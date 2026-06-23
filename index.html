@@ -11,49 +11,52 @@
     <div data-tauri-drag-region class="titlebar">
       <div class="titlebar-left">
         <img src="/assets/typstry-ico.svg" class="titlebar-icon" width="16" height="16" />
-        <div class="menu-item dropdown-container">
-          <div class="menu-label">File</div>
-          <div class="dropdown-menu">
-            <div class="dropdown-item" id="action-new-file">New File <span class="hotkey">Ctrl+N</span></div>
-            <div class="dropdown-item" id="action-open-file">Open File... <span class="hotkey">Ctrl+O</span></div>
-            <div class="dropdown-item" id="action-open-folder">Open Workspace... <span class="hotkey">Ctrl+K Ctrl+O</span></div>
-            <div class="dropdown-separator"></div>
-            <div class="dropdown-item" id="action-save-file">Save <span class="hotkey">Ctrl+S</span></div>
-            <div class="dropdown-separator"></div>
-            <div class="dropdown-item" id="action-export-pdf">Export PDF</div>
-            <div class="dropdown-separator"></div>
-            <div class="dropdown-item" id="action-exit">Exit</div>
+        <div id="app-menus" style="display: flex;">
+          <div class="menu-item dropdown-container">
+            <div class="menu-label">File</div>
+            <div class="dropdown-menu">
+              <div class="dropdown-item" id="action-new-file">New File <span class="hotkey">Ctrl+N</span></div>
+              <div class="dropdown-item" id="action-open-folder">Open Workspace... <span class="hotkey">Ctrl+K Ctrl+O</span></div>
+              <div class="dropdown-separator"></div>
+              <div class="dropdown-item" id="action-save-file">Save <span class="hotkey">Ctrl+S</span></div>
+              <div class="dropdown-separator"></div>
+              <div class="dropdown-item" id="action-export-pdf">Export PDF</div>
+              <div class="dropdown-separator"></div>
+              <div class="dropdown-item" id="action-close-project">Close Project</div>
+              <div class="dropdown-separator"></div>
+              <div class="dropdown-item" id="action-exit">Exit</div>
+            </div>
           </div>
-        </div>
-        <div class="menu-item dropdown-container">
-          <div class="menu-label">Edit</div>
-          <div class="dropdown-menu">
-            <div class="dropdown-item" id="action-undo">Undo <span class="hotkey">Ctrl+Z</span></div>
-            <div class="dropdown-item" id="action-redo">Redo <span class="hotkey">Ctrl+Y</span></div>
+          <div class="menu-item dropdown-container">
+            <div class="menu-label">Edit</div>
+            <div class="dropdown-menu">
+              <div class="dropdown-item" id="action-undo">Undo <span class="hotkey">Ctrl+Z</span></div>
+              <div class="dropdown-item" id="action-redo">Redo <span class="hotkey">Ctrl+Y</span></div>
+            </div>
           </div>
-        </div>
-        <div class="menu-item dropdown-container">
-          <div class="menu-label">View</div>
-          <div class="dropdown-menu">
-            <div class="dropdown-item" id="action-toggle-layout">Switch Layout <span class="hotkey">Ctrl+M</span></div>
-            <div class="dropdown-item" id="action-toggle-word-wrap">Toggle Word Wrap <span class="hotkey">Alt+Z</span></div>
-            <div class="dropdown-item" id="action-toggle-sidebar">Toggle Sidebar <span class="hotkey">Ctrl+B</span></div>
+          <div class="menu-item dropdown-container">
+            <div class="menu-label">View</div>
+            <div class="dropdown-menu">
+              <div class="dropdown-item" id="action-toggle-layout">Switch Layout <span class="hotkey">Ctrl+M</span></div>
+              <div class="dropdown-item" id="action-toggle-word-wrap">Toggle Word Wrap <span class="hotkey">Alt+Z</span></div>
+              <div class="dropdown-item" id="action-toggle-sidebar">Toggle Sidebar <span class="hotkey">Ctrl+B</span></div>
+            </div>
           </div>
-        </div>
-        <div class="menu-item dropdown-container">
-          <div class="menu-label">Terminal</div>
-          <div class="dropdown-menu">
-            <div class="dropdown-item" id="action-toggle-logs">Toggle Log Console <span class="hotkey">Ctrl+`</span></div>
-            <div class="dropdown-item" id="action-clear-logs">Clear Logs</div>
-            <div class="dropdown-separator"></div>
-            <div class="dropdown-item" id="action-restart-lsp">Restart Tinymist LSP</div>
+          <div class="menu-item dropdown-container">
+            <div class="menu-label">Terminal</div>
+            <div class="dropdown-menu">
+              <div class="dropdown-item" id="action-toggle-logs">Toggle Log Console <span class="hotkey">Ctrl+`</span></div>
+              <div class="dropdown-item" id="action-clear-logs">Clear Logs</div>
+              <div class="dropdown-separator"></div>
+              <div class="dropdown-item" id="action-restart-lsp">Restart Tinymist LSP</div>
+            </div>
           </div>
-        </div>
-        <div class="menu-item dropdown-container">
-          <div class="menu-label">Help</div>
-          <div class="dropdown-menu">
-            <div class="dropdown-item" id="action-docs-typstry">Typstry Documentation</div>
-            <div class="dropdown-item" id="action-docs-typst">Typst Reference</div>
+          <div class="menu-item dropdown-container">
+            <div class="menu-label">Help</div>
+            <div class="dropdown-menu">
+              <div class="dropdown-item" id="action-docs-typstry">Typstry Documentation</div>
+              <div class="dropdown-item" id="action-docs-typst">Typst Reference</div>
+            </div>
           </div>
         </div>
       </div>
@@ -87,11 +90,6 @@
           
           <div class="welcome-section">
             <div class="welcome-section-title">GET STARTED</div>
-            <div class="welcome-item" id="welcome-new-file">
-              <span class="welcome-item-icon">+</span>
-              <span class="welcome-item-text">New File</span>
-              <span class="welcome-item-hotkey">Ctrl-N</span>
-            </div>
             <div class="welcome-item" id="welcome-open-project">
               <span class="welcome-item-icon">📁</span>
               <span class="welcome-item-text">Open Project</span>

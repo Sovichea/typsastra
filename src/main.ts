@@ -1,6 +1,6 @@
 import "./style.css";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -94,6 +94,7 @@ class TypstryWorkspaceController {
   private diagnosticCount = document.getElementById("diagnostic-count")!;
 
   public async bootstrap() {
+    this.renderRecentProjects();
     this.initCodeMirror();
     this.initExplorer();
     this.bindGlobalEvents();
@@ -119,6 +120,7 @@ class TypstryWorkspaceController {
     const resizer = document.getElementById("editor-preview-resizer");
     const explorerSidebar = document.getElementById("explorer-sidebar");
     const explorerResizer = document.getElementById("explorer-resizer");
+    const appMenus = document.getElementById("app-menus");
 
     if (this.activeFilePath || this.workspaceRootPath) {
       welcomeScreen?.classList.add("hidden");
@@ -135,9 +137,11 @@ class TypstryWorkspaceController {
     if (this.workspaceRootPath) {
       explorerSidebar?.classList.remove("hidden");
       explorerResizer?.classList.remove("hidden");
+      appMenus?.classList.remove("hidden");
     } else {
       explorerSidebar?.classList.add("hidden");
       explorerResizer?.classList.add("hidden");
+      appMenus?.classList.add("hidden");
     }
   }
 
@@ -967,40 +971,125 @@ class TypstryWorkspaceController {
     }
   }
 
+  private getRecentProjects(): string[] {
+    try {
+      const stored = localStorage.getItem("typstry-recent-projects");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private addRecentProject(path: string) {
+    let recent = this.getRecentProjects();
+    recent = recent.filter(p => p !== path);
+    recent.unshift(path);
+    if (recent.length > 5) recent.pop();
+    localStorage.setItem("typstry-recent-projects", JSON.stringify(recent));
+    this.renderRecentProjects();
+  }
+
+  private renderRecentProjects() {
+    const recentProjects = this.getRecentProjects();
+    
+    // Find the Recent Projects section in the welcome screen
+    const welcomeSections = document.querySelectorAll('.welcome-section');
+    if (welcomeSections.length < 2) return;
+    
+    const recentSection = welcomeSections[1];
+    
+    // Clear existing items but keep the title
+    const titleHtml = '<div class="welcome-section-title">RECENT PROJECTS</div>';
+    
+    if (recentProjects.length === 0) {
+      recentSection.innerHTML = titleHtml + '<div style="font-size: 13px; color: var(--ui-text); opacity: 0.5; padding: 8px 12px;">No recent projects</div>';
+      return;
+    }
+    
+    let html = titleHtml;
+    recentProjects.forEach((path, index) => {
+      // Extract folder name from path (handling both / and \ depending on OS)
+      const folderName = path.split(/[/\\]/).pop() || path;
+      const hotkey = index < 5 ? `Ctrl-${index + 1}` : '';
+      
+      html += `
+        <div class="welcome-item recent-project-item" data-path="${path}">
+          <span class="welcome-item-icon">📁</span>
+          <span class="welcome-item-text" title="${path}">${folderName}</span>
+          <span class="welcome-item-hotkey">${hotkey}</span>
+        </div>
+      `;
+    });
+    
+    recentSection.innerHTML = html;
+    
+    // Bind click events
+    recentSection.querySelectorAll('.recent-project-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const path = (el as HTMLElement).dataset.path;
+        if (path) this.openWorkspace(path);
+      });
+    });
+  }
+
+  private openWorkspace(selected: string) {
+    this.workspaceRootPath = selected;
+    this.explorer.loadWorkspace(selected);
+    this.updateWorkspaceViewportVisibility();
+    this.addRecentProject(selected);
+  }
+
+  private closeProject() {
+    this.workspaceRootPath = null;
+    this.activeFilePath = null;
+    
+    // Clear editor
+    this.editorInstance.dispatch({
+      changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
+    });
+    
+    // Clear explorer
+    document.getElementById("explorer-sidebar")!.innerHTML = "";
+    
+    this.setLspStatus({ kind: "ready", message: "Project closed" });
+    this.updateWorkspaceViewportVisibility();
+  }
+
   private bindGlobalEvents() {
     listen("menu-toggle-layout", () => this.switchViewLayoutMode());
     listen("menu-toggle-log-console", () => this.toggleLogConsole());
     listen("menu-open-folder", async () => {
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected === "string") {
-        this.workspaceRootPath = selected;
-        this.explorer.loadWorkspace(selected);
-        this.updateWorkspaceViewportVisibility();
+        this.openWorkspace(selected);
       }
     });
 
     document.getElementById("action-open-folder")?.addEventListener("click", async () => {
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected === "string") {
-        this.workspaceRootPath = selected;
-        this.explorer.loadWorkspace(selected);
-        this.updateWorkspaceViewportVisibility();
+        this.openWorkspace(selected);
       }
     });
-
-    document.getElementById("action-new-file")?.addEventListener("click", () => {
-      this.activeFilePath = null;
-      this.editorInstance.dispatch({
-        changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
-      });
-      this.setLspStatus({ kind: "preview-ready", message: "New Unsaved File" });
-      this.updateWorkspaceViewportVisibility();
+    
+    document.getElementById("action-close-project")?.addEventListener("click", () => {
+      this.closeProject();
     });
 
-    document.getElementById("action-open-file")?.addEventListener("click", async () => {
-      const selected = await open({ multiple: false });
-      if (typeof selected === "string") {
-        this.loadFile(selected);
+    document.getElementById("action-new-file")?.addEventListener("click", async () => {
+      if (!this.workspaceRootPath) {
+        alert("Please open a project workspace first.");
+        return;
+      }
+      const savePath = await save({
+        defaultPath: this.workspaceRootPath,
+        filters: [{ name: "Typst Document", extensions: ["typ"] }]
+      });
+      if (typeof savePath === "string") {
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        await writeTextFile(savePath, "= New Document\n");
+        this.explorer.loadWorkspace(this.workspaceRootPath);
+        this.loadFile(savePath);
       }
     });
 
@@ -1074,10 +1163,6 @@ class TypstryWorkspaceController {
     document.getElementById("action-toggle-logs")?.addEventListener("click", () => this.toggleLogConsole());
 
     // Welcome Screen Actions
-    document.getElementById("welcome-new-file")?.addEventListener("click", () => {
-      document.getElementById("action-new-file")?.click();
-    });
-    
     document.getElementById("welcome-open-project")?.addEventListener("click", () => {
       document.getElementById("action-open-folder")?.click();
     });
