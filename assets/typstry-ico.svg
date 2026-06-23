@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Depth Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1e2e" />
+      <stop offset="100%" stop-color="#0f0f15" />
+    </linearGradient>
+
+    <!-- Left Code Face Gradient (Deep Electric Blue) -->
+    <linearGradient id="leftFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+
+    <!-- Right WYSIWYM Face Gradient (Vibrant Cyan/Teal) -->
+    <linearGradient id="rightFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#0e7490" />
+    </linearGradient>
+
+    <!-- Glowing Accent Accentuation -->
+    <linearGradient id="accentGlow" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+    
+    <!-- Shadow Filter for Clean App Dimension -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Smooth Rounded App Icon Canvas Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Core Isometric Geometry Group -->
+  <g filter="url(#dropShadow)" transform="translate(0, -10)">
+    
+    <!-- Left Ribbon Segment: Code/Monospace Layer (Flipped Book Page Perspective) -->
+    <path d="M 256,120 
+             L 120,180 
+             L 120,340 
+             L 256,400 
+             L 256,280 
+             L 170,240 
+             L 170,200 
+             L 256,160 Z" 
+          fill="url(#leftFace)" />
+
+    <!-- Right Ribbon Segment: WYSIWYM/Visual Rich Layer (Interlocking Matrix Structure) -->
+    <path d="M 256,120 
+             L 392,180 
+             L 392,340 
+             L 256,400 
+             L 256,280 
+             L 342,240 
+             L 342,200 
+             L 256,160 Z" 
+          fill="url(#rightFace)" />
+
+    <!-- Central Floating Core Pillar: The "T" Typst Anchor & Compilation Engine Link -->
+    <path d="M 236,150 
+             L 276,150 
+             L 276,370 
+             L 236,370 Z" 
+          fill="url(#accentGlow)" opacity="0.9" />
+          
+    <path d="M 200,150 
+             L 312,150 
+             L 312,185 
+             L 200,185 Z" 
+          fill="url(#accentGlow)" opacity="0.9" />
+
+    <!-- Subtle Technical Highlight Nodes -->
+    <circle cx="170" cy="200" r="6" fill="#67e8f9" />
+    <circle cx="342" cy="200" r="6" fill="#67e8f9" />
+    <circle cx="256" cy="400" r="8" fill="#a855f7" />
+  </g>
+</svg>

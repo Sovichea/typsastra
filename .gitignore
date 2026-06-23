@@ -1,0 +1,31 @@
+# Node / Bun
+node_modules/
+npm-debug.log
+bun-debug.log
+.env
+.env.local
+
+# Vite Build Output
+dist/
+dist-ssr/
+
+# Tauri & Rust
+src-tauri/target/
+src-tauri/gen/
+**/*.rs.bk
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Others
+implementation-plan.md
