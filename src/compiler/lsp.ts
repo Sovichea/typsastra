@@ -27,6 +27,23 @@ export type LspSourcePosition = {
   character?: number;
 };
 
+export type LspDiagnostic = {
+  range: {
+    start: LspSourcePosition;
+    end: LspSourcePosition;
+  };
+  severity?: number;
+  code?: string | number;
+  source?: string;
+  message: string;
+};
+
+export type LspLogEntry = {
+  kind: "error" | "warning" | "info" | "log";
+  message: string;
+  source?: string;
+};
+
 export class TinymistLspClient {
   private requestId = 0;
   private editorView?: EditorView;
@@ -34,7 +51,9 @@ export class TinymistLspClient {
   constructor(
     private onSvgPreviewStream: (svgContent: string) => void,
     private onStatus: (status: LspStatus) => void = () => {},
-    private onInverseSync: (position: LspSourcePosition, defaultCursorPos: number) => number | void = () => {}
+    private onInverseSync: (position: LspSourcePosition, defaultCursorPos: number) => number | void = () => {},
+    private onDiagnostics: (uri: string, diagnostics: LspDiagnostic[], version?: number) => void = () => {},
+    private onLog: (entry: LspLogEntry) => void = () => {}
   ) {}
 
   public setEditorView(view: EditorView) {
@@ -74,14 +93,47 @@ export class TinymistLspClient {
     }
   }
 
+  public async restart(): Promise<void> {
+    this.setStatus("starting", "Restarting Tinymist");
+    await invoke("start_tinymist_lsp");
+    this.setStatus("running", "Tinymist process running");
+    this.setStatus("initializing", "Initializing LSP");
+    await this.initializeLsp();
+    this.setStatus("ready", "LSP ready");
+  }
+
   private handleMessage(payload: any) {
+    if (payload.id !== undefined && typeof payload.method === "string") {
+      this.handleServerRequest(payload);
+      return;
+    }
+
     if (payload.method === "tinymist/preview/svgStream") {
       this.onSvgPreviewStream(payload.params.svg);
     }
 
     // Sometimes tinymist sends logs or errors!
     if (payload.method === "window/showMessage") {
-      console.log("LSP Message:", payload.params);
+      this.emitLog(payload.params?.type, payload.params?.message, "showMessage");
+    }
+
+    if (payload.method === "window/logMessage") {
+      this.emitLog(payload.params?.type, payload.params?.message, "logMessage");
+    }
+
+    if (payload.method === "textDocument/publishDiagnostics") {
+      const params = payload.params;
+      if (typeof params?.uri === "string" && Array.isArray(params.diagnostics)) {
+        this.onDiagnostics(params.uri, params.diagnostics, params.version);
+      }
+    }
+
+    if (payload.error) {
+      this.onLog({
+        kind: "error",
+        source: "response",
+        message: payload.error.message ?? JSON.stringify(payload.error)
+      });
     }
 
     // Handle Inverse Sync from Tinymist (clicking preview -> jump editor)
@@ -144,7 +196,21 @@ export class TinymistLspClient {
 
       this.sendRequest("initialize", {
         processId: null,
-        capabilities: {},
+        capabilities: {
+          textDocument: {
+            synchronization: {
+              dynamicRegistration: false,
+              didSave: true
+            },
+            publishDiagnostics: {
+              relatedInformation: true,
+              versionSupport: false
+            }
+          },
+          workspace: {
+            configuration: true
+          }
+        },
         initializationOptions: {
           preview: {
             background: {
@@ -166,11 +232,18 @@ export class TinymistLspClient {
     });
   }
 
-  public notifyTextOpen(uri: string, path: string, text: string, version: number): Promise<string> {
-    this.sendNotification("textDocument/didOpen", {
+  public openTextDocument(uri: string, text: string, version: number): Promise<void> {
+    return this.sendNotification("textDocument/didOpen", {
       textDocument: { uri, languageId: "typst", version, text }
     });
+  }
 
+  public notifyTextOpen(uri: string, path: string, text: string, version: number): Promise<string> {
+    this.openTextDocument(uri, text, version);
+    return this.startPreview(path);
+  }
+
+  public startPreview(path: string): Promise<string> {
     // Force tinymist to render this specific file instead of auto-detecting an entry point.
     // NOTE: These commands specifically require the raw OS path, not a URI!
     this.sendRequest("workspace/executeCommand", {
@@ -243,6 +316,10 @@ export class TinymistLspClient {
     return invoke("send_lsp_message", { message: JSON.stringify({ jsonrpc: "2.0", method, params }) });
   }
 
+  private sendResponse(id: number | string, result: any): Promise<void> {
+    return invoke("send_lsp_message", { message: JSON.stringify({ jsonrpc: "2.0", id, result }) });
+  }
+
   private normalizePreviewUrl(result: string | TinymistPreviewResult | null | undefined): string {
     if (typeof result === "string") {
       return result.startsWith("http") ? result : `http://${result}`;
@@ -267,5 +344,49 @@ export class TinymistLspClient {
 
   private setStatus(kind: LspStatusKind, message: string) {
     this.onStatus({ kind, message });
+  }
+
+  private handleServerRequest(payload: any) {
+    switch (payload.method) {
+      case "client/registerCapability":
+      case "client/unregisterCapability":
+      case "window/showMessageRequest":
+        this.sendResponse(payload.id, null);
+        return;
+      case "workspace/configuration": {
+        const count = Array.isArray(payload.params?.items) ? payload.params.items.length : 0;
+        this.sendResponse(payload.id, Array.from({ length: count }, () => null));
+        return;
+      }
+      default:
+        if (payload.method.startsWith("$/")) {
+          return;
+        }
+        this.sendResponse(payload.id, null);
+    }
+  }
+
+  private emitLog(type: number | undefined, message: unknown, source: string) {
+    const text = typeof message === "string" ? message : JSON.stringify(message ?? "");
+    if (!text) return;
+
+    this.onLog({
+      kind: this.logKindFromLspType(type),
+      source,
+      message: text
+    });
+  }
+
+  private logKindFromLspType(type: number | undefined): LspLogEntry["kind"] {
+    switch (type) {
+      case 1:
+        return "error";
+      case 2:
+        return "warning";
+      case 3:
+        return "info";
+      default:
+        return "log";
+    }
   }
 }

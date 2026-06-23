@@ -5,11 +5,33 @@ import { invoke } from "@tauri-apps/api/core";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { getEditorExtensions } from "./editor/extensions";
+import { setEditorDiagnosticsEffect } from "./editor/diagnostics";
+import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
 import { WorkspaceExplorer } from "./components/explorer";
 import { TinymistLspClient } from "./compiler/lsp";
-import type { LspSourcePosition, LspStatus } from "./compiler/lsp";
+import type { LspDiagnostic, LspLogEntry, LspSourcePosition, LspStatus } from "./compiler/lsp";
 
 type EditorMode = "CODE" | "WYSIWYM";
+type LogEntryKind = "error" | "warning" | "info" | "log" | "hint";
+
+type LogConsoleEntry = {
+  id: number;
+  kind: LogEntryKind;
+  message: string;
+  source: string;
+  filePath?: string;
+  fileName?: string;
+  line?: number;
+  column?: number;
+  timestamp: Date;
+};
+
+type FallbackDiagnostic = {
+  severity: "error" | "warning" | "info";
+  message: string;
+  line?: number;
+  column?: number;
+};
 
 type PreviewHighlightMapping = {
   lineNumber: number;
@@ -28,6 +50,8 @@ class TypstryWorkspaceController {
   private readonly previewHighlightSuffix = "]";
   private activeMode: EditorMode = "CODE";
   private activeFilePath: string | null = null;
+  private previewRootPath: string | null = null;
+  private workspaceRootPath: string | null = null;
   private currentVersion = 1;
   private isLoadingFile = false;
   private lspReady = false;
@@ -39,6 +63,12 @@ class TypstryWorkspaceController {
   private pendingForwardSyncTimer: number | null = null;
   private suppressNextForwardSync = false;
   private previewHighlightMapping: PreviewHighlightMapping | null = null;
+  private readonly previewOnlyVersions = new Set<number>();
+  private latestDocumentVersion = 1;
+  private nextLogEntryId = 1;
+  private diagnosticLogEntries: LogConsoleEntry[] = [];
+  private lspLogEntries: LogConsoleEntry[] = [];
+  private isLogConsoleVisible = false;
 
   private editorInstance!: EditorView;
   private explorer!: WorkspaceExplorer;
@@ -52,6 +82,12 @@ class TypstryWorkspaceController {
   private lspStatus = document.getElementById("lsp-status")!;
   private lspStatusDot = this.lspStatus.querySelector(".status-dot") as HTMLElement;
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
+  private logConsole = document.getElementById("log-console")!;
+  private logConsoleBody = document.getElementById("log-console-body")!;
+  private logConsoleToggle = document.getElementById("log-console-toggle") as HTMLButtonElement;
+  private logConsoleClose = document.getElementById("log-console-close") as HTMLButtonElement;
+  private logConsoleClear = document.getElementById("log-console-clear") as HTMLButtonElement;
+  private diagnosticCount = document.getElementById("diagnostic-count")!;
 
   public async bootstrap() {
     this.setLspStatus({ kind: "starting", message: "Preparing toolchain" });
@@ -60,6 +96,8 @@ class TypstryWorkspaceController {
     this.initExplorer();
     await this.initLsp();
     this.bindGlobalEvents();
+    this.renderLogConsole();
+    this.setLogConsoleVisible(false);
   }
 
   private async ensureDependencies() {
@@ -87,6 +125,7 @@ class TypstryWorkspaceController {
           getEditorExtensions(),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
+              this.clearPendingForwardSync();
               this.handleContentMutation(update.state.doc.toString());
             } else if (update.selectionSet) {
               this.scheduleForwardSync(this.forwardSyncDebounceMs);
@@ -106,7 +145,9 @@ class TypstryWorkspaceController {
     this.lspClient = new TinymistLspClient(
       () => {},
       (status) => this.setLspStatus(status),
-      (position, defaultCursorPos) => this.handleInverseSync(position, defaultCursorPos)
+      (position, defaultCursorPos) => this.handleInverseSync(position, defaultCursorPos),
+      (uri, diagnostics, version) => this.handleLspDiagnostics(uri, diagnostics, version),
+      (entry) => this.appendLspLog(entry)
     );
     try {
       await this.lspClient.connect();
@@ -122,7 +163,10 @@ class TypstryWorkspaceController {
     try {
       const contents: string = await invoke("read_workspace_file", { path });
       this.currentVersion = 1;
+      this.latestDocumentVersion = 1;
+      this.previewOnlyVersions.clear();
       this.previewHighlightMapping = null;
+      this.clearDiagnostics();
 
       this.isLoadingFile = true;
       try {
@@ -134,17 +178,28 @@ class TypstryWorkspaceController {
       }
 
       this.activeFilePath = path;
+      this.previewRootPath = await invoke<string | null>("resolve_preview_main", {
+        filePath: path,
+        workspaceRootPath: this.workspaceRootPath
+      });
       this.clearPendingLspSync();
       this.clearPendingForwardSync();
 
       if (this.lspReady && this.lspClient) {
-        this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Starting live preview server...</div>`;
         const uri = this.filePathToUri(path);
-        const previewUrl = await this.lspClient.notifyTextOpen(uri, path, contents, this.currentVersion);
-        if (previewUrl) {
-          this.mountPreviewFrame(previewUrl);
+        await this.lspClient.openTextDocument(uri, contents, this.currentVersion);
+        void this.runFallbackDiagnostics(path, contents, this.currentVersion);
+
+        if (this.previewRootPath) {
+          this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Starting live preview server...</div>`;
+          const previewUrl = await this.startPreviewWithRestart(this.previewRootPath, contents);
+          if (previewUrl) {
+            this.mountPreviewFrame(previewUrl);
+          } else {
+            this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Failed to start live preview server after restart. Check the log console for details.</div>`;
+          }
         } else {
-          this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Failed to start live preview server. Check the developer console or LSP log for details.</div>`;
+          this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: sans-serif;">No preview root found for this library/template file. Diagnostics are still active.</div>`;
         }
       } else {
         this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Tinymist LSP is offline. Live preview is unavailable.</div>`;
@@ -156,6 +211,43 @@ class TypstryWorkspaceController {
     } catch (e) {
       console.error("Failed to load file:", e);
       alert("Failed to load file: " + e);
+    }
+  }
+
+  private async startPreviewWithRestart(previewRootPath: string, activeContents: string): Promise<string> {
+    const firstAttemptUrl = await this.lspClient.startPreview(previewRootPath);
+    if (firstAttemptUrl) {
+      return firstAttemptUrl;
+    }
+
+    this.appendLspLog({
+      kind: "warning",
+      source: "preview",
+      message: "Preview startup failed. Restarting Tinymist and retrying once."
+    });
+    this.setLspStatus({ kind: "starting", message: "Restarting preview" });
+
+    try {
+      await this.lspClient.restart();
+      this.lspReady = true;
+      if (!this.activeFilePath || this.previewRootPath !== previewRootPath) {
+        return "";
+      }
+
+      await this.lspClient.openTextDocument(
+        this.filePathToUri(this.activeFilePath),
+        activeContents,
+        this.currentVersion
+      );
+      return await this.lspClient.startPreview(previewRootPath);
+    } catch (error) {
+      this.lspReady = false;
+      this.appendLspLog({
+        kind: "error",
+        source: "preview",
+        message: `Preview restart failed: ${String(error)}`
+      });
+      return "";
     }
   }
 
@@ -193,13 +285,68 @@ class TypstryWorkspaceController {
 
     this.setLspStatus({ kind: "syncing", message: "Syncing preview" });
     this.previewHighlightMapping = null;
-    this.lspClient.notifyTextChange(this.filePathToUri(path), text, ++this.currentVersion);
-    this.scheduleForwardSync(450);
+    this.previewOnlyVersions.clear();
+    const version = ++this.currentVersion;
+    this.latestDocumentVersion = version;
+    this.lspClient.notifyTextChange(this.filePathToUri(path), text, version);
+    void this.runFallbackDiagnostics(path, text, version);
     window.setTimeout(() => {
       if (this.lspReady && !this.pendingLspSyncTimer && this.pendingLspSyncText === null) {
         this.setLspStatus({ kind: "preview-ready", message: "Preview update sent" });
       }
     }, 250);
+  }
+
+  private async runFallbackDiagnostics(path: string, text: string, version: number) {
+    try {
+      const diagnostics = await invoke<FallbackDiagnostic[]>("check_typst_document", {
+        sourceCode: text,
+        filePath: path
+      });
+
+      if (version !== this.latestDocumentVersion || path !== this.activeFilePath) {
+        return;
+      }
+
+      const editorDiagnostics = diagnostics
+        .map((diagnostic) => this.editorDiagnosticFromFallback(diagnostic))
+        .filter((diagnostic): diagnostic is EditorDiagnostic => diagnostic !== null);
+
+      this.editorInstance.dispatch({
+        effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
+      });
+
+      this.diagnosticLogEntries = diagnostics.map((diagnostic) => ({
+        id: this.nextLogEntryId++,
+        kind: diagnostic.severity,
+        source: "typst check",
+        filePath: path,
+        fileName: this.fileNameFromPath(path),
+        message: diagnostic.message,
+        line: diagnostic.line ?? 1,
+        column: diagnostic.column ?? 1,
+        timestamp: new Date()
+      }));
+      this.renderLogConsole();
+    } catch (error) {
+      this.appendLspLog({
+        kind: "error",
+        source: "typst check",
+        message: `Fallback diagnostics failed: ${String(error)}`
+      });
+    }
+  }
+
+  private editorDiagnosticFromFallback(diagnostic: FallbackDiagnostic): EditorDiagnostic | null {
+    if (!diagnostic.line) return null;
+
+    const from = this.editorPositionFromSourceLocation(diagnostic.line, diagnostic.column ?? 1);
+    return {
+      from,
+      to: Math.min(from + 1, this.editorInstance.state.doc.length),
+      severity: diagnostic.severity,
+      message: diagnostic.message
+    };
   }
 
   private clearPendingLspSync() {
@@ -212,7 +359,7 @@ class TypstryWorkspaceController {
   }
 
   private scheduleForwardSync(delayMs: number) {
-    if (!this.activeFilePath || !this.lspReady || !this.lspClient) {
+    if (!this.activeFilePath || !this.previewRootPath || !this.lspReady || !this.lspClient) {
       return;
     }
 
@@ -243,7 +390,7 @@ class TypstryWorkspaceController {
   }
 
   private async renderHighlightedPreviewAtCursor(cursor: number) {
-    if (!this.activeFilePath || !this.lspReady || !this.lspClient) {
+    if (!this.activeFilePath || this.activeFilePath !== this.previewRootPath || !this.lspReady || !this.lspClient) {
       return;
     }
 
@@ -251,10 +398,12 @@ class TypstryWorkspaceController {
     if (!previewHighlight) return;
 
     this.previewHighlightMapping = previewHighlight.mapping;
+    const version = ++this.currentVersion;
+    this.previewOnlyVersions.add(version);
     await this.lspClient.notifyTextChange(
       this.filePathToUri(this.activeFilePath),
       previewHighlight.text,
-      ++this.currentVersion
+      version
     );
     window.setTimeout(() => {
       if (!this.activeFilePath || !this.lspReady || !this.lspClient) return;
@@ -425,6 +574,30 @@ class TypstryWorkspaceController {
     return `file:///${encodedPath}`;
   }
 
+  private filePathFromUri(uri: string): string {
+    if (uri.startsWith("file:///")) {
+      const decodedPath = uri
+        .slice("file:///".length)
+        .split("/")
+        .map(decodeURIComponent)
+        .join("/");
+      if (!/^[A-Za-z]:/.test(decodedPath)) {
+        return "/" + decodedPath;
+      }
+      return decodedPath;
+    }
+    if (uri.startsWith("file://")) {
+      return decodeURIComponent(uri.slice("file://".length));
+    }
+    return uri;
+  }
+
+  private fileNameFromPath(path: string): string {
+    const normalizedPath = path.replace(/\\/g, "/");
+    const parts = normalizedPath.split("/");
+    return parts[parts.length - 1] || path;
+  }
+
   private setLspStatus(status: LspStatus) {
     this.lspStatus.dataset.state = status.kind;
     this.lspStatusDot.setAttribute("aria-label", status.message);
@@ -433,6 +606,255 @@ class TypstryWorkspaceController {
     if (status.kind === "stopped" || status.kind === "error") {
       this.lspReady = false;
     }
+  }
+
+  private handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
+    if (typeof version === "number") {
+      if (this.previewOnlyVersions.delete(version)) return;
+      if (version < this.latestDocumentVersion) return;
+    }
+
+    if (!this.activeFilePath || uri !== this.filePathToUri(this.activeFilePath)) {
+      return;
+    }
+
+    const editorDiagnostics = diagnostics
+      .map((diagnostic) => this.editorDiagnosticFromLsp(diagnostic))
+      .filter((diagnostic): diagnostic is EditorDiagnostic => diagnostic !== null);
+
+    this.editorInstance.dispatch({
+      effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
+    });
+
+    this.diagnosticLogEntries = diagnostics.map((diagnostic) => this.logEntryFromDiagnostic(uri, diagnostic));
+    this.renderLogConsole();
+  }
+
+  private editorDiagnosticFromLsp(diagnostic: LspDiagnostic): EditorDiagnostic | null {
+    const from = this.editorPositionFromLspPosition(diagnostic.range.start);
+    const to = this.editorPositionFromLspPosition(diagnostic.range.end);
+    if (from === null || to === null) return null;
+
+    return {
+      from,
+      to: Math.max(from, to),
+      severity: this.diagnosticSeverityFromLsp(diagnostic.severity),
+      message: diagnostic.message
+    };
+  }
+
+  private logEntryFromDiagnostic(uri: string, diagnostic: LspDiagnostic): LogConsoleEntry {
+    const filePath = this.filePathFromUri(uri);
+    return {
+      id: this.nextLogEntryId++,
+      kind: this.diagnosticSeverityFromLsp(diagnostic.severity),
+      source: diagnostic.source ?? "typst",
+      filePath,
+      fileName: this.fileNameFromPath(filePath),
+      message: diagnostic.message,
+      line: diagnostic.range.start.line + 1,
+      column: (diagnostic.range.start.character ?? 0) + 1,
+      timestamp: new Date()
+    };
+  }
+
+  private appendLspLog(entry: LspLogEntry) {
+    this.lspLogEntries.unshift({
+      id: this.nextLogEntryId++,
+      kind: entry.kind,
+      source: entry.source ?? "tinymist",
+      message: entry.message,
+      timestamp: new Date()
+    });
+
+    this.lspLogEntries = this.lspLogEntries.slice(0, 100);
+    this.renderLogConsole();
+  }
+
+  private clearDiagnostics() {
+    this.diagnosticLogEntries = [];
+    if (this.editorInstance) {
+      this.editorInstance.dispatch({
+        effects: setEditorDiagnosticsEffect.of([])
+      });
+    }
+    this.renderLogConsole();
+  }
+
+  private diagnosticSeverityFromLsp(severity: number | undefined): EditorDiagnosticSeverity {
+    switch (severity) {
+      case 1:
+        return "error";
+      case 2:
+        return "warning";
+      case 3:
+        return "info";
+      case 4:
+        return "hint";
+      default:
+        return "info";
+    }
+  }
+
+  private editorPositionFromLspPosition(position: LspSourcePosition): number | null {
+    const doc = this.editorInstance.state.doc;
+    if (!doc.length) return 0;
+
+    const lineNumber = Math.max(1, Math.min(position.line + 1, doc.lines));
+    const line = doc.line(lineNumber);
+    const character = this.utf8ByteOffsetToStringOffset(line.text, position.character ?? 0);
+    return Math.max(line.from, Math.min(line.from + character, line.to));
+  }
+
+  private renderLogConsole() {
+    this.updateDiagnosticCount();
+    this.logConsoleBody.replaceChildren();
+
+    const entries = [...this.diagnosticLogEntries, ...this.lspLogEntries];
+    if (!entries.length) {
+      const empty = document.createElement("div");
+      empty.className = "log-console-empty";
+      empty.textContent = "No problems";
+      this.logConsoleBody.appendChild(empty);
+      return;
+    }
+
+    const groups = new Map<string, LogConsoleEntry[]>();
+    for (const entry of entries) {
+      const groupKey = entry.filePath ?? entry.source ?? "Other";
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, []);
+      }
+      groups.get(groupKey)!.push(entry);
+    }
+
+    for (const [key, groupEntries] of groups.entries()) {
+      this.logConsoleBody.appendChild(this.createLogGroupElement(key, groupEntries));
+    }
+  }
+
+  private dirnameFromPath(path: string): string {
+    const normalized = path.replace(/\\/g, "/");
+    const lastSlash = normalized.lastIndexOf("/");
+    return lastSlash > 0 ? normalized.slice(0, lastSlash) : "";
+  }
+
+  private createLogGroupElement(groupKey: string, entries: LogConsoleEntry[]): HTMLElement {
+    const groupContainer = document.createElement("div");
+    groupContainer.className = "log-group";
+
+    const header = document.createElement("button");
+    header.className = "log-group-header";
+    header.type = "button";
+
+    const firstEntry = entries[0];
+    const fileName = firstEntry.fileName ?? groupKey;
+    let dirName = "";
+    if (firstEntry.filePath) {
+        dirName = this.dirnameFromPath(firstEntry.filePath);
+    } else if (groupKey !== fileName && groupKey.endsWith(fileName)) {
+        dirName = groupKey.slice(0, -(fileName.length + 1));
+    }
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "log-group-filename";
+    nameSpan.textContent = fileName;
+
+    const dirSpan = document.createElement("span");
+    dirSpan.className = "log-group-dirname";
+    dirSpan.textContent = dirName;
+
+    const countBadge = document.createElement("span");
+    countBadge.className = "log-group-count";
+    countBadge.textContent = String(entries.length);
+
+    header.append(nameSpan, dirSpan, countBadge);
+
+    const itemsContainer = document.createElement("div");
+    itemsContainer.className = "log-group-items";
+
+    for (const entry of entries) {
+      itemsContainer.appendChild(this.createLogEntryElement(entry));
+    }
+
+    header.addEventListener("click", () => {
+      itemsContainer.classList.toggle("hidden");
+    });
+
+    groupContainer.append(header, itemsContainer);
+    return groupContainer;
+  }
+
+  private createLogEntryElement(entry: LogConsoleEntry): HTMLElement {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `log-entry log-entry-${entry.kind}`;
+
+    const severityIcon = document.createElement("span");
+    severityIcon.className = "log-entry-icon";
+    if (entry.kind === "error") {
+      severityIcon.textContent = "⊗";
+    } else if (entry.kind === "warning") {
+      severityIcon.textContent = "⚠";
+    } else {
+      severityIcon.textContent = "ℹ";
+    }
+
+    const message = document.createElement("span");
+    message.className = "log-entry-message";
+    message.textContent = entry.message;
+
+    const source = document.createElement("span");
+    source.className = "log-entry-source";
+    source.textContent = entry.source ? `typst(${entry.source})` : "";
+
+    const location = document.createElement("span");
+    location.className = "log-entry-position";
+    if (entry.line) {
+      location.textContent = `[Ln ${entry.line}, Col ${entry.column ?? 1}]`;
+    }
+
+    item.append(severityIcon, message, source, location);
+    
+    item.addEventListener("click", async () => {
+      if (!entry.line) return;
+      if (entry.filePath && entry.filePath !== this.activeFilePath) {
+        await this.loadFile(entry.filePath);
+      }
+      const cursor = this.editorPositionFromSourceLocation(entry.line, entry.column ?? 1);
+      this.editorInstance.dispatch({
+        selection: { anchor: cursor },
+        effects: EditorView.scrollIntoView(cursor, { y: "center" })
+      });
+      this.editorInstance.focus();
+    });
+
+    return item;
+  }
+
+  private updateDiagnosticCount() {
+    const errorCount = this.diagnosticLogEntries.filter((entry) => entry.kind === "error").length;
+    const warningCount = this.diagnosticLogEntries.filter((entry) => entry.kind === "warning").length;
+    const totalCount = this.diagnosticLogEntries.length;
+    const state = errorCount ? "error" : warningCount ? "warning" : "ok";
+
+    this.diagnosticCount.textContent = totalCount > 99 ? "99+" : String(totalCount);
+    this.logConsoleToggle.dataset.state = state;
+    this.logConsoleToggle.setAttribute("aria-expanded", String(this.isLogConsoleVisible));
+    this.logConsoleToggle.setAttribute(
+      "aria-label",
+      `${this.isLogConsoleVisible ? "Hide" : "Show"} log console, ${totalCount} problem${totalCount === 1 ? "" : "s"}`
+    );
+  }
+
+  private setLogConsoleVisible(visible: boolean) {
+    this.isLogConsoleVisible = visible;
+    this.logConsole.classList.toggle("hidden", !visible);
+    this.updateDiagnosticCount();
+  }
+
+  private toggleLogConsole() {
+    this.setLogConsoleVisible(!this.isLogConsoleVisible);
   }
 
   private switchViewLayoutMode() {
@@ -454,9 +876,19 @@ class TypstryWorkspaceController {
 
   private bindGlobalEvents() {
     listen("menu-toggle-layout", () => this.switchViewLayoutMode());
+    listen("menu-toggle-log-console", () => this.toggleLogConsole());
     listen("menu-open-folder", async () => {
       const selected = await open({ directory: true, multiple: false });
-      if (typeof selected === "string") this.explorer.loadWorkspace(selected);
+      if (typeof selected === "string") {
+        this.workspaceRootPath = selected;
+        this.explorer.loadWorkspace(selected);
+      }
+    });
+    this.logConsoleToggle.addEventListener("click", () => this.toggleLogConsole());
+    this.logConsoleClose.addEventListener("click", () => this.setLogConsoleVisible(false));
+    this.logConsoleClear.addEventListener("click", () => {
+      this.lspLogEntries = [];
+      this.renderLogConsole();
     });
     this.wysiwymContainer.addEventListener("input", () => {
       if (this.activeMode === "WYSIWYM") {

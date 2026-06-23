@@ -10,11 +10,15 @@ export const unicodeLayoutTheme = EditorView.theme({
 });
 
 export const typstSyntaxHighlighting = HighlightStyle.define([
-  { tag: tags.keyword, color: "#0000ff", fontWeight: "bold" },
+  { tag: [tags.keyword, tags.controlKeyword], color: "#7c3aed", fontWeight: "bold" },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "#0f766e", fontWeight: "600" },
+  { tag: [tags.variableName, tags.labelName], color: "#1d4ed8" },
+  { tag: [tags.number, tags.atom, tags.bool], color: "#b45309" },
+  { tag: [tags.operator, tags.punctuation], color: "#4b5563" },
   { tag: tags.heading, color: "#0056b3", fontWeight: "bold", scale: 1.15 },
   { tag: tags.comment, color: "#008000", fontStyle: "italic" },
-  { 
-    tag: [tags.string, tags.content, tags.literal], 
+  {
+    tag: [tags.string, tags.content, tags.literal],
     color: "#a31515",
     fontFamily: "system-ui, -apple-system, 'MiSans Khmer', 'Noto Sans Arabic', 'Noto Sans Devanagari', sans-serif"
   }

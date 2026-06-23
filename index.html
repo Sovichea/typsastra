@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Typstry Workspace</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/typstry-ico.svg" />
 </head>
 <body>
   <div id="app-shell">
@@ -19,12 +20,26 @@
         <div id="preview-render-pane"></div>
       </div>
     </div>
+    <section id="log-console" class="hidden" aria-label="Log console">
+      <div class="log-console-toolbar">
+        <span class="log-console-title">Problems</span>
+        <div class="log-console-actions">
+          <button id="log-console-clear" type="button">Clear</button>
+          <button id="log-console-close" type="button" aria-label="Hide log console">x</button>
+        </div>
+      </div>
+      <div id="log-console-body"></div>
+    </section>
     <div id="status-bar" role="status" aria-live="polite">
       <div id="lsp-status" class="status-item" data-state="starting">
         <span class="status-dot" aria-label="Preparing toolchain"></span>
         <span class="status-label">LSP</span>
         <span class="status-text">Preparing toolchain</span>
       </div>
+      <button id="log-console-toggle" class="status-button" type="button" data-state="ok" aria-expanded="false">
+        <span class="status-label">Logs</span>
+        <span id="diagnostic-count" class="status-count">0</span>
+      </button>
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>

@@ -38,6 +38,182 @@ fn read_workspace_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
 }
 
 #[tauri::command]
+fn resolve_preview_main(
+    file_path: String,
+    workspace_root_path: Option<String>,
+) -> Result<Option<String>, String> {
+    let path = std::path::PathBuf::from(&file_path);
+    if path.extension().and_then(|ext| ext.to_str()) != Some("typ") {
+        return Ok(None);
+    }
+
+    if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+        let lower_name = file_name.to_ascii_lowercase();
+        if lower_name == "main.typ" || lower_name == "index.typ" || lower_name == "document.typ" {
+            return Ok(Some(path.to_string_lossy().to_string()));
+        }
+    }
+
+    let workspace_root = workspace_root_path.map(std::path::PathBuf::from);
+    if let Some(parent) = path.parent() {
+        for ancestor in parent.ancestors() {
+            if let Some(root) = workspace_root.as_ref() {
+                if !ancestor.starts_with(root) {
+                    break;
+                }
+            }
+
+            for candidate_name in ["main.typ", "index.typ", "document.typ"] {
+                let candidate = ancestor.join(candidate_name);
+                if candidate.exists() {
+                    return Ok(Some(candidate.to_string_lossy().to_string()));
+                }
+            }
+
+            if workspace_root.as_ref().is_some_and(|root| ancestor == root) {
+                break;
+            }
+        }
+    }
+
+    let contents =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
+    if typst_file_has_renderable_content(&contents) {
+        Ok(Some(path.to_string_lossy().to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
+fn typst_file_has_renderable_content(contents: &str) -> bool {
+    contents.lines().any(|line| {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
+            return false;
+        }
+
+        if trimmed.starts_with('=') {
+            return true;
+        }
+
+        if !trimmed.starts_with('#') {
+            return true;
+        }
+
+        !(trimmed.starts_with("#let")
+            || trimmed.starts_with("#import")
+            || trimmed.starts_with("#include")
+            || trimmed.starts_with("#show")
+            || trimmed.starts_with("#set"))
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TypstCheckDiagnostic {
+    severity: String,
+    message: String,
+    line: Option<usize>,
+    column: Option<usize>,
+}
+
+#[tauri::command]
+async fn check_typst_document(
+    app_handle: tauri::AppHandle,
+    source_code: String,
+    file_path: String,
+) -> Result<Vec<TypstCheckDiagnostic>, String> {
+    use tauri::Manager;
+
+    let path = std::path::Path::new(&file_path);
+    let parent = path.parent().unwrap_or(std::path::Path::new(""));
+    let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let input_path = parent.join(format!(".{}.typstry-check.typ", file_stem));
+    let output_path = parent.join(format!(".{}.typstry-check.svg", file_stem));
+
+    std::fs::write(&input_path, source_code).map_err(|e| format!("Check write failed: {}", e))?;
+
+    let data_dir = app_handle.path().app_local_data_dir().unwrap_or_default();
+    let local_typst = data_dir.join("typst.exe");
+    let typst_cmd = if local_typst.exists() {
+        local_typst.to_string_lossy().to_string()
+    } else {
+        "typst".to_string()
+    };
+
+    let mut command = std::process::Command::new(typst_cmd);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let output = command
+        .arg("compile")
+        .arg("--diagnostic-format")
+        .arg("short")
+        .arg("--format")
+        .arg("svg")
+        .arg(&input_path)
+        .arg(&output_path)
+        .output()
+        .map_err(|e| format!("Typst check failed to start: {}", e));
+
+    let _ = std::fs::remove_file(&input_path);
+    let _ = std::fs::remove_file(&output_path);
+
+    let output = output?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Ok(parse_typst_check_diagnostics(&stderr))
+}
+
+fn parse_typst_check_diagnostics(stderr: &str) -> Vec<TypstCheckDiagnostic> {
+    let mut diagnostics = Vec::new();
+
+    for line in stderr.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some(diagnostic) = parse_short_typst_diagnostic(trimmed) {
+            diagnostics.push(diagnostic);
+        } else if trimmed.starts_with("error:") || trimmed.starts_with("warning:") {
+            let (severity, message) = trimmed.split_once(':').unwrap_or(("error", trimmed));
+            diagnostics.push(TypstCheckDiagnostic {
+                severity: severity.to_string(),
+                message: message.trim().to_string(),
+                line: None,
+                column: None,
+            });
+        }
+    }
+
+    diagnostics
+}
+
+fn parse_short_typst_diagnostic(line: &str) -> Option<TypstCheckDiagnostic> {
+    let (location, severity, message) =
+        if let Some((location, message)) = line.split_once(": error:") {
+            (location, "error", message)
+        } else if let Some((location, message)) = line.split_once(": warning:") {
+            (location, "warning", message)
+        } else if let Some((location, message)) = line.split_once(": info:") {
+            (location, "info", message)
+        } else {
+            return None;
+        };
+
+    let mut location_parts = location.rsplitn(3, ':');
+    let column_number = location_parts.next()?.parse::<usize>().ok()?;
+    let line_number = location_parts.next()?.parse::<usize>().ok()?;
+
+    Some(TypstCheckDiagnostic {
+        severity: severity.to_string(),
+        message: message.trim().to_string(),
+        line: Some(line_number),
+        column: Some(column_number),
+    })
+}
+
+#[tauri::command]
 async fn compile_typst_document(
     app_handle: tauri::AppHandle,
     source_code: String,
@@ -172,6 +348,13 @@ async fn start_tinymist_lsp(
     state: tauri::State<'_, LspState>,
 ) -> Result<(), String> {
     use tauri::Manager;
+
+    *state.tx.lock().unwrap() = None;
+    let existing_process = state.process.lock().unwrap().take();
+    if let Some(mut child) = existing_process {
+        let _ = child.kill().await;
+    }
+
     let data_dir = app_handle.path().app_local_data_dir().unwrap_or_default();
     let tinymist_exe = data_dir.join("tinymist.exe");
 
@@ -353,13 +536,22 @@ pub fn run() {
                 handle,
                 "View",
                 true,
-                &[&MenuItem::with_id(
-                    handle,
-                    "toggle_editor_mode",
-                    "Switch Workspace Layout (Code / WYSIWYM)",
-                    true,
-                    Some("CmdOrCtrl+M"),
-                )?],
+                &[
+                    &MenuItem::with_id(
+                        handle,
+                        "toggle_editor_mode",
+                        "Switch Workspace Layout (Code / WYSIWYM)",
+                        true,
+                        Some("CmdOrCtrl+M"),
+                    )?,
+                    &MenuItem::with_id(
+                        handle,
+                        "toggle_log_console",
+                        "Toggle Log Console",
+                        true,
+                        Some("CmdOrCtrl+`"),
+                    )?,
+                ],
             )?;
 
             let menu = Menu::with_items(handle, &[&file_menu, &edit_menu, &view_menu])?;
@@ -375,6 +567,9 @@ pub fn run() {
                 "toggle_editor_mode" => {
                     let _ = app_handle.emit("menu-toggle-layout", ());
                 }
+                "toggle_log_console" => {
+                    let _ = app_handle.emit("menu-toggle-log-console", ());
+                }
                 _ => {}
             });
 
@@ -382,8 +577,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             compile_typst_document,
+            check_typst_document,
             read_workspace_file,
             read_workspace_dir,
+            resolve_preview_main,
             ensure_toolchain,
             start_tinymist_lsp,
             send_lsp_message
