@@ -6,16 +6,25 @@
   <title>Typstry Workspace</title>
 </head>
 <body>
-  <div id="app-container">
-    <div id="explorer-sidebar"></div>
-    <div id="workspace-viewport">
-      <div id="input-container-wrapper">
-        <div id="code-editor-pane" class="input-pane"></div>
-        <div id="wysiwym-editor-pane" class="input-pane hidden">
-          <div class="wysiwym-container"></div>
+  <div id="app-shell">
+    <div id="app-container">
+      <div id="explorer-sidebar"></div>
+      <div id="workspace-viewport">
+        <div id="input-container-wrapper">
+          <div id="code-editor-pane" class="input-pane"></div>
+          <div id="wysiwym-editor-pane" class="input-pane hidden">
+            <div class="wysiwym-container"></div>
+          </div>
         </div>
+        <div id="preview-render-pane"></div>
       </div>
-      <div id="preview-render-pane"></div>
+    </div>
+    <div id="status-bar" role="status" aria-live="polite">
+      <div id="lsp-status" class="status-item" data-state="starting">
+        <span class="status-dot" aria-label="Preparing toolchain"></span>
+        <span class="status-label">LSP</span>
+        <span class="status-text">Preparing toolchain</span>
+      </div>
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>

@@ -1,4 +1,4 @@
-import { readDir } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
 
 export interface FileNode { name: string; path: string; isDirectory: boolean; children?: FileNode[]; }
@@ -18,7 +18,7 @@ export class WorkspaceExplorer {
   }
 
   private async readDirectoryRecursive(dirPath: string): Promise<FileNode[]> {
-    const entries = await readDir(dirPath);
+    const entries: {name: string, isDirectory: boolean}[] = await invoke("read_workspace_dir", { path: dirPath });
     const nodes: FileNode[] = [];
     for (const entry of entries) {
       const childPath = await join(dirPath, entry.name);

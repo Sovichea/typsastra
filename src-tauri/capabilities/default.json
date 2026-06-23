@@ -1,0 +1,19 @@
+{
+  "identifier": "default",
+  "description": "Allow core plugins and dialog access",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:default",
+    {
+      "identifier": "fs:allow-read",
+      "allow": [{ "path": "$HOME/**" }, { "path": "C:/**" }]
+    },
+    {
+      "identifier": "fs:allow-write",
+      "allow": [{ "path": "$HOME/**" }, { "path": "C:/**" }]
+    },
+    "shell:default"
+  ]
+}

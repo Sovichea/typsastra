@@ -1,33 +1,302 @@
-use tauri::menu::{Menu, Submenu, MenuItem, PredefinedMenuItem};
-use tauri::{ipc::Response, Emitter};
-use std::process::Command;
-use std::fs::File;
-use std::io::Write;
-use tempfile::tempdir;
+use serde_json::json;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::Emitter;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[tauri::command]
-async fn compile_typst_document(source_code: String) -> Result<Response, String> {
-    let dir = tempdir().map_err(|e| format!("Failed to create isolated environment: {}", e))?;
-    let input_path = dir.path().join("document.typ");
-    let output_path = dir.path().join("document.pdf");
+fn read_workspace_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+}
 
-    let mut file = File::create(&input_path).map_err(|e| format!("IO Failure: {}", e))?;
-    file.write_all(source_code.as_bytes()).map_err(|e| format!("Buffer Flush Failure: {}", e))?;
+use std::sync::Mutex;
+use tokio::sync::mpsc;
 
-    let output = Command::new("typst")
+struct LspState {
+    tx: Mutex<Option<mpsc::Sender<String>>>,
+    process: Mutex<Option<tokio::process::Child>>,
+}
+
+#[tauri::command]
+fn read_workspace_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
+    let mut entries = vec![];
+    let dir = std::fs::read_dir(&path).map_err(|e| format!("Failed to read dir: {}", e))?;
+    for entry in dir {
+        if let Ok(entry) = entry {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            entries.push(json!({
+                "name": file_name,
+                "isDirectory": is_dir
+            }));
+        }
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn compile_typst_document(
+    app_handle: tauri::AppHandle,
+    source_code: String,
+    file_path: String,
+) -> Result<String, String> {
+    use tauri::Manager;
+    let path = std::path::Path::new(&file_path);
+    let parent = path.parent().unwrap_or(std::path::Path::new(""));
+    let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
+
+    let input_path = parent.join(format!(".{}.preview.typ", file_stem));
+    let output_path_template = parent.join(format!(".{}.preview-{{p}}.svg", file_stem));
+
+    let mut file = std::fs::File::create(&input_path).map_err(|e| format!("IO Failure: {}", e))?;
+    std::io::Write::write_all(&mut file, source_code.as_bytes())
+        .map_err(|e| format!("Buffer Flush Failure: {}", e))?;
+
+    let data_dir = app_handle.path().app_local_data_dir().unwrap_or_default();
+    let local_typst = data_dir.join("typst.exe");
+    let typst_cmd = if local_typst.exists() {
+        local_typst.to_string_lossy().to_string()
+    } else {
+        "typst".to_string()
+    };
+
+    let mut command = std::process::Command::new(typst_cmd);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let output = command
         .arg("compile")
+        .arg("--format")
+        .arg("svg")
         .arg(&input_path)
-        .arg(&output_path)
+        .arg(output_path_template.to_string_lossy().as_ref())
         .output()
         .map_err(|e| format!("Host binary execution blocked: {}", e))?;
+
+    let _ = std::fs::remove_file(&input_path);
 
     if !output.status.success() {
         let stderr_string = String::from_utf8_lossy(&output.stderr).to_string();
         return Err(stderr_string);
     }
 
-    let pdf_bytes = std::fs::read(&output_path).map_err(|e| format!("Artifact collection failed: {}", e))?;
-    Ok(Response::new(pdf_bytes))
+    let mut combined_svg = String::new();
+    let mut page = 1;
+    loop {
+        let page_path = parent.join(format!(".{}.preview-{}.svg", file_stem, page));
+        if !page_path.exists() {
+            break;
+        }
+
+        if let Ok(svg) = std::fs::read_to_string(&page_path) {
+            combined_svg.push_str(&format!("<div class='typst-page' style='margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);'>\n{}\n</div>", svg));
+        }
+        let _ = std::fs::remove_file(&page_path);
+        page += 1;
+    }
+
+    Ok(combined_svg)
+}
+
+#[tauri::command]
+async fn ensure_toolchain(app_handle: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to get data dir: {}", e))?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create data dir: {}", e))?;
+
+    let typst_exe = data_dir.join("typst.exe");
+    let tinymist_exe = data_dir.join("tinymist.exe");
+
+    if typst_exe.exists() && tinymist_exe.exists() {
+        return Ok("Toolchain is ready.".to_string());
+    }
+
+    let script = format!(
+        r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+$DataDir = "{}"
+
+if (!(Test-Path "$DataDir\tinymist.exe")) {{
+    Write-Host "Downloading Tinymist..."
+    curl.exe -L -o "$DataDir\tinymist.exe" "https://github.com/Myriad-Dreamin/tinymist/releases/download/v0.15.2/tinymist-win32-x64.exe"
+}}
+
+if (!(Test-Path "$DataDir\typst.exe")) {{
+    Write-Host "Downloading Typst..."
+    curl.exe -L -o "$DataDir\typst.zip" "https://github.com/typst/typst/releases/download/v0.15.0/typst-x86_64-pc-windows-msvc.zip"
+    Expand-Archive -Path "$DataDir\typst.zip" -DestinationPath "$DataDir\typst_extracted" -Force
+    Move-Item -Path "$DataDir\typst_extracted\typst-x86_64-pc-windows-msvc\typst.exe" -Destination "$DataDir\typst.exe" -Force
+    Remove-Item "$DataDir\typst.zip"
+    Remove-Item "$DataDir\typst_extracted" -Recurse -Force
+}}
+"#,
+        data_dir.to_string_lossy()
+    );
+
+    let script_path = data_dir.join("download_toolchain.ps1");
+    std::fs::write(&script_path, script).map_err(|e| format!("Failed to write script: {}", e))?;
+
+    let mut command = std::process::Command::new("powershell");
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let output = command
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-File")
+        .arg(&script_path)
+        .output()
+        .map_err(|e| format!("Failed to execute powershell: {}", e))?;
+
+    let _ = std::fs::remove_file(&script_path);
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Toolchain download failed: {}", stderr));
+    }
+
+    Ok("Toolchain downloaded successfully.".to_string())
+}
+
+#[tauri::command]
+async fn start_tinymist_lsp(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, LspState>,
+) -> Result<(), String> {
+    use tauri::Manager;
+    let data_dir = app_handle.path().app_local_data_dir().unwrap_or_default();
+    let tinymist_exe = data_dir.join("tinymist.exe");
+
+    if !tinymist_exe.exists() {
+        return Err("Tinymist not found. Please restart to download.".to_string());
+    }
+
+    let mut command = tokio::process::Command::new(&tinymist_exe);
+    command
+        .arg("lsp")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+
+    #[cfg(windows)]
+    {
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("Failed to spawn LSP: {}", e))?;
+
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+
+    let (tx, mut rx) = mpsc::channel::<String>(32);
+    *state.tx.lock().unwrap() = Some(tx);
+
+    let app_clone = app_handle.clone();
+    tokio::spawn(async move {
+        let mut byte = [0u8; 1];
+        let mut header = Vec::new();
+        loop {
+            header.clear();
+            loop {
+                if tokio::io::AsyncReadExt::read_exact(&mut stdout, &mut byte)
+                    .await
+                    .is_err()
+                {
+                    let _ = app_clone.emit("lsp-status", "stopped");
+                    return;
+                }
+                header.push(byte[0]);
+                if header.ends_with(b"\r\n\r\n") {
+                    break;
+                }
+            }
+
+            let header_str = String::from_utf8_lossy(&header);
+            let mut content_length = 0;
+            for line in header_str.split("\r\n") {
+                if line.starts_with("Content-Length: ") {
+                    content_length = line["Content-Length: ".len()..].trim().parse().unwrap_or(0);
+                }
+            }
+
+            if content_length > 0 {
+                let mut content = vec![0u8; content_length];
+                if tokio::io::AsyncReadExt::read_exact(&mut stdout, &mut content)
+                    .await
+                    .is_err()
+                {
+                    let _ = app_clone.emit("lsp-status", "stopped");
+                    return;
+                }
+                if let Ok(json_str) = String::from_utf8(content) {
+                    #[cfg(debug_assertions)]
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(std::env::temp_dir().join("typstry_lsp_log.txt"))
+                        .and_then(|mut f| {
+                            std::io::Write::write_all(
+                                &mut f,
+                                format!("RX: {}\n", json_str).as_bytes(),
+                            )
+                        });
+
+                    let _ = app_clone.emit("lsp-rx", json_str);
+                }
+            }
+        }
+    });
+
+    let app_clone = app_handle.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            #[cfg(debug_assertions)]
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(std::env::temp_dir().join("typstry_lsp_log.txt"))
+                .and_then(|mut f| {
+                    std::io::Write::write_all(&mut f, format!("TX: {}\n", msg).as_bytes())
+                });
+
+            let payload: String = format!("Content-Length: {}\r\n\r\n{}", msg.len(), msg);
+            if tokio::io::AsyncWriteExt::write_all(&mut stdin, payload.as_bytes())
+                .await
+                .is_err()
+            {
+                let _ = app_clone.emit("lsp-status", "stopped");
+                break;
+            }
+            let _ = tokio::io::AsyncWriteExt::flush(&mut stdin).await;
+        }
+    });
+
+    *state.process.lock().unwrap() = Some(child);
+    let _ = app_handle.emit("lsp-status", "running");
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn send_lsp_message(
+    message: String,
+    state: tauri::State<'_, LspState>,
+) -> Result<(), String> {
+    if let Some(tx) = state.tx.lock().unwrap().as_ref() {
+        let _ = tx.try_send(message);
+    }
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -35,43 +304,90 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .manage(LspState {
+            tx: Mutex::new(None),
+            process: Mutex::new(None),
+        })
         .setup(|app| {
             let handle = app.handle();
-            
-            let file_menu = Submenu::with_items(handle, "File", true, &[
-                &MenuItem::with_id(handle, "open_folder", "Open Workspace Folder...", true, Some("CmdOrCtrl+O"))?,
-                &MenuItem::with_id(handle, "save_file", "Save File", true, Some("CmdOrCtrl+S"))?,
-                &PredefinedMenuItem::separator(handle)?,
-                &PredefinedMenuItem::quit(handle, None)?
-            ])?;
 
-            let edit_menu = Submenu::with_items(handle, "Edit", true, &[
-                &PredefinedMenuItem::undo(handle, None)?,
-                &PredefinedMenuItem::redo(handle, None)?,
-                &PredefinedMenuItem::cut(handle, None)?,
-                &PredefinedMenuItem::copy(handle, None)?,
-                &PredefinedMenuItem::paste(handle, None)?,
-            ])?;
+            let file_menu = Submenu::with_items(
+                handle,
+                "File",
+                true,
+                &[
+                    &MenuItem::with_id(
+                        handle,
+                        "open_folder",
+                        "Open Workspace Folder...",
+                        true,
+                        Some("CmdOrCtrl+O"),
+                    )?,
+                    &MenuItem::with_id(
+                        handle,
+                        "save_file",
+                        "Save File",
+                        true,
+                        Some("CmdOrCtrl+S"),
+                    )?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::quit(handle, None)?,
+                ],
+            )?;
 
-            let view_menu = Submenu::with_items(handle, "View", true, &[
-                &MenuItem::with_id(handle, "toggle_editor_mode", "Switch Workspace Layout (Code / WYSIWYM)", true, Some("CmdOrCtrl+M"))?,
-            ])?;
+            let edit_menu = Submenu::with_items(
+                handle,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(handle, None)?,
+                    &PredefinedMenuItem::redo(handle, None)?,
+                    &PredefinedMenuItem::cut(handle, None)?,
+                    &PredefinedMenuItem::copy(handle, None)?,
+                    &PredefinedMenuItem::paste(handle, None)?,
+                ],
+            )?;
+
+            let view_menu = Submenu::with_items(
+                handle,
+                "View",
+                true,
+                &[&MenuItem::with_id(
+                    handle,
+                    "toggle_editor_mode",
+                    "Switch Workspace Layout (Code / WYSIWYM)",
+                    true,
+                    Some("CmdOrCtrl+M"),
+                )?],
+            )?;
 
             let menu = Menu::with_items(handle, &[&file_menu, &edit_menu, &view_menu])?;
             app.set_menu(menu)?;
 
-            app.on_menu_event(|app_handle, event| {
-                match event.id.as_ref() {
-                    "open_folder" => { let _ = app_handle.emit("menu-open-folder", ()); },
-                    "save_file" => { let _ = app_handle.emit("menu-save-active", ()); },
-                    "toggle_editor_mode" => { let _ = app_handle.emit("menu-toggle-layout", ()); },
-                    _ => {}
+            app.on_menu_event(|app_handle, event| match event.id.as_ref() {
+                "open_folder" => {
+                    let _ = app_handle.emit("menu-open-folder", ());
                 }
+                "save_file" => {
+                    let _ = app_handle.emit("menu-save-active", ());
+                }
+                "toggle_editor_mode" => {
+                    let _ = app_handle.emit("menu-toggle-layout", ());
+                }
+                _ => {}
             });
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![compile_typst_document])
+        .invoke_handler(tauri::generate_handler![
+            compile_typst_document,
+            read_workspace_file,
+            read_workspace_dir,
+            ensure_toolchain,
+            start_tinymist_lsp,
+            send_lsp_message
+        ])
         .run(tauri::generate_context!())
         .expect("Error initializing Tauri execution engine");
 }

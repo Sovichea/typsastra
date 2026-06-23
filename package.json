@@ -16,7 +16,8 @@
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
-    "@tauri-apps/plugin-shell": "^2.0.0"
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "tinymist": "^0.12.16"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
