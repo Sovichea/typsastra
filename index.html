@@ -111,6 +111,158 @@
         <div id="input-container-wrapper" class="hidden">
           <div id="code-editor-pane" class="input-pane">
             <div id="editor-tab-bar" class="editor-tab-bar" role="tablist" aria-label="Open files"></div>
+            <div id="editor-visual-toolbar" class="editor-visual-toolbar" aria-label="Editor tools">
+              <div class="toolbar-group">
+                <button type="button" class="toolbar-button" data-tool="save" title="Save" aria-label="Save">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="undo" title="Undo" aria-label="Undo">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="redo" title="Redo" aria-label="Redo">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+                </button>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="toolbar-button" data-tool="heading-1" title="Heading 1" aria-label="Heading 1"><span class="toolbar-button-text">H1</span></button>
+                <button type="button" class="toolbar-button" data-tool="heading-2" title="Heading 2" aria-label="Heading 2"><span class="toolbar-button-text">H2</span></button>
+                <button type="button" class="toolbar-button" data-tool="heading-3" title="Heading 3" aria-label="Heading 3"><span class="toolbar-button-text">H3</span></button>
+                <button type="button" class="toolbar-button" data-tool="bold" title="Bold" aria-label="Bold">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 12a4 4 0 0 0 0-8H6v8"/><path d="M15 20a4 4 0 0 0 0-8H6v8Z"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="italic" title="Italic" aria-label="Italic">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/></svg>
+                </button>
+                <div class="dropdown-container toolbar-dropdown-container">
+                  <button type="button" class="toolbar-button toolbar-dropdown-btn" title="More Text Formatting" aria-haspopup="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                  </button>
+                  <div class="dropdown-menu toolbar-dropdown-menu">
+                    <div class="dropdown-item" data-tool="underline">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" x2="20" y1="21" y2="21"/></svg><span>Underline</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="strikethrough">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg><span>Strikethrough</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="highlight">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg><span>Highlight</span></div>
+                    </div>
+                    <div class="dropdown-separator"></div>
+                    <div class="dropdown-item" data-tool="inline-code">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span>Inline Code</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="code-block">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><polyline points="13 15 17 12 13 9"/><polyline points="11 9 7 12 11 15"/></svg><span>Code Block</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="blockquote">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg><span>Blockquote</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="toolbar-button" data-tool="link" title="Link" aria-label="Link">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="bullet-list" title="Bullet list" aria-label="Bullet list">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="numbered-list" title="Numbered list" aria-label="Numbered list">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+                </button>
+                <div class="dropdown-container toolbar-dropdown-container">
+                  <button type="button" class="toolbar-button toolbar-dropdown-btn" title="Insert Elements" aria-haspopup="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                  </button>
+                  <div class="dropdown-menu toolbar-dropdown-menu">
+                    <div class="dropdown-item" data-tool="table">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="3" y2="21"/><line x1="15" x2="15" y1="3" y2="21"/></svg><span>Table</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="figure">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><span>Figure</span></div>
+                    </div>
+                    <div class="dropdown-separator"></div>
+                    <div class="dropdown-item" data-tool="footnote">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7h6M9 13h6M9 17h3M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/></svg><span>Footnote</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="label">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg><span>Label</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="reference">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Reference</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="bibliography">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg><span>Bibliography</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="toolbar-button" data-tool="inline-math" title="Inline math" aria-label="Inline math"><span class="toolbar-button-text-math">$</span></button>
+                <button type="button" class="toolbar-button" data-tool="math-block" title="Math block" aria-label="Math block">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 7V4H6l6 8-6 8h12v-3"/></svg>
+                </button>
+                <div class="dropdown-container toolbar-dropdown-container">
+                  <button type="button" class="toolbar-button toolbar-dropdown-btn" title="More Math Tools" aria-haspopup="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                  </button>
+                  <div class="dropdown-menu toolbar-dropdown-menu">
+                    <div class="dropdown-item" data-tool="fraction">
+                      <div style="display: flex; align-items: center; gap: 8px;"><span style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: 600; width: 14px; text-align: center; display: inline-block;">a/b</span><span>Fraction (a/b)</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="sqrt">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2l4 8 5-16h7"/></svg><span>Square Root</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="subscript">
+                      <div style="display: flex; align-items: center; gap: 8px;"><span style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: 600; width: 14px; text-align: center; display: inline-block; font-size: 14px;">X<sub style="font-size: 10px; margin-left: -2px;">2</sub></span><span>Subscript</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="superscript">
+                      <div style="display: flex; align-items: center; gap: 8px;"><span style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: 600; width: 14px; text-align: center; display: inline-block; font-size: 14px;">X<sup style="font-size: 10px; margin-left: -2px;">2</sup></span><span>Superscript</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="toolbar-button" data-tool="outline" title="Outline" aria-label="Outline">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"/><path d="M3 18h18"/><path d="M3 6h18"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="pagebreak" title="Page break" aria-label="Page break">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="12" y2="12"/><path d="M16 20h-4"/><path d="M8 20H4"/><path d="M20 20h-4"/><path d="M12 4h4"/><path d="M4 4h4"/><path d="M20 4h-4"/></svg>
+                </button>
+                <div class="dropdown-container toolbar-dropdown-container">
+                  <button type="button" class="toolbar-button toolbar-dropdown-btn" title="Layout Options" aria-haspopup="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="21" x2="9" y1="12" y2="12"/><line x1="21" x2="7" y1="18" y2="18"/></svg>
+                  </button>
+                  <div class="dropdown-menu toolbar-dropdown-menu">
+                    <div class="dropdown-item" data-tool="align-center">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="17" x2="7" y1="12" y2="12"/><line x1="21" x2="3" y1="18" y2="18"/></svg><span>Center Align</span></div>
+                    </div>
+                    <div class="dropdown-item" data-tool="align-right">
+                      <div style="display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="21" x2="9" y1="12" y2="12"/><line x1="21" x2="7" y1="18" y2="18"/></svg><span>Right Align</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="toolbar-group toolbar-group-actions">
+                <button type="button" class="toolbar-button" data-tool="find-replace" title="Find and Replace" aria-label="Find and Replace">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </button>
+              </div>
+              <div class="toolbar-group toolbar-group-actions">
+                <button type="button" class="toolbar-button" data-tool="sync-preview" title="Sync preview" aria-label="Sync preview">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="export-pdf" title="Export PDF" aria-label="Export PDF">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="toggle-wrap" title="Toggle word wrap" aria-label="Toggle word wrap">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><line x1="3" x2="9" y1="18" y2="18"/></svg>
+                </button>
+                <button type="button" class="toolbar-button" data-tool="toggle-mode" title="Switch layout" aria-label="Switch layout">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="9" x2="9" y1="3" y2="21"/></svg>
+                </button>
+              </div>
+            </div>
             <div id="editor-font-breadcrumb" class="editor-font-breadcrumb hidden" role="status" aria-live="polite">
               <span id="editor-font-breadcrumb-text"></span>
               <button id="editor-font-download" type="button"></button>

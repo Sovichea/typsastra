@@ -5,9 +5,10 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
+import { openSearchPanel } from "@codemirror/search";
 import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, editorFontCompartment } from "./editor/extensions";
 import { editorFontTheme } from "./editor/themes";
 import { setEditorDiagnosticsEffect } from "./editor/diagnostics";
@@ -138,6 +139,7 @@ class TypstryWorkspaceController {
 
   private codePane = document.getElementById("code-editor-pane")!;
   private editorTabBar = document.getElementById("editor-tab-bar")!;
+  private editorVisualToolbar = document.getElementById("editor-visual-toolbar")!;
   private codeRenderPane = document.getElementById("code-render-pane")!;
   private editorFontBreadcrumb = document.getElementById("editor-font-breadcrumb")!;
   private editorFontBreadcrumbText = document.getElementById("editor-font-breadcrumb-text")!;
@@ -161,6 +163,7 @@ class TypstryWorkspaceController {
     this.renderRecentProjects();
     this.initCodeMirror();
     this.initExplorer();
+    this.initVisualToolbar();
     this.bindGlobalEvents();
     this.initResizers();
     this.initUndockPreview();
@@ -189,11 +192,15 @@ class TypstryWorkspaceController {
 
     if (this.activeFilePath || this.workspaceRootPath) {
       welcomeScreen?.classList.add("hidden");
+    } else {
+      welcomeScreen?.classList.remove("hidden");
+    }
+
+    if (this.activeFilePath) {
       inputWrapper?.classList.remove("hidden");
       previewWrapper?.classList.remove("hidden");
       resizer?.classList.remove("hidden");
     } else {
-      welcomeScreen?.classList.remove("hidden");
       inputWrapper?.classList.add("hidden");
       previewWrapper?.classList.add("hidden");
       resizer?.classList.add("hidden");
@@ -235,13 +242,12 @@ class TypstryWorkspaceController {
             this.explorer.showInlineInput(targetPath, "file", "", async (name) => {
               if (name) {
                 const { join, dirname } = await import("@tauri-apps/api/path");
-                const { writeTextFile } = await import("@tauri-apps/plugin-fs");
                 let parentDir = this.workspaceRootPath!;
                 if (targetPath) parentDir = isTargetDir ? targetPath : await dirname(targetPath);
                 
                 const newPath = await join(parentDir, name);
                 try {
-                   await writeTextFile(newPath, "");
+                   await invoke("save_workspace_file", { path: newPath, contents: "" });
                    if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
                    this.loadFile(newPath);
                 } catch(e) { alert("Failed to create file: " + e); }
@@ -282,14 +288,13 @@ class TypstryWorkspaceController {
             this.explorer.showInlineInput(targetPath, "folder", "", async (name) => {
               if (name) {
                 const { join, dirname } = await import("@tauri-apps/api/path");
-                const { mkdir } = await import("@tauri-apps/plugin-fs");
                 let parentDir = this.workspaceRootPath!;
                 if (targetPath) {
                    parentDir = isTargetDir ? targetPath : await dirname(targetPath);
                 }
                 const newDirPath = await join(parentDir, name);
                 try {
-                  await mkdir(newDirPath);
+                  await invoke("create_workspace_dir", { path: newDirPath });
                   if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
                 } catch(e) { alert("Failed to create folder: " + e); }
               }
@@ -303,11 +308,10 @@ class TypstryWorkspaceController {
             this.explorer.showInlineInput(targetPath, "rename", oldName, async (newName) => {
               if (newName && newName !== oldName) {
                 const { join, dirname } = await import("@tauri-apps/api/path");
-                const { rename } = await import("@tauri-apps/plugin-fs");
                 const dir = await dirname(targetPath);
                 const newPath = await join(dir, newName);
                 try {
-                  await rename(targetPath, newPath);
+                  await invoke("rename_workspace_file", { oldPath: targetPath, newPath });
                   if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
                   const wasActiveTab = this.activeFilePath === targetPath;
                   this.updateEditorTabPath(targetPath, newPath);
@@ -391,7 +395,6 @@ class TypstryWorkspaceController {
         case "ctx-fs-paste":
           if (this.clipboardFilePath) {
              const { basename, join, dirname } = await import("@tauri-apps/api/path");
-             const { copyFile } = await import("@tauri-apps/plugin-fs");
              
              let parentDir = this.workspaceRootPath!;
              if (targetPath) {
@@ -403,7 +406,7 @@ class TypstryWorkspaceController {
                 // Basic strategy to prevent overwriting: prefix with "Copy of "
                 const newName = "Copy of " + name;
                 const newPath = await join(parentDir, newName);
-                await copyFile(this.clipboardFilePath, newPath);
+                await invoke("copy_workspace_file", { source: this.clipboardFilePath, dest: newPath });
                 if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
              } catch(e) { alert("Failed to paste file: " + e); }
           }
@@ -444,6 +447,7 @@ class TypstryWorkspaceController {
         `;
       } else if (isExplorer) {
         targetPath = this.workspaceRootPath || "";
+        isTargetDir = !!this.workspaceRootPath;
         menuItems = `
           <div class="dropdown-item" id="ctx-new-file">New File <span class="hotkey">Ctrl+N</span></div>
           <div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div>
@@ -607,7 +611,7 @@ class TypstryWorkspaceController {
   }
 
   private initCodeMirror() {
-    const initialDocument = "= Welcome to Typstry\nSelect a file from the explorer to begin configuration editing.";
+    const initialDocument = "";
     this.bindEditorFontBreadcrumb();
     this.editorInstance = new EditorView({
       state: EditorState.create({
@@ -803,6 +807,256 @@ class TypstryWorkspaceController {
 
   private initExplorer() {
     this.explorer = new WorkspaceExplorer(document.getElementById("explorer-sidebar")!, (path) => this.loadFile(path));
+  }
+
+  private initVisualToolbar() {
+    this.editorVisualToolbar.addEventListener("pointerdown", (event) => {
+      const target = event.target as HTMLElement;
+      if (target.closest("[data-tool]") || target.closest(".toolbar-dropdown-btn")) {
+        event.preventDefault();
+      }
+    });
+
+    this.editorVisualToolbar.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement;
+
+      const dropdownBtn = target.closest(".toolbar-dropdown-btn");
+      if (dropdownBtn) {
+        const container = dropdownBtn.closest(".toolbar-dropdown-container");
+        if (container) {
+          this.editorVisualToolbar.querySelectorAll(".toolbar-dropdown-container.active").forEach((el) => {
+            if (el !== container) el.classList.remove("active");
+          });
+          container.classList.toggle("active");
+          event.stopPropagation();
+        }
+        return;
+      }
+
+      const button = target.closest("[data-tool]") as HTMLElement | null;
+      if (!button) {
+        this.editorVisualToolbar.querySelectorAll(".toolbar-dropdown-container.active").forEach((el) => {
+          el.classList.remove("active");
+        });
+        return;
+      }
+
+      this.editorVisualToolbar.querySelectorAll(".toolbar-dropdown-container.active").forEach((el) => {
+        el.classList.remove("active");
+      });
+
+      void this.runVisualToolbarTool(button.dataset.tool ?? "");
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!this.editorVisualToolbar.contains(event.target as Node)) {
+        this.editorVisualToolbar.querySelectorAll(".toolbar-dropdown-container.active").forEach((el) => {
+          el.classList.remove("active");
+        });
+      }
+    });
+  }
+
+  private async runVisualToolbarTool(tool: string) {
+    switch (tool) {
+      case "save":
+        await this.saveActiveFile();
+        break;
+      case "undo":
+        undo(this.editorInstance);
+        break;
+      case "redo":
+        redo(this.editorInstance);
+        break;
+      case "find-replace":
+        openSearchPanel(this.editorInstance);
+        break;
+      case "heading-1":
+        this.applyHeading(1);
+        break;
+      case "heading-2":
+        this.applyHeading(2);
+        break;
+      case "heading-3":
+        this.applyHeading(3);
+        break;
+      case "bold":
+        this.wrapSelection("#strong[", "]", "strong text");
+        break;
+      case "italic":
+        this.wrapSelection("#emph[", "]", "emphasized text");
+        break;
+      case "underline":
+        this.wrapSelection("#underline[", "]", "text");
+        break;
+      case "strikethrough":
+        this.wrapSelection("#strike[", "]", "text");
+        break;
+      case "highlight":
+        this.wrapSelection("#highlight[", "]", "text");
+        break;
+      case "inline-code":
+        this.wrapSelection("`", "`", "code");
+        break;
+      case "code-block":
+        this.wrapSelection("```typst\n", "\n```", "code");
+        break;
+      case "blockquote":
+        this.wrapSelection("#quote(block: true)[\n  ", "\n]", "quote");
+        break;
+      case "link":
+        this.wrapSelection('#link("https://example.com")[', "]", "link text");
+        break;
+      case "bullet-list":
+        this.applyLinePrefix("- ");
+        break;
+      case "numbered-list":
+        this.applyLinePrefix("+ ");
+        break;
+      case "table":
+        this.insertSnippet(`#table(
+  columns: 3,
+  [Header 1], [Header 2], [Header 3],
+  [Cell 1], [Cell 2], [Cell 3],
+)
+`);
+        break;
+      case "figure":
+        this.insertSnippet(`#figure(
+  image("image.png", width: 80%),
+  caption: [Caption],
+)
+`);
+        break;
+      case "footnote":
+        this.wrapSelection("#footnote[", "]", "note");
+        break;
+      case "label":
+        this.wrapSelection("<", ">", "label");
+        break;
+      case "reference":
+        this.wrapSelection("@", "", "label");
+        break;
+      case "bibliography":
+        this.insertSnippet('#bibliography("refs.bib")\n');
+        break;
+      case "inline-math":
+        this.wrapSelection("$", "$", "x");
+        break;
+      case "math-block":
+        this.insertSnippet(`$
+  x = frac(-b plus.minus sqrt(b^2 - 4 a c), 2 a)
+$
+`);
+        break;
+      case "fraction":
+        this.insertSnippet("$frac(1, 2)$", 6, 7);
+        break;
+      case "sqrt":
+        this.insertSnippet("$sqrt(x)$", 6, 7);
+        break;
+      case "subscript":
+        this.wrapSelection("_", "", "sub");
+        break;
+      case "superscript":
+        this.wrapSelection("^", "", "sup");
+        break;
+      case "outline":
+        this.insertSnippet("#outline()\n");
+        break;
+      case "pagebreak":
+        this.insertSnippet("#pagebreak()\n");
+        break;
+      case "align-center":
+        this.wrapSelection("#align(center)[\n  ", "\n]", "content");
+        break;
+      case "align-right":
+        this.wrapSelection("#align(right)[\n  ", "\n]", "content");
+        break;
+      case "sync-preview":
+        await this.renderHighlightedPreviewAtCursor(this.editorInstance.state.selection.main.head);
+        this.editorInstance.focus();
+        break;
+      case "export-pdf":
+        document.getElementById("action-export-pdf")?.click();
+        break;
+      case "toggle-wrap":
+        document.getElementById("word-wrap-toggle")?.click();
+        break;
+      case "toggle-mode":
+        this.switchViewLayoutMode();
+        break;
+    }
+  }
+
+  private wrapSelection(prefix: string, suffix: string, placeholder: string) {
+    const state = this.editorInstance.state;
+    const transaction = state.changeByRange((range) => {
+      const selectedText = state.sliceDoc(range.from, range.to) || placeholder;
+      const insert = `${prefix}${selectedText}${suffix}`;
+      const selectionFrom = range.from + prefix.length;
+      const selectionTo = selectionFrom + selectedText.length;
+
+      return {
+        changes: { from: range.from, to: range.to, insert },
+        range: EditorSelection.range(selectionFrom, selectionTo)
+      };
+    });
+
+    this.editorInstance.dispatch(transaction, { scrollIntoView: true, userEvent: "input" });
+    this.editorInstance.focus();
+  }
+
+  private insertSnippet(snippet: string, selectFrom?: number, selectTo?: number) {
+    const state = this.editorInstance.state;
+    const range = state.selection.main;
+    const selectionFrom = range.from + (selectFrom ?? snippet.length);
+    const selectionTo = range.from + (selectTo ?? (selectFrom ?? snippet.length));
+
+    this.editorInstance.dispatch({
+      changes: { from: range.from, to: range.to, insert: snippet },
+      selection: { anchor: selectionFrom, head: selectionTo },
+      scrollIntoView: true,
+      userEvent: "input"
+    });
+    this.editorInstance.focus();
+  }
+
+  private applyHeading(level: number) {
+    const state = this.editorInstance.state;
+    const selection = state.selection.main;
+    const line = state.doc.lineAt(selection.from);
+    const prefix = `${"=".repeat(level)} `;
+    const lineText = line.text.replace(/^=+\s*/, "");
+
+    this.editorInstance.dispatch({
+      changes: { from: line.from, to: line.to, insert: `${prefix}${lineText}` },
+      selection: { anchor: line.from + prefix.length, head: line.from + prefix.length + lineText.length },
+      scrollIntoView: true,
+      userEvent: "input"
+    });
+    this.editorInstance.focus();
+  }
+
+  private applyLinePrefix(prefix: string) {
+    const state = this.editorInstance.state;
+    const selection = state.selection.main;
+    const startLine = state.doc.lineAt(selection.from);
+    const endPosition = selection.to > selection.from ? selection.to - 1 : selection.to;
+    const endLine = state.doc.lineAt(endPosition);
+    const changes = [];
+
+    for (let lineNumber = startLine.number; lineNumber <= endLine.number; lineNumber++) {
+      const line = state.doc.line(lineNumber);
+      changes.push({ from: line.from, insert: prefix });
+    }
+
+    this.editorInstance.dispatch({
+      changes,
+      scrollIntoView: true,
+      userEvent: "input"
+    });
+    this.editorInstance.focus();
   }
 
   private renderEditorTabs() {
@@ -2063,8 +2317,7 @@ class TypstryWorkspaceController {
         filters: [{ name: "Typst Document", extensions: ["typ"] }]
       });
       if (typeof savePath === "string") {
-        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-        await writeTextFile(savePath, "= New Document\n");
+        await invoke("save_workspace_file", { path: savePath, contents: "= New Document\n" });
         this.explorer.loadWorkspace(this.workspaceRootPath);
         this.loadFile(savePath);
       }

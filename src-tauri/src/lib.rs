@@ -16,6 +16,23 @@ fn save_workspace_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(&path, contents).map_err(|e| format!("Failed to save file: {}", e))
 }
 
+#[tauri::command]
+fn create_workspace_dir(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create dir: {}", e))
+}
+
+#[tauri::command]
+fn rename_workspace_file(old_path: String, new_path: String) -> Result<(), String> {
+    std::fs::rename(&old_path, &new_path).map_err(|e| format!("Failed to rename: {}", e))
+}
+
+#[tauri::command]
+fn copy_workspace_file(source: String, dest: String) -> Result<(), String> {
+    std::fs::copy(&source, &dest)
+        .map(|_| ())
+        .map_err(|e| format!("Failed to copy: {}", e))
+}
+
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Mutex,
@@ -581,6 +598,9 @@ pub fn run() {
             check_typst_document,
             read_workspace_file,
             save_workspace_file,
+            create_workspace_dir,
+            rename_workspace_file,
+            copy_workspace_file,
             read_workspace_dir,
             move_to_trash,
             reveal_in_explorer,
