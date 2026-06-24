@@ -1672,6 +1672,14 @@ class TypstryWorkspaceController {
     const dropdownContainers = document.querySelectorAll(".dropdown-container");
     dropdownContainers.forEach(container => {
       container.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+        
+        // If the user clicked a dropdown action item, close all menus and do not toggle open
+        if (target.closest(".dropdown-item")) {
+          dropdownContainers.forEach(c => c.classList.remove("active"));
+          return;
+        }
+
         const isActive = container.classList.contains("active");
         // Close all dropdowns
         dropdownContainers.forEach(c => c.classList.remove("active"));
