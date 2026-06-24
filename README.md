@@ -88,5 +88,5 @@ The compiled binaries will be placed in `src-tauri/target/release/`.
 - [ ] Establish cross-compilation CI/CD pipelines and verify Tauri builds for Linux and macOS
 - [ ] Interactive Document Outline (Table of Contents) sidebar for quick navigation
 - [ ] Integrated Typst Package Manager UI
-- [ ] Multi-tab support for editing multiple files simultaneously
+- [x] Multi-tab support for editing multiple files simultaneously
 - [ ] Visual Toolbar for inserting Typst math symbols, fractions, and code snippets

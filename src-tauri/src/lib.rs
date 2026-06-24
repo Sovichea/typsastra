@@ -11,6 +11,11 @@ fn read_workspace_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
 }
 
+#[tauri::command]
+fn save_workspace_file(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(&path, contents).map_err(|e| format!("Failed to save file: {}", e))
+}
+
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Mutex,
@@ -575,6 +580,7 @@ pub fn run() {
             compile_typst_document,
             check_typst_document,
             read_workspace_file,
+            save_workspace_file,
             read_workspace_dir,
             move_to_trash,
             reveal_in_explorer,

@@ -60,6 +60,18 @@ type EditorFontCandidate = {
   restartRequired?: boolean;
 };
 
+type EditorTab = {
+  path: string;
+  content: string;
+  savedContent: string;
+  isDirty: boolean;
+  previewRootPath: string | null;
+  version: number;
+  latestVersion: number;
+  selectionAnchor: number;
+  selectionHead: number;
+};
+
 const systemMonospaceFontStack = "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace";
 
 const editorUnicodeFontRules: Array<EditorFontCandidate & { pattern: RegExp }> = [
@@ -114,6 +126,7 @@ class TypstryWorkspaceController {
   private diagnosticLogEntries: LogConsoleEntry[] = [];
   private lspLogEntries: LogConsoleEntry[] = [];
   private isLogConsoleVisible = false;
+  private openTabs: EditorTab[] = [];
   private activeEditorFontCandidate: EditorFontCandidate | null = null;
   private appliedEditorFontStack = systemMonospaceFontStack;
   private dismissedEditorFontPromptId: string | null = null;
@@ -124,6 +137,7 @@ class TypstryWorkspaceController {
   private lspClient!: TinymistLspClient;
 
   private codePane = document.getElementById("code-editor-pane")!;
+  private editorTabBar = document.getElementById("editor-tab-bar")!;
   private codeRenderPane = document.getElementById("code-render-pane")!;
   private editorFontBreadcrumb = document.getElementById("editor-font-breadcrumb")!;
   private editorFontBreadcrumbText = document.getElementById("editor-font-breadcrumb-text")!;
@@ -295,8 +309,10 @@ class TypstryWorkspaceController {
                 try {
                   await rename(targetPath, newPath);
                   if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
-                  if (this.activeFilePath === targetPath) {
-                     this.activeFilePath = newPath;
+                  const wasActiveTab = this.activeFilePath === targetPath;
+                  this.updateEditorTabPath(targetPath, newPath);
+                  if (wasActiveTab) {
+                     await this.activateEditorTab(newPath, false);
                   }
                 } catch(e) { alert("Failed to rename: " + e); }
               }
@@ -312,9 +328,9 @@ class TypstryWorkspaceController {
                 await invoke("move_to_trash", { path: targetPath });
                 if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
                 if (this.activeFilePath === targetPath) {
-                   this.activeFilePath = null;
-                   this.editorInstance.dispatch({ changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" } });
-                   this.updateWorkspaceViewportVisibility();
+                   await this.closeEditorTab(targetPath, true);
+                } else {
+                   await this.closeEditorTab(targetPath, true);
                 }
               } catch(e) { alert("Failed to move to trash: " + e); }
             }
@@ -348,7 +364,7 @@ class TypstryWorkspaceController {
         case "ctx-editor-format":
           if (this.activeFilePath && this.lspReady && this.lspClient) {
              // Currently relying on Tinymist for formatting. Wait for proper textDocument/formatting support in TinyMist LSP client implementation, or trigger save.
-             document.getElementById("action-save-file")?.click();
+             await this.saveActiveFile();
           }
           break;
         case "ctx-editor-toggle-comment":
@@ -789,6 +805,221 @@ class TypstryWorkspaceController {
     this.explorer = new WorkspaceExplorer(document.getElementById("explorer-sidebar")!, (path) => this.loadFile(path));
   }
 
+  private renderEditorTabs() {
+    this.editorTabBar.innerHTML = "";
+
+    for (const tab of this.openTabs) {
+      const tabButton = document.createElement("button");
+      tabButton.className = `editor-tab${tab.path === this.activeFilePath ? " active" : ""}${tab.isDirty ? " dirty" : ""}`;
+      tabButton.type = "button";
+      tabButton.role = "tab";
+      tabButton.title = tab.path;
+      tabButton.setAttribute("aria-selected", String(tab.path === this.activeFilePath));
+      tabButton.dataset.path = tab.path;
+
+      const title = document.createElement("span");
+      title.className = "editor-tab-title";
+      title.textContent = this.fileNameFromPath(tab.path);
+      tabButton.appendChild(title);
+
+      const dirtyDot = document.createElement("span");
+      dirtyDot.className = "editor-tab-dirty";
+      dirtyDot.setAttribute("aria-hidden", "true");
+      tabButton.appendChild(dirtyDot);
+
+      const closeButton = document.createElement("span");
+      closeButton.className = "editor-tab-close";
+      closeButton.textContent = "x";
+      closeButton.title = "Close";
+      closeButton.setAttribute("aria-label", `Close ${this.fileNameFromPath(tab.path)}`);
+      tabButton.appendChild(closeButton);
+
+      tabButton.addEventListener("click", () => {
+        void this.activateEditorTab(tab.path);
+      });
+
+      closeButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void this.closeEditorTab(tab.path);
+      });
+
+      this.editorTabBar.appendChild(tabButton);
+    }
+  }
+
+  private getActiveTab(): EditorTab | null {
+    if (!this.activeFilePath) return null;
+    return this.openTabs.find((tab) => tab.path === this.activeFilePath) ?? null;
+  }
+
+  private persistActiveTabState() {
+    const tab = this.getActiveTab();
+    if (!tab || !this.editorInstance) return;
+
+    const content = this.activeMode === "WYSIWYM"
+      ? this.mapWysiwymToMarkup()
+      : this.editorInstance.state.doc.toString();
+    const selection = this.editorInstance.state.selection.main;
+    tab.content = content;
+    tab.isDirty = tab.content !== tab.savedContent;
+    tab.version = this.currentVersion;
+    tab.latestVersion = this.latestDocumentVersion;
+    tab.selectionAnchor = selection.anchor;
+    tab.selectionHead = selection.head;
+  }
+
+  private updateActiveTabContent(content: string) {
+    const tab = this.getActiveTab();
+    if (!tab) return;
+
+    const wasDirty = tab.isDirty;
+    tab.content = content;
+    tab.isDirty = tab.content !== tab.savedContent;
+    if (wasDirty !== tab.isDirty) {
+      this.renderEditorTabs();
+    }
+  }
+
+  private updateEditorTabPath(oldPath: string, newPath: string) {
+    const tab = this.openTabs.find((candidate) => candidate.path === oldPath);
+    if (!tab) return;
+
+    tab.path = newPath;
+    if (this.activeFilePath === oldPath) {
+      this.activeFilePath = newPath;
+      this.previewRootPath = tab.previewRootPath;
+    }
+    this.renderEditorTabs();
+  }
+
+  private async closeEditorTab(path: string, skipDirtyCheck = false) {
+    const tabIndex = this.openTabs.findIndex((tab) => tab.path === path);
+    if (tabIndex === -1) return;
+
+    if (this.activeFilePath === path) {
+      this.persistActiveTabState();
+    }
+
+    const tab = this.openTabs[tabIndex];
+    if (!skipDirtyCheck && tab.isDirty) {
+      const { confirm: confirmDialog } = await import("@tauri-apps/plugin-dialog");
+      const shouldClose = await confirmDialog(
+        `Close ${this.fileNameFromPath(tab.path)} without saving?`,
+        { title: "Unsaved Changes", kind: "warning" }
+      );
+      if (!shouldClose) {
+        return;
+      }
+    }
+
+    const wasActive = this.activeFilePath === path;
+    this.openTabs.splice(tabIndex, 1);
+
+    if (wasActive) {
+      const nextTab = this.openTabs[Math.min(tabIndex, this.openTabs.length - 1)] ?? null;
+      this.activeFilePath = null;
+      this.previewRootPath = null;
+      this.clearDiagnostics();
+      this.clearPendingLspSync();
+      this.clearPendingForwardSync();
+
+      if (nextTab) {
+        await this.activateEditorTab(nextTab.path, false);
+      } else {
+        this.isLoadingFile = true;
+        try {
+          this.editorInstance.dispatch({
+            changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
+          });
+        } finally {
+          this.isLoadingFile = false;
+        }
+        this.previewPane.innerHTML = "";
+        this.updateEditorUnicodeFontState("");
+        if (this.activeMode === "WYSIWYM") {
+          this.mapMarkupToWysiwym("");
+        }
+      }
+    }
+
+    this.renderEditorTabs();
+    this.updateWorkspaceViewportVisibility();
+  }
+
+  private async activateEditorTab(path: string, persistCurrent = true) {
+    if (this.activeFilePath === path) {
+      if (persistCurrent) {
+        this.persistActiveTabState();
+        this.renderEditorTabs();
+      }
+      this.editorInstance.focus();
+      return;
+    }
+
+    if (persistCurrent) {
+      this.persistActiveTabState();
+    }
+
+    const tab = this.openTabs.find((candidate) => candidate.path === path);
+    if (!tab) return;
+
+    this.currentVersion = tab.version;
+    this.latestDocumentVersion = tab.latestVersion;
+    this.previewOnlyVersions.clear();
+    this.previewHighlightMapping = null;
+    this.clearDiagnostics();
+
+    this.isLoadingFile = true;
+    try {
+      this.editorInstance.dispatch({
+        changes: { from: 0, to: this.editorInstance.state.doc.length, insert: tab.content },
+        selection: {
+          anchor: Math.min(tab.selectionAnchor, tab.content.length),
+          head: Math.min(tab.selectionHead, tab.content.length)
+        }
+      });
+    } finally {
+      this.isLoadingFile = false;
+    }
+
+    this.activeFilePath = path;
+    this.previewRootPath = await invoke<string | null>("resolve_preview_main", {
+      filePath: path,
+      workspaceRootPath: this.workspaceRootPath
+    });
+    tab.previewRootPath = this.previewRootPath;
+    this.clearPendingLspSync();
+    this.clearPendingForwardSync();
+    this.renderEditorTabs();
+    this.updateEditorUnicodeFontState(tab.content);
+
+    if (this.lspReady && this.lspClient) {
+      const uri = this.filePathToUri(path);
+      await this.lspClient.openTextDocument(uri, tab.content, this.currentVersion);
+      void this.runFallbackDiagnostics(path, tab.content, this.currentVersion);
+
+      if (this.previewRootPath) {
+        this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Starting live preview server...</div>`;
+        const previewUrl = await this.startPreviewWithRestart(this.previewRootPath, tab.content);
+        if (previewUrl) {
+          this.mountPreviewFrame(previewUrl);
+        } else {
+          this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Failed to start live preview server after restart. Check the log console for details.</div>`;
+        }
+      } else {
+        this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: sans-serif;">No preview root found for this library/template file. Diagnostics are still active.</div>`;
+      }
+    } else {
+      this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Tinymist LSP is offline. Live preview is unavailable.</div>`;
+    }
+
+    if (this.activeMode === "WYSIWYM") {
+      this.mapMarkupToWysiwym(tab.content);
+    }
+    this.updateWorkspaceViewportVisibility();
+    this.editorInstance.focus();
+  }
+
   private async initLsp() {
     this.lspClient = new TinymistLspClient(
       () => {},
@@ -808,58 +1039,61 @@ class TypstryWorkspaceController {
   }
 
   private async loadFile(path: string) {
+    const existingTab = this.openTabs.find((tab) => tab.path === path);
+    if (existingTab) {
+      await this.activateEditorTab(path);
+      return;
+    }
+
     try {
       const contents: string = await invoke("read_workspace_file", { path });
-      this.currentVersion = 1;
-      this.latestDocumentVersion = 1;
-      this.previewOnlyVersions.clear();
-      this.previewHighlightMapping = null;
-      this.clearDiagnostics();
-
-      this.isLoadingFile = true;
-      try {
-        this.editorInstance.dispatch({
-          changes: { from: 0, to: this.editorInstance.state.doc.length, insert: contents }
-        });
-      } finally {
-        this.isLoadingFile = false;
-      }
-
-      this.activeFilePath = path;
-      this.previewRootPath = await invoke<string | null>("resolve_preview_main", {
-        filePath: path,
-        workspaceRootPath: this.workspaceRootPath
+      this.openTabs.push({
+        path,
+        content: contents,
+        savedContent: contents,
+        isDirty: false,
+        previewRootPath: null,
+        version: 1,
+        latestVersion: 1,
+        selectionAnchor: 0,
+        selectionHead: 0
       });
-      this.clearPendingLspSync();
-      this.clearPendingForwardSync();
-
-      if (this.lspReady && this.lspClient) {
-        const uri = this.filePathToUri(path);
-        await this.lspClient.openTextDocument(uri, contents, this.currentVersion);
-        void this.runFallbackDiagnostics(path, contents, this.currentVersion);
-
-        if (this.previewRootPath) {
-          this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Starting live preview server...</div>`;
-          const previewUrl = await this.startPreviewWithRestart(this.previewRootPath, contents);
-          if (previewUrl) {
-            this.mountPreviewFrame(previewUrl);
-          } else {
-            this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Failed to start live preview server after restart. Check the log console for details.</div>`;
-          }
-        } else {
-          this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: sans-serif;">No preview root found for this library/template file. Diagnostics are still active.</div>`;
-        }
-      } else {
-        this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Tinymist LSP is offline. Live preview is unavailable.</div>`;
-      }
-
-      if (this.activeMode === "WYSIWYM") {
-        this.mapMarkupToWysiwym(contents);
-      }
-      this.updateWorkspaceViewportVisibility();
+      this.renderEditorTabs();
+      await this.activateEditorTab(path);
     } catch (e) {
       console.error("Failed to load file:", e);
       alert("Failed to load file: " + e);
+    }
+  }
+
+  private async saveActiveFile() {
+    if (!this.activeFilePath) {
+      return;
+    }
+
+    try {
+      const content = this.activeMode === "WYSIWYM"
+        ? this.mapWysiwymToMarkup()
+        : this.editorInstance.state.doc.toString();
+
+      await invoke("save_workspace_file", {
+        path: this.activeFilePath,
+        contents: content
+      });
+
+      const activeTab = this.getActiveTab();
+      if (activeTab) {
+        activeTab.content = content;
+        activeTab.savedContent = content;
+        activeTab.isDirty = false;
+        this.renderEditorTabs();
+      }
+      this.setLspStatus({ kind: "preview-ready", message: "File saved" });
+    } catch (error) {
+      const message = `Save failed: ${String(error)}`;
+      console.error(message);
+      this.setLspStatus({ kind: "error", message });
+      alert(message);
     }
   }
 
@@ -901,6 +1135,10 @@ class TypstryWorkspaceController {
   }
 
   private handleContentMutation(rawText: string) {
+    if (!this.isLoadingFile) {
+      this.updateActiveTabContent(rawText);
+    }
+
     if (!this.isLoadingFile && this.activeFilePath && this.lspReady && this.lspClient) {
       this.pendingLspSyncPath = this.activeFilePath;
       this.pendingLspSyncText = rawText;
@@ -937,6 +1175,11 @@ class TypstryWorkspaceController {
     this.previewOnlyVersions.clear();
     const version = ++this.currentVersion;
     this.latestDocumentVersion = version;
+    const activeTab = this.getActiveTab();
+    if (activeTab && activeTab.path === path) {
+      activeTab.version = version;
+      activeTab.latestVersion = version;
+    }
     this.lspClient.notifyTextChange(this.filePathToUri(path), text, version);
     void this.runFallbackDiagnostics(path, text, version);
     window.setTimeout(() => {
@@ -1162,6 +1405,11 @@ class TypstryWorkspaceController {
     if (this.activeFilePath && this.lspReady && this.lspClient && this.editorInstance) {
         const version = ++this.currentVersion;
         this.latestDocumentVersion = version;
+        const activeTab = this.getActiveTab();
+        if (activeTab) {
+          activeTab.version = version;
+          activeTab.latestVersion = version;
+        }
         this.previewHighlightMapping = null;
         this.lspClient.notifyTextChange(this.filePathToUri(this.activeFilePath), this.editorInstance.state.doc.toString(), version);
     }
@@ -1699,6 +1947,9 @@ class TypstryWorkspaceController {
   private closeProject() {
     this.workspaceRootPath = null;
     this.activeFilePath = null;
+    this.previewRootPath = null;
+    this.openTabs = [];
+    this.renderEditorTabs();
     
     // Clear editor
     this.editorInstance.dispatch({
@@ -1707,6 +1958,7 @@ class TypstryWorkspaceController {
     
     // Clear explorer
     document.getElementById("explorer-sidebar")!.innerHTML = "";
+    this.previewPane.innerHTML = "";
     
     this.setLspStatus({ kind: "ready", message: "Project closed" });
     this.updateWorkspaceViewportVisibility();
@@ -1744,7 +1996,7 @@ class TypstryWorkspaceController {
         switch (e.key.toLowerCase()) {
           case "s":
             e.preventDefault();
-            document.getElementById("action-save-file")?.click();
+            void this.saveActiveFile();
             break;
           case "o":
             e.preventDefault();
@@ -1819,16 +2071,7 @@ class TypstryWorkspaceController {
     });
 
     document.getElementById("action-save-file")?.addEventListener("click", async () => {
-      if (this.activeFilePath) {
-        try {
-          const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-          const content = this.editorInstance.state.doc.toString();
-          await writeTextFile(this.activeFilePath, content);
-          this.setLspStatus({ kind: "preview-ready", message: "File saved" });
-        } catch (e) {
-          console.error("Save failed:", e);
-        }
-      }
+      await this.saveActiveFile();
     });
 
     document.getElementById("action-export-pdf")?.addEventListener("click", async () => {
