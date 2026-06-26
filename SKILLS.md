@@ -35,4 +35,11 @@ The application operates across distinct processes and contexts:
 - **LSP Offline Warnings:** If the Tinymist client emits offline warnings, verify that the Tinymist LSP is actually active on port `8589`.
 - **LNK1104 msvcrt.lib / Rust Compile Errors on Windows:** Tauri requires the MSVC toolchain. Ensure that **Desktop development with C++** and the **Windows 10/11 SDK** are installed via the Visual Studio Installer.
 
+## 5. Development Cycle & AI Session Handover
+At the end of a session, when the user states that a task is finished and successful, the AI agent **MUST** update `DEVELOPMENT_CONTEXT.md` in the repository root. To prevent token bloat, do not write long paragraphs. Instead, record the learnings as a new row in the **Architectural Lessons & Pitfalls Log** table, specifying:
+- **Feature / Bug**: The targeted feature or bug.
+- **Failed Approach (Anti-pattern)**: What failed or caused regressions during implementation.
+- **Working Pattern / Fix**: The successful code fix or regex pattern.
+- **Rationale / Gotcha**: The key warning or explanation to prevent future regression.
+
 *(This file should be continually updated as the project's architectural scope expands).*
