@@ -759,7 +759,7 @@ class TypstryWorkspaceController {
     try {
       await this.loadEditorFont(candidate);
       this.markEditorFontDownloaded(candidate);
-      const fontStack = `"${candidate.fontFamily}", ${systemMonospaceFontStack}`;
+      const fontStack = `${systemMonospaceFontStack}, "${candidate.fontFamily}"`;
       this.applyEditorFontStack(fontStack, candidate.fontFamily);
       if (!fromCache || showNotice) {
         this.dismissedEditorFontPromptId = null;
@@ -2220,6 +2220,19 @@ $
     if (!this.activeFilePath || uri !== this.filePathToUri(this.activeFilePath)) {
       return;
     }
+
+    const isPackageFile = uri.toLowerCase().includes("typst/packages") || 
+                          uri.toLowerCase().includes("typst\\packages") ||
+                          uri.toLowerCase().includes("packages/preview") ||
+                          uri.toLowerCase().includes("packages\\preview");
+    if (isPackageFile) {
+      this.editorInstance.dispatch({
+        effects: setEditorDiagnosticsEffect.of([])
+      });
+      return;
+    }
+
+
 
     const filteredDiagnostics = diagnostics.filter(
       (diagnostic) => !diagnostic.message.includes("cannot export multiple images without a page number template")

@@ -1,11 +1,17 @@
 import { Decoration, EditorView } from "@codemirror/view";
 import { ViewPlugin, DecorationSet } from "@codemirror/view";
 import { MatchDecorator } from "@codemirror/view";
+import { syntaxTree } from "@codemirror/language";
 
 // Create a MatchDecorator that matches ANY bracket.
 const bracketMatcher = new MatchDecorator({
   regexp: /[()[\]{}]/g,
   decoration: (match, view, pos) => {
+    const nodeName = syntaxTree(view.state).resolveInner(pos, 1).name;
+    if (nodeName !== "punctuation") {
+      return null;
+    }
+
     // To calculate depth, we can just scan the text up to this position.
     // Since MatchDecorator caches decorations, this is only called when needed.
     const text = view.state.doc.sliceString(0, pos);

@@ -28,22 +28,41 @@ export const baseEditorLayoutTheme = EditorView.theme({
 
 export function editorFontTheme(fontFamily: string = "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace") {
   return EditorView.theme({
-    "&, .cm-content, .cm-gutters": {
-      fontFamily
+    "&": {
+      height: "100%",
+      "--editor-code-font": fontFamily
+    },
+    ".cm-content": {
+      fontFamily: "var(--editor-code-font) !important"
+    },
+    ".cm-gutters": {
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace !important"
     }
   });
 }
 
-export const typstSyntaxHighlighting = HighlightStyle.define([
+export const typstColorHighlighting = HighlightStyle.define([
   { tag: [tags.keyword, tags.controlKeyword], color: "#7c3aed", fontWeight: "bold" },
   { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "#0f766e", fontWeight: "600" },
   { tag: [tags.variableName, tags.labelName], color: "#1d4ed8" },
   { tag: [tags.number, tags.atom, tags.bool], color: "#b45309" },
   { tag: [tags.operator, tags.punctuation], color: "#4b5563" },
-  { tag: tags.heading, color: "#0056b3", fontWeight: "bold", scale: 1.15 },
+  { tag: tags.heading, color: "#0056b3", fontWeight: "bold" },
   { tag: tags.comment, color: "#008000", fontStyle: "italic" },
-  {
-    tag: [tags.string, tags.content, tags.literal],
-    color: "#a31515"
-  }
+  { tag: tags.string, color: "#22863a" },
+  { tag: [tags.literal, tags.monospace], color: "#0056b3" }
+]);
+
+export const typstFontHighlighting = HighlightStyle.define([
+  { tag: [tags.keyword, tags.controlKeyword], fontFamily: "var(--editor-code-font) !important" },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], fontFamily: "var(--editor-code-font) !important" },
+  { tag: [tags.variableName, tags.labelName], fontFamily: "var(--editor-code-font) !important" },
+  { tag: [tags.number, tags.atom, tags.bool], fontFamily: "var(--editor-code-font) !important" },
+  { tag: [tags.operator, tags.punctuation], fontFamily: "var(--editor-code-font) !important" },
+  { tag: tags.heading, scale: 1.15, fontFamily: "'MiSans Latin', var(--active-unicode-font, 'MiSans Khmer'), sans-serif !important" },
+  { tag: tags.comment, fontFamily: "'MiSans Latin', var(--active-unicode-font, 'MiSans Khmer'), sans-serif !important" },
+  { tag: tags.string, fontFamily: "'MiSans Latin', var(--active-unicode-font, 'MiSans Khmer'), sans-serif !important" },
+  { tag: tags.content, fontFamily: "'MiSans Latin', var(--active-unicode-font, 'MiSans Khmer'), sans-serif !important" },
+  { tag: [tags.literal, tags.monospace], fontFamily: "var(--editor-code-font) !important", color: "var(--ui-monospace-color) !important" },
+  { tag: [tags.strong, tags.emphasis, tags.list, tags.link, tags.url], fontFamily: "'MiSans Latin', var(--active-unicode-font, 'MiSans Khmer'), sans-serif !important" }
 ]);

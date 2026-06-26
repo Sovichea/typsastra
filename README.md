@@ -22,6 +22,7 @@ A lightweight, local-first Typst editor with seamless Code and WYSIWYM toggles, 
 * **True Local-First Experience**: No cloud dependencies. Everything compiles instantly on your local machine.
 * **Live PDF Preview**: Powered by the highly optimized Tinymist LSP running in a Rust background process with bidirectional scroll sync.
 * **Focus-Driven UI**: A custom, frameless window design, persistent multi-tab workspace state (preserving open tabs, split ratios, and cursor positions), and integrated native-feel search and replace.
+* **Context-Aware Editor & Bracket Colorizer**: Implements intelligent syntax recognition, skipping bracket coloring inside comments, strings, and equations. Integrates theme-aware monospace coloring for raw code/equations, nested function coloring without requiring `#` prefixes, and precise parsing of escaped symbols (like `\$` for literal dollars and ignoring URL comments).
 * **Blazing Fast**: Built on Tauri v2 and Bun, resulting in a tiny memory footprint compared to Electron-based editors.
 
 ## Keyboard Shortcuts
@@ -116,6 +117,12 @@ The compiled binaries will be placed in `src-tauri/target/release/`.
 - [x] Snippets and custom auto-complete
   - [x] Context-aware snippets for Typst
   - [x] Auto-complete UI integration
+- [x] Context-aware syntax highlighting & editor enhancements
+  - [x] Theme-aware unified styling for equations and code blocks
+  - [x] Bracket colorizer exclusions (ignores comments, strings, and monospace)
+  - [x] Nested function/identifier highlighting without `#` in code mode
+  - [x] Escaped character handling (correctly parses `\$` as literal and prevents false comment/reference triggers)
+  - [x] Escaped symbol auto-closing prevention
 - [ ] Settings panel / configuration file (`settings.json`)
   - [ ] UI for editing user preferences
   - [ ] Persistent settings storage
