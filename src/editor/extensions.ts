@@ -1,10 +1,10 @@
-import { Extension, Compartment, type EditorState } from "@codemirror/state";
+import { Extension, Compartment, EditorState } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
 import { baseEditorLayoutTheme, editorFontTheme, typstColorHighlighting, typstFontHighlighting, typstFunctionHighlighting, typstSemanticHighlighting, typstVariableHighlighting } from "./themes";
-import { codeFolding, foldGutter, foldKeymap, foldService, syntaxHighlighting } from "@codemirror/language";
+import { codeFolding, foldGutter, foldKeymap, foldService, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { typstLanguage } from "./typstLanguage";
 import { editorDiagnosticsExtension } from "./diagnostics";
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
@@ -23,6 +23,11 @@ import { typstFunctionFoldService } from "./folding";
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
 export const editorFontCompartment = new Compartment();
+export const lineNumbersCompartment = new Compartment();
+export const activeLineCompartment = new Compartment();
+export const closeBracketsCompartment = new Compartment();
+export const indentationGuidesCompartment = new Compartment();
+export const tabSizeCompartment = new Compartment();
 
 function foldedTypstPlaceholderSuffix(state: EditorState, range: { from: number; to: number }): string {
   const foldedText = state.doc.sliceString(range.from, range.to).trimEnd();
@@ -57,12 +62,12 @@ export function getEditorExtensions(getClient: () => TinymistLspClient | undefin
   return [
     preventEscapedBracketAutoClose,
     foldService.of(typstFunctionFoldService),
-    lineNumbers(),
+    lineNumbersCompartment.of(lineNumbers()),
     foldGutter({
       openText: "v",
       closedText: ">"
     }),
-    highlightActiveLineGutter(), highlightActiveLine(),
+    activeLineCompartment.of([highlightActiveLineGutter(), highlightActiveLine()]),
     drawSelection(), dropCursor(), history(), 
     typstLanguage,
     baseEditorLayoutTheme,
@@ -71,10 +76,11 @@ export function getEditorExtensions(getClient: () => TinymistLspClient | undefin
       placeholderDOM: foldedTypstPlaceholderDOM
     }),
     editorDiagnosticsExtension,
-    indentationMarkers(),
+    indentationGuidesCompartment.of(indentationMarkers()),
+    tabSizeCompartment.of([EditorState.tabSize.of(2), indentUnit.of("  ")]),
     wrapCompartment.of(EditorView.lineWrapping),
     search({ top: true }),
-    closeBrackets(),
+    closeBracketsCompartment.of(closeBrackets()),
     bracketMatching(),
     bracketColorizer,
     createHoverTooltip(getClient, getUri),

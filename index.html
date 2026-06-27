@@ -24,6 +24,8 @@
               <div class="dropdown-separator"></div>
               <div class="dropdown-item" id="action-close-project">Close Project</div>
               <div class="dropdown-separator"></div>
+              <div class="dropdown-item" id="action-open-settings">Settings... <span class="hotkey">Ctrl+,</span></div>
+              <div class="dropdown-separator"></div>
               <div class="dropdown-item" id="action-exit">Exit</div>
             </div>
           </div>
@@ -320,20 +322,100 @@
       <button id="word-wrap-toggle" class="status-button" type="button" title="Toggle Word Wrap" style="margin-left: auto;">
         <span class="status-label" id="word-wrap-label">Wrap: On</span>
       </button>
-      <select id="editor-theme-selector" class="status-select" title="Change Theme" style="margin-left: 0;">
-        <option value="default">Default Light</option>
-        <option value="githubLight">GitHub Light</option>
-        <option value="githubDark">GitHub Dark</option>
-        <option value="oneDark">One Dark</option>
-        <option value="dracula">Dracula</option>
-        <option value="material">Material Dark</option>
-        <option value="materialLight">Material Light</option>
-        <option value="nord">Nord</option>
-      </select>
+      <button id="settings-status-button" class="status-button" type="button" title="Open Settings (Ctrl+,)">
+        <span class="status-label">Settings</span>
+      </button>
     </div>
   </div>
 
   <div id="context-menu" class="dropdown-menu" style="display: none; position: fixed; z-index: 10000; left: 0; top: 0;"></div>
+
+  <div id="settings-overlay" class="settings-overlay hidden" role="presentation">
+    <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="settings-header">
+        <div>
+          <h2 id="settings-title">Settings</h2>
+          <p>Application preferences stored in settings.json</p>
+        </div>
+        <button id="settings-close" class="settings-icon-button" type="button" aria-label="Close settings">x</button>
+      </header>
+      <div class="settings-content">
+        <nav class="settings-nav" aria-label="Settings categories">
+          <button class="settings-nav-item active" type="button" data-settings-panel="appearance">Appearance</button>
+          <button class="settings-nav-item" type="button" data-settings-panel="editor">Editor</button>
+          <button class="settings-nav-item" type="button" data-settings-panel="preview">Preview</button>
+        </nav>
+        <div class="settings-panels">
+          <div class="settings-panel active" data-settings-panel-content="appearance">
+            <h3>Appearance</h3>
+            <div class="settings-field">
+              <label for="settings-theme">Color theme</label>
+              <select id="settings-theme">
+                <option value="default">Default Light</option>
+                <option value="githubLight">GitHub Light</option>
+                <option value="githubDark">GitHub Dark</option>
+                <option value="oneDark">One Dark</option>
+                <option value="dracula">Dracula</option>
+                <option value="material">Material Dark</option>
+                <option value="materialLight">Material Light</option>
+                <option value="nord">Nord</option>
+              </select>
+              <small>Controls the application and syntax color palette.</small>
+            </div>
+            <div class="settings-field">
+              <label for="settings-font-size">Editor font size</label>
+              <input id="settings-font-size" type="number" min="10" max="32" step="1">
+              <small>Font size in pixels (10-32).</small>
+            </div>
+            <div class="settings-field">
+              <label for="settings-line-height">Editor line height</label>
+              <input id="settings-line-height" type="number" min="1.2" max="2.4" step="0.1">
+              <small>Line-height multiplier (1.2-2.4).</small>
+            </div>
+          </div>
+
+          <div class="settings-panel" data-settings-panel-content="editor">
+            <h3>Editor</h3>
+            <label class="settings-toggle"><input id="settings-word-wrap" type="checkbox"><span><strong>Word wrap</strong><small>Wrap long lines inside the editor viewport.</small></span></label>
+            <div class="settings-field">
+              <label for="settings-tab-size">Tab size</label>
+              <select id="settings-tab-size"><option value="2">2 spaces</option><option value="4">4 spaces</option><option value="8">8 spaces</option></select>
+            </div>
+            <label class="settings-toggle"><input id="settings-line-numbers" type="checkbox"><span><strong>Line numbers</strong><small>Show the line-number gutter.</small></span></label>
+            <label class="settings-toggle"><input id="settings-active-line" type="checkbox"><span><strong>Highlight active line</strong><small>Highlight the cursor line and its gutter.</small></span></label>
+            <label class="settings-toggle"><input id="settings-auto-close" type="checkbox"><span><strong>Auto-close brackets</strong><small>Insert matching brackets, quotes, and Typst delimiters.</small></span></label>
+            <label class="settings-toggle"><input id="settings-indent-guides" type="checkbox"><span><strong>Indentation guides</strong><small>Show visual indentation markers.</small></span></label>
+          </div>
+
+          <div class="settings-panel" data-settings-panel-content="preview">
+            <h3>Preview</h3>
+            <label class="settings-toggle"><input id="settings-cursor-sync" type="checkbox"><span><strong>Cursor-to-preview sync</strong><small>Navigate and briefly highlight preview content as the cursor moves.</small></span></label>
+            <div class="settings-field">
+              <label for="settings-sync-debounce">Sync debounce</label>
+              <input id="settings-sync-debounce" type="number" min="50" max="2000" step="10">
+              <small>Delay before cursor sync in milliseconds (50-2000).</small>
+            </div>
+            <div class="settings-field">
+              <label for="settings-highlight-duration">Highlight duration</label>
+              <input id="settings-highlight-duration" type="number" min="500" max="10000" step="100">
+              <small>Preview source highlight duration in milliseconds (500-10000).</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="settings-footer">
+        <div class="settings-file-meta">
+          <span id="settings-save-status">Saved</span>
+          <code id="settings-file-path"></code>
+        </div>
+        <div class="settings-footer-actions">
+          <button id="settings-reveal-file" type="button">Reveal JSON</button>
+          <button id="settings-reset" type="button">Reset defaults</button>
+          <button id="settings-done" class="settings-primary" type="button">Done</button>
+        </div>
+      </footer>
+    </section>
+  </div>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

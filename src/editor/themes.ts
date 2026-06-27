@@ -5,8 +5,8 @@ import { tags } from "@lezer/highlight";
 export const baseEditorLayoutTheme = EditorView.theme({
   "&": { 
       height: "100%", 
-      fontSize: "14px", 
-      lineHeight: "1.7" 
+      fontSize: "var(--editor-font-size, 14px)",
+      lineHeight: "var(--editor-line-height, 1.7)"
   },
   ".cm-line": { padding: "0 12px", overflow: "visible !important" },
   ".cm-gutters": { borderRight: "1px solid var(--ui-border)" },

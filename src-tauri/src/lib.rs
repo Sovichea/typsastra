@@ -6,6 +6,58 @@ use tauri::{Emitter, Manager};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsFilePayload {
+    path: String,
+    settings: Option<serde_json::Value>,
+}
+
+fn settings_file_path(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app_handle
+        .path()
+        .app_config_dir()
+        .map(|directory| directory.join("settings.json"))
+        .map_err(|error| format!("Failed to resolve settings directory: {}", error))
+}
+
+#[tauri::command]
+fn load_app_settings(app_handle: tauri::AppHandle) -> Result<SettingsFilePayload, String> {
+    let path = settings_file_path(&app_handle)?;
+    let settings = if path.exists() {
+        let contents = std::fs::read_to_string(&path)
+            .map_err(|error| format!("Failed to read settings.json: {}", error))?;
+        Some(
+            serde_json::from_str(&contents)
+                .map_err(|error| format!("Invalid settings.json: {}", error))?,
+        )
+    } else {
+        None
+    };
+
+    Ok(SettingsFilePayload {
+        path: path.to_string_lossy().to_string(),
+        settings,
+    })
+}
+
+#[tauri::command]
+fn save_app_settings(
+    app_handle: tauri::AppHandle,
+    settings: serde_json::Value,
+) -> Result<String, String> {
+    let path = settings_file_path(&app_handle)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create settings directory: {}", error))?;
+    }
+    let contents = serde_json::to_string_pretty(&settings)
+        .map_err(|error| format!("Failed to serialize settings: {}", error))?;
+    std::fs::write(&path, format!("{}\n", contents))
+        .map_err(|error| format!("Failed to write settings.json: {}", error))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn read_workspace_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
@@ -641,6 +693,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            load_app_settings,
+            save_app_settings,
             compile_typst_document,
             check_typst_document,
             read_workspace_file,

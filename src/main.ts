@@ -6,11 +6,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { EditorSelection, EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
-import { foldEffect, foldedRanges, unfoldEffect } from "@codemirror/language";
-import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, editorFontCompartment } from "./editor/extensions";
+import { foldEffect, foldedRanges, indentUnit, unfoldEffect } from "@codemirror/language";
+import { closeBrackets } from "@codemirror/autocomplete";
+import { indentationMarkers } from "@replit/codemirror-indentation-markers";
+import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, editorFontCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment } from "./editor/extensions";
 import { editorFontTheme } from "./editor/themes";
 import { collectDefaultTypstFunctionFolds } from "./editor/folding";
 import type { EditorFoldRange } from "./editor/folding";
@@ -21,6 +23,7 @@ import { TinymistLspClient } from "./compiler/lsp";
 import type { LspDiagnostic, LspLogEntry, LspSourcePosition, LspStatus } from "./compiler/lsp";
 import miSansKhmerRegularUrl from "./assets/fonts/MiSansKhmer-Regular.woff2?url";
 import miSansKhmerBoldUrl from "./assets/fonts/MiSansKhmer-Bold.woff2?url";
+import { cloneDefaultAppSettings, normalizeAppSettings, type AppSettings, type ThemeName } from "./settings";
 
 type EditorMode = "CODE" | "WYSIWYM";
 type LogEntryKind = "error" | "warning" | "info" | "log" | "hint";
@@ -125,8 +128,8 @@ class TypstryWorkspaceController {
   private clipboardFilePath: string | null = null;
   private lspReady = false;
   private readonly lspSyncDebounceMs = 350;
-  private readonly forwardSyncDebounceMs = 120;
-  private readonly previewHighlightVisibleMs = 2200;
+  private forwardSyncDebounceMs = 120;
+  private previewHighlightVisibleMs = 2200;
   private pendingLspSyncTimer: number | null = null;
   private pendingLspSyncPath: string | null = null;
   private pendingLspSyncText: string | null = null;
@@ -148,6 +151,10 @@ class TypstryWorkspaceController {
   private appliedEditorFontStack = systemMonospaceFontStack;
   private dismissedEditorFontPromptId: string | null = null;
   private readonly loadedEditorFonts = new Set<string>();
+  private settings: AppSettings = cloneDefaultAppSettings();
+  private settingsFilePath = "";
+  private settingsSaveTimer: number | null = null;
+  private settingsLoadError: string | null = null;
 
   private editorInstance!: EditorView;
   private explorer!: WorkspaceExplorer;
@@ -175,8 +182,10 @@ class TypstryWorkspaceController {
   private diagnosticCount = document.getElementById("diagnostic-count")!;
 
   public async bootstrap() {
+    await this.loadAppSettings();
     this.renderRecentProjects();
     this.initCodeMirror();
+    this.applySettingsToRuntime();
     this.initExplorer();
     this.initVisualToolbar();
     this.bindGlobalEvents();
@@ -184,6 +193,7 @@ class TypstryWorkspaceController {
     this.initUndockPreview();
     this.initThemeSelector();
     this.initWordWrap();
+    this.initSettingsPanel();
     this.initContextMenu();
     this.renderLogConsole();
     this.setLogConsoleVisible(false);
@@ -565,25 +575,219 @@ class TypstryWorkspaceController {
     });
   }
 
+  private async loadAppSettings() {
+    type SettingsPayload = { path: string; settings: unknown | null };
+    let shouldPersist = false;
+
+    try {
+      const payload = await invoke<SettingsPayload>("load_app_settings");
+      this.settingsFilePath = payload.path;
+      if (payload.settings) {
+        this.settings = normalizeAppSettings(payload.settings);
+        shouldPersist = JSON.stringify(payload.settings) !== JSON.stringify(this.settings);
+      } else {
+        const legacyTheme = localStorage.getItem("typstry-theme");
+        const legacyWordWrap = localStorage.getItem("typstry-word-wrap");
+        const migrated = cloneDefaultAppSettings();
+        if (legacyTheme) migrated.appearance.theme = legacyTheme as ThemeName;
+        if (legacyWordWrap) migrated.editor.wordWrap = legacyWordWrap !== "false";
+        this.settings = normalizeAppSettings(migrated);
+        shouldPersist = true;
+      }
+    } catch (error) {
+      console.warn("Failed to load settings.json; using defaults.", error);
+      this.settings = cloneDefaultAppSettings();
+      this.settingsLoadError = String(error);
+    }
+
+    if (shouldPersist) {
+      await this.persistAppSettings();
+    }
+  }
+
+  private async persistAppSettings() {
+    const status = document.getElementById("settings-save-status");
+    if (status) status.textContent = "Saving...";
+
+    try {
+      this.settingsFilePath = await invoke<string>("save_app_settings", { settings: this.settings });
+      this.settingsLoadError = null;
+      localStorage.removeItem("typstry-theme");
+      localStorage.removeItem("typstry-word-wrap");
+      if (status) status.textContent = "Saved";
+      const path = document.getElementById("settings-file-path");
+      if (path) path.textContent = this.settingsFilePath;
+    } catch (error) {
+      console.error("Failed to save settings.json", error);
+      if (status) status.textContent = `Save failed: ${String(error)}`;
+    }
+  }
+
+  private scheduleSettingsSave() {
+    if (this.settingsSaveTimer) window.clearTimeout(this.settingsSaveTimer);
+    const status = document.getElementById("settings-save-status");
+    if (status) status.textContent = "Unsaved changes";
+    this.settingsSaveTimer = window.setTimeout(() => {
+      this.settingsSaveTimer = null;
+      void this.persistAppSettings();
+    }, 180);
+  }
+
+  private updateSettings(mutator: (settings: AppSettings) => void) {
+    const nextSettings = normalizeAppSettings(this.settings);
+    mutator(nextSettings);
+    this.settings = normalizeAppSettings(nextSettings);
+    this.applySettingsToRuntime();
+    this.populateSettingsPanel();
+    this.scheduleSettingsSave();
+  }
+
+  private applySettingsToRuntime() {
+    const { appearance, editor, preview } = this.settings;
+    document.documentElement.style.setProperty("--editor-font-size", `${appearance.editorFontSize}px`);
+    document.documentElement.style.setProperty("--editor-line-height", String(appearance.editorLineHeight));
+    this.forwardSyncDebounceMs = preview.syncDebounceMs;
+    this.previewHighlightVisibleMs = preview.highlightDurationMs;
+
+    const themeSelector = document.getElementById("editor-theme-selector") as HTMLSelectElement | null;
+    if (themeSelector) themeSelector.value = appearance.theme;
+    void applyUIThemeVariables(appearance.theme);
+
+    if (this.editorInstance) {
+      const indentation = " ".repeat(editor.tabSize);
+      this.editorInstance.dispatch({
+        effects: [
+          themeCompartment.reconfigure(getThemeExtension(appearance.theme)),
+          wrapCompartment.reconfigure(editor.wordWrap ? EditorView.lineWrapping : []),
+          lineNumbersCompartment.reconfigure(editor.lineNumbers ? lineNumbers() : []),
+          activeLineCompartment.reconfigure(editor.highlightActiveLine ? [highlightActiveLineGutter(), highlightActiveLine()] : []),
+          closeBracketsCompartment.reconfigure(editor.autoCloseBrackets ? closeBrackets() : []),
+          indentationGuidesCompartment.reconfigure(editor.indentationGuides ? indentationMarkers() : []),
+          tabSizeCompartment.reconfigure([EditorState.tabSize.of(editor.tabSize), indentUnit.of(indentation)])
+        ]
+      });
+    }
+
+    const wrapLabel = document.getElementById("word-wrap-label");
+    if (wrapLabel) wrapLabel.textContent = editor.wordWrap ? "Wrap: On" : "Wrap: Off";
+    if (!preview.cursorSync) this.clearPendingForwardSync();
+  }
+
+  private populateSettingsPanel() {
+    const { appearance, editor, preview } = this.settings;
+    const setValue = (id: string, value: string) => {
+      const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+      if (control) control.value = value;
+    };
+    const setChecked = (id: string, checked: boolean) => {
+      const control = document.getElementById(id) as HTMLInputElement | null;
+      if (control) control.checked = checked;
+    };
+
+    setValue("settings-theme", appearance.theme);
+    setValue("settings-font-size", String(appearance.editorFontSize));
+    setValue("settings-line-height", String(appearance.editorLineHeight));
+    setValue("settings-tab-size", String(editor.tabSize));
+    setValue("settings-sync-debounce", String(preview.syncDebounceMs));
+    setValue("settings-highlight-duration", String(preview.highlightDurationMs));
+    setChecked("settings-word-wrap", editor.wordWrap);
+    setChecked("settings-line-numbers", editor.lineNumbers);
+    setChecked("settings-active-line", editor.highlightActiveLine);
+    setChecked("settings-auto-close", editor.autoCloseBrackets);
+    setChecked("settings-indent-guides", editor.indentationGuides);
+    setChecked("settings-cursor-sync", preview.cursorSync);
+
+    const path = document.getElementById("settings-file-path");
+    if (path) {
+      path.textContent = this.settingsFilePath || "settings.json path unavailable";
+      path.title = this.settingsFilePath;
+    }
+    const status = document.getElementById("settings-save-status");
+    if (status && this.settingsLoadError) status.textContent = `Using defaults: ${this.settingsLoadError}`;
+  }
+
+  private initSettingsPanel() {
+    const overlay = document.getElementById("settings-overlay");
+    if (!overlay) return;
+
+    const openSettings = () => {
+      this.populateSettingsPanel();
+      overlay.classList.remove("hidden");
+      (document.querySelector(".settings-nav-item.active") as HTMLButtonElement | null)?.focus();
+    };
+    const closeSettings = () => overlay.classList.add("hidden");
+    const activatePanel = (name: string) => {
+      document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
+        item.classList.toggle("active", item.dataset.settingsPanel === name);
+      });
+      document.querySelectorAll<HTMLElement>("[data-settings-panel-content]").forEach(panel => {
+        panel.classList.toggle("active", panel.dataset.settingsPanelContent === name);
+      });
+    };
+
+    document.getElementById("action-open-settings")?.addEventListener("click", openSettings);
+    document.getElementById("settings-status-button")?.addEventListener("click", openSettings);
+    document.getElementById("settings-close")?.addEventListener("click", closeSettings);
+    document.getElementById("settings-done")?.addEventListener("click", closeSettings);
+    overlay.addEventListener("mousedown", event => {
+      if (event.target === overlay) closeSettings();
+    });
+    document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
+      item.addEventListener("click", () => activatePanel(item.dataset.settingsPanel ?? "appearance"));
+    });
+
+    const onChange = (id: string, update: (settings: AppSettings, control: HTMLInputElement | HTMLSelectElement) => void) => {
+      const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+      control?.addEventListener("change", () => this.updateSettings(settings => update(settings, control)));
+    };
+    onChange("settings-theme", (settings, control) => { settings.appearance.theme = control.value as ThemeName; });
+    onChange("settings-font-size", (settings, control) => { settings.appearance.editorFontSize = Number(control.value); });
+    onChange("settings-line-height", (settings, control) => { settings.appearance.editorLineHeight = Number(control.value); });
+    onChange("settings-word-wrap", (settings, control) => { settings.editor.wordWrap = (control as HTMLInputElement).checked; });
+    onChange("settings-tab-size", (settings, control) => { settings.editor.tabSize = Number(control.value) as 2 | 4 | 8; });
+    onChange("settings-line-numbers", (settings, control) => { settings.editor.lineNumbers = (control as HTMLInputElement).checked; });
+    onChange("settings-active-line", (settings, control) => { settings.editor.highlightActiveLine = (control as HTMLInputElement).checked; });
+    onChange("settings-auto-close", (settings, control) => { settings.editor.autoCloseBrackets = (control as HTMLInputElement).checked; });
+    onChange("settings-indent-guides", (settings, control) => { settings.editor.indentationGuides = (control as HTMLInputElement).checked; });
+    onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
+    onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
+    onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
+
+    document.getElementById("settings-reset")?.addEventListener("click", async () => {
+      const { confirm } = await import("@tauri-apps/plugin-dialog");
+      if (await confirm("Reset all application settings to their defaults?", { title: "Reset Settings", kind: "warning" })) {
+        this.settings = cloneDefaultAppSettings();
+        this.applySettingsToRuntime();
+        this.populateSettingsPanel();
+        this.scheduleSettingsSave();
+      }
+    });
+    document.getElementById("settings-reveal-file")?.addEventListener("click", () => {
+      if (this.settingsFilePath) void invoke("reveal_in_explorer", { path: this.settingsFilePath });
+    });
+    document.addEventListener("keydown", event => {
+      const isMac = navigator.userAgent.toLowerCase().includes("mac");
+      if ((isMac ? event.metaKey : event.ctrlKey) && event.key === ",") {
+        event.preventDefault();
+        openSettings();
+      } else if (event.key === "Escape" && !overlay.classList.contains("hidden")) {
+        event.preventDefault();
+        closeSettings();
+      }
+    });
+
+    this.populateSettingsPanel();
+  }
+
   private initThemeSelector() {
     const themeSelector = document.getElementById("editor-theme-selector") as HTMLSelectElement;
     if (themeSelector) {
-      // Try to load saved theme
-      const savedTheme = localStorage.getItem("typstry-theme") || "default";
-      themeSelector.value = savedTheme;
-      applyUIThemeVariables(savedTheme);
-      if (savedTheme !== "default") {
-          this.editorInstance.dispatch({
-              effects: themeCompartment.reconfigure(getThemeExtension(savedTheme))
-          });
-      }
+      themeSelector.value = this.settings.appearance.theme;
 
       themeSelector.addEventListener("change", (e) => {
-        const themeName = (e.target as HTMLSelectElement).value;
-        localStorage.setItem("typstry-theme", themeName);
-        applyUIThemeVariables(themeName);
-        this.editorInstance.dispatch({
-          effects: themeCompartment.reconfigure(getThemeExtension(themeName))
+        const themeName = (e.target as HTMLSelectElement).value as ThemeName;
+        this.updateSettings(settings => {
+          settings.appearance.theme = themeName;
         });
       });
     }
@@ -594,24 +798,12 @@ class TypstryWorkspaceController {
     const wrapLabel = document.getElementById("word-wrap-label");
     
     if (wrapToggleBtn && wrapLabel) {
-      // Load preference from localStorage, default to true
-      let isWrapEnabled = localStorage.getItem("typstry-word-wrap") !== "false";
-      
-      const applyWrapState = () => {
-        wrapLabel.textContent = isWrapEnabled ? "Wrap: On" : "Wrap: Off";
-        this.editorInstance.dispatch({
-            effects: wrapCompartment.reconfigure(isWrapEnabled ? EditorView.lineWrapping : [])
-        });
-      };
+      wrapLabel.textContent = this.settings.editor.wordWrap ? "Wrap: On" : "Wrap: Off";
 
-      // Apply initial state
-      applyWrapState();
-
-      // Toggle listener
       wrapToggleBtn.addEventListener("click", () => {
-        isWrapEnabled = !isWrapEnabled;
-        localStorage.setItem("typstry-word-wrap", isWrapEnabled.toString());
-        applyWrapState();
+        this.updateSettings(settings => {
+          settings.editor.wordWrap = !settings.editor.wordWrap;
+        });
       });
     }
   }
@@ -1759,7 +1951,7 @@ $
   }
 
   private scheduleForwardSync(delayMs: number) {
-    if (!this.activeFilePath || !this.previewRootPath || !this.lspReady || !this.lspClient) {
+    if (!this.settings.preview.cursorSync || !this.activeFilePath || !this.previewRootPath || !this.lspReady || !this.lspClient) {
       return;
     }
 
@@ -2935,6 +3127,11 @@ $
   private bindGlobalEvents() {
     window.addEventListener("beforeunload", () => {
       this.saveWorkspaceState();
+      if (this.settingsSaveTimer) {
+        window.clearTimeout(this.settingsSaveTimer);
+        this.settingsSaveTimer = null;
+        void this.persistAppSettings();
+      }
     });
 
     document.addEventListener("keydown", (e) => {
