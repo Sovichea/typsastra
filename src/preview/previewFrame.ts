@@ -2,6 +2,7 @@ export type PreviewTextPoint = { text: string; offset: number };
 
 export class PreviewFrame {
   private iframe: HTMLIFrameElement | null = null;
+  private mountedUrl = "";
 
   constructor(
     private readonly pane: HTMLElement,
@@ -12,17 +13,52 @@ export class PreviewFrame {
     return this.iframe;
   }
 
-  public async mount(previewUrl: string, getPreviewHtml: () => Promise<string>): Promise<void> {
+  /**
+   * Returns the currently mounted preview URL, or empty if no preview is active.
+   */
+  public get currentUrl(): string {
+    return this.mountedUrl;
+  }
+
+  /**
+   * Mount a preview iframe. If the URL matches the currently mounted preview,
+   * skip remounting — Tinymist updates existing previews via WebSocket.
+   * Returns true if a fresh mount was performed, false if reused.
+   */
+  public async mount(previewUrl: string, _getPreviewHtml?: () => Promise<string>): Promise<boolean> {
+    // Reuse existing iframe if the preview URL hasn't changed
+    if (this.iframe && this.mountedUrl === previewUrl && this.iframe.parentElement === this.pane) {
+      return false;
+    }
+
     this.pane.innerHTML = "";
     const iframe = document.createElement("iframe");
     iframe.className = "preview-frame";
     iframe.addEventListener("load", () => this.configureDocument());
     this.pane.appendChild(iframe);
     this.iframe = iframe;
+    this.mountedUrl = previewUrl;
 
-    const previewHtml = await getPreviewHtml();
-    if (previewHtml) iframe.srcdoc = this.buildSrcdoc(previewUrl, previewHtml);
-    else iframe.src = previewUrl;
+    iframe.src = previewUrl;
+    return true;
+  }
+
+  /**
+   * Force a fresh mount even if the URL hasn't changed.
+   * Used when the preview content must be reloaded (e.g. after LSP restart).
+   */
+  public async remount(previewUrl: string, getPreviewHtml: () => Promise<string>): Promise<void> {
+    this.mountedUrl = "";
+    await this.mount(previewUrl, getPreviewHtml);
+  }
+
+  /**
+   * Clear the preview pane and reset state.
+   */
+  public clear(): void {
+    this.pane.innerHTML = "";
+    this.iframe = null;
+    this.mountedUrl = "";
   }
 
   public mountSvgPages(pages: readonly string[]): void {
@@ -36,37 +72,9 @@ export class PreviewFrame {
     </style></head><body>${pages.map(page => page.replace("<svg", '<svg class="page"')).join("")}</body></html>`;
     this.pane.appendChild(iframe);
     this.iframe = iframe;
+    this.mountedUrl = "";
   }
 
-  public scrollToHighlight(color = "#fe0102"): boolean {
-    const iframe = this.iframe;
-    const iframeDocument = iframe?.contentDocument;
-    if (!iframe || !iframeDocument) return false;
-
-    const elements = Array.from(iframeDocument.querySelectorAll(
-      `[fill="${color}"], [fill="rgb(254, 1, 2)"], [style*="color: ${color}"], [style*="color: rgb(254, 1, 2)"]`
-    ));
-    const target = elements.find(element => {
-      const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-    if (!target) return false;
-    target.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
-    return true;
-  }
-
-  private buildSrcdoc(previewUrl: string, previewHtml: string): string {
-    const baseHref = previewUrl.endsWith("/") ? previewUrl : `${previewUrl}/`;
-    const escapedHref = baseHref
-      .replace(/&/g, "&amp;")
-      .replace(/"/g, "&quot;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    const base = `<base href="${escapedHref}">`;
-    return /<head[^>]*>/i.test(previewHtml)
-      ? previewHtml.replace(/<head([^>]*)>/i, `<head$1>${base}`)
-      : `${base}${previewHtml}`;
-  }
 
   private configureDocument(): void {
     try {

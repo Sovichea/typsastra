@@ -632,7 +632,6 @@ async fn start_tinymist_lsp(
     let mut command = tokio::process::Command::new(&tinymist_exe);
     command
         .arg("lsp")
-        .env("VSCODE_PROXY_URI", "http://tauri.localhost/{{port}}")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

@@ -492,15 +492,18 @@ export class TinymistLspClient {
     this.latestPreviewDataPlaneUrl = "";
 
     if (typeof result === "string") {
-      this.latestPreviewUrl = result.startsWith("http") ? result : `http://${result}`;
+      let url = result.startsWith("http") ? result : `http://${result}`;
+      url = url.replace("localhost", "127.0.0.1");
+      this.latestPreviewUrl = url;
       this.latestPreviewDataPlaneUrl = this.latestPreviewUrl.replace(/^http/, "ws");
       return this.latestPreviewUrl;
     }
 
     if (result?.staticServerAddr) {
-      const previewUrl = result.staticServerAddr.startsWith("http")
+      let previewUrl = result.staticServerAddr.startsWith("http")
         ? result.staticServerAddr
         : `http://${result.staticServerAddr}`;
+      previewUrl = previewUrl.replace("localhost", "127.0.0.1");
       this.latestPreviewUrl = previewUrl;
       this.latestPreviewDataPlaneUrl = result.dataPlanePort
         ? `ws://127.0.0.1:${result.dataPlanePort}`

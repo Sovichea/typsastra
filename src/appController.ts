@@ -67,7 +67,6 @@ export class TypstryWorkspaceController {
   private lspReady = false;
   private readonly lspSyncDebounceMs = 350;
   private forwardSyncDebounceMs = 120;
-  private previewHighlightVisibleMs = 2200;
   private pendingLspSyncTimer: number | null = null;
   private pendingLspSyncPath: string | null = null;
   private pendingLspSyncText: string | null = null;
@@ -102,17 +101,13 @@ export class TypstryWorkspaceController {
   private readonly previewFrame = new PreviewFrame(this.previewPane, point => {
     this.previewSyncController.recordTextClick(point);
   });
-  private readonly previewSyncController = new PreviewSyncController(this.previewFrame, {
+  private readonly previewSyncController = new PreviewSyncController({
     getEditor: () => this.editorInstance,
     getClient: () => this.lspClient,
     getActiveFilePath: () => this.activeFilePath,
     getPreviewRootPath: () => this.previewRootPath,
     isReady: () => this.lspReady,
-    isEnabled: () => this.settingsController.value.preview.cursorSync,
-    getHighlightDuration: () => this.previewHighlightVisibleMs,
-    getSectionPreviewPosition: cursor => this.documentOutlineController.previewPositionAt(cursor),
-    nextPreviewVersion: () => ++this.currentVersion,
-    restoreDocumentVersion: () => this.restorePreviewDocumentVersion()
+    isEnabled: () => this.settingsController.value.preview.cursorSync
   });
   private readonly logConsoleController = new LogConsoleController(entry => this.navigateToLogEntry(entry));
   private readonly layoutController = new LayoutController(
@@ -231,7 +226,6 @@ export class TypstryWorkspaceController {
     document.documentElement.style.setProperty("--editor-font-size", `${appearance.editorFontSize}px`);
     document.documentElement.style.setProperty("--editor-line-height", String(appearance.editorLineHeight));
     this.forwardSyncDebounceMs = preview.syncDebounceMs;
-    this.previewHighlightVisibleMs = preview.highlightDurationMs;
     this.editorFontManager.configure(editor.codeFont, editor.unicodeFont);
 
     void applyUIThemeVariables(appearance.theme);
@@ -605,20 +599,25 @@ export class TypstryWorkspaceController {
     this.documentOutlineController.update(path, tab.content);
     this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head);
 
+
     if (this.lspReady && this.lspClient) {
       const uri = filePathToUri(path);
       await this.lspClient.openTextDocument(uri, tab.content, this.currentVersion);
       void this.runFallbackDiagnostics(path, tab.content, this.currentVersion);
 
       if (this.previewRootPath) {
-        this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Starting live preview server...</div>`;
         const previewUrl = await this.startPreviewWithRestart(this.previewRootPath, tab.content);
         if (previewUrl) {
+          if (this.previewFrame.currentUrl !== previewUrl) {
+            this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Starting live preview server...</div>`;
+          }
           await this.previewFrame.mount(previewUrl, () => this.lspClient?.getPreviewHtml() ?? Promise.resolve(""));
         } else {
+          this.previewFrame.clear();
           this.previewPane.innerHTML = `<div style="padding: 20px; color: red; font-family: sans-serif;">Failed to start live preview server after restart. Check the log console for details.</div>`;
         }
       } else {
+        this.previewFrame.clear();
         this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: sans-serif;">No preview root found for this library/template file. Diagnostics are still active.</div>`;
       }
     } else {
@@ -932,17 +931,6 @@ export class TypstryWorkspaceController {
     this.pendingLspSyncText = null;
   }
 
-  private restorePreviewDocumentVersion(): { path: string; text: string; version: number } | null {
-    if (!this.activeFilePath || !this.lspReady || !this.lspClient || !this.editorInstance) return null;
-    const version = ++this.currentVersion;
-    this.latestDocumentVersion = version;
-    const activeTab = this.getActiveTab();
-    if (activeTab) {
-      activeTab.version = version;
-      activeTab.latestVersion = version;
-    }
-    return { path: this.activeFilePath, text: this.editorInstance.state.doc.toString(), version };
-  }
 
   private async handleInverseSync(uri: string | undefined, position: LspSourcePosition): Promise<number> {
     const targetPath = uri ? filePathFromUri(uri) : null;
@@ -951,7 +939,6 @@ export class TypstryWorkspaceController {
       : null;
     const resolvedTargetPath = existingTargetTab?.path ?? targetPath;
     if (resolvedTargetPath && filePathKey(resolvedTargetPath) !== filePathKey(this.activeFilePath ?? "")) {
-      this.previewSyncController.clearMapping();
       await this.loadFile(resolvedTargetPath);
     }
 
@@ -979,7 +966,7 @@ export class TypstryWorkspaceController {
   }
 
   private handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
-    if (this.previewSyncController.shouldIgnoreDiagnostics(version, this.latestDocumentVersion)) return;
+    if (typeof version === "number" && version < this.latestDocumentVersion) return;
 
     if (!this.activeFilePath || uri !== filePathToUri(this.activeFilePath)) {
       return;
@@ -1040,10 +1027,6 @@ export class TypstryWorkspaceController {
   }
 
   private appendLspLog(entry: LspLogEntry) {
-    if (entry.kind === "error" && this.previewSyncController.shouldSuppressErrorLog()) {
-      return;
-    }
-
     this.logConsoleController.appendLog({
       kind: entry.kind,
       source: entry.source ?? "tinymist",
@@ -1359,9 +1342,11 @@ export class TypstryWorkspaceController {
       return;
     }
 
-    this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Restarting live preview...</div>`;
     const previewUrl = await this.startPreviewWithRestart(nextPreviewRoot, contents);
     if (previewUrl && this.previewRootPath === nextPreviewRoot) {
+      if (this.previewFrame.currentUrl !== previewUrl) {
+        this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Restarting live preview...</div>`;
+      }
       await this.previewFrame.mount(previewUrl, () => this.lspClient?.getPreviewHtml() ?? Promise.resolve(""));
     }
   }
