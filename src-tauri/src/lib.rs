@@ -126,6 +126,14 @@ fn read_workspace_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
     for entry in dir {
         if let Ok(entry) = entry {
             let file_name = entry.file_name().to_string_lossy().to_string();
+            // Ignore hidden system/editor metadata and temporary build files
+            if file_name == ".git"
+                || file_name.contains("typstry-check")
+                || file_name.contains("typstry-preview")
+                || file_name.contains(".export.typ")
+            {
+                continue;
+            }
             let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
             entries.push(json!({
                 "name": file_name,
@@ -267,8 +275,15 @@ async fn check_typst_document(
     let path = std::path::Path::new(&file_path);
     let parent = path.parent().unwrap_or(std::path::Path::new(""));
     let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let input_path = parent.join(format!(".{}.typstry-check.typ", file_stem));
-    let output_path = parent.join(format!(".{}.typstry-check.svg", file_stem));
+    
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+        
+    let input_path = parent.join(format!(".{}.typstry-check-{}.typ", file_stem, nonce));
+    let temp_dir = std::env::temp_dir();
+    let output_path = temp_dir.join(format!(".{}.typstry-check-{}.svg", file_stem, nonce));
 
     let data_dir = app_handle
         .path()
@@ -429,7 +444,10 @@ async fn compile_typst_preview(
         .unwrap_or_default();
     let prefix = format!(".{}.typstry-preview-{}-", file_stem, nonce);
     let input_path = parent.join(format!("{}.typ", prefix));
-    let output_pattern = parent.join(format!("{}{{0p}}.svg", prefix));
+    
+    let temp_dir = std::env::temp_dir();
+    let output_pattern = temp_dir.join(format!("{}{{0p}}.svg", prefix));
+    
     let data_dir = app_handle
         .path()
         .app_local_data_dir()
@@ -457,7 +475,7 @@ async fn compile_typst_preview(
     let _ = std::fs::remove_file(&input_path);
     let output = output?;
 
-    let mut page_paths: Vec<_> = std::fs::read_dir(parent)
+    let mut page_paths: Vec<_> = std::fs::read_dir(&temp_dir)
         .map_err(|error| format!("Failed to read compiled preview: {}", error))?
         .flatten()
         .map(|entry| entry.path())
