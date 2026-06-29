@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { basename, dirname, join } from "@tauri-apps/api/path";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-shell";
 import type { EditorView } from "@codemirror/view";
 import { selectAll, toggleLineComment } from "@codemirror/commands";
@@ -28,6 +29,9 @@ export class ContextMenuController {
   private targetPath = "";
   private targetIsDirectory = false;
   private copiedFilePath: string | null = null;
+  private textControl: HTMLInputElement | HTMLTextAreaElement | null = null;
+  private selectedText = "";
+  private contextText = "";
   private readonly menu = document.getElementById("context-menu")!;
 
   constructor(private readonly dependencies: ContextMenuDependencies) {}
@@ -57,9 +61,13 @@ export class ContextMenuController {
       case "ctx-fs-paste": return this.pasteFile();
       case "ctx-open-project": document.getElementById("action-open-folder")?.click(); return;
       case "ctx-export-pdf": document.getElementById("action-export-pdf")?.click(); return;
-      case "ctx-copy-text": document.execCommand("copy"); return;
-      case "ctx-cut-text": document.execCommand("cut"); return;
+      case "ctx-copy-text": return this.copyEditorText(false);
+      case "ctx-cut-text": return this.copyEditorText(true);
       case "ctx-paste-text": return this.pasteText();
+      case "ctx-native-copy": return this.copyNativeText();
+      case "ctx-native-cut": return this.cutNativeText();
+      case "ctx-native-paste": return this.pasteNativeText();
+      case "ctx-native-select-all": this.selectAllNativeText(); return;
       case "ctx-undo": document.getElementById("action-undo")?.click(); return;
       case "ctx-redo": document.getElementById("action-redo")?.click(); return;
       case "ctx-editor-toggle-comment": toggleLineComment(this.dependencies.getEditor()); return;
@@ -71,7 +79,7 @@ export class ContextMenuController {
         return;
       case "ctx-fs-reveal": if (this.targetPath) await invoke("reveal_in_explorer", { path: this.targetPath }); return;
       case "ctx-fs-copy-rel-path": return this.copyRelativePath();
-      case "ctx-fs-copy-abs-path": if (this.targetPath) await navigator.clipboard.writeText(this.targetPath); return;
+      case "ctx-fs-copy-abs-path": if (this.targetPath) await writeText(this.targetPath); return;
       case "ctx-preview-open-external": return this.openPreviewPdf();
     }
   }
@@ -161,15 +169,83 @@ export class ContextMenuController {
   private async pasteText(): Promise<void> {
     try {
       const editor = this.dependencies.getEditor();
-      editor.dispatch(editor.state.replaceSelection(await navigator.clipboard.readText()));
+      editor.dispatch(editor.state.replaceSelection(await readText()));
     } catch (error) { console.error("Failed to read clipboard:", error); }
+  }
+
+  private async copyEditorText(cut: boolean): Promise<void> {
+    const editor = this.dependencies.getEditor();
+    const selection = editor.state.selection.main;
+    if (selection.empty) return;
+    await writeText(editor.state.sliceDoc(selection.from, selection.to));
+    if (cut) editor.dispatch(editor.state.replaceSelection(""));
+    editor.focus();
+  }
+
+  private async copyNativeText(): Promise<void> {
+    const text = this.selectedControlText() || this.selectedText || this.contextText;
+    if (text) await writeText(text);
+  }
+
+  private async cutNativeText(): Promise<void> {
+    const control = this.textControl;
+    if (!control || control.readOnly || control.disabled) return;
+    await this.copyNativeText();
+    this.replaceControlSelection("");
+  }
+
+  private async pasteNativeText(): Promise<void> {
+    const control = this.textControl;
+    if (!control || control.readOnly || control.disabled) return;
+    try {
+      this.replaceControlSelection(await readText());
+    } catch (error) {
+      console.error("Failed to paste text:", error);
+    }
+  }
+
+  private selectAllNativeText(): void {
+    this.textControl?.select();
+  }
+
+  private selectedControlText(): string {
+    const control = this.textControl;
+    if (!control) return "";
+    if (control.selectionStart === null || control.selectionEnd === null) return control.value;
+    const start = control.selectionStart;
+    const end = control.selectionEnd;
+    return control.value.slice(start, end);
+  }
+
+  private replaceControlSelection(text: string): void {
+    const control = this.textControl;
+    if (!control) return;
+    if (control.selectionStart === null || control.selectionEnd === null) {
+      control.value = text;
+      this.dispatchControlInput(control, text);
+      return;
+    }
+    const start = control.selectionStart;
+    const end = control.selectionEnd;
+    control.setRangeText(text, start, end, "end");
+    this.dispatchControlInput(control, text);
+  }
+
+  private dispatchControlInput(control: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+    control.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      data: text,
+      inputType: text ? "insertFromPaste" : "deleteByCut"
+    }));
+    control.dispatchEvent(new Event("change", { bubbles: true }));
+    control.focus();
   }
 
   private async copyRelativePath(): Promise<void> {
     const workspace = this.dependencies.getWorkspaceRoot();
     if (!workspace || !this.targetPath) return;
     const relative = this.targetPath.replace(workspace, "").replace(/^[\\/]/, "").replace(/\\/g, "/");
-    await navigator.clipboard.writeText(relative);
+    await writeText(relative);
   }
 
   private async openPreviewPdf(): Promise<void> {
@@ -191,6 +267,22 @@ export class ContextMenuController {
 
   private showForTarget(event: MouseEvent): void {
     const target = event.target as HTMLElement;
+    this.textControl = this.textControlFor(target);
+    const selection = window.getSelection();
+    this.selectedText = selection?.toString() ?? "";
+    const logEntry = target.closest<HTMLElement>(".log-entry");
+    this.contextText = logEntry?.querySelector<HTMLElement>(".log-entry-message")?.textContent ?? "";
+    if (logEntry && selection?.anchorNode && !logEntry.contains(selection.anchorNode)) this.selectedText = "";
+    if (this.textControl) {
+      event.preventDefault();
+      this.show(this.nativeTextItems(!this.textControl.readOnly && !this.textControl.disabled), event.clientX, event.clientY);
+      return;
+    }
+    if (this.contextText || (this.selectedText && !target.closest(".cm-editor, #code-render-pane"))) {
+      event.preventDefault();
+      this.show(this.nativeTextItems(false), event.clientX, event.clientY);
+      return;
+    }
     if (target.closest("#document-outline-section")) {
       this.hide();
       return;
@@ -225,6 +317,15 @@ export class ContextMenuController {
 
   private hide(): void { this.menu.style.display = "none"; }
 
+  private textControlFor(target: HTMLElement): HTMLInputElement | HTMLTextAreaElement | null {
+    const control = target.closest<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
+    if (!control) return null;
+    if (control instanceof HTMLTextAreaElement) return control;
+    return ["text", "search", "url", "tel", "email", "password", "number"].includes(control.type)
+      ? control
+      : null;
+  }
+
   private handlePreviewMessage(event: MessageEvent): void {
     const data = event.data as { type?: unknown; x?: unknown; y?: unknown } | null;
     if (data?.type === "HIDE_CONTEXT_MENU") this.hide();
@@ -243,5 +344,15 @@ export class ContextMenuController {
 
   private editorItems(): string {
     return `<div class="dropdown-item" id="ctx-copy-text">Copy <span class="hotkey">Ctrl+C</span></div><div class="dropdown-item" id="ctx-paste-text">Paste <span class="hotkey">Ctrl+V</span></div><div class="dropdown-item" id="ctx-cut-text">Cut <span class="hotkey">Ctrl+X</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-editor-toggle-comment">Toggle Line Comment</div><div class="dropdown-item" id="ctx-editor-format">Format Document</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-undo">Undo</div><div class="dropdown-item" id="ctx-redo">Redo</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-editor-select-all">Select All</div>`;
+  }
+
+  private nativeTextItems(editable: boolean): string {
+    const editItems = editable
+      ? '<div class="dropdown-item" id="ctx-native-cut">Cut <span class="hotkey">Ctrl+X</span></div><div class="dropdown-item" id="ctx-native-paste">Paste <span class="hotkey">Ctrl+V</span></div>'
+      : "";
+    const selectAll = editable
+      ? '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-native-select-all">Select All <span class="hotkey">Ctrl+A</span></div>'
+      : "";
+    return `<div class="dropdown-item" id="ctx-native-copy">Copy <span class="hotkey">Ctrl+C</span></div>${editItems}${selectAll}`;
   }
 }

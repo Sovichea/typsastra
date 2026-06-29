@@ -26,6 +26,7 @@ import { PreviewSyncController } from "./preview/previewSyncController";
 import { allowsLiveImportPreview, previewRefreshStyle, previewSessionIdentity, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
+import { TabStripController } from "./editor/tabStripController";
 import { LayoutController } from "./layout/layoutController";
 import { WorkspaceStateStore } from "./workspace/workspaceStateStore";
 import { RecentProjectsController } from "./workspace/recentProjectsController";
@@ -102,6 +103,11 @@ export class TypstryWorkspaceController {
 
   private codePane = document.getElementById("code-editor-pane")!;
   private editorTabBar = document.getElementById("editor-tab-bar")!;
+  private readonly tabStripController = new TabStripController(
+    this.editorTabBar,
+    document.getElementById("editor-tabs-previous") as HTMLButtonElement,
+    document.getElementById("editor-tabs-next") as HTMLButtonElement
+  );
   private editorVisualToolbar = document.getElementById("editor-visual-toolbar")!;
   private codeRenderPane = document.getElementById("code-render-pane")!;
   private wysiwymPane = document.getElementById("wysiwym-editor-pane")!;
@@ -175,6 +181,7 @@ export class TypstryWorkspaceController {
     this.applySettingsToRuntime(this.settingsController.value);
     this.initExplorer();
     this.editorToolbarController.initialize();
+    this.tabStripController.initialize();
     this.bindGlobalEvents();
     this.layoutController.initialize();
     this.initWordWrap();

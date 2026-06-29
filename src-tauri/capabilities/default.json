@@ -16,6 +16,8 @@
     "core:window:allow-show",
     "core:webview:default",
     "dialog:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "shell:default",
     "shell:allow-open",
     "fs:default",

@@ -126,7 +126,13 @@
         </div>
 
         <div id="input-container-wrapper" class="hidden">
-          <div id="editor-tab-bar" class="editor-tab-bar" role="tablist" aria-label="Open files"></div>
+          <div id="editor-tab-strip" class="editor-tab-strip">
+            <div id="editor-tab-bar" class="editor-tab-bar" role="tablist" aria-label="Open files"></div>
+            <div class="editor-tab-scroll-controls" aria-label="Scroll open tabs">
+              <button id="editor-tabs-previous" class="hidden" type="button" title="Scroll tabs left" aria-label="Scroll tabs left">&#x2039;</button>
+              <button id="editor-tabs-next" class="hidden" type="button" title="Scroll tabs right" aria-label="Scroll tabs right">&#x203A;</button>
+            </div>
+          </div>
           <div id="editor-visual-toolbar" class="editor-visual-toolbar" aria-label="Editor tools">
             <div class="toolbar-group">
                 <button type="button" class="toolbar-button" data-tool="save" title="Save" aria-label="Save">

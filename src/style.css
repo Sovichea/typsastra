@@ -386,19 +386,63 @@ html {
   overflow: hidden;
 }
 
-.editor-tab-bar {
+.editor-tab-strip {
   min-height: 34px;
   display: flex;
   align-items: stretch;
-  overflow-x: auto;
-  overflow-y: hidden;
+  min-width: 0;
   border-bottom: 1px solid var(--ui-border);
   background: var(--ui-hover);
   flex-shrink: 0;
 }
 
-.editor-tab-bar:empty {
+.editor-tab-strip:has(.editor-tab-bar:empty) {
   display: none;
+}
+
+.editor-tab-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.editor-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.editor-tab-scroll-controls {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  background: var(--ui-hover);
+  box-shadow: -4px 0 6px rgba(0, 0, 0, 0.08);
+}
+
+.editor-tab-scroll-controls button {
+  width: 26px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.editor-tab-scroll-controls button:hover:not(:disabled) {
+  background: var(--ui-bg);
+}
+
+.editor-tab-scroll-controls button:disabled {
+  color: var(--ui-header-text);
+  opacity: 0.45;
+  cursor: default;
 }
 
 .editor-tab {
@@ -990,6 +1034,7 @@ html {
   text-align: left;
   cursor: pointer;
   gap: 8px;
+  user-select: text;
 }
 
 .log-entry:hover {
@@ -1027,6 +1072,8 @@ html {
   line-height: 1.4;
   color: var(--ui-text);
   flex: 1;
+  user-select: text;
+  cursor: text;
 }
 
 .log-entry-source {
