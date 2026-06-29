@@ -3,8 +3,19 @@ use serde_json::json;
 use std::os::windows::process::CommandExt;
 use tauri::{Emitter, Manager};
 
+mod font_store;
 mod toolchain;
 use toolchain::active_tinymist;
+
+#[tauri::command]
+fn list_system_fonts() -> font_store::SystemFontCatalog {
+    font_store::list_system_fonts()
+}
+
+#[tauri::command]
+async fn install_unicode_font(font_id: String) -> Result<font_store::InstalledFont, String> {
+    font_store::install_unicode_font(&font_id).await
+}
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -568,14 +579,21 @@ async fn compile_typst_document(
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
 
-    let output = command
-        .arg("compile")
-        .arg("--root")
-        .arg(parent)
-        .arg(&input_path)
-        .arg(&output_path)
-        .output()
-        .map_err(|e| format!("Host binary execution blocked: {}", e))?;
+    let output =
+        command
+            .arg("compile")
+            .arg("--root")
+            .arg(".")
+            .arg(input_path.file_name().ok_or_else(|| {
+                "Failed to construct the temporary Typst export path.".to_string()
+            })?)
+            .arg(
+                output_path
+                    .file_name()
+                    .ok_or_else(|| "Failed to construct the PDF export path.".to_string())?,
+            )
+            .output()
+            .map_err(|e| format!("Host binary execution blocked: {}", e))?;
 
     let _ = std::fs::remove_file(&input_path);
 
@@ -632,16 +650,19 @@ async fn compile_typst_preview(
     command.current_dir(parent);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
-    let output = command
-        .arg("compile")
-        .arg("--root")
-        .arg(parent)
-        .arg("--format")
-        .arg("svg")
-        .arg(&input_path)
-        .arg(&output_pattern)
-        .output()
-        .map_err(|error| format!("Tinymist preview failed to start: {}", error));
+    let output =
+        command
+            .arg("compile")
+            .arg("--root")
+            .arg(".")
+            .arg("--format")
+            .arg("svg")
+            .arg(input_path.file_name().ok_or_else(|| {
+                "Failed to construct the temporary Typst preview path.".to_string()
+            })?)
+            .arg(&output_pattern)
+            .output()
+            .map_err(|error| format!("Tinymist preview failed to start: {}", error));
     let _ = std::fs::remove_file(&input_path);
     let output = output?;
 
@@ -1042,6 +1063,12 @@ pub fn run() {
             process: Mutex::new(None),
         })
         .setup(|app| {
+            if let Ok(data_dir) = app.path().app_local_data_dir() {
+                font_store::remove_legacy_font_cache(&data_dir);
+            }
+            if let Err(error) = font_store::ensure_base_fonts_installed() {
+                eprintln!("Failed to install bundled fonts for the current user: {error}");
+            }
             if let Some(webview) = app.get_webview_window("main") {
                 let _ = webview.with_webview(disable_webview_context_menus);
             }
@@ -1065,6 +1092,8 @@ pub fn run() {
             resolve_preview_main,
             ensure_toolchain,
             get_toolchain_status,
+            list_system_fonts,
+            install_unicode_font,
             list_tinymist_releases,
             install_tinymist_toolchain,
             start_tinymist_lsp,

@@ -26,34 +26,6 @@
   font-weight: bold;
 }
 
-@font-face {
-  font-family: 'DejaVu Sans Mono';
-  src: url('./assets/fonts/DejaVuSansMono-Regular.woff2') format('woff2');
-  font-weight: normal;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'DejaVu Sans Mono';
-  src: url('./assets/fonts/DejaVuSansMono-Bold.woff2') format('woff2');
-  font-weight: bold;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'DejaVu Sans Mono';
-  src: url('./assets/fonts/DejaVuSansMono-Oblique.woff2') format('woff2');
-  font-weight: normal;
-  font-style: italic;
-}
-
-@font-face {
-  font-family: 'DejaVu Sans Mono';
-  src: url('./assets/fonts/DejaVuSansMono-BoldOblique.woff2') format('woff2');
-  font-weight: bold;
-  font-style: italic;
-}
-
 :root {
   --ui-font: 'MiSans Latin';
   --editor-code-font: 'Fira Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
@@ -644,8 +616,8 @@ html {
 }
 
 #editor-font-dismiss {
-  width: 24px;
-  padding: 0;
+  min-width: 24px;
+  padding: 0 7px;
   margin-left: auto;
 }
 

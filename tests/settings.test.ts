@@ -6,7 +6,7 @@ describe("application settings", () => {
     const settings = normalizeAppSettings({ appearance: { theme: "nord" } });
 
     expect(settings.appearance.theme).toBe("nord");
-    expect(settings.editor.codeFont).toBe("fira-mono");
+    expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
@@ -25,8 +25,8 @@ describe("application settings", () => {
     expect(settings.appearance.editorFontSize).toBe(32);
     expect(settings.appearance.editorLineHeight).toBe(1.2);
     expect(settings.editor.tabSize).toBe(2);
-    expect(settings.editor.codeFont).toBe("fira-mono");
-    expect(settings.editor.unicodeFont).toBe("auto");
+    expect(settings.editor.codeFont).toBe("Fira Mono");
+    expect(settings.editor.unicodeFont).toBe("unknown-font");
     expect(settings.preview.syncDebounceMs).toBe(50);
     expect(settings.preview.highlightDurationMs).toBe(10000);
     expect(settings.toolchain.tinymistVersion).toBeNull();

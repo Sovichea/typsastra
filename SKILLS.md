@@ -7,7 +7,7 @@ This document serves as the core knowledge base and skill reference for the Typs
 - **Desktop Framework:** Tauri v2 (Rust + Webview)
 - **Frontend Core:** Vite + Vanilla TypeScript (No UI frameworks like React or Vue)
 - **Editor Engine:** CodeMirror 6
-- **Bundled Fonts:** MiSans Latin is the UI font. Fira Mono is the default code font; DejaVu Sans Mono remains an alternate bundled monospace choice.
+- **Bundled Fonts:** Only MiSans Latin (UI and Latin-script fallback) and Fira Mono (default code font) are bundled. The Rust font store installs both for the current user on first launch.
 - **Language Server:** Tinymist LSP spawned by the Rust backend and bridged to the frontend over Tauri IPC (`lsp-rx`, `lsp-status`, `send_lsp_message`). Tinymist preview assets may still use local `127.0.0.1` ports.
 - **Toolchain:** Tinymist is the single managed toolchain. `src-tauri/src/toolchain.rs` installs stable platform binaries in Tauri app-local data; compilation and export use Tinymist's embedded Typst compiler. Do not download or require a separate `typst` executable.
 
@@ -37,7 +37,7 @@ The application operates across distinct processes and contexts:
 4. **Controller Boundaries:** DOM-heavy feature controllers own their elements and local state. `appController.ts` coordinates them through callbacks; do not move feature implementations back into the orchestrator.
 5. **WYSIWYM Parsing:** Use `WysiwymAdapter.render()` and `.serialize()` when mapping DOM blocks to Typst. Preserve structural prefixes such as `= ` and table metadata.
 6. **Validation:** Run `bun test`, `bun run build`, `cargo fmt --check`, `cargo check --lib`, and `cargo test --lib` after cross-boundary changes.
-7. **Font Catalogs:** `editor/fontCatalog.ts` is the source of truth for editor font selectors. Code-font entries must be monospace. MiSans Latin is UI-only and must never be added as a code or detector recommendation. New Unicode downloads must be registered with the detector engine and remain separate from the base code font.
+7. **Font Management:** `font_store.rs` installs fonts per user and enumerates operating-system families; Settings must list only enumerated monospace families for code and all enumerated families for fallback. `editor/fontCatalog.ts` owns optional script recommendations, not selector inventory: prefer the matching MiSans family and use script-specific Noto Sans when MiSans has no family. Never download before explicit consent, and remember declined recommendations. Only Fira Mono and MiSans Latin may be bundled.
 8. **Stable Toolchains Only:** Filter GitHub drafts, prereleases, semantic prerelease identifiers, and Tinymist's odd-patch nightly releases.
 
 ## 4. Common Troubleshooting

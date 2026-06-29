@@ -6,7 +6,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
 
 ## 1. Core Architecture
 - **Tech Stack**: Tauri v2 (Rust backend for system/file operations and Tinymist LSP lifecycle) + Bun/Vite (Frontend) + CodeMirror 6 (Editor).
-- **Run Commands**: `bun install`, `bun run tauri dev`, `bun run tauri build`; frontend build is `tsc && vite build`.
+- **Run Commands**: `bun install`, `bun run tauri dev`, `bun run tauri build`; frontend build is `tsc && vite build`. Commit `bun.lock`; use `bun install --frozen-lockfile` for clean setup and CI, and regenerate it with `bun install` whenever `package.json` changes.
 - **TypeScript Mode**: `strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`; unused imports/params fail build.
 - **Core Files**:
   - `index.html`: Single-page DOM scaffold. Feature controllers bind hardcoded element IDs, so DOM ID changes must be paired with the controller that owns that element.
@@ -30,6 +30,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
   - `src/editor/hover.ts`: LSP hover renderer with small local markdown parser and external-link shell open.
   - `src/editor/diagnostics.ts`: CodeMirror diagnostic underline decorations via `StateEffect`/`StateField`.
   - `src-tauri/src/lib.rs`: IPC commands, filesystem operations, toolchain download, Typst check/compile, Tinymist child-process bridge.
+  - `src-tauri/src/font_store.rs`: Current-user font installation, operating-system font enumeration, allowlisted MiSans downloads, and obsolete app-cache migration.
   - `src-tauri/capabilities/default.json`: Grants broad FS/plugin permissions; frontend assumes these commands are available.
 
 ### A. Frontend Controller Flow (`src/appController.ts`)
@@ -40,12 +41,14 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - `WorkspaceStateStore` owns localStorage persistence under `typstry-workspace-${workspaceRootPath}`. It normalizes stored values, keeps tab paths/selection/scroll/split widths, and reloads content from disk; unsaved tab contents are not persisted across app restart.
 - `RecentProjectsController` owns `typstry-recent-projects` (max 5) and renders paths with DOM APIs rather than interpolated HTML.
 - Application preferences live in the platform app-config `settings.json`; `typstry-word-wrap` and `typstry-theme` localStorage keys are migration inputs only and are removed after the first successful JSON save.
-- MiSans Latin Regular/Bold is bundled and used only for application UI. Fira Mono Regular/Bold is bundled and is the default editor font; DejaVu Sans Mono and System Monospace are alternate catalog entries.
-- `EditorFontManager` keeps base code-font selection separate from Unicode fallback selection. Auto detection only recommends registered script fonts; unmatched Latin Extended, Greek, Cyrillic, or other scripts must not fall back to MiSans Latin.
+- Only MiSans Latin Regular/Bold and Fira Mono Regular/Bold are bundled. Rust installs both in the current user's OS font collection on first launch; Typstry-owned filenames avoid collisions with locked pre-existing font files.
+- Settings obtains its choices from `list_system_fonts`: code-font options are OS families identified as monospace, while Unicode fallback may use any installed family. `EditorFontManager` keeps both roles separate.
+- Automatic Unicode detection asks for consent before an allowlisted family is downloaded and installed. It recommends MiSans where available and the corresponding Noto Sans family otherwise. Declines are remembered per script, and the user can always choose another installed family in Settings.
 
 ### B. Tauri IPC Contract (`src-tauri/src/lib.rs`)
 - File commands: `read_workspace_file`, `save_workspace_file`, `create_workspace_dir`, `rename_workspace_file`, `copy_workspace_file`, `read_workspace_dir`, `move_to_trash`, `reveal_in_explorer`.
 - Settings commands: `load_app_settings` and `save_app_settings`; Rust owns config-path resolution and pretty JSON disk I/O while TypeScript owns schema normalization.
+- Font commands: `list_system_fonts` enumerates OS families and monospace metadata; `install_unicode_font` downloads only allowlisted official MiSans archives or Google Fonts Noto variable TTFs after frontend consent and installs them for the current user.
 - Preview/document commands: `resolve_preview_main`, `check_typst_document`, `compile_typst_document`.
 - Toolchain/LSP commands: `ensure_toolchain`, `start_tinymist_lsp`, `send_lsp_message`.
 - Executable resolution first checks the OS-appropriate managed filename (`.exe` only on Windows), then falls back to `PATH` for both Typst and Tinymist.
@@ -90,9 +93,9 @@ This file serves as a consolidated reference for the architectural decisions, pa
 ## 2. Editor & Syntax Highlight Rules
 
 ### A. Font Fallbacks & Monospace Rendering
-- **UI vs Code**: MiSans Latin is the UI-only sans-serif family. Fira Mono is the default editor family and every `codeFont` selector entry must be registered as monospace in `fontCatalog.ts`.
-- **Unicode Fallback Stack**: The chosen monospace code font is placed before an optional detector-managed Unicode family. `unicodeFont: "none"` disables the additional fallback; `"auto"` follows script detection.
-- **Detector Catalog**: Do not use a catch-all Unicode recommendation. Add a script pattern, metadata, and load source for each supported font. MiSans Latin is not a valid detector candidate, including for French or Greek text.
+- **UI vs Code**: MiSans Latin is the primary UI family. Fira Mono is the default editor family; the code selector is populated from OS fonts whose metadata marks them as monospace.
+- **Unicode Fallback Stack**: The chosen monospace code font precedes an optional installed fallback family. `unicodeFont: "none"` disables it, `"auto"` follows consent-based script detection, and any other value names an enumerated system family.
+- **Detector Catalog**: Recommendations are optional consistency aids, not selector inventory or advertisements. Never download before confirmation. Greek/Cyrillic can use bundled MiSans Latin; scripts without a MiSans family recommend the corresponding Noto Sans family while retaining every installed fallback as a user choice.
 - **String Literals**: Rendered using a monospace font (`var(--editor-code-font)`) because they serve as internal parameters/code arguments rather than output text.
 - **Equations & Raw Blocks**: Rendered in monospace. Both are assigned a unified theme-aware monospace color (`--ui-monospace-color`).
 
@@ -166,6 +169,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
 | **Application Settings** | Keeping theme/wrap in scattered localStorage keys or rebuilding CodeMirror for each preference. | Normalize one versioned `settings.json`, persist it through Rust IPC, and apply editor toggles through compartments. | Native config paths are platform-specific; schema validation, migration, debounced writes, and live reconfiguration must remain separate concerns. |
 | **Frontend Controller Decomposition** | Keeping DOM, timers, persistence, JSON-RPC, preview mapping, and feature actions in a 3,800-line `main.ts`. | Keep `main.ts` composition-only; place orchestration in `appController.ts` and feature state in callback-driven controllers/pure libraries. | Moving one giant class only renames the problem; extract ownership first, keep a single LSP transport, and test pure boundaries before reducing the entry point. |
 | **Workspace Portability** | Recursive explorer startup scans, manual file-URI concatenation, Unix path case-folding, and hardcoded `.exe` names. | Lazy-load folders, centralize path/URI helpers, preserve Unix case, and resolve managed executables with PATH fallback. | Windows, macOS, and Linux differ in path identity and executable naming; portability logic must stay out of feature controllers. |
-| **Editor Font Roles** | Using MiSans Latin as a catch-all code/Unicode recommendation and coupling script fallback to the base editor font. | Bundle MiSans Latin for UI and Fira Mono for code; validate monospace code choices and configure detector-managed Unicode fallback separately. | A UI sans font is not a code font, and unmatched scripts must not produce false download recommendations; `none` must override automatic fallback. |
+| **Editor Font Roles** | Hardcoding a small selector catalog, auto-downloading into app cache, and treating MiSans as mandatory. | Enumerate OS fonts, restrict code choices by monospace metadata, ask before per-user MiSans/Noto installation, and remember script-level declines. | Removing a system font cannot affect a privately loaded app cache; OS installation plus explicit consent makes font ownership and user choice predictable. |
+| **Bun Dependency Lock** | Changing `package.json` without refreshing or committing `bun.lock`. | Run `bun install`, commit both files, and use `bun install --frozen-lockfile` in setup/CI. | Bun can otherwise resolve a different graph or omit a newly direct dependency; the frozen install makes drift fail early. |
 | **Release Build Preview Blank** | Using `VSCODE_PROXY_URI` environment variable (set to `tauri.localhost`) and complex `srcdoc` HTML/JS/CSS resource inlining. | Remove `VSCODE_PROXY_URI` env, let Tinymist preview server default to loopback IP (`127.0.0.1`), and mount `iframe.src` directly. | WebView2/Chromium exempts loopback addresses (`127.0.0.1` and `localhost`) from Mixed Content blocks. The custom `tauri.localhost` domain was not exempted, causing direct loads to block and necessitating the fragile `srcdoc` inlining bypass, which broke WebSocket URL host resolution (resulting in permanent preview failure on restart/tab-switch). |
 | **Forward Sync Ripple Jitter** | Triggering the scroll ripple prematurely, dispatching multiple redundant scrolls, and matching stale highlights. | Remove the red-highlight mutation hack entirely, clean up all document reverts and polling loops, and scroll directly to the cursor coordinates. | Document-mutation highlight overlays are fragile and cause compile latency and sync lag. Directly sending scroll commands to the preview coordinates is faster, cleaner, and completely reliable. |

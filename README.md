@@ -46,7 +46,7 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
     "editorLineHeight": 1.7
   },
   "editor": {
-    "codeFont": "fira-mono",
+    "codeFont": "Fira Mono",
     "unicodeFont": "auto",
     "wordWrap": true,
     "tabSize": 2,
@@ -72,7 +72,7 @@ The Toolchain panel installs stable Tinymist releases and shows each release's e
 
 Each preview root has a uniquely identified Tinymist task whose iframe is cached across tab switches. When an open file is imported by another Typst file, Typstry previews the top-level importing document and updates that preview on save. Put `//@allow-preview` on the imported file's first line to preview that file itself and update it live while editing.
 
-MiSans Latin is bundled as the application UI font. Fira Mono Regular/Bold is bundled as the default code font; the code-font selector only lists monospace families registered by the font engine. Unicode fallback is configured separately as automatic detection, no fallback, or a detector-managed font.
+Only MiSans Latin and Fira Mono are bundled. Typstry installs them in the current user's font directory on first launch, avoiding administrator access on Windows, Linux, and macOS. Settings enumerates the operating system's fonts: the code-font selector contains monospace families, while Unicode fallback accepts any installed family. Automatic detection recommends the matching MiSans family when one exists and a script-specific Noto Sans family otherwise. It never downloads without confirmation and does not repeat a recommendation the user declines. Recommendations are optional; users can select any installed fallback or disable fallback entirely. MiSans downloads and use are subject to Xiaomi's [MiSans license agreement](https://hyperos.mi.com/font/en/download/); Noto fonts use the [SIL Open Font License](https://openfontlicense.org/).
 
 ## Tech Stack & Architecture
 * **Core Framework**: [Tauri v2](https://v2.tauri.app/)
@@ -174,6 +174,8 @@ git clone https://github.com/Sovichea/typstry.git
 cd typstry
 bun install --frozen-lockfile
 ```
+
+`bun.lock` is committed and is the reproducible dependency source for local development and CI. After changing `package.json`, run `bun install` and commit both files; routine setup and CI should keep using `bun install --frozen-lockfile` so an outdated lockfile fails immediately.
 
 Verify the environment:
 

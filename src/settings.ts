@@ -46,7 +46,7 @@ export const defaultAppSettings: AppSettings = {
     editorLineHeight: 1.7
   },
   editor: {
-    codeFont: "fira-mono",
+    codeFont: "Fira Mono",
     unicodeFont: "auto",
     wordWrap: true,
     tabSize: 2,

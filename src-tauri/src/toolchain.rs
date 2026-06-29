@@ -1,7 +1,9 @@
 use semver::Version;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -9,6 +11,12 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 const TINYMIST_RELEASES_URL: &str = "https://api.github.com/repos/Myriad-Dreamin/tinymist/releases";
+const TINYMIST_TAGS_URL: &str = "https://api.github.com/repos/Myriad-Dreamin/tinymist/tags";
+
+#[derive(Deserialize)]
+struct GithubTag {
+    name: String,
+}
 
 #[derive(Clone, Deserialize)]
 struct GithubAsset {
@@ -21,14 +29,12 @@ struct GithubRelease {
     tag_name: String,
     draft: bool,
     prerelease: bool,
-    published_at: Option<String>,
     assets: Vec<GithubAsset>,
 }
 
 #[derive(Clone)]
 struct StableRelease {
     version: Version,
-    published_at: Option<String>,
     assets: Vec<GithubAsset>,
 }
 
@@ -70,6 +76,7 @@ pub fn managed_executable_path(data_dir: &Path, version: &str, name: &str) -> Pa
 }
 
 fn command_for(executable: &Path) -> Command {
+    #[allow(unused_mut)]
     let mut command = Command::new(executable);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
@@ -112,6 +119,10 @@ fn tinymist_metadata(executable: &Path) -> Option<(Version, Version)> {
                     .trim_start_matches('v');
                 Version::parse(value).ok()
             })
+        })
+        .or_else(|| {
+            let dir_name = executable.parent()?.file_name()?;
+            Version::parse(&dir_name.to_string_lossy()).ok()
         })?;
     let typst = labeled_version(&text, "Typst Version:")?;
     Some((tinymist, typst))
@@ -197,35 +208,93 @@ pub fn status(data_dir: &Path) -> ToolchainStatus {
 fn github_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent(format!("Typstry/{}", env!("CARGO_PKG_VERSION")))
+        .default_headers({
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/vnd.github+json"),
+            );
+            headers.insert(
+                "x-github-api-version",
+                reqwest::header::HeaderValue::from_static("2022-11-28"),
+            );
+            headers
+        })
+        .timeout(Duration::from_secs(30))
         .build()
         .map_err(|error| format!("Failed to initialize GitHub client: {}", error))
 }
 
-async fn fetch_stable_releases() -> Result<Vec<StableRelease>, String> {
+async fn decode_github_json<T: DeserializeOwned>(
+    response: reqwest::Response,
+    context: &str,
+) -> Result<T, String> {
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Failed to read {} response: {}", context, error))?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&body);
+        return Err(format!(
+            "{} request failed ({}): {}",
+            context,
+            status,
+            detail.chars().take(240).collect::<String>()
+        ));
+    }
+    serde_json::from_slice(&body).map_err(|error| {
+        format!(
+            "Failed to decode {} response ({}; {} bytes): {}",
+            context,
+            content_type,
+            body.len(),
+            error
+        )
+    })
+}
+
+async fn fetch_stable_versions() -> Result<Vec<Version>, String> {
     let client = github_client()?;
-    let mut releases = Vec::new();
+    let mut versions = Vec::new();
     for page in 1.. {
         let response = client
-            .get(TINYMIST_RELEASES_URL)
+            .get(TINYMIST_TAGS_URL)
             .query(&[("per_page", 100), ("page", page)])
             .send()
             .await
-            .map_err(|error| format!("Failed to fetch Tinymist releases: {}", error))?
-            .error_for_status()
-            .map_err(|error| format!("Tinymist release request failed: {}", error))?;
-        let mut page_releases = response
-            .json::<Vec<GithubRelease>>()
-            .await
-            .map_err(|error| format!("Failed to read Tinymist releases: {}", error))?;
-        let is_last_page = page_releases.len() < 100;
-        releases.append(&mut page_releases);
+            .map_err(|error| format!("Failed to fetch Tinymist tags: {}", error))?;
+        let page_tags: Vec<GithubTag> = decode_github_json(response, "Tinymist tags").await?;
+        let is_last_page = page_tags.len() < 100;
+        versions.extend(page_tags.into_iter().filter_map(|tag| {
+            let version = Version::parse(tag.name.trim_start_matches('v')).ok()?;
+            (version.pre.is_empty() && version.patch % 2 == 0).then_some(version)
+        }));
         if is_last_page {
             break;
         }
     }
-    let mut stable: Vec<_> = releases.into_iter().filter_map(stable_release).collect();
-    stable.sort_by(|left, right| right.version.cmp(&left.version));
-    Ok(stable)
+    versions.sort_by(|left, right| right.cmp(left));
+    versions.dedup();
+    Ok(versions)
+}
+
+async fn fetch_release(version: &Version) -> Result<StableRelease, String> {
+    let client = github_client()?;
+    let response = client
+        .get(format!("{}/tags/v{}", TINYMIST_RELEASES_URL, version))
+        .send()
+        .await
+        .map_err(|error| format!("Failed to fetch Tinymist {}: {}", version, error))?;
+    let release: GithubRelease =
+        decode_github_json(response, &format!("Tinymist {} release", version)).await?;
+    stable_release(release).ok_or_else(|| format!("Tinymist {} is not a stable release.", version))
 }
 
 fn stable_release(release: GithubRelease) -> Option<StableRelease> {
@@ -238,18 +307,17 @@ fn stable_release(release: GithubRelease) -> Option<StableRelease> {
     }
     Some(StableRelease {
         version,
-        published_at: release.published_at,
         assets: release.assets,
     })
 }
 
 pub async fn tinymist_releases() -> Result<Vec<TinymistReleaseInfo>, String> {
-    Ok(fetch_stable_releases()
+    Ok(fetch_stable_versions()
         .await?
         .into_iter()
-        .map(|release| TinymistReleaseInfo {
-            version: release.version.to_string(),
-            published_at: release.published_at,
+        .map(|version| TinymistReleaseInfo {
+            version: version.to_string(),
+            published_at: None,
         })
         .collect())
 }
@@ -334,11 +402,7 @@ pub async fn install(data_dir: &Path, requested_version: &str) -> Result<Toolcha
                 .to_string(),
         );
     }
-    let release = fetch_stable_releases()
-        .await?
-        .into_iter()
-        .find(|release| release.version == requested)
-        .ok_or_else(|| format!("Tinymist {} is not a stable release.", requested))?;
+    let release = fetch_release(&requested).await?;
     let asset_name = platform_asset_name()?;
     let asset = release
         .assets
@@ -377,12 +441,12 @@ pub async fn ensure(data_dir: &Path) -> Result<ToolchainStatus, String> {
     if current.lsp_available {
         return Ok(current);
     }
-    let latest = fetch_stable_releases()
+    let latest = fetch_stable_versions()
         .await?
         .into_iter()
         .next()
         .ok_or_else(|| "GitHub returned no stable Tinymist releases.".to_string())?;
-    install(data_dir, &latest.version.to_string()).await
+    install(data_dir, &latest.to_string()).await
 }
 
 #[cfg(test)]
@@ -395,7 +459,6 @@ mod tests {
             tag_name: tag.to_string(),
             draft: false,
             prerelease,
-            published_at: None,
             assets: vec![],
         };
         assert!(stable_release(release("v0.15.2", false)).is_some());

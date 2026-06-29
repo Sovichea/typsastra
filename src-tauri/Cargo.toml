@@ -19,6 +19,12 @@ tokio = { version = "1.52.3", features = ["process", "io-util", "sync", "rt"] }
 trash = "5.2.6"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 semver = "1.0"
+zip = { version = "4.6", default-features = false, features = ["deflate"] }
+fontdb = "0.23"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.61", features = ["Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }

@@ -2,19 +2,18 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { cloneDefaultAppSettings, normalizeAppSettings, type AppSettings, type ThemeName } from "./settings";
 import {
-  codeEditorFonts,
   unicodeFontPreferenceOptions,
-  type CodeEditorFontId,
-  type UnicodeFontPreference
 } from "./editor/fontCatalog";
 
 type SettingsPayload = { path: string; settings: unknown | null };
+type SystemFontCatalog = { all: string[]; monospace: string[] };
 
 export class SettingsController {
   private settings: AppSettings = cloneDefaultAppSettings();
   private filePath = "";
   private saveTimer: number | null = null;
   private loadError: string | null = null;
+  private systemFonts: SystemFontCatalog = { all: ["MiSans Latin"], monospace: ["Fira Mono"] };
 
   constructor(private readonly applySettings: (settings: AppSettings) => void) {}
 
@@ -46,6 +45,7 @@ export class SettingsController {
     }
 
     if (shouldPersist) await this.persist();
+    await this.refreshSystemFonts();
   }
 
   public update(mutator: (settings: AppSettings) => void) {
@@ -69,13 +69,6 @@ export class SettingsController {
     if (!overlay) return;
     this.populateFontOptions();
 
-    const openSettings = () => {
-      this.populatePanel();
-      overlay.classList.remove("hidden");
-      document.dispatchEvent(new Event("typstry:settings-opened"));
-      (document.querySelector(".settings-nav-item.active") as HTMLButtonElement | null)?.focus();
-    };
-    const closeSettings = () => overlay.classList.add("hidden");
     const activatePanel = (name: string) => {
       document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
         item.classList.toggle("active", item.dataset.settingsPanel === name);
@@ -84,9 +77,17 @@ export class SettingsController {
         panel.classList.toggle("active", panel.dataset.settingsPanelContent === name);
       });
     };
+    const openSettings = (panel?: string) => {
+      this.populatePanel();
+      if (panel) activatePanel(panel);
+      overlay.classList.remove("hidden");
+      document.dispatchEvent(new Event("typstry:settings-opened"));
+      (document.querySelector(".settings-nav-item.active") as HTMLButtonElement | null)?.focus();
+    };
+    const closeSettings = () => overlay.classList.add("hidden");
 
-    document.getElementById("action-open-settings")?.addEventListener("click", openSettings);
-    document.getElementById("settings-status-button")?.addEventListener("click", openSettings);
+    document.getElementById("action-open-settings")?.addEventListener("click", () => openSettings());
+    document.getElementById("settings-status-button")?.addEventListener("click", () => openSettings());
     document.getElementById("settings-close")?.addEventListener("click", closeSettings);
     document.getElementById("settings-done")?.addEventListener("click", closeSettings);
     overlay.addEventListener("mousedown", event => {
@@ -95,6 +96,10 @@ export class SettingsController {
     document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
       item.addEventListener("click", () => activatePanel(item.dataset.settingsPanel ?? "appearance"));
     });
+    document.addEventListener("typstry:open-settings", event => {
+      openSettings((event as CustomEvent<{ panel?: string }>).detail?.panel);
+    });
+    document.addEventListener("typstry:system-fonts-changed", () => void this.refreshSystemFonts());
 
     const onChange = (id: string, update: (settings: AppSettings, control: HTMLInputElement | HTMLSelectElement) => void) => {
       const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
@@ -103,8 +108,8 @@ export class SettingsController {
     onChange("settings-theme", (settings, control) => { settings.appearance.theme = control.value as ThemeName; });
     onChange("settings-font-size", (settings, control) => { settings.appearance.editorFontSize = Number(control.value); });
     onChange("settings-line-height", (settings, control) => { settings.appearance.editorLineHeight = Number(control.value); });
-    onChange("settings-code-font", (settings, control) => { settings.editor.codeFont = control.value as CodeEditorFontId; });
-    onChange("settings-unicode-font", (settings, control) => { settings.editor.unicodeFont = control.value as UnicodeFontPreference; });
+    onChange("settings-code-font", (settings, control) => { settings.editor.codeFont = control.value; });
+    onChange("settings-unicode-font", (settings, control) => { settings.editor.unicodeFont = control.value; });
     onChange("settings-word-wrap", (settings, control) => { settings.editor.wordWrap = (control as HTMLInputElement).checked; });
     onChange("settings-tab-size", (settings, control) => { settings.editor.tabSize = Number(control.value) as 2 | 4 | 8; });
     onChange("settings-line-numbers", (settings, control) => { settings.editor.lineNumbers = (control as HTMLInputElement).checked; });
@@ -214,7 +219,40 @@ export class SettingsController {
       }));
     };
 
-    populate("settings-code-font", codeEditorFonts);
-    populate("settings-unicode-font", unicodeFontPreferenceOptions);
+    const codeFamilies = new Set(this.systemFonts.monospace);
+    codeFamilies.add(this.settings.editor.codeFont);
+    const fallbackFamilies = new Set(this.systemFonts.all);
+    if (this.settings.editor.unicodeFont !== "auto" && this.settings.editor.unicodeFont !== "none") {
+      fallbackFamilies.add(this.settings.editor.unicodeFont);
+    }
+    populate("settings-code-font", [...codeFamilies].sort().map(family => ({ id: family, label: family })));
+    populate("settings-unicode-font", [
+      ...unicodeFontPreferenceOptions,
+      ...[...fallbackFamilies].sort().map(family => ({ id: family, label: family }))
+    ]);
+  }
+
+  private async refreshSystemFonts(): Promise<void> {
+    try {
+      this.systemFonts = await invoke<SystemFontCatalog>("list_system_fonts");
+      const selectedCodeFont = this.settings.editor.codeFont.toLocaleLowerCase();
+      if (!this.systemFonts.monospace.some(family => family.toLocaleLowerCase() === selectedCodeFont)) {
+        this.settings.editor.codeFont = this.systemFonts.monospace.find(family => family === "Fira Mono")
+          ?? this.systemFonts.monospace[0]
+          ?? "Fira Mono";
+        this.scheduleSave();
+      }
+      const selectedFallback = this.settings.editor.unicodeFont;
+      if (selectedFallback !== "auto"
+        && selectedFallback !== "none"
+        && !this.systemFonts.all.some(family => family.toLocaleLowerCase() === selectedFallback.toLocaleLowerCase())) {
+        this.settings.editor.unicodeFont = "auto";
+        this.scheduleSave();
+      }
+      this.populateFontOptions();
+      this.populatePanel();
+    } catch (error) {
+      console.warn("Failed to load system font choices.", error);
+    }
   }
 }
