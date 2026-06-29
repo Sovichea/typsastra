@@ -1,5 +1,6 @@
 {
-  "version": "1.0.0-alpha",
+  "version": "0.1.0",
+  "productName": "Typstry",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",

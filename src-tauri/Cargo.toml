@@ -1,10 +1,10 @@
 [package]
-name = "typstry-editor"
-version = "1.0.0-alpha"
+name = "typstry"
+version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "typstry_editor_lib"
+name = "typstry_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]

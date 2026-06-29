@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "typstry-editor",
+      "name": "typstry",
       "dependencies": {
         "@babel/runtime": "^8.0.0",
         "@codemirror/commands": "^6.6.0",

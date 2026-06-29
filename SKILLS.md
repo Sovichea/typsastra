@@ -1,6 +1,6 @@
-# Typstry Editor - Developer & AI Skills Reference
+# Typstry - Developer & AI Skills Reference
 
-This document serves as the core knowledge base and skill reference for the Typstry Editor repository. AI agents and developers should read this file to understand the framework, technology stack, architecture boundaries, and best practices.
+This document serves as the core knowledge base and skill reference for the Typstry repository. AI agents and developers should read this file to understand the framework, technology stack, architecture boundaries, and best practices.
 
 ## 1. Technology Stack
 - **Package Manager:** Bun (`bun install`, `bun run tauri dev`)

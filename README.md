@@ -9,7 +9,7 @@ A lightweight, local-first Typst code editor with advanced Unicode font fallback
 ## Screenshots
 
 <p align="center">
-  <img src="./assets/screenshot-welcome.png" alt="Typstry Editor View" width="800"/>
+  <img src="./assets/screenshot-welcome.png" alt="Typstry application view" width="800"/>
   <br/><br/>
   <img src="./assets/screenshot-editor.png" alt="Typstry Welcome Screen" width="800"/>
 </p>
@@ -218,6 +218,8 @@ bun run tauri build
 The native executable is written under `src-tauri/target/release/`. Installers and application bundles are written under `src-tauri/target/release/bundle/`, with platform-specific subdirectories such as `nsis`/`msi`, `deb`/`rpm`/`appimage`, or `dmg`/`macos`.
 
 Windows signing and macOS signing/notarization are not required for local development, but they are required for trusted public distribution. Linux package availability depends on the packaging tools supported by the build distribution.
+
+The current development release is `v0.1.0`.
 
 ### Common setup problems
 
