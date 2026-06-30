@@ -1,0 +1,7 @@
+[build]
+# Explicitly use all available CPU cores for cargo builds (this is the default, but set explicitly for support)
+# jobs = 16
+
+# NOTE: If you switch to the nightly toolchain, uncomment the following line
+# to enable the experimental parallel compiler frontend for even faster builds:
+# rustflags = ["-Z", "threads=8"]

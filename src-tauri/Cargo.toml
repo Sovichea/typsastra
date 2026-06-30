@@ -22,6 +22,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 semver = "1.0"
 zip = { version = "4.6", default-features = false, features = ["deflate"] }
 fontdb = "0.23"
+dunce = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -32,7 +33,7 @@ tauri-build = { version = "2.0.0", features = [] }
 
 [profile.release]
 panic = "abort" # Strip expensive panic clean-up logic
-codegen-units = 1 # Compile crates one after another so the compiler can optimize better
+codegen-units = 16 # Use multiple codegen units to enable multithreaded compilation
 lto = true # Enables link-time optimizations
 opt-level = "s" # Optimize for binary size
 strip = true # Automatically strip symbols from the binary

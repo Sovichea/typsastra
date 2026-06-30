@@ -399,6 +399,12 @@ export class TinymistLspClient {
       return previewUrl;
     } catch (error) {
       console.error("Tinymist preview startup failed:", error);
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error);
+      this.onLog({ kind: "error", source: "preview", message: `Preview startup failed: ${message}` });
       this.setStatus("error", "Preview startup failed");
       return "";
     }
@@ -422,11 +428,20 @@ export class TinymistLspClient {
     return this.sendNotification("workspace/didChangeWatchedFiles", { changes });
   }
 
-  public scrollPreview(taskId: string, request: ScrollPreviewRequest): Promise<void> {
-    return this.sendRequest("workspace/executeCommand", {
-      command: "tinymist.scrollPreview",
-      arguments: [taskId, request]
-    });
+  public async scrollPreview(taskId: string, request: ScrollPreviewRequest): Promise<void> {
+    try {
+      await this.request<void>("workspace/executeCommand", {
+        command: "tinymist.scrollPreview",
+        arguments: [taskId, request]
+      }, 5000);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error);
+      this.onLog({ kind: "error", source: "forward sync", message });
+    }
   }
 
   public async getPreviewHtml(): Promise<string> {

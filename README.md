@@ -250,7 +250,7 @@ The current development release is `v0.1.0`.
 - [x] Dynamic file explorer with Material icons
   - [x] Material icon integration
   - [x] Custom Rust backend commands for secure file operations (create, rename, copy)
-- [ ] Implement robust WYSIWYM (What You See Is What You Mean) layout parsing
+- [-] Implement robust WYSIWYM (What You See Is What You Mean) layout parsing
   - [x] Intelligent toggle-formatting logic for inline editing
   - [x] DOM-to-markup serialization pipeline
   - [x] Hide technical syntax markers during active editing
@@ -284,14 +284,14 @@ The current development release is `v0.1.0`.
   - [x] UI for appearance, editor, and preview preferences
   - [x] Native persistent settings storage and legacy preference migration
 - [ ] Integrate Khmer word segmentation engine for accurate text highlighting and selection in the preview pane
-  - [ ] Research and integrate WASM segmentation engine
+  - [ ] Implement [Khmer Segmenter](https://github.com/Sovichea/khmer_segmenter)
   - [ ] Hook engine into preview highlight logic
 - [ ] Embed an AI Copilot / Agent for context-aware Typst auto-completion and document drafting
   - [ ] API integration for language model
   - [ ] Inline UI for code suggestions
 - [ ] Establish cross-compilation CI/CD pipelines and verify Tauri builds for Linux and macOS
-  - [ ] GitHub Actions workflow for automated builds
-  - [ ] Verify and fix Linux builds
+  - [x] GitHub Actions workflow for automated builds
+  - [x] Verify and fix Linux builds
   - [ ] Verify and fix macOS builds
 - [x] Interactive Document Outline (Table of Contents) sidebar for quick navigation
   - [x] Parse document headers via LSP

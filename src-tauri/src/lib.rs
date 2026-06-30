@@ -199,7 +199,10 @@ struct PreviewTarget {
 }
 
 fn normalized_existing_path(path: &std::path::Path) -> std::path::PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    // std::fs::canonicalize returns verbatim `\\?\` paths on Windows. Tinymist
+    // compares source identities against ordinary file-URI paths, so keep the
+    // canonical path while removing that platform-specific representation.
+    dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn local_typst_dependencies(contents: &str, parent: &std::path::Path) -> Vec<std::path::PathBuf> {
@@ -709,6 +712,24 @@ async fn compile_typst_preview(
 #[cfg(test)]
 mod preview_main_tests {
     use super::resolve_preview_target;
+
+    #[cfg(windows)]
+    #[test]
+    fn preview_root_uses_the_same_windows_path_form_as_lsp_documents() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let main_path = workspace.path().join("main.typ");
+        std::fs::write(&main_path, "Main document").expect("write main");
+
+        let resolved = resolve_preview_target(
+            main_path.to_string_lossy().to_string(),
+            Some(workspace.path().to_string_lossy().to_string()),
+            None,
+        )
+        .expect("resolve preview");
+
+        let root = resolved.root_path.expect("preview root");
+        assert!(!root.starts_with(r"\\?\"), "verbatim path leaked: {root}");
+    }
 
     #[test]
     fn imported_file_uses_workspace_main() {

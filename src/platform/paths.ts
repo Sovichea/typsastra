@@ -12,7 +12,8 @@ export function filePathToUri(path: string): string {
     return `file://${uncMatch[1]}${encodePath(uncMatch[2] ?? "/")}`;
   }
   if (/^[A-Za-z]:\//.test(normalized)) {
-    return `file:///${encodePath(normalized)}`;
+    const capitalized = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    return `file:///${encodePath(capitalized)}`;
   }
   if (normalized.startsWith("/")) {
     return `file://${encodePath(normalized)}`;

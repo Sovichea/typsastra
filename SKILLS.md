@@ -39,6 +39,7 @@ The application operates across distinct processes and contexts:
 6. **Validation:** Run `bun test`, `bun run build`, `cargo fmt --check`, `cargo check --lib`, and `cargo test --lib` after cross-boundary changes.
 7. **Font Management:** `font_store.rs` installs fonts per user and enumerates operating-system families; Settings must list only enumerated monospace families for code and all enumerated families for fallback. `editor/fontCatalog.ts` owns optional script recommendations, not selector inventory: prefer the matching MiSans family and use script-specific Noto Sans when MiSans has no family. Never download before explicit consent, and remember declined recommendations. Only Fira Mono and MiSans Latin may be bundled.
 8. **Stable Toolchains Only:** Filter GitHub drafts, prereleases, semantic prerelease identifiers, and Tinymist's odd-patch nightly releases.
+9. **Cross-Platform Compatibility:** Ensure cross-platform compatibility in every code edit and fix. When dealing with file paths, system paths, line endings, or OS-specific APIs, always implement solutions that work robustly across Windows, macOS, and Linux (e.g., using `filePathKey()` for case-insensitive path comparisons on Windows, or `@tauri-apps/api/path` utilities instead of hardcoding delimiters).
 
 ## 4. Common Troubleshooting
 - **LSP Offline Warnings:** Check the Toolchain settings panel and the managed Tinymist binary. Frontend JSON-RPC uses Tauri IPC; only preview assets use random loopback ports.

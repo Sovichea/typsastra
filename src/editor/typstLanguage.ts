@@ -56,7 +56,7 @@ function startsCodeExpression(rest: string): boolean {
 function getCurrentMode(state: TypstParserState): "markup" | "math" | "code" {
   // A hash expression may start inside markup, a content block, or math. At
   // its original bracket depth it must take precedence over the parent mode.
-  if (state.inCodeExpression && state.bracketStack.length === state.expressionBracketDepth) {
+  if (state.inCodeExpression && state.bracketStack.length <= state.expressionBracketDepth) {
     return "code";
   }
 
@@ -118,7 +118,7 @@ const typstParser: StreamParser<TypstParserState> = {
       state.lastToken = rawToken;
     }
 
-    if (tok && state.inCodeExpression && !state.isStatement && state.bracketStack.length === state.expressionBracketDepth) {
+    if (tok && state.inCodeExpression && !state.isStatement && state.bracketStack.length <= state.expressionBracketDepth) {
       const tokenNames = new Set(tok.split(" "));
       const current = stream.current();
       if (["function", "variable", "number", "atom", "string"].some(name => tokenNames.has(name))) {
@@ -190,7 +190,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
     // 1. Handle start of line state resets
     if (stream.sol()) {
       state.inHeading = false;
-      if (state.inCodeExpression && state.bracketStack.length === state.expressionBracketDepth) {
+      if (state.inCodeExpression && state.bracketStack.length <= state.expressionBracketDepth) {
         endCodeExpression(state);
       }
     }
@@ -229,7 +229,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
 
     // Skip white space
     if (stream.eatSpace()) {
-      if (state.inCodeExpression && !state.isStatement && state.bracketStack.length === state.expressionBracketDepth) {
+      if (state.inCodeExpression && !state.isStatement && state.bracketStack.length <= state.expressionBracketDepth) {
         state.expressionSawWhitespace = true;
       }
 
@@ -267,7 +267,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
     // math) resumes. Operators, member access, and argument/content blocks are
     // valid continuations and remain in code mode.
     if (mode === "code" && state.inCodeExpression && !state.isStatement &&
-        state.bracketStack.length === state.expressionBracketDepth && state.expressionComplete) {
+        state.bracketStack.length <= state.expressionBracketDepth && state.expressionComplete) {
       const rest = stream.string.slice(stream.pos);
       const canContinueAfterSpace = /^(?:[([{.]|=>|==|!=|<=|>=|\.\.|[+\-*\/%=<>!&|^~])/.test(rest);
       const closesParentMath = state.expressionParentMode === "math" && stream.peek() === "$";
@@ -301,7 +301,8 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
       }
 
       // Lists (bullet, numbered, terms)
-      if (stream.sol()) {
+      const isLineStart = stream.pos === (stream.string.match(/^\s*/) || [""])[0].length;
+      if (isLineStart) {
         if (stream.match(/-\s+/)) return "operator";
         if (stream.match(/\+\s+/)) return "operator";
         if (stream.match(/\/\s+[^\s:][^:]*:\s+/, false)) {
@@ -534,7 +535,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
       if (stream.match(identifierRegex)) {
         if (stream.match(/^\s*(?:\(|\[)/, false)) return "function";
         if (state.inCodeExpression && !state.isStatement) {
-          if (state.bracketStack.length === state.expressionBracketDepth) {
+          if (state.bracketStack.length <= state.expressionBracketDepth) {
             state.expressionComplete = true;
             state.expressionSawWhitespace = false;
           }
@@ -552,7 +553,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
       // Punctuation
       if (stream.match(/[.,:;]/)) {
         const char = stream.current();
-        if (char === ";" && state.bracketStack.length === state.expressionBracketDepth) {
+        if (char === ";" && state.bracketStack.length <= state.expressionBracketDepth) {
           endCodeExpression(state);
         }
         if (char === ":") {

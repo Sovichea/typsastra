@@ -1140,7 +1140,7 @@ export class TypstryWorkspaceController {
   private handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
     if (typeof version === "number" && version < this.latestDocumentVersion) return;
 
-    if (!this.activeFilePath || uri !== filePathToUri(this.activeFilePath)) {
+    if (!this.activeFilePath || filePathKey(filePathFromUri(uri)) !== filePathKey(this.activeFilePath)) {
       return;
     }
 
@@ -1738,7 +1738,16 @@ export class TypstryWorkspaceController {
 
     document.getElementById("action-restart-lsp")?.addEventListener("click", async () => {
       this.setLspStatus({ kind: "starting", message: "Restarting LSP..." });
+      const activePath = this.activeFilePath;
+      this.lspReady = false;
+      this.openedDocumentUris.clear();
+      this.previewFrame.clear();
+      this.clearPendingLspSync();
       await this.initLsp();
+      if (activePath && this.openTabs.some(tab => filePathKey(tab.path) === filePathKey(activePath))) {
+        this.activeFilePath = null;
+        await this.activateEditorTab(activePath, false);
+      }
     });
 
     document.getElementById("action-docs-typstry")?.addEventListener("click", () => {

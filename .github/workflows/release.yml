@@ -20,7 +20,7 @@ jobs:
           - platform: macos-latest
             args: ''
           - platform: ubuntu-22.04
-            args: ''
+            args: '--bundles appimage,deb'
 
     runs-on: ${{ matrix.platform }}
     steps:
