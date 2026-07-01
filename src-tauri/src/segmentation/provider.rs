@@ -20,9 +20,13 @@ pub struct TextAnalysis {
 
 pub trait LanguageSegmenter: Send + Sync {
     fn id(&self) -> &'static str;
+    fn pattern(&self) -> &'static str;
     fn supports(&self, text: &str) -> bool;
     fn analyze(&self, text: &str) -> Result<TextAnalysis, String>;
     fn suggestions(&self, word: &str, limit: usize) -> Vec<String>;
+    fn autocomplete(&self, _prefix: &str, _limit: usize) -> Vec<String> {
+        Vec::new()
+    }
     fn render_replacements(&self, text: &str) -> Vec<RenderReplacement>;
 }
 

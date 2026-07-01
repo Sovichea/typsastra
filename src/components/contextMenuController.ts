@@ -22,7 +22,7 @@ export type ContextMenuDependencies = {
   closeTabInteractive: (path: string) => void | Promise<void>;
   closeOtherTabs: (path: string) => void | Promise<void>;
   restartWorkspace: () => void | Promise<void>;
-  getSpellingIssue: (x: number, y: number) => SpellingIssue | null;
+  getSpellingIssue: (x: number, y: number, target?: HTMLElement) => SpellingIssue | null;
   getSpellingSuggestions: (issue: SpellingIssue) => Promise<string[]>;
   replaceSpelling: (issue: SpellingIssue, replacement: string) => void;
 };
@@ -316,7 +316,7 @@ export class ContextMenuController {
       this.targetIsDirectory = !!this.targetPath;
       items = this.explorerBackgroundItems();
     } else if (target.closest(".cm-editor") || target.closest("#code-render-pane")) {
-      this.spellingIssue = this.dependencies.getSpellingIssue(event.clientX, event.clientY);
+      this.spellingIssue = this.dependencies.getSpellingIssue(event.clientX, event.clientY, target);
       this.spellingSuggestions = this.spellingIssue
         ? await this.dependencies.getSpellingSuggestions(this.spellingIssue)
         : [];

@@ -45,7 +45,7 @@ export class SpellcheckController {
   private enabled = true;
   private timer: number | null = null;
   private generation = 0;
-  private issues: SpellingIssue[] = [];
+  public issues: SpellingIssue[] = [];
   private suggestionCache = new Map<string, string[]>();
   private readonly popup = document.createElement("div");
 
@@ -73,8 +73,40 @@ export class SpellcheckController {
     }, 160);
   }
 
-  public issueAt(position: number): SpellingIssue | null {
-    return this.issues.find(issue => position >= issue.from && position <= issue.to) ?? null;
+  public issueAt(position: number, docText: string): SpellingIssue | null {
+    const clampedPos = Math.max(0, Math.min(position, docText.length));
+    
+    let runStart = clampedPos;
+    while (runStart > 0) {
+      const char = docText[runStart - 1];
+      if (char >= "\u1780" && char <= "\u17ff" && char !== "\u200b" && char !== "\u200c" && char !== "\u200d") {
+        runStart--;
+      } else {
+        break;
+      }
+    }
+    let runEnd = clampedPos;
+    while (runEnd < docText.length) {
+      const char = docText[runEnd];
+      if (char >= "\u1780" && char <= "\u17ff" && char !== "\u200b" && char !== "\u200c" && char !== "\u200d") {
+        runEnd++;
+      } else {
+        break;
+      }
+    }
+
+    const matching = this.issues.filter(issue => 
+      (issue.from >= runStart && issue.from <= runEnd) ||
+      (issue.to >= runStart && issue.to <= runEnd)
+    );
+    if (matching.length === 0) return null;
+
+    matching.sort((a, b) => {
+      const distA = Math.min(Math.abs(clampedPos - a.from), Math.abs(clampedPos - a.to));
+      const distB = Math.min(Math.abs(clampedPos - b.from), Math.abs(clampedPos - b.to));
+      return distA - distB;
+    });
+    return matching[0];
   }
 
   public async suggestions(issue: SpellingIssue): Promise<string[]> {

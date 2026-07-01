@@ -189,9 +189,56 @@ export class TypstryWorkspaceController {
     closeTabInteractive: path => this.closeEditorTab(path, false),
     closeOtherTabs: path => this.closeOtherTabs(path),
     restartWorkspace: () => this.restartWorkspace(),
-    getSpellingIssue: (x, y) => {
-      const position = this.editorInstance.posAtCoords({ x, y });
-      return position === null ? null : this.spellcheckController.issueAt(position);
+    getSpellingIssue: (x, y, target) => {
+      const docText = this.editorInstance.state.doc.toString();
+      if (target) {
+        const spellingSpan = target.closest(".cm-spelling-unknown");
+        if (spellingSpan) {
+          try {
+            let pos = spellingSpan.firstChild ? this.editorInstance.posAtDOM(spellingSpan.firstChild) : null;
+            if (pos === null) {
+              pos = this.editorInstance.posAtDOM(spellingSpan);
+            }
+            if (pos !== null) {
+              const issue = this.spellcheckController.issueAt(pos, docText);
+              if (issue) return issue;
+            }
+          } catch (e) {
+            console.error("posAtDOM failed in getSpellingIssue:", e);
+          }
+          
+          const wordText = spellingSpan.textContent;
+          if (wordText) {
+            const issue = this.spellcheckController.issues.find(i => i.word === wordText);
+            if (issue) return issue;
+          }
+        }
+      }
+      
+      try {
+        let position = this.editorInstance.posAtCoords({ x, y });
+        if (position === null) {
+          position = this.editorInstance.state.selection.main.head;
+        }
+        const issue = this.spellcheckController.issueAt(position, docText);
+        if (issue) return issue;
+
+        const line = this.editorInstance.state.doc.lineAt(position);
+        const lineIssues = this.spellcheckController.issues.filter(i => 
+          i.from >= line.from && i.to <= line.to
+        );
+        if (lineIssues.length > 0) {
+          lineIssues.sort((a, b) => {
+            const distA = Math.min(Math.abs(position - a.from), Math.abs(position - a.to));
+            const distB = Math.min(Math.abs(position - b.from), Math.abs(position - b.to));
+            return distA - distB;
+          });
+          return lineIssues[0];
+        }
+      } catch (e) {
+        console.error("posAtCoords or line lookup failed in getSpellingIssue:", e);
+      }
+      return null;
     },
     getSpellingSuggestions: issue => this.spellcheckController.suggestions(issue),
     replaceSpelling: (issue, replacement) => this.spellcheckController.replace(issue, replacement)
@@ -780,7 +827,7 @@ export class TypstryWorkspaceController {
       fileContents: tab.content
     });
     previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
-    previewTarget = await this.prepareSegmentedPreview(previewTarget, path, tab.content);
+    // previewTarget = await this.prepareSegmentedPreview(previewTarget, path, tab.content);
     this.applyPreviewTargetToTab(tab, previewTarget);
     this.clearPendingLspSync();
     this.previewSyncController.clearForward();
@@ -1176,6 +1223,7 @@ export class TypstryWorkspaceController {
     }
   }
 
+  /*
   private async prepareSegmentedPreview(
     target: PreviewTarget,
     activePath: string,
@@ -1210,6 +1258,7 @@ export class TypstryWorkspaceController {
       return target;
     }
   }
+  */
 
   private async openDocumentIfNeeded(uri: string, text: string, version: number): Promise<void> {
     if (this.openedDocumentUris.has(uri)) return;
@@ -1371,7 +1420,7 @@ export class TypstryWorkspaceController {
         fileContents: text
       });
       target = await this.prepareTemplateAwarePreview(target, path, text);
-      await this.prepareSegmentedPreview(target, path, text);
+      // await this.prepareSegmentedPreview(target, path, text);
     }
     const version = ++this.currentVersion;
     this.latestDocumentVersion = version;
@@ -1903,7 +1952,7 @@ export class TypstryWorkspaceController {
       fileContents: contents
     });
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
-    target = await this.prepareSegmentedPreview(target, this.activeFilePath, contents);
+    // target = await this.prepareSegmentedPreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(target.mainPath);
     const identity = target.rootPath
       ? previewSessionIdentity(target.rootPath, previewRefreshStyle(target))

@@ -1,6 +1,7 @@
 import { autocompletion, CompletionContext, snippetCompletion, Completion } from "@codemirror/autocomplete";
 import type { Text } from "@codemirror/state";
 import type { TinymistLspClient } from "../compiler/lsp";
+import { invoke } from "@tauri-apps/api/core";
 
 type LspPosition = { line: number; character?: number };
 type LspRange = { start: LspPosition; end: LspPosition };
@@ -207,6 +208,29 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
   return autocompletion({
     override: [
       async (context: CompletionContext) => {
+        const khmerWord = context.matchBefore(/[\u1780-\u17ff]+/u);
+        if (khmerWord) {
+          try {
+            const suggestions = await invoke<string[]>("autocomplete_khmer", {
+              prefix: khmerWord.text,
+              limit: 10
+            });
+            if (suggestions && suggestions.length > 0) {
+              return {
+                from: khmerWord.from,
+                options: suggestions.map(word => ({
+                  label: word,
+                  type: "text",
+                  detail: "Khmer Word"
+                }))
+              };
+            }
+          } catch (e) {
+            console.warn("Khmer autocomplete error", e);
+          }
+          return null;
+        }
+
         const fontValueFrom = fontCompletionValueStart(context.state.doc, context.pos);
         if (!context.explicit) {
           const lineStr = context.state.doc.lineAt(context.pos).text;

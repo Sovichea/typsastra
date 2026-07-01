@@ -1916,3 +1916,19 @@ button.welcome-item:disabled {
 
 .spellcheck-suggestions button:hover { background: var(--ui-hover); }
 
+.cm-zws-widget {
+  display: inline-block;
+  width: 4px;
+  height: 1.1em;
+  background-color: var(--editor-cursor-contrast-color, #ef4444);
+  border-radius: 1px;
+  vertical-align: middle;
+  margin: 0 1px;
+  opacity: 0.8;
+}
+
+.cm-tooltip-autocomplete,
+.cm-tooltip-autocomplete * {
+  font-family: var(--editor-code-font), var(--font-family-mono), monospace !important;
+}
+

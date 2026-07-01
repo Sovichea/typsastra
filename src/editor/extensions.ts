@@ -1,6 +1,6 @@
-import { Extension, Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { Extension, Compartment, EditorState, StateEffect, RangeSetBuilder } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from "@codemirror/view";
+import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, WidgetType } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
 import { baseEditorLayoutTheme, editorFontTheme, typstColorHighlighting, typstFontHighlighting, typstFunctionHighlighting, typstSemanticHighlighting, typstVariableHighlighting } from "./themes";
@@ -125,6 +125,58 @@ export const ctrlClickLinkPlugin = ViewPlugin.fromClass(class {
 });
 
 
+class ZWSWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-zws-widget";
+    return span;
+  }
+
+  eq(_other: ZWSWidget) {
+    return true;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const zwsDecoration = Decoration.widget({
+  widget: new ZWSWidget(),
+  side: -1
+});
+
+export const showZeroWidthSpaces = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+
+  constructor(view: EditorView) {
+    this.decorations = this.getDeco(view);
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.getDeco(update.view);
+    }
+  }
+
+  getDeco(view: EditorView) {
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const { from, to } of view.visibleRanges) {
+      const text = view.state.doc.sliceString(from, to);
+      let index = 0;
+      while (true) {
+        const next = text.indexOf("\u200b", index);
+        if (next === -1) break;
+        builder.add(from + next, from + next + 1, zwsDecoration);
+        index = next + 1;
+      }
+    }
+    return builder.finish();
+  }
+}, {
+  decorations: v => v.decorations
+});
+
 export function getEditorExtensions(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
@@ -133,6 +185,7 @@ export function getEditorExtensions(
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
+    showZeroWidthSpaces,
     preventEscapedBracketAutoClose,
     EditorView.domEventHandlers({
       mousedown: (event, view) => {
