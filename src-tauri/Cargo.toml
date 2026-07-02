@@ -24,6 +24,7 @@ zip = { version = "4.6", default-features = false, features = ["deflate"] }
 fontdb = "0.23"
 dunce = "1.0"
 ttf-parser = "0.25"
+khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -38,3 +39,6 @@ codegen-units = 16 # Use multiple codegen units to enable multithreaded compilat
 lto = true # Enables link-time optimizations
 opt-level = "s" # Optimize for binary size
 strip = true # Automatically strip symbols from the binary
+
+[profile.dev.package.khmer_segmenter]
+opt-level = 3

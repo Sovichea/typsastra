@@ -1,6 +1,7 @@
 import { autocompletion, CompletionContext, snippetCompletion, Completion } from "@codemirror/autocomplete";
 import type { Text } from "@codemirror/state";
 import type { TinymistLspClient } from "../compiler/lsp";
+import { invoke } from "@tauri-apps/api/core";
 
 type LspPosition = { line: number; character?: number };
 type LspRange = { start: LspPosition; end: LspPosition };
@@ -31,6 +32,25 @@ type LspCompletionResponse = LspCompletionItem[] | {
     insertTextFormat?: number;
   };
 } | null;
+
+export type LanguageCompletionResponse = {
+  provider: string;
+  from: number;
+  to: number;
+  options: string[];
+};
+
+export function languageCompletionRange(
+  runFrom: number,
+  runLength: number,
+  completion: LanguageCompletionResponse | null
+): { from: number; to: number } | null {
+  if (!completion || completion.from < 0 || completion.from >= completion.to
+    || completion.to !== runLength) return null;
+  return { from: runFrom + completion.from, to: runFrom + completion.to };
+}
+
+export const languageCompletionValidFor = () => false;
 
 function textEditFromDefault(range: LspEditRange | undefined, newText: string): LspTextEdit | undefined {
   if (!range) return undefined;
@@ -203,10 +223,58 @@ function getCmCompletionType(kind?: number): string {
   }
 }
 
-export function createTypstAutocomplete(getClient: () => TinymistLspClient | undefined, getUri: () => string, flushLspSync: () => void) {
+export type ProviderCapabilities = {
+  id: string;
+  pattern: string;
+};
+
+export function createTypstAutocomplete(
+  getClient: () => TinymistLspClient | undefined,
+  getUri: () => string,
+  flushLspSync: () => void,
+  languageWordCompletion = true,
+  getProviders: () => ProviderCapabilities[] = () => []
+) {
   return autocompletion({
     override: [
       async (context: CompletionContext) => {
+        if (languageWordCompletion) {
+          const providers = getProviders();
+          for (const provider of providers) {
+            const pattern = new RegExp(provider.pattern + "$", "u");
+            const word = context.matchBefore(pattern);
+            if (word) {
+              try {
+                const completion = await invoke<LanguageCompletionResponse | null>("complete_language_word", {
+                  request: {
+                    provider: provider.id,
+                    text: word.text,
+                    cursorUtf16: word.text.length,
+                    limit: 10
+                  }
+                });
+                const replacement = languageCompletionRange(word.from, word.text.length, completion);
+                if (completion && replacement && completion.options.length > 0) {
+                  return {
+                    from: replacement.from,
+                    options: completion.options.map(w => ({
+                      label: w,
+                      type: "text",
+                      detail: completion.provider
+                    })),
+                    // Results are deliberately bounded and ranked for the current
+                    // segmented prefix, so every typed character must query again.
+                    validFor: languageCompletionValidFor
+                  };
+                }
+              } catch (e) {
+                console.warn(`${provider.id} autocomplete error`, e);
+              }
+              return null;
+            }
+          }
+        }
+
         const fontValueFrom = fontCompletionValueStart(context.state.doc, context.pos);
         if (!context.explicit) {
           const lineStr = context.state.doc.lineAt(context.pos).text;

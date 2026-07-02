@@ -3,6 +3,8 @@ import { Text } from "@codemirror/state";
 import {
   completionEditOffsets,
   fontCompletionValueStart,
+  languageCompletionRange,
+  languageCompletionValidFor,
   lspCompletionEditOffsets,
   quotedCompletionEditOffsets
 } from "../src/editor/autocomplete";
@@ -101,5 +103,29 @@ describe("LSP autocomplete edits", () => {
       + 'Khmer OS Bokor"'
       + doc.sliceString(edit!.to);
     expect(completed).toBe('#set text(font: "Khmer OS Bokor")');
+  });
+});
+
+describe("segmented language completion", () => {
+  test("refreshes bounded native results after every typed character", () => {
+    expect(languageCompletionValidFor()).toBe(false);
+  });
+
+  test("replaces only the final word in an unspaced run", () => {
+    expect(languageCompletionRange(10, 12, {
+      provider: "khmer-segmenter",
+      from: 7,
+      to: 12,
+      options: ["word"]
+    })).toEqual({ from: 17, to: 22 });
+  });
+
+  test("rejects a response for a stale run length", () => {
+    expect(languageCompletionRange(0, 13, {
+      provider: "khmer-segmenter",
+      from: 7,
+      to: 12,
+      options: ["word"]
+    })).toBeNull();
   });
 });

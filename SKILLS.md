@@ -51,5 +51,15 @@ At the end of a session, when the user states that a task is finished and succes
 - **Failed Approach (Anti-pattern)**: What failed or caused regressions during implementation.
 - **Working Pattern / Fix**: The successful code fix or regex pattern.
 - **Rationale / Gotcha**: The key warning or explanation to prevent future regression.
+ 
+## 6. Language Segmentation & Spellchecking Boundary (Contributor Contract)
+To add support for a new localized script or language segmenter:
+1. **Implement `LanguageSegmenter` Trait (`src-tauri/src/segmentation/provider.rs`):**
+   - Implement `id()`, `pattern()` (regular expression matching the script range), `supports()`, `analyze()`, `suggestions()`, and `render_replacements()`.
+2. **Register in `SegmentationRegistry` (`src-tauri/src/segmentation/registry.rs`):**
+   - Add the provider instance to the registry in `SegmentationRegistry::new()`.
+3. **Zero-Config Frontend Integration:**
+   - The generic frontend controllers (`spellcheck.ts` and `autocomplete.ts`) dynamically fetch provider capabilities via the `get_provider_capabilities` command.
+   - Never hardcode script-specific regular expressions (e.g. Khmer RegExp) or routing rules in the frontend controllers. Let the generic controllers match against the retrieved provider patterns and route requests with `provider` ID.
 
 *(This file should be continually updated as the project's architectural scope expands).*

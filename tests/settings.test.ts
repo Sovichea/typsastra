@@ -9,6 +9,9 @@ describe("application settings", () => {
     expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
+    expect(settings.editor.spellcheck).toBe(true);
+    expect(settings.editor.wordCompletion).toBe(true);
+    expect(settings.editor.userDictionary).toEqual([]);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
     expect(settings.toolchain.tinymistVersion).toBeNull();
   });
@@ -46,5 +49,13 @@ describe("application settings", () => {
     first.editor.wordWrap = false;
 
     expect(second.editor.wordWrap).toBe(true);
+  });
+
+  test("normalizes and deduplicates personal dictionary words", () => {
+    const settings = normalizeAppSettings({
+      editor: { wordCompletion: false, userDictionary: [" សាលា ", "សាលា", "", 42] }
+    });
+    expect(settings.editor.wordCompletion).toBe(false);
+    expect(settings.editor.userDictionary).toEqual(["សាលា"]);
   });
 });

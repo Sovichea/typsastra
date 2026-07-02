@@ -1,6 +1,6 @@
-import { Extension, Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { Extension, Compartment, EditorState, StateEffect, RangeSetBuilder } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from "@codemirror/view";
+import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, WidgetType } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
 import { baseEditorLayoutTheme, editorFontTheme, typstColorHighlighting, typstFontHighlighting, typstFunctionHighlighting, typstSemanticHighlighting, typstVariableHighlighting } from "./themes";
@@ -11,7 +11,7 @@ import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 
 import * as uiwThemes from "@uiw/codemirror-themes-all";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { createTypstAutocomplete } from "./autocomplete";
+import { createTypstAutocomplete, type ProviderCapabilities } from "./autocomplete";
 import { completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { bracketMatching } from "@codemirror/language";
 import { toggleLineComment } from "@codemirror/commands";
@@ -28,6 +28,7 @@ export const activeLineCompartment = new Compartment();
 export const closeBracketsCompartment = new Compartment();
 export const indentationGuidesCompartment = new Compartment();
 export const tabSizeCompartment = new Compartment();
+export const completionCompartment = new Compartment();
 
 function foldedTypstPlaceholderSuffix(state: EditorState, range: { from: number; to: number }): string {
   const foldedText = state.doc.sliceString(range.from, range.to).trimEnd();
@@ -125,14 +126,68 @@ export const ctrlClickLinkPlugin = ViewPlugin.fromClass(class {
 });
 
 
+class ZWSWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-zws-widget";
+    return span;
+  }
+
+  eq(_other: ZWSWidget) {
+    return true;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const zwsDecoration = Decoration.widget({
+  widget: new ZWSWidget(),
+  side: -1
+});
+
+export const showZeroWidthSpaces = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+
+  constructor(view: EditorView) {
+    this.decorations = this.getDeco(view);
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.getDeco(update.view);
+    }
+  }
+
+  getDeco(view: EditorView) {
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const { from, to } of view.visibleRanges) {
+      const text = view.state.doc.sliceString(from, to);
+      let index = 0;
+      while (true) {
+        const next = text.indexOf("\u200b", index);
+        if (next === -1) break;
+        builder.add(from + next, from + next + 1, zwsDecoration);
+        index = next + 1;
+      }
+    }
+    return builder.finish();
+  }
+}, {
+  decorations: v => v.decorations
+});
+
 export function getEditorExtensions(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
   flushLspSync: () => void,
-  onNavigateToDefinition?: (uri: string, line: number, character: number) => void
+  onNavigateToDefinition?: (uri: string, line: number, character: number) => void,
+  getProviders?: () => ProviderCapabilities[]
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
+    showZeroWidthSpaces,
     preventEscapedBracketAutoClose,
     EditorView.domEventHandlers({
       mousedown: (event, view) => {
@@ -198,7 +253,7 @@ export function getEditorExtensions(
     bracketMatching(),
     bracketColorizer,
     createHoverTooltip(getClient, getUri),
-    createTypstAutocomplete(getClient, getUri, flushLspSync),
+    completionCompartment.of(createTypstAutocomplete(getClient, getUri, flushLspSync, true, getProviders)),
     themeCompartment.of(getThemeExtension("default")),
     editorFontCompartment.of(editorFontTheme()),
     keymap.of([

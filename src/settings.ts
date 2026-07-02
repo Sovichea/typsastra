@@ -27,6 +27,9 @@ export type AppSettings = {
     highlightActiveLine: boolean;
     autoCloseBrackets: boolean;
     indentationGuides: boolean;
+    spellcheck: boolean;
+    wordCompletion: boolean;
+    userDictionary: string[];
   };
   preview: {
     cursorSync: boolean;
@@ -53,7 +56,10 @@ export const defaultAppSettings: AppSettings = {
     lineNumbers: true,
     highlightActiveLine: true,
     autoCloseBrackets: true,
-    indentationGuides: true
+    indentationGuides: true,
+    spellcheck: true,
+    wordCompletion: true,
+    userDictionary: []
   },
   preview: {
     cursorSync: true,
@@ -109,7 +115,12 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       lineNumbers: booleanValue(editor.lineNumbers, defaultAppSettings.editor.lineNumbers),
       highlightActiveLine: booleanValue(editor.highlightActiveLine, defaultAppSettings.editor.highlightActiveLine),
       autoCloseBrackets: booleanValue(editor.autoCloseBrackets, defaultAppSettings.editor.autoCloseBrackets),
-      indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides)
+      indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides),
+      spellcheck: booleanValue(editor.spellcheck, defaultAppSettings.editor.spellcheck),
+      wordCompletion: booleanValue(editor.wordCompletion, defaultAppSettings.editor.wordCompletion),
+      userDictionary: Array.isArray(editor.userDictionary)
+        ? [...new Set(editor.userDictionary.filter((word): word is string => typeof word === "string" && word.trim().length > 0).map(word => word.trim()))].sort()
+        : []
     },
     preview: {
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),

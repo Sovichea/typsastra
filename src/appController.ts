@@ -10,7 +10,8 @@ import { undo, redo } from "@codemirror/commands";
 import { foldEffect, foldedRanges, indentUnit, unfoldEffect } from "@codemirror/language";
 import { closeBrackets } from "@codemirror/autocomplete";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
-import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment } from "./editor/extensions";
+import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment } from "./editor/extensions";
+import { createTypstAutocomplete } from "./editor/autocomplete";
 import { collectDefaultTypstFunctionFolds } from "./editor/folding";
 import type { EditorFoldRange } from "./editor/folding";
 import { setEditorDiagnosticsEffect } from "./editor/diagnostics";
@@ -38,6 +39,7 @@ import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { typographyEdit, type DocumentTypography } from "./editor/documentTypography";
+import { SpellcheckController } from "./editor/spellcheck";
 import {
   ensureTypographyTemplateApplication,
   externalReferenceLabels,
@@ -118,6 +120,7 @@ export class TypstryWorkspaceController {
 
   private editorInstance!: EditorView;
   private readonly editorFontManager = new EditorFontManager(() => this.editorInstance);
+  private readonly spellcheckController = new SpellcheckController(() => this.editorInstance);
   private explorer!: WorkspaceExplorer;
   private lspClient!: TinymistLspClient;
 
@@ -186,7 +189,45 @@ export class TypstryWorkspaceController {
     closeTab: path => this.closeEditorTab(path, true),
     closeTabInteractive: path => this.closeEditorTab(path, false),
     closeOtherTabs: path => this.closeOtherTabs(path),
-    restartWorkspace: () => this.restartWorkspace()
+    restartWorkspace: () => this.restartWorkspace(),
+    getSpellingIssue: (x, y, target) => {
+      if (target) {
+        const spellingSpan = target.closest(".cm-spelling-unknown");
+        if (spellingSpan) {
+          try {
+            let pos = spellingSpan.firstChild ? this.editorInstance.posAtDOM(spellingSpan.firstChild) : null;
+            if (pos === null) {
+              pos = this.editorInstance.posAtDOM(spellingSpan);
+            }
+            if (pos !== null) {
+              const issue = this.spellcheckController.issueAt(pos);
+              if (issue) return issue;
+            }
+          } catch (e) {
+            console.error("posAtDOM failed in getSpellingIssue:", e);
+          }
+        }
+      }
+      
+      try {
+        let position = this.editorInstance.posAtCoords({ x, y });
+        if (position === null) {
+          position = this.editorInstance.state.selection.main.head;
+        }
+        const issue = this.spellcheckController.issueAt(position);
+        if (issue) return issue;
+      } catch (e) {
+        console.error("posAtCoords or line lookup failed in getSpellingIssue:", e);
+      }
+      return null;
+    },
+    getSpellingSuggestions: issue => this.spellcheckController.suggestions(issue),
+    replaceSpelling: (issue, replacement) => this.spellcheckController.replace(issue, replacement),
+    addSpellingToDictionary: issue => this.settingsController.update(settings => {
+      if (!settings.editor.userDictionary.includes(issue.word)) {
+        settings.editor.userDictionary.push(issue.word);
+      }
+    })
   });
   private readonly documentOutlineController = new DocumentOutlineController(
     document.getElementById("document-outline-tree")!,
@@ -199,6 +240,7 @@ export class TypstryWorkspaceController {
 
   public async bootstrap() {
     await this.settingsController.load();
+    await this.spellcheckController.initialize();
     this.recentProjectsController.initialize();
     this.initCodeMirror();
     this.documentOutlineController.initialize();
@@ -276,6 +318,8 @@ export class TypstryWorkspaceController {
     document.documentElement.style.setProperty("--editor-line-height", String(appearance.editorLineHeight));
     this.forwardSyncDebounceMs = preview.syncDebounceMs;
     this.editorFontManager.configure(editor.codeFont, editor.unicodeFont);
+    this.spellcheckController.setEnabled(editor.spellcheck);
+    this.spellcheckController.setUserDictionary(editor.userDictionary);
 
     void applyUIThemeVariables(appearance.theme);
 
@@ -289,7 +333,14 @@ export class TypstryWorkspaceController {
           activeLineCompartment.reconfigure(editor.highlightActiveLine ? [highlightActiveLineGutter(), highlightActiveLine()] : []),
           closeBracketsCompartment.reconfigure(editor.autoCloseBrackets ? closeBrackets() : []),
           indentationGuidesCompartment.reconfigure(editor.indentationGuides ? indentationMarkers() : []),
-          tabSizeCompartment.reconfigure([EditorState.tabSize.of(editor.tabSize), indentUnit.of(indentation)])
+          tabSizeCompartment.reconfigure([EditorState.tabSize.of(editor.tabSize), indentUnit.of(indentation)]),
+          completionCompartment.reconfigure(createTypstAutocomplete(
+              () => this.lspClient,
+              () => this.activeFilePath ? filePathToUri(this.activeFilePath) : "",
+              () => this.flushPendingLspSync(),
+              editor.wordCompletion,
+              () => this.spellcheckController.getProviders()
+            ))
         ]
       });
     }
@@ -431,16 +482,20 @@ export class TypstryWorkspaceController {
             () => this.lspClient,
             () => this.activeFilePath ? filePathToUri(this.activeFilePath) : "",
             () => this.flushPendingLspSync(),
-            (uri, line, character) => void this.navigateToLspLocation(uri, line, character)
+            (uri, line, character) => void this.navigateToLspLocation(uri, line, character),
+            () => this.spellcheckController.getProviders()
           ),
+          this.spellcheckController.extension(),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               const currentText = update.state.doc.toString();
               this.previewSyncController.clearForward();
               this.editorFontManager.updateDocument(currentText);
               this.handleContentMutation(currentText);
+              this.spellcheckController.documentChanged(update);
             }
             if (update.selectionSet) {
+              this.spellcheckController.selectionChanged();
               this.documentOutlineController.setCursorPosition(update.state.selection.main.head, this.activeFilePath);
             }
             if (!update.docChanged && this.shouldForwardSyncSelectionUpdate(update)) {
@@ -646,6 +701,7 @@ export class TypstryWorkspaceController {
     tab.path = newPath;
     if (this.activeFilePath === oldPath) {
       this.activeFilePath = newPath;
+      this.spellcheckController.activateDocument(filePathKey(newPath));
       this.previewRootPath = tab.previewRootPath;
       this.previewMainPath = tab.previewMainPath;
       this.previewTaskId = tab.previewTaskId;
@@ -694,6 +750,7 @@ export class TypstryWorkspaceController {
       if (nextTab) {
         await this.activateEditorTab(nextTab.path, false);
       } else {
+        this.spellcheckController.activateDocument("");
         this.isLoadingFile = true;
         try {
           this.editorInstance.dispatch({
@@ -736,6 +793,8 @@ export class TypstryWorkspaceController {
     const tab = this.openTabs.find((candidate) => candidate.path === path);
     if (!tab) return;
 
+    this.spellcheckController.activateDocument(filePathKey(path));
+
     this.currentVersion = tab.version;
     this.latestDocumentVersion = tab.latestVersion;
     this.previewSyncController.reset();
@@ -769,11 +828,13 @@ export class TypstryWorkspaceController {
       fileContents: tab.content
     });
     previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
+    // previewTarget = await this.prepareSegmentedPreview(previewTarget, path, tab.content);
     this.applyPreviewTargetToTab(tab, previewTarget);
     this.clearPendingLspSync();
     this.previewSyncController.clearForward();
     this.renderEditorTabs();
     this.editorFontManager.updateDocument(tab.content);
+    this.spellcheckController.schedule();
     void this.documentOutlineController.update(
       path, 
       tab.content, 
@@ -1163,6 +1224,43 @@ export class TypstryWorkspaceController {
     }
   }
 
+  /*
+  private async prepareSegmentedPreview(
+    target: PreviewTarget,
+    activePath: string,
+    activeContents: string
+  ): Promise<PreviewTarget> {
+    if (!this.workspaceRootPath || !target.rootPath) return target;
+    try {
+      const rootPath = await this.rootRelativeTypstPath(target.rootPath);
+      if (!rootPath) return target;
+      const prelude = await invoke<string>("segmentation_prelude", {
+        workspaceRootPath: this.workspaceRootPath,
+        activeFilePath: activePath,
+        activeContents
+      });
+      const identity = previewSessionIdentity(activePath, previewRefreshStyle(target));
+      const previewPath = await join(
+        this.workspaceRootPath,
+        `.${fileNameFromPath(activePath)}.${identity.taskId}.segmentation.typstry-preview.typ`
+      );
+      const source = `${prelude}${prelude ? "\n" : ""}#include "${rootPath}"\n`;
+      const existing = await invoke<string>("read_workspace_file", { path: previewPath }).catch(() => null);
+      if (existing !== source) {
+        await invoke("save_workspace_file", { path: previewPath, contents: source });
+      }
+      return { ...target, rootPath: previewPath };
+    } catch (error) {
+      this.appendLspLog({
+        kind: "warning",
+        source: "segmentation",
+        message: `Language-aware preview could not be prepared: ${String(error)}`
+      });
+      return target;
+    }
+  }
+  */
+
   private async openDocumentIfNeeded(uri: string, text: string, version: number): Promise<void> {
     if (this.openedDocumentUris.has(uri)) return;
     await this.lspClient.openTextDocument(uri, text, version);
@@ -1316,14 +1414,14 @@ export class TypstryWorkspaceController {
 
     this.setLspStatus({ kind: "syncing", message: "Syncing preview" });
     this.previewSyncController.reset();
-    if (this.previewImported && this.previewLiveUpdates) {
-      const target: PreviewTarget = {
-        rootPath: path,
-        mainPath: this.previewMainPath,
-        imported: true,
-        liveUpdates: true
-      };
-      await this.prepareTemplateAwarePreview(target, path, text);
+    if (this.workspaceRootPath && this.previewLiveUpdates) {
+      let target = await invoke<PreviewTarget>("resolve_preview_main", {
+        filePath: path,
+        workspaceRootPath: this.workspaceRootPath,
+        fileContents: text
+      });
+      target = await this.prepareTemplateAwarePreview(target, path, text);
+      // await this.prepareSegmentedPreview(target, path, text);
     }
     const version = ++this.currentVersion;
     this.latestDocumentVersion = version;
@@ -1855,6 +1953,7 @@ export class TypstryWorkspaceController {
       fileContents: contents
     });
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
+    // target = await this.prepareSegmentedPreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(target.mainPath);
     const identity = target.rootPath
       ? previewSessionIdentity(target.rootPath, previewRefreshStyle(target))
@@ -1953,6 +2052,7 @@ export class TypstryWorkspaceController {
     
     this.workspaceRootPath = null;
     this.activeFilePath = null;
+    this.spellcheckController.activateDocument("");
     this.previewRootPath = null;
     this.previewTaskId = null;
     this.previewSessionKey = null;
@@ -1986,6 +2086,12 @@ export class TypstryWorkspaceController {
     document.addEventListener("keydown", (e) => {
       const isMac = navigator.userAgent.toLowerCase().includes("mac");
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+      
+      // Ctrl+F12 to open devtools in dev build
+      if (cmdOrCtrl && e.key === "F12" && import.meta.env.DEV) {
+        e.preventDefault();
+        void invoke("open_devtools");
+      }
       
       // Block common function keys (except F3 which we handle conditionally)
       if (["F5", "F6", "F7", "F11"].includes(e.key)) {
@@ -2101,8 +2207,15 @@ export class TypstryWorkspaceController {
         this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
         const content = this.editorInstance.state.doc.toString();
         try {
+          const prelude = this.workspaceRootPath
+            ? await invoke<string>("segmentation_prelude", {
+                workspaceRootPath: this.workspaceRootPath,
+                activeFilePath: this.activeFilePath,
+                activeContents: content
+              })
+            : "";
           const pdfPath = await invoke<string>("compile_typst_document", {
-            sourceCode: content,
+            sourceCode: `${prelude}${prelude ? "\n" : ""}${content}`,
             filePath: this.activeFilePath
           });
           this.setLspStatus({ kind: "preview-ready", message: `Exported to ${pdfPath}` });
