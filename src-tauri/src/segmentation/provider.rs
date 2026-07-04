@@ -96,6 +96,9 @@ pub trait LanguageSegmenter: Send + Sync {
     fn supports(&self, text: &str) -> bool;
     fn analyze(&self, text: &str) -> Result<TextAnalysis, String>;
     fn suggestions(&self, word: &str, limit: usize) -> Vec<String>;
+    fn is_known_word(&self, _word: &str) -> bool {
+        false
+    }
     fn autocomplete(&self, _prefix: &str, _limit: usize) -> Vec<String> {
         Vec::new()
     }

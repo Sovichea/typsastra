@@ -31,6 +31,7 @@ export type AppSettings = {
     wordCompletion: boolean;
     showZws: boolean;
     userDictionary: string[];
+    formatOnSave: boolean;
   };
   preview: {
     cursorSync: boolean;
@@ -62,7 +63,8 @@ export const defaultAppSettings: AppSettings = {
     spellcheck: true,
     wordCompletion: true,
     showZws: true,
-    userDictionary: []
+    userDictionary: [],
+    formatOnSave: false
   },
   preview: {
     cursorSync: true,
@@ -125,7 +127,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       showZws: booleanValue(editor.showZws, defaultAppSettings.editor.showZws),
       userDictionary: Array.isArray(editor.userDictionary)
         ? [...new Set(editor.userDictionary.filter((word): word is string => typeof word === "string" && word.trim().length > 0).map(word => word.trim()))].sort()
-        : []
+        : [],
+      formatOnSave: booleanValue(editor.formatOnSave, defaultAppSettings.editor.formatOnSave)
     },
     preview: {
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),

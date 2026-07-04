@@ -24,7 +24,7 @@ A lightweight, local-first Typst code editor with advanced Unicode font fallback
 * **Template-Aware Chapter Editing**: Imported chapters can reuse their main document's local template in standalone live preview. Cross-chapter references render as clear placeholders until the complete document is previewed, while the source remains standard Typst.
 * **Managed Toolchain**: The settings panel installs stable Tinymist releases. Tinymist's embedded Typst compiler handles preview, diagnostics, and export; no separate Typst installation is required.
 * **Document Typography Controls**: Choose Latin and complex-script fonts independently from the toolbar, adjust complex-script sizing relative to the Latin size, and apply either selection to the current document or its local template.
-* **Khmer Language Support**: Optional real-time dictionary spellcheck underlines unknown Khmer words and offers corrections from the editor context menu. Typing suggestions can be controlled independently, and unknown words can be added to a persistent personal dictionary. See [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Preview and PDF export add non-destructive Khmer word-break opportunities, including discretionary hyphenation in justified paragraphs.
+* **Khmer Language Support**: Optional real-time dictionary spellcheck underlines unknown Khmer words and offers corrections from the editor context menu. Typing suggestions can be controlled independently, and unknown words can be added to a persistent personal dictionary. See [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Experimental Khmer render preparation can generate non-destructive zero-width word-break opportunities for preview/export in dev builds, but it is off by default.
 * **Interactive Document Outline**: Browse collapsible heading levels beside the file explorer and navigate both source and preview from a single click.
 * **Writable Example Workspace**: Open installed examples from the welcome screen, including Unicode-focused documents, a Khmer technical document, and a three-chapter thesis demonstrating external labels.
 * **Focus-Driven UI**: A custom, frameless window design, persistent multi-tab workspace state (preserving open tabs, split ratios, and cursor positions), and integrated native-feel search and replace.
@@ -37,8 +37,11 @@ A lightweight, local-first Typst code editor with advanced Unicode font fallback
 * `Ctrl + K`, `Ctrl + O`: Open Workspace
 * `Ctrl + B`: Toggle Explorer Sidebar
 * `Ctrl + ,`: Open Settings
+* `Ctrl + Shift + F`: Format Document
 * `Alt + Z`: Toggle Word Wrap
 * `Ctrl + ~`: Toggle Log Console
+
+Shortcuts are matched by physical key position, so they continue to work under Khmer and other non-Latin keyboard layouts.
 
 ## Settings
 
@@ -63,12 +66,14 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
     "lineNumbers": true,
     "highlightActiveLine": true,
     "autoCloseBrackets": true,
-    "indentationGuides": true
+    "indentationGuides": true,
+    "formatOnSave": false
   },
   "preview": {
     "cursorSync": true,
     "syncDebounceMs": 120,
-    "highlightDurationMs": 2200
+    "highlightDurationMs": 2200,
+    "khmerRenderPreparation": false
   },
   "toolchain": {
     "tinymistVersion": null
@@ -84,9 +89,13 @@ Each preview root has a uniquely identified Tinymist task whose iframe is cached
 
 Only MiSans Latin and Fira Mono are bundled. Typstry installs them in the current user's font directory on first launch, avoiding administrator access on Windows, Linux, and macOS. Settings enumerates the operating system's fonts: the code-font selector contains monospace families, while Unicode fallback accepts any installed family. Automatic detection recommends the matching MiSans family when one exists and a script-specific Noto Sans family otherwise. It never downloads without confirmation and does not repeat a recommendation the user declines. Recommendations are optional; users can select any installed fallback or disable fallback entirely. MiSans downloads and use are subject to Xiaomi's [MiSans license agreement](https://hyperos.mi.com/font/en/download/); Noto fonts use the [SIL Open Font License](https://openfontlicense.org/).
 
+The selected Unicode fallback is also included in Typstry's own UI font stack for app-rendered text such as search controls, hover popups, and preview status messages.
+
 The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin rule, the complex-script rule, or both. **Apply to document** writes a managed `typstry:typography` block into the active file. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typstry-template.typ` when no editable local template can be identified.
 
-Language spellcheck and typing word suggestions can be controlled independently in Editor settings. Khmer analysis is provided by the modular Rust segmentation layer backed by the `khmer_segmenter` submodule; implementation details and modern Khmer encoding policy are documented in [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). The renderer leaves source files unchanged: generated preview and export input receives zero-width word-break opportunities for normal paragraphs and soft-hyphen opportunities for justified paragraphs. Soft hyphens are visible only when Typst actually breaks a word.
+Language spellcheck and typing word suggestions can be controlled independently in Editor settings. Khmer analysis is provided by the modular Rust segmentation layer backed by the `khmer_segmenter` submodule; implementation details and modern Khmer encoding policy are documented in [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
+
+Typst formatting is available from **Edit → Format Document** or `Ctrl+Shift+F`. **Format on save** is an Editor setting and defaults off.
 
 ## Tech Stack & Architecture
 * **Core Framework**: [Tauri v2](https://v2.tauri.app/)
@@ -281,7 +290,7 @@ The current development release is `v0.1.2`.
   - [x] Logic to insert symbols and markup correctly
   - [x] Independent Latin/complex-script typography controls
   - [x] Apply typography to the active document or local template
-- [ ] Global project-wide search (`Ctrl+Shift+F`)
+- [ ] Global project-wide search
   - [ ] Search interface and UI
   - [ ] Result navigation and highlighting
 - [ ] Advanced Git integration
@@ -303,7 +312,7 @@ The current development release is `v0.1.2`.
 - [x] Integrate a modular Khmer language engine
   - [x] Pin [Khmer Segmenter](https://github.com/Sovichea/khmer_segmenter) as a Git submodule and Rust dependency
   - [x] Add real-time spellcheck, current-word suggestions, and context-menu corrections
-  - [x] Add ZWS/soft-hyphen preprocessing for preview and PDF export without modifying source files
+  - [x] Add experimental ZWS preprocessing for preview and PDF export without modifying source files
 - [ ] Embed an AI Copilot / Agent for context-aware Typst auto-completion and document drafting
   - [ ] API integration for language model
   - [ ] Inline UI for code suggestions

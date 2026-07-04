@@ -30,7 +30,7 @@
   --ui-font: 'MiSans Latin';
   --editor-code-font: 'Fira Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
   --editor-unicode-font: sans-serif;
-  --font-family-sans: var(--ui-font), sans-serif;
+  --font-family-sans: var(--ui-font), var(--editor-unicode-font), sans-serif;
   --font-family-mono: var(--editor-code-font);
   --ui-bg: #fcfcfc;
   --ui-text: #333333;
@@ -81,7 +81,7 @@ html {
   background-color: var(--ui-bg);
   overflow: hidden;
   color: var(--ui-text);
-  font-family: var(--ui-font), sans-serif;
+  font-family: var(--font-family-sans);
 }
 
 #app-shell {
@@ -575,7 +575,7 @@ html {
   border-radius: 6px;
   background: transparent;
   color: var(--ui-header-text);
-  font-family: var(--ui-font), sans-serif;
+  font-family: var(--font-family-sans);
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -1076,7 +1076,7 @@ html {
 .log-console-empty {
   padding: 12px;
   color: var(--ui-header-text);
-  font-family: 'MiSans Latin', sans-serif;
+  font-family: var(--font-family-sans);
 }
 
 .log-group {
@@ -1159,7 +1159,7 @@ html {
   align-items: center;
   width: 16px;
   justify-content: center;
-  font-family: sans-serif;
+  font-family: var(--font-family-sans);
 }
 
 .log-entry-error .log-entry-icon {
@@ -1361,7 +1361,7 @@ html {
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: var(--ui-font), var(--editor-unicode-font), sans-serif;
+  font-family: var(--font-family-sans);
 }
 
 .wysiwym-block:focus {
@@ -1436,7 +1436,7 @@ html {
 .wysiwym-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'MiSans Latin', sans-serif;
+  font-family: var(--font-family-sans);
   background: var(--ui-bg);
 }
 
@@ -1617,7 +1617,7 @@ html {
   margin: 20px;
   padding: 14px;
   color: var(--ui-header-text);
-  font-family: var(--ui-font);
+  font-family: var(--font-family-sans);
 }
 .compiler-preview-message.error { color: #cf222e; }
 .compiler-preview-message pre { white-space: pre-wrap; font: 12px/1.5 var(--editor-code-font); }
@@ -1680,7 +1680,7 @@ button.welcome-item:disabled {
   border: 1px solid var(--ui-border) !important;
   border-top: none !important;
   padding: 8px 12px 12px 12px !important;
-  font-family: inherit !important;
+  font-family: var(--font-family-sans) !important;
   display: flex !important;
   flex-wrap: wrap !important;
   align-items: center !important;
@@ -1702,6 +1702,7 @@ button.welcome-item:disabled {
   border-radius: 3px !important;
   padding: 4px 6px !important;
   font-size: 12px !important;
+  font-family: var(--font-family-sans) !important;
   outline: none !important;
   width: 140px !important;
 }
@@ -1719,6 +1720,7 @@ button.welcome-item:disabled {
   border-radius: 3px !important;
   padding: 4px 8px !important;
   font-size: 12px !important;
+  font-family: var(--font-family-sans) !important;
   cursor: pointer !important;
   background-image: none !important;
   text-transform: capitalize !important;
@@ -1731,6 +1733,7 @@ button.welcome-item:disabled {
 
 .cm-panel.cm-search label {
   font-size: 12px !important;
+  font-family: var(--font-family-sans) !important;
   display: inline-flex !important;
   align-items: center !important;
   gap: 4px !important;

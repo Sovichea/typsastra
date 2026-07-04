@@ -48,6 +48,10 @@ The dictionary word source (`khmer_dictionary_words.txt`) is filtered during the
 
 The frontend refreshes bounded native results after every Khmer character. Accepting a completion replaces only the returned range and does not consume adjacent text.
 
+When the current token is already a known dictionary word, Typstry includes that exact word as the first completion option before longer ranked suggestions. For example, typing `ការងារ` returns `ការងារ` first so Enter can accept the current word instead of forcing the next candidate.
+
+Word completion remains controlled by the **Typing word suggestions** setting. Disabling it removes dictionary completions while leaving spellcheck, correction suggestions, and Typst/Tinymist code completion available.
+
 ## Validation
 
 Relevant coverage is in:

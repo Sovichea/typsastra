@@ -68,6 +68,7 @@ export class SettingsController {
     const overlay = document.getElementById("settings-overlay");
     if (!overlay) return;
     this.populateFontOptions();
+    document.getElementById("settings-khmer-prep-field")?.classList.toggle("hidden", !import.meta.env.DEV);
 
     const activatePanel = (name: string) => {
       document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
@@ -119,6 +120,7 @@ export class SettingsController {
     onChange("settings-spellcheck", (settings, control) => { settings.editor.spellcheck = (control as HTMLInputElement).checked; });
     onChange("settings-word-completion", (settings, control) => { settings.editor.wordCompletion = (control as HTMLInputElement).checked; });
     onChange("settings-show-zws", (settings, control) => { settings.editor.showZws = (control as HTMLInputElement).checked; });
+    onChange("settings-format-on-save", (settings, control) => { settings.editor.formatOnSave = (control as HTMLInputElement).checked; });
     onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
@@ -137,7 +139,7 @@ export class SettingsController {
     });
     document.addEventListener("keydown", event => {
       const isMac = navigator.userAgent.toLowerCase().includes("mac");
-      if ((isMac ? event.metaKey : event.ctrlKey) && event.key === ",") {
+      if ((isMac ? event.metaKey : event.ctrlKey) && event.code === "Comma") {
         event.preventDefault();
         openSettings();
       } else if (event.key === "Escape" && !overlay.classList.contains("hidden")) {
@@ -203,6 +205,7 @@ export class SettingsController {
     setChecked("settings-spellcheck", editor.spellcheck);
     setChecked("settings-word-completion", editor.wordCompletion);
     setChecked("settings-show-zws", editor.showZws);
+    setChecked("settings-format-on-save", editor.formatOnSave);
     setChecked("settings-cursor-sync", preview.cursorSync);
     setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
 

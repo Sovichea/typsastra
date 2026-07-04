@@ -1,7 +1,7 @@
 use super::provider::{
     AnalyzeRequest, AnalyzeResponse, CompletionRequest, CompletionResponse, EditorToken,
-    LanguageSegmenter, ProviderCapabilities, SegmentToken, SuggestionRequest,
-    SuggestionResponse, TextAnalysis,
+    LanguageSegmenter, ProviderCapabilities, SegmentToken, SuggestionRequest, SuggestionResponse,
+    TextAnalysis,
 };
 use khmer_segmenter::kdict::{KDict, KHypDict};
 use khmer_segmenter::{KhmerSegmenter, SegmenterConfig};
@@ -215,7 +215,8 @@ impl LanguageSegmenter for KhmerProvider {
                 let lookup_key = modern_khmer_key(token);
                 let known =
                     !token.chars().any(is_spelling_char) || self.known.contains(&lookup_key);
-                let hyphenated = self.hyphenation
+                let hyphenated = self
+                    .hyphenation
                     .lookup(token)
                     .map(|value| value.replace('\u{200b}', "\u{00ad}"));
                 SegmentToken {
@@ -384,6 +385,10 @@ impl LanguageSegmenter for KhmerProvider {
             .map(|(_, _, candidate)| candidate.clone())
             .collect()
     }
+
+    fn is_known_word(&self, word: &str) -> bool {
+        self.known.contains(&modern_khmer_key(word))
+    }
 }
 
 #[derive(Clone)]
@@ -402,7 +407,8 @@ impl SegmentationRegistry {
         let mut merged_tokens: Vec<EditorToken> = Vec::new();
 
         for chunk in request.chunks {
-            let active_providers: Vec<_> = self.providers
+            let active_providers: Vec<_> = self
+                .providers
                 .iter()
                 .filter(|provider| provider.supports(&chunk.text))
                 .collect();
@@ -424,11 +430,12 @@ impl SegmentationRegistry {
             }
             utf16_to_byte[current_utf16] = chunk.text.len();
 
-            let get_byte_range = |from: usize, to: usize, map: &[usize]| -> std::ops::Range<usize> {
-                let start = map.get(from).copied().unwrap_or(0);
-                let end = map.get(to).copied().unwrap_or(0);
-                start..end
-            };
+            let get_byte_range =
+                |from: usize, to: usize, map: &[usize]| -> std::ops::Range<usize> {
+                    let start = map.get(from).copied().unwrap_or(0);
+                    let end = map.get(to).copied().unwrap_or(0);
+                    start..end
+                };
 
             let default_provider = active_providers[0];
             let analysis = default_provider.analyze(&chunk.text)?;
@@ -573,7 +580,12 @@ fn complete_with_provider(
             .iter()
             .map(|token| token.text.as_str())
             .collect::<String>();
-        let options = provider.autocomplete(&prefix, request.limit.min(50));
+        let limit = request.limit.min(50);
+        let mut options = provider.autocomplete(&prefix, limit);
+        if provider.is_known_word(&prefix) && !options.iter().any(|option| option == &prefix) {
+            options.insert(0, prefix);
+            options.truncate(limit);
+        }
         if !options.is_empty() {
             return Ok(Some(CompletionResponse {
                 provider: provider.id().to_owned(),
@@ -585,7 +597,6 @@ fn complete_with_provider(
     }
     Ok(None)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -606,7 +617,11 @@ mod tests {
             )
             .unwrap()
             .expect("completion response");
-            assert!(!response.options.iter().any(|option| option == prefix));
+            if provider.is_known_word(prefix) {
+                assert_eq!(response.options.first().map(String::as_str), Some(prefix));
+            } else {
+                assert!(!response.options.iter().any(|option| option == prefix));
+            }
         }
         let response = complete_with_provider(
             &provider,
@@ -619,10 +634,8 @@ mod tests {
         )
         .unwrap()
         .expect("school completion");
-        assert_eq!(
-            response.options.first().map(String::as_str),
-            Some("សាលារៀន")
-        );
+        assert_eq!(response.options.first().map(String::as_str), Some("សាលា"));
+        assert!(response.options.iter().any(|option| option == "សាលារៀន"));
         let continued = complete_with_provider(
             &provider,
             &CompletionRequest {
@@ -639,6 +652,27 @@ mod tests {
             continued.options.first().map(String::as_str),
             Some("សាលារៀន")
         );
+    }
+
+    #[test]
+    fn includes_the_current_known_word_as_a_completion_option() {
+        let provider = KhmerProvider::new().unwrap();
+        let word = "ការងារ";
+        assert!(provider.is_known_word(word));
+        let response = complete_with_provider(
+            &provider,
+            &CompletionRequest {
+                provider: "khmer-segmenter".to_string(),
+                text: word.into(),
+                cursor_utf16: word.encode_utf16().count(),
+                limit: 10,
+            },
+        )
+        .unwrap()
+        .expect("known word completion");
+        assert_eq!(response.from, 0);
+        assert_eq!(response.to, word.encode_utf16().count());
+        assert_eq!(response.options.first().map(String::as_str), Some(word));
     }
 
     #[test]
@@ -831,13 +865,19 @@ mod tests {
         let provider = KhmerProvider::new().unwrap();
         let analysis = provider.analyze("សាលារៀន").unwrap();
         assert!(!analysis.tokens.is_empty());
-        
-        let words_with_hyphens: Vec<_> = analysis.tokens.iter()
+
+        let words_with_hyphens: Vec<_> = analysis
+            .tokens
+            .iter()
             .filter(|t| t.hyphenated.is_some())
             .collect();
-        
+
         // Let's assert that at least one token has hyphenated representation
-        assert!(!words_with_hyphens.is_empty(), "No hyphenated tokens found! Words analyzed: {:?}", analysis.tokens);
+        assert!(
+            !words_with_hyphens.is_empty(),
+            "No hyphenated tokens found! Words analyzed: {:?}",
+            analysis.tokens
+        );
     }
 
     #[test]
@@ -851,25 +891,38 @@ mod tests {
             ],
         };
 
-        let response = registry.analyze_ranges(
-            AnalyzeRequest {
+        let response = registry
+            .analyze_ranges(AnalyzeRequest {
                 chunks: vec![AnalyzeChunk {
                     text: "សាលារៀន hello invalidword".to_string(),
                     start_utf16: 0,
                 }],
-            },
-        )
-        .expect("analyze language ranges");
+            })
+            .expect("analyze language ranges");
 
         assert!(!response.tokens.is_empty());
-        let khmer_tokens: Vec<_> = response.tokens.iter().filter(|t| t.provider == "khmer-segmenter").collect();
-        let mock_tokens: Vec<_> = response.tokens.iter().filter(|t| t.provider == "mock-provider").collect();
+        let khmer_tokens: Vec<_> = response
+            .tokens
+            .iter()
+            .filter(|t| t.provider == "khmer-segmenter")
+            .collect();
+        let mock_tokens: Vec<_> = response
+            .tokens
+            .iter()
+            .filter(|t| t.provider == "mock-provider")
+            .collect();
 
         assert!(!khmer_tokens.is_empty());
         assert!(!mock_tokens.is_empty());
 
-        assert!(khmer_tokens.iter().any(|t| t.source_text == "សាលារៀន" && t.known));
-        assert!(mock_tokens.iter().any(|t| t.source_text == "hello" && t.known));
-        assert!(mock_tokens.iter().any(|t| t.source_text == "invalidword" && !t.known));
+        assert!(khmer_tokens
+            .iter()
+            .any(|t| t.source_text == "សាលារៀន" && t.known));
+        assert!(mock_tokens
+            .iter()
+            .any(|t| t.source_text == "hello" && t.known));
+        assert!(mock_tokens
+            .iter()
+            .any(|t| t.source_text == "invalidword" && !t.known));
     }
 }

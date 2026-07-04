@@ -158,6 +158,26 @@ export function completionEditOffsets(
     ?? quotedCompletionEditOffsets(doc, cursorPosition, insertion);
 }
 
+export function displayLabelForHashPrefix(label: string, type: string, isHashPrefix: boolean | undefined): string {
+  return isHashPrefix
+    && !label.startsWith('#')
+    && (type === 'function' || type === 'keyword' || type === 'module' || type === 'variable')
+    ? `#${label}`
+    : label;
+}
+
+export function applyTextForHashPrefix(apply: string, type: string, isHashPrefix: boolean | undefined, hasServerEdit: boolean): string {
+  if (
+    isHashPrefix
+    && !hasServerEdit
+    && !apply.startsWith('#')
+    && (type === 'function' || type === 'keyword' || type === 'module' || type === 'variable')
+  ) {
+    return `#${apply}`;
+  }
+  return apply;
+}
+
 export const typstSnippets = [
   // Document structure
   snippetCompletion("#set document(title: \"${title}\")\n", { label: "#document", detail: "Document Properties" }),
@@ -346,14 +366,8 @@ export function createTypstAutocomplete(
             const insertTextFormat = item.insertTextFormat ?? itemDefaults?.insertTextFormat;
             let apply = textEdit?.newText ?? defaultApply;
             
-            if (isHashPrefix && !label.startsWith('#') && (type === 'function' || type === 'keyword' || type === 'module' || type === 'variable')) {
-                label = '#' + label;
-                if (typeof apply === 'string' && !apply.startsWith('#')) {
-                    apply = '#' + apply;
-                } else if (typeof apply === 'string' && apply.startsWith('#')) {
-                    // already starts with #
-                }
-            }
+            label = displayLabelForHashPrefix(label, type, isHashPrefix);
+            apply = applyTextForHashPrefix(apply, type, isHashPrefix, Boolean(textEdit));
             
             if (insertTextFormat === 2) {
               const completion = snippetCompletion(apply, { label, detail, info, type });

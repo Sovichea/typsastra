@@ -44,7 +44,7 @@ export function createHoverTooltip(getClient: () => TinymistLspClient | undefine
       dom.style.fontSize = "13px";
       dom.style.whiteSpace = "normal";
       dom.style.wordBreak = "break-word";
-      dom.style.fontFamily = "var(--ui-font, sans-serif)";
+      dom.style.fontFamily = "var(--font-family-sans)";
       
       dom.innerHTML = parseMarkdown(markdown);
 
@@ -215,7 +215,7 @@ function parseMarkdown(md: string): string {
         // End of code block
         inCodeBlock = false;
         const codeText = escapeHtml(codeBlockContent.join("\n"));
-        html += `<pre style="background: var(--ui-hover); border: 1px solid var(--ui-border); padding: 6px 10px; border-radius: 4px; margin: 6px 0; overflow-x: auto; font-family: monospace; font-size: 12px; line-height: 1.4; white-space: pre; color: var(--ui-text);">${codeText}</pre>`;
+        html += `<pre style="background: var(--ui-hover); border: 1px solid var(--ui-border); padding: 6px 10px; border-radius: 4px; margin: 6px 0; overflow-x: auto; font-family: var(--font-family-mono); font-size: 12px; line-height: 1.4; white-space: pre; color: var(--ui-text);">${codeText}</pre>`;
         codeBlockContent = [];
       } else {
         // Start of code block
@@ -240,24 +240,24 @@ function parseMarkdown(md: string): string {
     // Handle headings
     if (trimmed.startsWith("# ")) {
       const text = parseInlineStyles(trimmed.slice(2));
-      html += `<h1 style="font-size: 14px; font-weight: bold; margin: 14px 0 6px 0; border-bottom: 1px solid var(--ui-border); padding-bottom: 3px; font-family: var(--ui-font, sans-serif); color: var(--ui-text);">${text}</h1>`;
+      html += `<h1 style="font-size: 14px; font-weight: bold; margin: 14px 0 6px 0; border-bottom: 1px solid var(--ui-border); padding-bottom: 3px; font-family: var(--font-family-sans); color: var(--ui-text);">${text}</h1>`;
       continue;
     }
     if (trimmed.startsWith("## ")) {
       const text = parseInlineStyles(trimmed.slice(3));
-      html += `<h2 style="font-size: 13px; font-weight: bold; margin: 12px 0 4px 0; color: var(--ui-header-text); font-family: var(--ui-font, sans-serif);">${text}</h2>`;
+      html += `<h2 style="font-size: 13px; font-weight: bold; margin: 12px 0 4px 0; color: var(--ui-header-text); font-family: var(--font-family-sans);">${text}</h2>`;
       continue;
     }
     if (trimmed.startsWith("### ")) {
       const text = parseInlineStyles(trimmed.slice(4));
-      html += `<h3 style="font-size: 12px; font-weight: bold; margin: 10px 0 4px 0; color: var(--ui-text); font-family: var(--ui-font, sans-serif);">${text}</h3>`;
+      html += `<h3 style="font-size: 12px; font-weight: bold; margin: 10px 0 4px 0; color: var(--ui-text); font-family: var(--font-family-sans);">${text}</h3>`;
       continue;
     }
 
     // Handle lists
     if (trimmed.startsWith("- ")) {
       const text = parseInlineStyles(trimmed.slice(2));
-      html += `<div style="margin-left: 12px; margin-bottom: 4px; display: list-item; list-style-type: disc; font-family: var(--ui-font, sans-serif); color: var(--ui-text);">${text}</div>`;
+      html += `<div style="margin-left: 12px; margin-bottom: 4px; display: list-item; list-style-type: disc; font-family: var(--font-family-sans); color: var(--ui-text);">${text}</div>`;
       continue;
     }
 
@@ -269,12 +269,12 @@ function parseMarkdown(md: string): string {
 
     // Normal paragraph text
     const parsedText = parseInlineStyles(line);
-    html += `<p style="margin: 0 0 6px 0; line-height: 1.5; font-family: var(--ui-font, sans-serif); color: var(--ui-text);">${parsedText}</p>`;
+    html += `<p style="margin: 0 0 6px 0; line-height: 1.5; font-family: var(--font-family-sans); color: var(--ui-text);">${parsedText}</p>`;
   }
 
   if (inCodeBlock && codeBlockContent.length > 0) {
     const codeText = escapeHtml(codeBlockContent.join("\n"));
-    html += `<pre style="background: var(--ui-hover); border: 1px solid var(--ui-border); padding: 6px 10px; border-radius: 4px; margin: 6px 0; overflow-x: auto; font-family: monospace; font-size: 12px; line-height: 1.4; white-space: pre; color: var(--ui-text);">${codeText}</pre>`;
+    html += `<pre style="background: var(--ui-hover); border: 1px solid var(--ui-border); padding: 6px 10px; border-radius: 4px; margin: 6px 0; overflow-x: auto; font-family: var(--font-family-mono); font-size: 12px; line-height: 1.4; white-space: pre; color: var(--ui-text);">${codeText}</pre>`;
   }
 
   return html;
@@ -294,7 +294,7 @@ function parseInlineStyles(text: string): string {
   let result = escapeHtml(text);
 
   // Parse inline code: `code`
-  result = result.replace(/`([^`\n]+)`/g, '<code style="background: var(--ui-hover); border: 1px solid var(--ui-border); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 12px; color: var(--ui-text);">$1</code>');
+  result = result.replace(/`([^`\n]+)`/g, '<code style="background: var(--ui-hover); border: 1px solid var(--ui-border); padding: 1px 4px; border-radius: 3px; font-family: var(--font-family-mono); font-size: 12px; color: var(--ui-text);">$1</code>');
 
   // Parse links: [text](url)
   result = result.replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, '<a href="$2" class="hover-link">$1</a>');

@@ -5,7 +5,10 @@ pub mod scanner;
 pub mod segment;
 pub mod sourcemap;
 
-pub use mirror::{mirror_project, prepare_single_in_memory_file, RenderPrepareOptions, RenderPrepareResult, RenderPrepareWarning};
+pub use mirror::{
+    mirror_project, prepare_single_in_memory_file, RenderPrepareOptions, RenderPrepareResult,
+    RenderPrepareWarning,
+};
 pub use segment::KhmerTextSegmenter;
 pub use sourcemap::SourceMap;
 
@@ -56,10 +59,13 @@ pub fn map_generated_to_source(
 ) -> Option<usize> {
     let maps_dir = std::path::Path::new(&cache_root).join("maps");
     let mut map_rel = std::path::PathBuf::from(&relative_path);
-    let ext = map_rel.extension().and_then(|s| s.to_str()).unwrap_or("typ");
+    let ext = map_rel
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("typ");
     map_rel.set_extension(format!("{}.map.json", ext));
     let map_path = maps_dir.join(map_rel);
-    
+
     if let Ok(content) = std::fs::read_to_string(map_path) {
         if let Ok(sourcemap) = serde_json::from_str::<SourceMap>(&content) {
             return sourcemap.generated_to_source(generated_offset);
@@ -76,10 +82,13 @@ pub fn map_source_to_generated(
 ) -> Option<usize> {
     let maps_dir = std::path::Path::new(&cache_root).join("maps");
     let mut map_rel = std::path::PathBuf::from(&relative_path);
-    let ext = map_rel.extension().and_then(|s| s.to_str()).unwrap_or("typ");
+    let ext = map_rel
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("typ");
     map_rel.set_extension(format!("{}.map.json", ext));
     let map_path = maps_dir.join(map_rel);
-    
+
     if let Ok(content) = std::fs::read_to_string(map_path) {
         if let Ok(sourcemap) = serde_json::from_str::<SourceMap>(&content) {
             return sourcemap.source_to_generated(source_offset);

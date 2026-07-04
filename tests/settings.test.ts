@@ -13,6 +13,7 @@ describe("application settings", () => {
     expect(settings.editor.wordCompletion).toBe(true);
     expect(settings.editor.showZws).toBe(true);
     expect(settings.editor.userDictionary).toEqual([]);
+    expect(settings.editor.formatOnSave).toBe(false);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
     expect(settings.preview.khmerRenderPreparation).toBe(false);
     expect(settings.toolchain.tinymistVersion).toBeNull();
@@ -32,6 +33,7 @@ describe("application settings", () => {
     expect(settings.editor.tabSize).toBe(2);
     expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("unknown-font");
+    expect(settings.editor.formatOnSave).toBe(false);
     expect(settings.preview.syncDebounceMs).toBe(50);
     expect(settings.preview.highlightDurationMs).toBe(10000);
     expect(settings.toolchain.tinymistVersion).toBeNull();

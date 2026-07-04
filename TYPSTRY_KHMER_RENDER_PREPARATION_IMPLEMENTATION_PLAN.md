@@ -13,6 +13,28 @@ Editor, diagnostics, and reverse sync map back to original files.
 
 # Typstry Khmer Render Preparation Implementation Plan
 
+## Current status (2026-07-04)
+
+Khmer render preparation is implemented as an experimental path, defaults to off, and the Settings row is shown only in dev builds. The current renderer inserts `U+200B` zero-width spaces only; Khmer `U+00AD` soft hyphen insertion was intentionally removed because it creates poor non-lexical break behavior. Normal users should first rely on Typst justification/tracking limits. Keep this pipeline for controlled experiments, preview/export comparison, and future segmentation tuning.
+
+The implemented settings shape is:
+
+```json
+{
+  "preview": {
+    "khmerRenderPreparation": false
+  }
+}
+```
+
+The implemented source directive is scope-aware:
+
+```typst
+// @disable-render-prep
+```
+
+It disables render preparation for the following syntactic scope so examples can compare plain Typst rendering against Typstry's generated ZWS rendering without changing application settings.
+
 ## 0. Core principle
 
 Never modify the user’s `.typ` source files automatically.
@@ -434,7 +456,7 @@ Typstry internally previews:
 
 The user should not need to know this unless debugging.
 
-Show a small status indicator:
+In dev builds, show a small status indicator when the experimental path is enabled:
 
 ```text
 Khmer render preparation: enabled
@@ -644,34 +666,27 @@ Unknown
 
 ## Required settings
 
-Add project/user settings:
+Implemented application setting:
 
 ```json
 {
-  "khmerRenderPreparation": {
-    "enabled": true,
-    "insertZws": true,
-    "insertShy": false,
-    "segmentPlainMarkupText": true,
-    "segmentVisibleStrings": false,
-    "debugGeneratedFiles": false
+  "preview": {
+    "khmerRenderPreparation": false
   }
 }
 ```
 
+The UI row is hidden outside dev builds. The setting remains in the JSON schema so explicit local experiments are still possible.
+
 ## Per-file/per-region directives
 
-Support comments:
+Implemented scope-aware comment:
 
 ```typst
-// typstry: disable-khmer-render-prep
+// @disable-render-prep
 ```
 
-```typst
-// typstry: enable-khmer-render-prep
-```
-
-Maybe later:
+Possible future region syntax:
 
 ```typst
 // typstry: no-segment-start
@@ -939,9 +954,10 @@ The user experience should be simple:
 
 ```text
 Write clean Khmer source.
-Preview renders with correct Khmer line breaking.
-Exported PDF has correct Khmer line breaking.
+Use normal Typst justification/tracking limits by default.
+Enable experimental render preparation only when comparing generated ZWS boundaries.
+Preview/export generated from the render cache can expose additional Khmer break opportunities.
 No invisible characters are inserted into the source unless explicitly requested.
 ```
 
-That should be the core promise of Typstry’s second feature.
+That is the current experimental promise. Do not present this feature as a production-default Khmer layout solution until segmentation quality is proven across real documents.

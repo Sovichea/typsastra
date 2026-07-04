@@ -45,6 +45,22 @@ export type LspSourcePosition = {
   character?: number;
 };
 
+export type LspRange = {
+  start: LspSourcePosition;
+  end: LspSourcePosition;
+};
+
+export type LspTextEdit = {
+  range: LspRange;
+  newText: string;
+};
+
+export type EditorTextEdit = {
+  from: number;
+  to: number;
+  insert: string;
+};
+
 export type LspDiagnostic = {
   range: {
     start: LspSourcePosition;
@@ -357,6 +373,9 @@ export class TinymistLspClient {
                   properties: ['documentation', 'detail', 'additionalTextEdits']
                 }
               }
+            },
+            formatting: {
+              dynamicRegistration: false
             }
           },
           workspace: {
@@ -448,6 +467,25 @@ export class TinymistLspClient {
     return this.sendNotification("workspace/didChangeWatchedFiles", { changes });
   }
 
+  public async formatTextDocument(uri: string, doc: Text, options?: { tabSize?: number; insertSpaces?: boolean }): Promise<EditorTextEdit[]> {
+    const result = await this.request<LspTextEdit[] | null>("textDocument/formatting", {
+      textDocument: { uri },
+      options: {
+        tabSize: options?.tabSize ?? 2,
+        insertSpaces: options?.insertSpaces ?? true,
+        trimTrailingWhitespace: true,
+        insertFinalNewline: true,
+        trimFinalNewlines: true
+      }
+    }, 10000);
+    if (!Array.isArray(result)) return [];
+    return result.map(edit => ({
+      from: this.editorOffsetFromLspPosition(doc, edit.range.start),
+      to: this.editorOffsetFromLspPosition(doc, edit.range.end),
+      insert: edit.newText
+    })).filter(edit => edit.from <= edit.to);
+  }
+
   public async getDefinition(uri: string, position: LspSourcePosition): Promise<LspLocation[]> {
     try {
       const result = await this.request<LspLocation | LspLocation[] | null>("textDocument/definition", {
@@ -459,6 +497,12 @@ export class TinymistLspClient {
     } catch {
       return [];
     }
+  }
+
+  private editorOffsetFromLspPosition(doc: Text, position: LspSourcePosition): number {
+    const lineNumber = Math.max(1, Math.min(position.line + 1, doc.lines));
+    const lineInfo = doc.line(lineNumber);
+    return lineInfo.from + this.stringOffsetFromLspCharacter(lineInfo.text, position.character ?? 0);
   }
 
   public async getReferences(uri: string, position: LspSourcePosition): Promise<LspLocation[]> {

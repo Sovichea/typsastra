@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Text } from "@codemirror/state";
 import {
+  applyTextForHashPrefix,
   completionEditOffsets,
+  displayLabelForHashPrefix,
   fontCompletionValueStart,
   languageCompletionRange,
   languageCompletionValidFor,
@@ -103,6 +105,12 @@ describe("LSP autocomplete edits", () => {
       + 'Khmer OS Bokor"'
       + doc.sliceString(edit!.to);
     expect(completed).toBe('#set text(font: "Khmer OS Bokor")');
+  });
+
+  test("does not prepend an extra hash when Tinymist supplies the edit range", () => {
+    expect(displayLabelForHashPrefix("set", "keyword", true)).toBe("#set");
+    expect(applyTextForHashPrefix("set", "keyword", true, false)).toBe("#set");
+    expect(applyTextForHashPrefix("set", "keyword", true, true)).toBe("set");
   });
 });
 

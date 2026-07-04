@@ -35,6 +35,8 @@
             <div class="dropdown-menu">
               <div class="dropdown-item" id="action-undo">Undo <span class="hotkey">Ctrl+Z</span></div>
               <div class="dropdown-item" id="action-redo">Redo <span class="hotkey">Ctrl+Y</span></div>
+              <div class="dropdown-separator"></div>
+              <div class="dropdown-item" id="action-format-document">Format Document <span class="hotkey">Ctrl+Shift+F</span></div>
             </div>
           </div>
           <div class="menu-item dropdown-container">
@@ -482,12 +484,13 @@
             <label class="settings-toggle"><input id="settings-spellcheck" type="checkbox"><span><strong>Language spellcheck</strong><small>Mark unknown words and provide correction suggestions.</small></span></label>
             <label class="settings-toggle"><input id="settings-word-completion" type="checkbox"><span><strong>Typing word suggestions</strong><small>Show dictionary completions while typing supported languages.</small></span></label>
             <label class="settings-toggle"><input id="settings-show-zws" type="checkbox"><span><strong>Show invisible characters</strong><small>Render Zero Width Spaces (ZWS) and Soft Hyphens (SHY) visually in the editor.</small></span></label>
+            <label class="settings-toggle"><input id="settings-format-on-save" type="checkbox"><span><strong>Format on save</strong><small>Run Tinymist's Typst formatter before saving.</small></span></label>
           </div>
 
           <div class="settings-panel" data-settings-panel-content="preview">
             <h3>Preview</h3>
             <label class="settings-toggle"><input id="settings-cursor-sync" type="checkbox"><span><strong>Cursor-to-preview sync</strong><small>Navigate and briefly highlight preview content as the cursor moves.</small></span></label>
-            <label class="settings-toggle"><input id="settings-khmer-prep" type="checkbox"><span><strong>Khmer render preparation (experimental)</strong><small>Opt in to generated Zero Width Space layout boundaries for Khmer preview/export. Leave off when Typst justification limits are sufficient.</small></span></label>
+            <label class="settings-toggle" id="settings-khmer-prep-field"><input id="settings-khmer-prep" type="checkbox"><span><strong>Khmer render preparation (experimental)</strong><small>Opt in to generated Zero Width Space layout boundaries for Khmer preview/export. Leave off when Typst justification limits are sufficient.</small></span></label>
             <div class="settings-field">
               <label for="settings-sync-debounce">Sync debounce</label>
               <input id="settings-sync-debounce" type="number" min="50" max="2000" step="10">

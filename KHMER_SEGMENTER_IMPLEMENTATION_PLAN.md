@@ -13,7 +13,7 @@ This plan covers the code editor only. Typst preview/export segmentation remains
 - [x] Spellcheck can be enabled or disabled in Settings.
 - [x] Unknown tokens receive editor decorations and correction suggestions.
 - [x] Native segmentation runs outside the Tauri UI thread.
-- [x] Current automated baseline passes: 54 Bun tests and 3 segmentation registry tests.
+- [x] Current automated baseline has been refreshed after the language-tools work; use the validation checklist below for the authoritative command set.
 - [x] Request results are tied safely to a document revision.
 - [x] Normalization-changing input retains usable source ranges.
 - [x] Completion identifies the current segmented word in unspaced Khmer text.

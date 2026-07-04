@@ -18,7 +18,7 @@ import { looksLikeStalePrefixDiagnostic, setEditorDiagnosticsEffect } from "./ed
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
 import { WorkspaceExplorer } from "./components/explorer";
 import { TinymistLspClient } from "./compiler/lsp";
-import type { LspDiagnostic, LspLogEntry, LspSourcePosition, LspStatus } from "./compiler/lsp";
+import type { EditorTextEdit, LspDiagnostic, LspLogEntry, LspSourcePosition, LspStatus } from "./compiler/lsp";
 import type { AppSettings } from "./settings";
 import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, relativeFilePath } from "./platform/paths";
@@ -681,15 +681,7 @@ export class TypstryWorkspaceController {
     if (!tab.temporary) return;
     tab.temporary = false;
     this.renderEditorTabs();
-    if (this.activeFilePath === tab.path) {
-      if (this.lspReady && this.lspClient && this.previewRootPath) {
-        const previewReady = await this.activatePreviewSession(tab.content);
-        if (!previewReady) {
-          this.previewFrame.clear();
-          void this.renderCompilerPreview(tab.path, tab.content);
-        }
-      }
-    }
+    this.saveWorkspaceState();
   }
 
   private getActiveTab(): EditorTab | null {
@@ -967,16 +959,12 @@ export class TypstryWorkspaceController {
       }
 
       if (this.previewRootPath) {
-        if (!tab.temporary) {
-          const previewReady = await this.activatePreviewSession(tab.content);
-          if (!previewReady) {
-            this.previewFrame.setMessage(`<div style="padding: 20px; color: red; font-family: sans-serif;">Failed to start live preview server after restart. Check the log console for details.</div>`);
-          }
-        } else {
-          void this.renderCompilerPreview(path, tab.content);
+        const previewReady = await this.activatePreviewSession(tab.content);
+        if (!previewReady) {
+          this.previewFrame.setMessage(`<div style="padding: 20px; color: red; font-family: var(--font-family-sans);">Failed to start live preview server after restart. Check the log console for details.</div>`);
         }
       } else {
-        this.previewFrame.setMessage(`<div style="padding: 20px; color: #5f6368; font-family: sans-serif;">No preview root found for this library/template file. Diagnostics are still active.</div>`);
+        this.previewFrame.setMessage(`<div style="padding: 20px; color: #5f6368; font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`);
       }
     } else {
       void this.runFallbackDiagnostics(path, tab.content, this.currentVersion);
@@ -1135,6 +1123,10 @@ export class TypstryWorkspaceController {
     }
 
     try {
+      if (this.activeMode === "CODE" && this.settingsController.value.editor.formatOnSave) {
+        await this.formatActiveDocument({ silent: true });
+      }
+
       const content = this.activeMode === "WYSIWYM"
         ? this.mapWysiwymToMarkup()
         : this.editorInstance.state.doc.toString();
@@ -1169,6 +1161,48 @@ export class TypstryWorkspaceController {
       this.setLspStatus({ kind: "error", message });
       alert(message);
     }
+  }
+
+  private async formatActiveDocument(options: { silent?: boolean } = {}): Promise<boolean> {
+    if (!this.activeFilePath || this.activeMode !== "CODE") return false;
+    if (!this.lspReady || !this.lspClient) {
+      if (!options.silent) this.setLspStatus({ kind: "error", message: "Formatter unavailable until Tinymist LSP is ready" });
+      return false;
+    }
+
+    try {
+      await this.flushPendingLspSync();
+      const doc = this.editorInstance.state.doc;
+      const edits = await this.lspClient.formatTextDocument(filePathToUri(this.activeFilePath), doc, {
+        tabSize: this.settingsController.value.editor.tabSize,
+        insertSpaces: true
+      });
+      this.applyFormattingEdits(edits);
+      if (!options.silent) {
+        this.setLspStatus({ kind: "preview-ready", message: edits.length > 0 ? "Document formatted" : "Document already formatted" });
+      }
+      return true;
+    } catch (error) {
+      this.appendLspLog({
+        kind: "warning",
+        source: "formatter",
+        message: `Format failed: ${String(error)}`
+      });
+      if (!options.silent) this.setLspStatus({ kind: "error", message: `Format failed: ${String(error)}` });
+      return false;
+    }
+  }
+
+  private applyFormattingEdits(edits: EditorTextEdit[]): void {
+    if (edits.length === 0) return;
+    const changes = edits
+      .slice()
+      .sort((a, b) => a.from - b.from)
+      .map(edit => ({ from: edit.from, to: edit.to, insert: edit.insert }));
+    this.editorInstance.dispatch({
+      changes,
+      userEvent: "input.format"
+    });
   }
 
   private workspaceText(path: string): Promise<string> {
@@ -2226,7 +2260,7 @@ export class TypstryWorkspaceController {
       return;
     }
     if (!target.rootPath) {
-      this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: sans-serif;">No preview root found for this library/template file. Diagnostics are still active.</div>`;
+      this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`;
       return;
     }
 
@@ -2343,63 +2377,70 @@ export class TypstryWorkspaceController {
     document.addEventListener("keydown", (e) => {
       const isMac = navigator.userAgent.toLowerCase().includes("mac");
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+      const keyCode = e.code;
       
       // Ctrl+F12 to open devtools in dev build
-      if (cmdOrCtrl && e.key === "F12" && import.meta.env.DEV) {
+      if (cmdOrCtrl && keyCode === "F12" && import.meta.env.DEV) {
         e.preventDefault();
         void invoke("open_devtools");
       }
       
       // Block common function keys (except F3 which we handle conditionally)
-      if (["F5", "F6", "F7", "F11"].includes(e.key)) {
+      if (["F5", "F6", "F7", "F11"].includes(keyCode)) {
         e.preventDefault();
       }
       
       // Block specific browser shortcuts (that we don't map below)
-      if (cmdOrCtrl && ["r", "p", "j", "u", "d"].includes(e.key.toLowerCase())) {
+      if (cmdOrCtrl && ["KeyR", "KeyP", "KeyJ", "KeyU", "KeyD"].includes(keyCode)) {
         e.preventDefault();
       }
       
       // Block browser's Find/Replace shortcuts only if not in an input/textarea/editor
-      if (e.key === "F3" || (cmdOrCtrl && ["f", "g", "h"].includes(e.key.toLowerCase()))) {
+      if (keyCode === "F3" || (cmdOrCtrl && ["KeyF", "KeyG", "KeyH"].includes(keyCode))) {
          const active = document.activeElement;
          if (!active || (!active.classList.contains("cm-content") && active.tagName !== "INPUT" && active.tagName !== "TEXTAREA" && !active.closest('.cm-panel'))) {
              e.preventDefault();
          }
       }
       
-      if (cmdOrCtrl && e.shiftKey && ["i", "c", "j", "r"].includes(e.key.toLowerCase())) {
+      if (cmdOrCtrl && e.shiftKey && ["KeyI", "KeyC", "KeyF", "KeyJ", "KeyR"].includes(keyCode)) {
         e.preventDefault();
+      }
+
+      if (cmdOrCtrl && e.shiftKey && !e.altKey && keyCode === "KeyF") {
+        e.preventDefault();
+        void this.formatActiveDocument();
+        return;
       }
       
       // App Keymappings
       if (cmdOrCtrl && !e.shiftKey && !e.altKey) {
-        switch (e.key.toLowerCase()) {
-          case "s":
+        switch (keyCode) {
+          case "KeyS":
             e.preventDefault();
             void this.saveActiveFile();
             break;
-          case "o":
+          case "KeyO":
             e.preventDefault();
             document.getElementById("action-open-folder")?.click();
             break;
-          case "n":
+          case "KeyN":
             e.preventDefault();
             document.getElementById("action-new-file")?.click();
             break;
-          case "b":
+          case "KeyB":
             e.preventDefault();
             document.getElementById("action-toggle-sidebar")?.click();
             break;
-          case "e":
+          case "KeyE":
             e.preventDefault();
             document.getElementById("action-export-pdf")?.click();
             break;
-          case "q":
+          case "KeyQ":
             e.preventDefault();
             document.getElementById("action-exit")?.click();
             break;
-          case "`":
+          case "Backquote":
             e.preventDefault();
             document.getElementById("action-toggle-logs")?.click();
             break;
@@ -2407,7 +2448,7 @@ export class TypstryWorkspaceController {
       }
 
       if (e.altKey && !cmdOrCtrl && !e.shiftKey) {
-        if (e.key.toLowerCase() === "z") {
+        if (keyCode === "KeyZ") {
           e.preventDefault();
           document.getElementById("action-toggle-word-wrap")?.click();
         }
@@ -2506,6 +2547,10 @@ export class TypstryWorkspaceController {
 
     document.getElementById("action-redo")?.addEventListener("click", () => {
       redo({ state: this.editorInstance.state, dispatch: this.editorInstance.dispatch });
+    });
+
+    document.getElementById("action-format-document")?.addEventListener("click", () => {
+      void this.formatActiveDocument();
     });
 
     document.getElementById("action-toggle-word-wrap")?.addEventListener("click", () => {
