@@ -30,3 +30,4 @@ Thumbs.db
 # Others
 implementation-plan.md
 vite.config.ts.timestamp-*.mjs
+assets/debug

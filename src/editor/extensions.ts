@@ -1,4 +1,4 @@
-import { Extension, Compartment, EditorState, StateEffect, RangeSetBuilder } from "@codemirror/state";
+import { Extension, Compartment, EditorState, StateEffect, RangeSetBuilder, Prec } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, WidgetType } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -12,7 +12,7 @@ import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import * as uiwThemes from "@uiw/codemirror-themes-all";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { createTypstAutocomplete, type ProviderCapabilities } from "./autocomplete";
-import { completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { acceptCompletion, completionKeymap, closeBrackets, closeBracketsKeymap, moveCompletionSelection } from "@codemirror/autocomplete";
 import { bracketMatching } from "@codemirror/language";
 import { toggleLineComment } from "@codemirror/commands";
 import { bracketColorizer } from "./bracketColorizer";
@@ -31,6 +31,26 @@ export const indentationGuidesCompartment = new Compartment();
 export const tabSizeCompartment = new Compartment();
 export const completionCompartment = new Compartment();
 export const showZwsCompartment = new Compartment();
+
+const completionNavigationHandler = Prec.highest(EditorView.domEventHandlers({
+  keydown(event, view) {
+    let handled = false;
+    if (event.key === "ArrowDown") {
+      handled = moveCompletionSelection(true)(view);
+    } else if (event.key === "ArrowUp") {
+      handled = moveCompletionSelection(false)(view);
+    } else if (event.key === "PageDown") {
+      handled = moveCompletionSelection(true, "page")(view);
+    } else if (event.key === "PageUp") {
+      handled = moveCompletionSelection(false, "page")(view);
+    } else if (event.key === "Enter") {
+      handled = acceptCompletion(view);
+    }
+    if (!handled) return false;
+    event.preventDefault();
+    return true;
+  }
+}));
 
 function foldedTypstPlaceholderSuffix(state: EditorState, range: { from: number; to: number }): string {
   const foldedText = state.doc.sliceString(range.from, range.to).trimEnd();
@@ -281,6 +301,7 @@ export function getEditorExtensions(
     bracketColorizer,
     createHoverTooltip(getClient, getUri),
     completionCompartment.of(createTypstAutocomplete(getClient, getUri, flushLspSync, true, getProviders)),
+    completionNavigationHandler,
     themeCompartment.of(getThemeExtension("default")),
     editorFontCompartment.of(editorFontTheme()),
     keymap.of([
@@ -291,13 +312,13 @@ export function getEditorExtensions(
       { key: "ArrowRight", run: moveNextGrapheme },
       { key: "Shift-ArrowLeft", run: selectPreviousGrapheme },
       { key: "Shift-ArrowRight", run: selectNextGrapheme },
+      ...completionKeymap,
       indentWithTab, 
       ...closeBracketsKeymap, 
       ...defaultKeymap, 
       ...historyKeymap, 
       ...searchKeymap, 
-      ...foldKeymap,
-      ...completionKeymap
+      ...foldKeymap
     ])
   ];
 }

@@ -98,6 +98,10 @@ type LoadFileOptions = {
   preservePreviewSession?: PreviewSessionState;
 };
 
+function normalizeEditorText(text: string): string {
+  return text.replace(/\r\n?/g, "\n");
+}
+
 export class TypstryWorkspaceController {
   private activeMode: EditorMode = "CODE";
   private activeFilePath: string | null = null;
@@ -1131,7 +1135,7 @@ export class TypstryWorkspaceController {
     }
 
     try {
-      const contents: string = await invoke("read_workspace_file", { path });
+      const contents = normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
       const newTab: EditorTab = {
         path,
         content: contents,
@@ -2230,7 +2234,7 @@ export class TypstryWorkspaceController {
       if (state.openTabs.length) {
         for (const tabInfo of state.openTabs) {
           try {
-             const contents: string = await invoke("read_workspace_file", { path: tabInfo.path });
+             const contents = normalizeEditorText(await invoke<string>("read_workspace_file", { path: tabInfo.path }));
              this.openTabs.push({
                path: tabInfo.path,
                content: contents,
@@ -2331,7 +2335,7 @@ export class TypstryWorkspaceController {
 
       let contents: string;
       try {
-        contents = await invoke<string>("read_workspace_file", { path: tab.path });
+        contents = normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
       } catch (error) {
         console.warn(`Unable to reload ${tab.path}:`, error);
         continue;
