@@ -84,6 +84,20 @@ type EditorTab = {
   temporary?: boolean;
 };
 
+type PreviewSessionState = Pick<
+  EditorTab,
+  "previewRootPath" | "previewMainPath" | "previewTaskId" | "previewSessionKey" | "previewImported" | "previewLiveUpdates"
+>;
+
+type ActivateEditorTabOptions = {
+  preservePreviewSession?: PreviewSessionState;
+};
+
+type LoadFileOptions = {
+  temporary?: boolean;
+  preservePreviewSession?: PreviewSessionState;
+};
+
 export class TypstryWorkspaceController {
   private activeMode: EditorMode = "CODE";
   private activeFilePath: string | null = null;
@@ -874,11 +888,18 @@ export class TypstryWorkspaceController {
     this.saveWorkspaceState();
   }
 
-  private async activateEditorTab(path: string, persistCurrent = true) {
+  private async activateEditorTab(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}) {
     if (this.activeFilePath === path) {
       if (persistCurrent) {
         this.persistActiveTabState();
         this.renderEditorTabs();
+      }
+      if (options.preservePreviewSession) {
+        const tab = this.getActiveTab();
+        if (tab) this.applyPreviewSessionToTab(tab, options.preservePreviewSession);
+        if (options.preservePreviewSession.previewSessionKey) {
+          this.previewFrame.activateSession(options.preservePreviewSession.previewSessionKey);
+        }
       }
       this.editorInstance.focus();
       this.saveWorkspaceState();
@@ -922,13 +943,29 @@ export class TypstryWorkspaceController {
 
     this.activeFilePath = path;
     await this.prepareRenderProjectIfNeeded();
-    let previewTarget = await invoke<PreviewTarget>("resolve_preview_main", {
-      filePath: path,
-      workspaceRootPath: this.workspaceRootPath,
-      fileContents: tab.content
-    });
-    previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
-    this.applyPreviewTargetToTab(tab, previewTarget);
+    let previewTarget: PreviewTarget | null = null;
+    if (options.preservePreviewSession) {
+      this.applyPreviewSessionToTab(tab, options.preservePreviewSession);
+      if (options.preservePreviewSession.previewSessionKey) {
+        this.previewFrame.activateSession(options.preservePreviewSession.previewSessionKey);
+      }
+    } else {
+      previewTarget = await invoke<PreviewTarget>("resolve_preview_main", {
+        filePath: path,
+        workspaceRootPath: this.workspaceRootPath,
+        fileContents: tab.content
+      });
+      previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
+      const existingMainSession = this.captureCurrentMainSessionForImportedTarget(previewTarget);
+      if (existingMainSession) {
+        this.applyPreviewSessionToTab(tab, existingMainSession);
+        if (existingMainSession.previewSessionKey) {
+          this.previewFrame.activateSession(existingMainSession.previewSessionKey);
+        }
+      } else {
+        this.applyPreviewTargetToTab(tab, previewTarget);
+      }
+    }
     this.clearPendingLspSync();
     this.previewSyncController.clearForward();
     this.renderEditorTabs();
@@ -955,12 +992,16 @@ export class TypstryWorkspaceController {
         const { uri: lspUri, content: lspContent } = lspRes;
         await this.openDocumentIfNeeded(lspUri, lspContent, this.currentVersion);
       }
-      const pinChanged = await this.updatePinnedMain(previewTarget.mainPath);
+      const pinChanged = await this.updatePinnedMain(previewTarget?.mainPath ?? this.previewMainPath);
       if (pinChanged) {
         await this.recheckActiveDocumentAfterPin(tab.content);
       }
 
-      if (this.previewRootPath) {
+      if (options.preservePreviewSession) {
+        // Inverse sync may switch from a main file into one of its includes. Keep the
+        // preview session that produced the click instead of resolving and mounting a
+        // separate include-file preview, otherwise scroll state and DOM interception reset.
+      } else if (this.previewRootPath) {
         const previewReady = await this.activatePreviewSession(tab.content);
         if (!previewReady) {
           this.previewFrame.setMessage(`<div style="padding: 20px; color: red; font-family: var(--font-family-sans);">Failed to start live preview server after restart. Check the log console for details.</div>`);
@@ -970,7 +1011,9 @@ export class TypstryWorkspaceController {
       }
     } else {
       void this.runFallbackDiagnostics(path, tab.content, this.currentVersion);
-      await this.renderCompilerPreview(path, tab.content);
+      if (!options.preservePreviewSession) {
+        await this.renderCompilerPreview(path, tab.content);
+      }
     }
 
     if (this.activeMode === "WYSIWYM") {
@@ -1072,13 +1115,15 @@ export class TypstryWorkspaceController {
     }, this.lspSyncDebounceMs);
   }
 
-  private async loadFile(path: string, options: { temporary?: boolean } = {}) {
+  private async loadFile(path: string, options: LoadFileOptions = {}) {
     const existingTab = this.openTabs.find((tab) => filePathKey(tab.path) === filePathKey(path));
     if (existingTab) {
       if (!options.temporary) {
         void this.promoteToPermanent(existingTab);
       }
-      await this.activateEditorTab(existingTab.path);
+      await this.activateEditorTab(existingTab.path, true, {
+        preservePreviewSession: options.preservePreviewSession
+      });
       return;
     }
 
@@ -1112,7 +1157,9 @@ export class TypstryWorkspaceController {
 
       this.openTabs.push(newTab);
       this.renderEditorTabs();
-      await this.activateEditorTab(path);
+      await this.activateEditorTab(path, true, {
+        preservePreviewSession: options.preservePreviewSession
+      });
     } catch (e) {
       console.error("Failed to load file:", e);
       alert("Failed to load file: " + e);
@@ -1345,6 +1392,50 @@ export class TypstryWorkspaceController {
     this.previewSessionKey = tab.previewSessionKey;
     this.previewImported = tab.previewImported;
     this.previewLiveUpdates = tab.previewLiveUpdates;
+  }
+
+  private capturePreviewSession(): PreviewSessionState {
+    return {
+      previewRootPath: this.previewRootPath,
+      previewMainPath: this.previewMainPath,
+      previewTaskId: this.previewTaskId,
+      previewSessionKey: this.previewSessionKey,
+      previewImported: this.previewImported,
+      previewLiveUpdates: this.previewLiveUpdates
+    };
+  }
+
+  private captureCurrentMainSessionForImportedTarget(target: PreviewTarget): PreviewSessionState | null {
+    if (!target.imported || !target.mainPath || !this.previewRootPath || !this.previewSessionKey) {
+      return null;
+    }
+    const mappedMainPath = this.settingsController.value.preview.khmerRenderPreparation
+      ? this.mapToCachePath(target.mainPath)
+      : target.mainPath;
+    if (!mappedMainPath) return null;
+    const mainKey = filePathKey(mappedMainPath);
+    const currentRootMatchesMain = filePathKey(this.previewRootPath) === mainKey;
+    const currentMainMatchesMain = this.previewMainPath
+      ? filePathKey(this.previewMainPath) === mainKey
+      : false;
+    return currentRootMatchesMain || currentMainMatchesMain
+      ? this.capturePreviewSession()
+      : null;
+  }
+
+  private applyPreviewSessionToTab(tab: EditorTab, session: PreviewSessionState): void {
+    tab.previewRootPath = session.previewRootPath;
+    tab.previewMainPath = session.previewMainPath;
+    tab.previewTaskId = session.previewTaskId;
+    tab.previewSessionKey = session.previewSessionKey;
+    tab.previewImported = session.previewImported;
+    tab.previewLiveUpdates = session.previewLiveUpdates;
+    this.previewRootPath = session.previewRootPath;
+    this.previewMainPath = session.previewMainPath;
+    this.previewTaskId = session.previewTaskId;
+    this.previewSessionKey = session.previewSessionKey;
+    this.previewImported = session.previewImported;
+    this.previewLiveUpdates = session.previewLiveUpdates;
   }
 
   private async rootRelativeTypstPath(path: string): Promise<string | null> {
@@ -1720,7 +1811,9 @@ export class TypstryWorkspaceController {
       : null;
     const resolvedTargetPath = existingTargetTab?.path ?? targetPath;
     if (resolvedTargetPath && filePathKey(resolvedTargetPath) !== filePathKey(this.activeFilePath ?? "")) {
-      await this.loadFile(resolvedTargetPath);
+      await this.loadFile(resolvedTargetPath, {
+        preservePreviewSession: this.capturePreviewSession()
+      });
     }
 
     if (this.activeMode === "WYSIWYM") {
