@@ -19,6 +19,7 @@ import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
 import type { TinymistLspClient } from "../compiler/lsp";
 import { typstFunctionFoldService } from "./folding";
+import { deleteNextGrapheme, deletePreviousGrapheme, moveNextGrapheme, movePreviousGrapheme, snapSelectionUpdateToGraphemeBoundaries } from "./grapheme";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -212,6 +213,11 @@ export function getEditorExtensions(
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
+    ViewPlugin.fromClass(class {
+      update(update: ViewUpdate) {
+        snapSelectionUpdateToGraphemeBoundaries(update);
+      }
+    }),
     showZwsCompartment.of(showZeroWidthSpaces),
     preventEscapedBracketAutoClose,
     EditorView.domEventHandlers({
@@ -283,6 +289,10 @@ export function getEditorExtensions(
     editorFontCompartment.of(editorFontTheme()),
     keymap.of([
       { key: "Mod-/", run: toggleLineComment },
+      { key: "Backspace", run: deletePreviousGrapheme },
+      { key: "Delete", run: deleteNextGrapheme },
+      { key: "ArrowLeft", run: movePreviousGrapheme },
+      { key: "ArrowRight", run: moveNextGrapheme },
       indentWithTab, 
       ...closeBracketsKeymap, 
       ...defaultKeymap, 

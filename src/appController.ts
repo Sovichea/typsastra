@@ -23,8 +23,8 @@ import type { AppSettings } from "./settings";
 import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, relativeFilePath } from "./platform/paths";
 import { WysiwymAdapter } from "./wysiwym/adapter";
-import { PreviewFrame } from "./preview/previewFrame";
-import { PreviewSyncController } from "./preview/previewSyncController";
+import { PreviewFrame, type PreviewInteractionStatus } from "./preview/previewFrame";
+import { PreviewSyncController, type InverseSyncResult } from "./preview/previewSyncController";
 import { allowsLiveImportPreview, previewRefreshStyle, previewSessionIdentity, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
@@ -149,6 +149,8 @@ export class TypstryWorkspaceController {
   private previewPane = document.getElementById("preview-render-pane")!;
   private readonly previewFrame = new PreviewFrame(this.previewPane, point => {
     this.previewSyncController.recordTextClick(point);
+  }, status => {
+    this.reportPreviewInteractionStatus(status);
   });
   private readonly previewSyncController = new PreviewSyncController({
     getEditor: () => this.editorInstance,
@@ -1461,7 +1463,13 @@ export class TypstryWorkspaceController {
     if (pinChanged) {
       await this.recheckActiveDocumentAfterPin(activeContents);
     }
-    await this.previewFrame.mountSession(this.previewSessionKey, previewUrl);
+    await this.previewFrame.mountSession(
+      this.previewSessionKey,
+      previewUrl,
+      filePathKey(this.previewMainPath ?? this.previewRootPath),
+      () => this.lspClient.getPreviewHtml(),
+      this.lspClient.getLatestPreviewDataPlaneUrl()
+    );
     return true;
   }
 
@@ -1731,8 +1739,48 @@ export class TypstryWorkspaceController {
       return defaultCursorPos;
     } else {
       defaultCursorPos = this.editorPositionFromLspPosition(position) ?? 0;
-      return this.previewSyncController.mapInversePosition(position, defaultCursorPos);
+      const result = this.previewSyncController.mapInversePosition(position, defaultCursorPos);
+      this.reportInverseSyncResult(result, position);
+      return result.cursor;
     }
+  }
+
+  private reportPreviewInteractionStatus(status: PreviewInteractionStatus): void {
+    if (!this.settingsController.value.developerMode) return;
+    if (status.kind === "installed") {
+      this.setLspStatus({ kind: "preview-ready", message: "Inverse sync refinement active" });
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "inverse sync",
+        message: `Preview DOM interception installed for ${status.url}`
+      });
+      return;
+    }
+    this.setLspStatus({ kind: "preview-ready", message: "Inverse sync refinement blocked" });
+    this.appendDeveloperLog({
+      kind: "warning",
+      source: "inverse sync",
+      message: `Preview DOM interception blocked for ${status.url}: ${status.reason ?? "unknown reason"}. Inverse sync will use Tinymist's raw source position only.`
+    });
+  }
+
+  private reportInverseSyncResult(result: InverseSyncResult, position: LspSourcePosition): void {
+    if (!this.settingsController.value.developerMode) return;
+    if (result.refined) {
+      this.setLspStatus({ kind: "preview-ready", message: `Inverse sync refined to line ${(result.sourceLine ?? position.line) + 1}` });
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "inverse sync",
+        message: `Refined preview click: line ${position.line + 1}, fallback offset ${result.fallback}, source offset ${result.sourceOffset}, preview offset ${result.previewOffset}/${result.previewTextLength}, sample "${result.clickedTextSample ?? ""}".`
+      });
+      return;
+    }
+    this.setLspStatus({ kind: "preview-ready", message: `Inverse sync fallback: ${result.reason}` });
+    this.appendDeveloperLog({
+      kind: "warning",
+      source: "inverse sync",
+      message: `Fallback used (${result.reason}): line ${position.line + 1}, fallback offset ${result.fallback}, preview offset ${result.previewOffset ?? "n/a"}/${result.previewTextLength ?? "n/a"}, sample "${result.clickedTextSample ?? ""}".`
+    });
   }
 
   private utf8ByteLength(text: string): number {
@@ -1844,6 +1892,11 @@ export class TypstryWorkspaceController {
       source: entry.source ?? "tinymist",
       message: entry.message
     });
+  }
+
+  private appendDeveloperLog(entry: LspLogEntry) {
+    if (!this.settingsController.value.developerMode) return;
+    this.appendLspLog(entry);
   }
 
   private recordLspSync(uri: string, path: string, editorText: string, version: number) {

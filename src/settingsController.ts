@@ -125,6 +125,7 @@ export class SettingsController {
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
     onChange("settings-khmer-prep", (settings, control) => { settings.preview.khmerRenderPreparation = (control as HTMLInputElement).checked; });
+    onChange("settings-developer-mode", (settings, control) => { settings.developerMode = (control as HTMLInputElement).checked; });
 
     document.getElementById("settings-reset")?.addEventListener("click", async () => {
       if (await confirm("Reset all application settings to their defaults?", { title: "Reset Settings", kind: "warning" })) {
@@ -208,6 +209,7 @@ export class SettingsController {
     setChecked("settings-format-on-save", editor.formatOnSave);
     setChecked("settings-cursor-sync", preview.cursorSync);
     setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
+    setChecked("settings-developer-mode", this.settings.developerMode);
 
     const path = document.getElementById("settings-file-path");
     if (path) {

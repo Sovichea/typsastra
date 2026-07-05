@@ -13,6 +13,7 @@ export type ThemeName = typeof themeNames[number];
 
 export type AppSettings = {
   version: 1;
+  developerMode: boolean;
   appearance: {
     theme: ThemeName;
     editorFontSize: number;
@@ -46,6 +47,7 @@ export type AppSettings = {
 
 export const defaultAppSettings: AppSettings = {
   version: 1,
+  developerMode: false,
   appearance: {
     theme: "default",
     editorFontSize: 14,
@@ -108,6 +110,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
 
   return {
     version: 1,
+    developerMode: booleanValue(root.developerMode, defaultAppSettings.developerMode),
     appearance: {
       theme,
       editorFontSize: boundedNumber(appearance.editorFontSize, defaultAppSettings.appearance.editorFontSize, 10, 32),

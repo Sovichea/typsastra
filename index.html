@@ -430,6 +430,7 @@
           <button class="settings-nav-item" type="button" data-settings-panel="editor">Editor</button>
           <button class="settings-nav-item" type="button" data-settings-panel="preview">Preview</button>
           <button class="settings-nav-item" type="button" data-settings-panel="toolchain">Toolchain</button>
+          <button class="settings-nav-item" type="button" data-settings-panel="developer">Developer</button>
         </nav>
         <div class="settings-panels">
           <div class="settings-panel active" data-settings-panel-content="appearance">
@@ -517,6 +518,11 @@
             </div>
             <p class="settings-help">Only stable Tinymist releases are listed. Each release includes its compatible Typst compiler.</p>
             <button id="settings-toolchain-refresh" class="settings-secondary-button" type="button">Refresh releases</button>
+          </div>
+
+          <div class="settings-panel" data-settings-panel-content="developer">
+            <h3>Developer</h3>
+            <label class="settings-toggle"><input id="settings-developer-mode" type="checkbox"><span><strong>Developer mode</strong><small>Show Typstry debug instrumentation such as inverse-sync refinement logs. LSP/compiler diagnostics and errors are always shown.</small></span></label>
           </div>
         </div>
       </div>

@@ -14,6 +14,18 @@ export type PreviewSyncDependencies = {
   mapForwardPosition?: (path: string, cursor: number) => Promise<{ filepath: string; line: number; character: number } | null>;
 };
 
+export type InverseSyncResult = {
+  cursor: number;
+  refined: boolean;
+  reason: "refined" | "no-click" | "stale-click" | "empty-click" | "no-editor" | "no-source-match";
+  fallback: number;
+  previewTextLength?: number;
+  previewOffset?: number;
+  sourceLine?: number;
+  sourceOffset?: number;
+  clickedTextSample?: string;
+};
+
 export class PreviewSyncController {
   private forwardTimer: number | null = null;
   private pendingTextClick: (PreviewTextPoint & { timestamp: number }) | null = null;
@@ -101,7 +113,7 @@ export class PreviewSyncController {
     this.pendingTextClick = null;
   }
 
-  public mapInversePosition(position: LspSourcePosition, fallback: number): number {
+  public mapInversePosition(position: LspSourcePosition, fallback: number): InverseSyncResult {
     return this.refineFromTextClick(position, fallback);
   }
 
@@ -114,14 +126,57 @@ export class PreviewSyncController {
       && !!this.dependencies.getClient();
   }
 
-  private refineFromTextClick(position: LspSourcePosition, fallback: number): number {
+  private refineFromTextClick(position: LspSourcePosition, fallback: number): InverseSyncResult {
     const click = this.pendingTextClick;
     this.pendingTextClick = null;
     const editor = this.dependencies.getEditor();
-    if (!editor || !click || Date.now() - click.timestamp > 1500 || !click.text.trim()) return fallback;
+    if (!editor) return { cursor: fallback, refined: false, reason: "no-editor", fallback };
+    if (!click) return { cursor: fallback, refined: false, reason: "no-click", fallback };
+    if (Date.now() - click.timestamp > 1500) {
+      return this.inverseFallback("stale-click", fallback, click, position);
+    }
+    if (!click.text.trim()) {
+      return this.inverseFallback("empty-click", fallback, click, position);
+    }
     const doc = editor.state.doc;
     const line = doc.line(Math.max(1, Math.min(position.line + 1, doc.lines)));
-    const match = findPreviewTextMatchInSourceLine(line.text, click.text, click.offset);
-    return match ? Math.max(line.from, Math.min(line.from + match.sourceOffset, line.to)) : fallback;
+    const match = findPreviewTextMatchInSourceLine(line.text, click.text, click.offset, Math.max(0, fallback - line.from));
+    if (!match) return this.inverseFallback("no-source-match", fallback, click, position);
+    const cursor = Math.max(line.from, Math.min(line.from + match.sourceOffset, line.to));
+    return {
+      cursor,
+      refined: true,
+      reason: "refined",
+      fallback,
+      previewTextLength: click.text.length,
+      previewOffset: click.offset,
+      sourceLine: position.line,
+      sourceOffset: match.sourceOffset,
+      clickedTextSample: sampleClickText(click.text, click.offset)
+    };
   }
+
+  private inverseFallback(
+    reason: InverseSyncResult["reason"],
+    fallback: number,
+    click: PreviewTextPoint,
+    position: LspSourcePosition
+  ): InverseSyncResult {
+    return {
+      cursor: fallback,
+      refined: false,
+      reason,
+      fallback,
+      previewTextLength: click.text.length,
+      previewOffset: click.offset,
+      sourceLine: position.line,
+      clickedTextSample: sampleClickText(click.text, click.offset)
+    };
+  }
+}
+
+function sampleClickText(text: string, offset: number): string {
+  const start = Math.max(0, offset - 24);
+  const end = Math.min(text.length, offset + 48);
+  return text.slice(start, end).replace(/\s+/g, " ");
 }

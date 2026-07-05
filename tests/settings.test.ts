@@ -6,6 +6,7 @@ describe("application settings", () => {
     const settings = normalizeAppSettings({ appearance: { theme: "nord" } });
 
     expect(settings.appearance.theme).toBe("nord");
+    expect(settings.developerMode).toBe(false);
     expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
@@ -21,6 +22,7 @@ describe("application settings", () => {
 
   test("rejects unsupported enums and clamps numeric values", () => {
     const settings = normalizeAppSettings({
+      developerMode: true,
       appearance: { theme: "unknown", editorFontSize: 80, editorLineHeight: 0.5 },
       editor: { tabSize: 3, codeFont: "MiSans Latin", unicodeFont: "unknown-font" },
       preview: { syncDebounceMs: 1, highlightDurationMs: 50000 },
@@ -28,6 +30,7 @@ describe("application settings", () => {
     });
 
     expect(settings.appearance.theme).toBe("default");
+    expect(settings.developerMode).toBe(true);
     expect(settings.appearance.editorFontSize).toBe(32);
     expect(settings.appearance.editorLineHeight).toBe(1.2);
     expect(settings.editor.tabSize).toBe(2);
@@ -51,8 +54,10 @@ describe("application settings", () => {
     const first = cloneDefaultAppSettings();
     const second = cloneDefaultAppSettings();
     first.editor.wordWrap = false;
+    first.developerMode = true;
 
     expect(second.editor.wordWrap).toBe(true);
+    expect(second.developerMode).toBe(false);
   });
 
   test("normalizes and deduplicates personal dictionary words", () => {
