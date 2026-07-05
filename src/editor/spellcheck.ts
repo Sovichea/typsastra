@@ -20,6 +20,11 @@ export type AnalyzeResponse = {
 export type ProviderCapabilities = {
   id: string;
   pattern: string;
+  displayName?: string;
+  languageTag?: string;
+  engine?: string;
+  supportLevel?: string;
+  boundaryMode?: string;
 };
 
 export type SpellingIssue = {

@@ -226,6 +226,42 @@ export function typstCompletions(context: CompletionContext) {
   };
 }
 
+export function allowsLanguageWordCompletionOnLine(lineText: string, wordFrom: number): boolean {
+  const beforeWord = lineText.slice(0, Math.max(0, Math.min(wordFrom, lineText.length)));
+  if (isInsideTypstCodeString(lineText, wordFrom)) return false;
+  const lastHash = beforeWord.lastIndexOf("#");
+  if (lastHash === -1) return true;
+  const lastOpenContent = beforeWord.lastIndexOf("[");
+  const lastCloseContent = beforeWord.lastIndexOf("]");
+  return Math.max(lastOpenContent, lastCloseContent) > lastHash;
+}
+
+function isInsideTypstCodeString(lineText: string, position: number): boolean {
+  const before = lineText.slice(0, Math.max(0, Math.min(position, lineText.length)));
+  const openQuote = lastUnescapedQuote(before);
+  if (openQuote === null) return false;
+  const after = lineText.slice(position);
+  const closeQuote = firstUnescapedQuote(after);
+  if (closeQuote === null) return false;
+  const afterClose = after.slice(closeQuote + 1).trimStart();
+  return before.slice(0, openQuote).includes("#")
+    || /^[),:\]]/.test(afterClose);
+}
+
+function lastUnescapedQuote(text: string): number | null {
+  for (let index = text.length - 1; index >= 0; index -= 1) {
+    if (text[index] === '"' && !isEscaped(text, index)) return index;
+  }
+  return null;
+}
+
+function firstUnescapedQuote(text: string): number | null {
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '"' && !isEscaped(text, index)) return index;
+  }
+  return null;
+}
+
 function getCmCompletionType(kind?: number): string {
   switch (kind) {
     case 1: return "text";
@@ -246,6 +282,11 @@ function getCmCompletionType(kind?: number): string {
 export type ProviderCapabilities = {
   id: string;
   pattern: string;
+  displayName?: string;
+  languageTag?: string;
+  engine?: string;
+  supportLevel?: string;
+  boundaryMode?: string;
 };
 
 export function createTypstAutocomplete(
@@ -264,6 +305,10 @@ export function createTypstAutocomplete(
             const pattern = new RegExp(provider.pattern + "$", "u");
             const word = context.matchBefore(pattern);
             if (word) {
+              const line = context.state.doc.lineAt(context.pos);
+              if (!allowsLanguageWordCompletionOnLine(line.text, word.from - line.from)) {
+                return null;
+              }
               try {
                 const completion = await invoke<LanguageCompletionResponse | null>("complete_language_word", {
                   request: {

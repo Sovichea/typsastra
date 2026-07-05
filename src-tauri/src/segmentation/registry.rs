@@ -3,6 +3,7 @@ use super::provider::{
     LanguageSegmenter, ProviderCapabilities, SegmentToken, SuggestionRequest, SuggestionResponse,
     TextAnalysis,
 };
+use crate::render_prepare::scanner::{scan_typst_content, ScanState};
 use khmer_segmenter::kdict::{KDict, KHypDict};
 use khmer_segmenter::{KhmerSegmenter, SegmenterConfig};
 use std::collections::{HashMap, HashSet};
@@ -15,6 +16,8 @@ const KHMER_WORDS: &str = include_str!(
 );
 const KHMER_HYPHENATION: &[u8] =
     include_bytes!("../../../third_party/khmer_segmenter/port/common/khmer_hyphenation.kdict");
+const EN_US_AFF: &str = include_str!("../../resources/dictionaries/hunspell/en_US/en_US.aff");
+const EN_US_DIC: &str = include_str!("../../resources/dictionaries/hunspell/en_US/en_US.dic");
 
 fn khmer_clusters(text: &str) -> Vec<String> {
     let mut clusters = Vec::new();
@@ -177,6 +180,26 @@ fn modern_khmer_key(text: &str) -> String {
 impl LanguageSegmenter for KhmerProvider {
     fn id(&self) -> &'static str {
         "khmer-segmenter"
+    }
+
+    fn display_name(&self) -> &'static str {
+        "Khmer"
+    }
+
+    fn language_tag(&self) -> &'static str {
+        "km"
+    }
+
+    fn engine(&self) -> &'static str {
+        "khmer_segmenter"
+    }
+
+    fn support_level(&self) -> &'static str {
+        "experimental"
+    }
+
+    fn boundary_mode(&self) -> &'static str {
+        "custom-segmenter"
     }
 
     fn pattern(&self) -> &'static str {
@@ -391,6 +414,362 @@ impl LanguageSegmenter for KhmerProvider {
     }
 }
 
+struct EnglishHunspellProvider {
+    dictionary: spellbook::Dictionary,
+    completion_words: Vec<String>,
+    known_stems: HashSet<String>,
+}
+
+impl EnglishHunspellProvider {
+    fn new() -> Result<Self, String> {
+        let dictionary = spellbook::Dictionary::new(EN_US_AFF, EN_US_DIC)
+            .map_err(|error| format!("Failed to load en_US dictionary: {error}"))?;
+        let mut completion_words: Vec<String> = EN_US_DIC
+            .lines()
+            .skip(1)
+            .filter_map(hunspell_dic_stem)
+            .filter(|word| is_completion_word(word))
+            .map(|word| word.to_ascii_lowercase())
+            .collect();
+        completion_words.sort();
+        completion_words.dedup();
+        let known_stems = completion_words.iter().cloned().collect();
+        Ok(Self {
+            dictionary,
+            completion_words,
+            known_stems,
+        })
+    }
+
+    fn has_prefix(&self, prefix: &str) -> bool {
+        let prefix = normalize_english_word(prefix);
+        if prefix.len() < 2 {
+            return false;
+        }
+        let index = self
+            .completion_words
+            .partition_point(|candidate| candidate.as_str() < prefix.as_str());
+        self.completion_words
+            .get(index)
+            .is_some_and(|candidate| candidate.starts_with(&prefix))
+    }
+
+    fn should_skip_token(&self, text: &str, from: usize, to: usize) -> bool {
+        let word = &text[from..to];
+        if word.len() <= 1 || word.chars().all(|c| c.is_ascii_uppercase()) {
+            return true;
+        }
+        if word.contains('_') || word.chars().any(|c| c.is_ascii_digit()) {
+            return true;
+        }
+        if word.chars().any(|c| c.is_ascii_uppercase())
+            && !is_title_case_word(word)
+            && !word.chars().all(|c| c.is_ascii_uppercase())
+        {
+            return true;
+        }
+        let previous = text[..from].chars().next_back();
+        if matches!(previous, Some('#' | '@' | '_' | '\\')) {
+            return true;
+        }
+        if matches!(previous, Some('.')) && text[..from].ends_with("..") {
+            return true;
+        }
+        let next = text[to..].chars().next();
+        if matches!(next, Some('@')) || looks_like_url_context(text, from, to) {
+            return true;
+        }
+        if is_inside_typst_code_string(text, from, to) {
+            return true;
+        }
+        false
+    }
+}
+
+impl LanguageSegmenter for EnglishHunspellProvider {
+    fn id(&self) -> &'static str {
+        "hunspell:en_US"
+    }
+
+    fn display_name(&self) -> &'static str {
+        "English (US)"
+    }
+
+    fn language_tag(&self) -> &'static str {
+        "en-US"
+    }
+
+    fn engine(&self) -> &'static str {
+        "spellbook"
+    }
+
+    fn support_level(&self) -> &'static str {
+        "full"
+    }
+
+    fn boundary_mode(&self) -> &'static str {
+        "unicode-word"
+    }
+
+    fn pattern(&self) -> &'static str {
+        "[A-Za-z][A-Za-z'’\\-]*"
+    }
+
+    fn supports(&self, text: &str) -> bool {
+        text.chars()
+            .any(|character| character.is_ascii_alphabetic())
+    }
+
+    fn analyze(&self, text: &str) -> Result<TextAnalysis, String> {
+        let mut tokens = Vec::new();
+        let mut start = None::<(usize, usize)>;
+        let mut current_utf16 = 0;
+        for (byte_index, character) in text.char_indices() {
+            let is_word = is_english_token_char(character);
+            match (start, is_word) {
+                (None, true) => start = Some((byte_index, current_utf16)),
+                (Some((from_byte, from_utf16)), false) => {
+                    self.push_token(
+                        text,
+                        from_byte,
+                        byte_index,
+                        from_utf16,
+                        current_utf16,
+                        &mut tokens,
+                    );
+                    start = None;
+                }
+                _ => {}
+            }
+            current_utf16 += character.len_utf16();
+        }
+        if let Some((from_byte, from_utf16)) = start {
+            self.push_token(
+                text,
+                from_byte,
+                text.len(),
+                from_utf16,
+                current_utf16,
+                &mut tokens,
+            );
+        }
+        Ok(TextAnalysis {
+            provider: self.id(),
+            normalized_changed: false,
+            tokens,
+        })
+    }
+
+    fn suggestions(&self, word: &str, limit: usize) -> Vec<String> {
+        if word.trim().is_empty() || limit == 0 {
+            return Vec::new();
+        }
+        let mut output = Vec::new();
+        self.dictionary.suggest(word, &mut output);
+        output.truncate(limit);
+        output
+    }
+
+    fn is_known_word(&self, word: &str) -> bool {
+        self.dictionary.check(word) || self.known_stems.contains(&normalize_english_word(word))
+    }
+
+    fn autocomplete(&self, prefix: &str, limit: usize) -> Vec<String> {
+        if limit == 0 {
+            return Vec::new();
+        }
+        let normalized = normalize_english_word(prefix);
+        if normalized.len() < 2 {
+            return Vec::new();
+        }
+        let index = self
+            .completion_words
+            .partition_point(|candidate| candidate.as_str() < normalized.as_str());
+        self.completion_words
+            .iter()
+            .skip(index)
+            .take_while(|candidate| candidate.starts_with(&normalized))
+            .filter(|candidate| candidate.as_str() != normalized.as_str())
+            .take(limit)
+            .map(|candidate| apply_english_casing(prefix, candidate))
+            .collect()
+    }
+}
+
+impl EnglishHunspellProvider {
+    fn push_token(
+        &self,
+        text: &str,
+        from_byte: usize,
+        to_byte: usize,
+        from_utf16: usize,
+        to_utf16: usize,
+        tokens: &mut Vec<SegmentToken>,
+    ) {
+        let original_from_byte = from_byte;
+        let original_to_byte = to_byte;
+        let (trimmed_from_byte, trimmed_to_byte) = trim_english_token(text, from_byte, to_byte);
+        if trimmed_from_byte >= trimmed_to_byte
+            || self.should_skip_token(text, trimmed_from_byte, trimmed_to_byte)
+        {
+            return;
+        }
+        let word = &text[trimmed_from_byte..trimmed_to_byte];
+        let normalized = normalize_english_word(word);
+        let trim_start_utf16 = text[original_from_byte..trimmed_from_byte]
+            .encode_utf16()
+            .count();
+        let trim_end_utf16 = text[trimmed_to_byte..original_to_byte]
+            .encode_utf16()
+            .count();
+        let known = self.dictionary.check(word) || self.dictionary.check(&normalized);
+        tokens.push(SegmentToken {
+            text: normalized.clone(),
+            from: from_utf16 + trim_start_utf16,
+            to: to_utf16 - trim_end_utf16,
+            known,
+            known_prefix: known || self.has_prefix(&normalized),
+            hyphenated: None,
+        });
+    }
+}
+
+fn hunspell_dic_stem(line: &str) -> Option<&str> {
+    let value = line.trim();
+    if value.is_empty() || value.starts_with('#') {
+        return None;
+    }
+    let stem = value
+        .split_once('/')
+        .map(|(stem, _)| stem)
+        .unwrap_or(value)
+        .split_whitespace()
+        .next()
+        .unwrap_or("");
+    (!stem.is_empty()).then_some(stem)
+}
+
+fn is_completion_word(word: &str) -> bool {
+    word.len() >= 2
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphabetic() || matches!(c, '\'' | '’' | '-'))
+        && word.chars().any(|c| c.is_ascii_alphabetic())
+}
+
+fn is_english_token_char(character: char) -> bool {
+    character.is_ascii_alphabetic() || matches!(character, '\'' | '’' | '-')
+}
+
+fn trim_english_token(text: &str, mut from: usize, mut to: usize) -> (usize, usize) {
+    while from < to {
+        let Some(character) = text[from..to].chars().next() else {
+            break;
+        };
+        if character.is_ascii_alphabetic() {
+            break;
+        }
+        from += character.len_utf8();
+    }
+    while from < to {
+        let Some(character) = text[from..to].chars().next_back() else {
+            break;
+        };
+        if character.is_ascii_alphabetic() {
+            break;
+        }
+        to -= character.len_utf8();
+    }
+    (from, to)
+}
+
+fn normalize_english_word(word: &str) -> String {
+    word.replace('’', "'").to_ascii_lowercase()
+}
+
+fn apply_english_casing(prefix: &str, word: &str) -> String {
+    if prefix.chars().all(|c| !c.is_ascii_lowercase()) {
+        return word.to_ascii_uppercase();
+    }
+    if is_title_case_word(prefix) {
+        let mut chars = word.chars();
+        let Some(first) = chars.next() else {
+            return String::new();
+        };
+        return format!("{}{}", first.to_ascii_uppercase(), chars.as_str());
+    }
+    word.to_string()
+}
+
+fn is_title_case_word(word: &str) -> bool {
+    let mut chars = word.chars().filter(|c| c.is_ascii_alphabetic());
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_ascii_uppercase() && chars.all(|c| c.is_ascii_lowercase())
+}
+
+fn looks_like_url_context(text: &str, from: usize, to: usize) -> bool {
+    let line_start = text[..from].rfind('\n').map(|index| index + 1).unwrap_or(0);
+    let line_end = text[to..]
+        .find('\n')
+        .map(|index| to + index)
+        .unwrap_or(text.len());
+    let line = &text[line_start..line_end];
+    let local_from = from - line_start;
+    let before = &line[..local_from];
+    before.contains("://")
+        || before.ends_with("www.")
+        || before
+            .rsplit_once(' ')
+            .is_some_and(|(_, value)| value.contains("://"))
+}
+
+fn is_inside_typst_code_string(text: &str, from: usize, to: usize) -> bool {
+    let line_start = text[..from].rfind('\n').map(|index| index + 1).unwrap_or(0);
+    let line_end = text[to..]
+        .find('\n')
+        .map(|index| to + index)
+        .unwrap_or(text.len());
+    let line = &text[line_start..line_end];
+    let local_from = from - line_start;
+    let local_to = to - line_start;
+    let before = &line[..local_from];
+    let Some(open_quote) = last_unescaped_quote(before) else {
+        return false;
+    };
+    let after = &line[local_to..];
+    let Some(close_quote) = first_unescaped_quote(after) else {
+        return false;
+    };
+    let after_close = after[close_quote + 1..].trim_start();
+    before[..open_quote].contains('#') || after_close.starts_with([')', ',', ':', ']'])
+}
+
+fn last_unescaped_quote(text: &str) -> Option<usize> {
+    text.char_indices()
+        .filter(|(index, character)| *character == '"' && !is_escaped_at(text, *index))
+        .map(|(index, _)| index)
+        .last()
+}
+
+fn first_unescaped_quote(text: &str) -> Option<usize> {
+    text.char_indices()
+        .find(|(index, character)| *character == '"' && !is_escaped_at(text, *index))
+        .map(|(index, _)| index)
+}
+
+fn is_escaped_at(text: &str, index: usize) -> bool {
+    let mut count = 0;
+    for character in text[..index].chars().rev() {
+        if character != '\\' {
+            break;
+        }
+        count += 1;
+    }
+    count % 2 == 1
+}
+
 #[derive(Clone)]
 pub struct SegmentationRegistry {
     providers: Vec<Arc<dyn LanguageSegmenter>>,
@@ -399,7 +778,10 @@ pub struct SegmentationRegistry {
 impl SegmentationRegistry {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
-            providers: vec![Arc::new(KhmerProvider::new()?)],
+            providers: vec![
+                Arc::new(KhmerProvider::new()?),
+                Arc::new(EnglishHunspellProvider::new()?),
+            ],
         })
     }
 
@@ -407,93 +789,114 @@ impl SegmentationRegistry {
         let mut merged_tokens: Vec<EditorToken> = Vec::new();
 
         for chunk in request.chunks {
-            let active_providers: Vec<_> = self
-                .providers
-                .iter()
-                .filter(|provider| provider.supports(&chunk.text))
-                .collect();
-
-            if active_providers.is_empty() {
-                continue;
-            }
-
-            // Build UTF-16 to byte offset lookup map in one linear pass
-            let mut utf16_to_byte = vec![0; chunk.text.encode_utf16().count() + 1];
-            let mut current_utf16 = 0;
-            for (byte_offset, character) in chunk.text.char_indices() {
-                let len_u16 = character.len_utf16();
-                utf16_to_byte[current_utf16] = byte_offset;
-                if len_u16 > 1 {
-                    utf16_to_byte[current_utf16 + 1] = byte_offset;
+            let byte_to_utf16 = byte_to_utf16_offsets(&chunk.text);
+            for (state, span_from_byte, span_to_byte, _scope) in scan_typst_content(&chunk.text) {
+                if state != ScanState::MarkupText || span_from_byte >= span_to_byte {
+                    continue;
                 }
-                current_utf16 += len_u16;
-            }
-            utf16_to_byte[current_utf16] = chunk.text.len();
+                let span_text = &chunk.text[span_from_byte..span_to_byte];
+                let span_start_utf16 = chunk.start_utf16 + byte_to_utf16[span_from_byte];
+                let active_providers: Vec<_> = self
+                    .providers
+                    .iter()
+                    .filter(|provider| provider.supports(span_text))
+                    .collect();
 
-            let get_byte_range =
-                |from: usize, to: usize, map: &[usize]| -> std::ops::Range<usize> {
-                    let start = map.get(from).copied().unwrap_or(0);
-                    let end = map.get(to).copied().unwrap_or(0);
-                    start..end
-                };
+                if active_providers.is_empty() {
+                    continue;
+                }
 
-            let default_provider = active_providers[0];
-            let analysis = default_provider.analyze(&chunk.text)?;
-            let mut chunk_tokens: Vec<EditorToken> = analysis
-                .tokens
-                .iter()
-                .map(|token| {
-                    let range = get_byte_range(token.from, token.to, &utf16_to_byte);
-                    let source_text = chunk.text[range].to_owned();
-                    EditorToken {
-                        provider: default_provider.id().to_owned(),
-                        source_from_utf16: token.from + chunk.start_utf16,
-                        source_to_utf16: token.to + chunk.start_utf16,
-                        source_text,
-                        normalized_text: token.text.clone(),
-                        known: token.known,
-                        known_prefix: token.known_prefix,
-                        hyphenated: token.hyphenated.clone(),
+                // Build UTF-16 to byte offset lookup map in one linear pass
+                let mut utf16_to_byte = vec![0; span_text.encode_utf16().count() + 1];
+                let mut current_utf16 = 0;
+                for (byte_offset, character) in span_text.char_indices() {
+                    let len_u16 = character.len_utf16();
+                    utf16_to_byte[current_utf16] = byte_offset;
+                    if len_u16 > 1 {
+                        utf16_to_byte[current_utf16 + 1] = byte_offset;
                     }
-                })
-                .collect();
+                    current_utf16 += len_u16;
+                }
+                utf16_to_byte[current_utf16] = span_text.len();
 
-            for provider in active_providers.iter().skip(1) {
-                let analysis = provider.analyze(&chunk.text)?;
-                for token in analysis.tokens {
-                    let range = get_byte_range(token.from, token.to, &utf16_to_byte);
-                    let source_text = chunk.text[range].to_owned();
-                    if provider.supports(&source_text) {
-                        let from_adjusted = token.from + chunk.start_utf16;
-                        let to_adjusted = token.to + chunk.start_utf16;
+                let get_byte_range =
+                    |from: usize, to: usize, map: &[usize]| -> std::ops::Range<usize> {
+                        let start = map.get(from).copied().unwrap_or(0);
+                        let end = map.get(to).copied().unwrap_or(0);
+                        start..end
+                    };
 
-                        chunk_tokens.retain(|existing| {
-                            existing.source_to_utf16 <= from_adjusted
-                                || existing.source_from_utf16 >= to_adjusted
-                        });
-
-                        chunk_tokens.push(EditorToken {
-                            provider: provider.id().to_owned(),
-                            source_from_utf16: from_adjusted,
-                            source_to_utf16: to_adjusted,
+                let default_provider = active_providers[0];
+                let analysis = default_provider.analyze(span_text)?;
+                let mut span_tokens: Vec<EditorToken> = analysis
+                    .tokens
+                    .iter()
+                    .map(|token| {
+                        let range = get_byte_range(token.from, token.to, &utf16_to_byte);
+                        let source_text = span_text[range].to_owned();
+                        EditorToken {
+                            provider: default_provider.id().to_owned(),
+                            source_from_utf16: token.from + span_start_utf16,
+                            source_to_utf16: token.to + span_start_utf16,
                             source_text,
                             normalized_text: token.text.clone(),
                             known: token.known,
                             known_prefix: token.known_prefix,
                             hyphenated: token.hyphenated.clone(),
-                        });
+                        }
+                    })
+                    .collect();
+
+                for provider in active_providers.iter().skip(1) {
+                    let analysis = provider.analyze(span_text)?;
+                    for token in analysis.tokens {
+                        let range = get_byte_range(token.from, token.to, &utf16_to_byte);
+                        let source_text = span_text[range].to_owned();
+                        if provider.supports(&source_text) {
+                            let from_adjusted = token.from + span_start_utf16;
+                            let to_adjusted = token.to + span_start_utf16;
+
+                            span_tokens.retain(|existing| {
+                                existing.source_to_utf16 <= from_adjusted
+                                    || existing.source_from_utf16 >= to_adjusted
+                            });
+
+                            span_tokens.push(EditorToken {
+                                provider: provider.id().to_owned(),
+                                source_from_utf16: from_adjusted,
+                                source_to_utf16: to_adjusted,
+                                source_text,
+                                normalized_text: token.text.clone(),
+                                known: token.known,
+                                known_prefix: token.known_prefix,
+                                hyphenated: token.hyphenated.clone(),
+                            });
+                        }
                     }
                 }
-            }
 
-            chunk_tokens.sort_by_key(|t| t.source_from_utf16);
-            merged_tokens.extend(chunk_tokens);
+                span_tokens.sort_by_key(|t| t.source_from_utf16);
+                merged_tokens.extend(span_tokens);
+            }
         }
 
         Ok(AnalyzeResponse {
             tokens: merged_tokens,
         })
     }
+}
+
+fn byte_to_utf16_offsets(text: &str) -> Vec<usize> {
+    let mut map = vec![0; text.len() + 1];
+    let mut utf16_offset = 0;
+    for (byte_offset, character) in text.char_indices() {
+        for offset in byte_offset..byte_offset + character.len_utf8() {
+            map[offset] = utf16_offset;
+        }
+        utf16_offset += character.len_utf16();
+    }
+    map[text.len()] = utf16_offset;
+    map
 }
 
 #[tauri::command]
@@ -506,6 +909,11 @@ pub fn get_provider_capabilities(
         .map(|provider| ProviderCapabilities {
             id: provider.id().to_owned(),
             pattern: provider.pattern().to_owned(),
+            display_name: provider.display_name().to_owned(),
+            language_tag: provider.language_tag().to_owned(),
+            engine: provider.engine().to_owned(),
+            support_level: provider.support_level().to_owned(),
+            boundary_mode: provider.boundary_mode().to_owned(),
         })
         .collect()
 }
@@ -924,5 +1332,121 @@ mod tests {
         assert!(mock_tokens
             .iter()
             .any(|t| t.source_text == "invalidword" && !t.known));
+    }
+
+    #[test]
+    fn english_hunspell_provider_checks_and_suggests_words() {
+        let provider = EnglishHunspellProvider::new().expect("English provider");
+        let analysis = provider
+            .analyze("This sentence has a recieve typo.")
+            .expect("analysis");
+        assert!(analysis
+            .tokens
+            .iter()
+            .any(|token| token.text == "sentence" && token.known));
+        assert!(analysis
+            .tokens
+            .iter()
+            .any(|token| token.text == "recieve" && !token.known));
+        let suggestions = provider.suggestions("recieve", 8);
+        assert!(suggestions.iter().any(|word| word == "receive"));
+    }
+
+    #[test]
+    fn english_hunspell_provider_completes_prefixes() {
+        let provider = EnglishHunspellProvider::new().expect("English provider");
+        let response = complete_with_provider(
+            &provider,
+            &CompletionRequest {
+                provider: "hunspell:en_US".to_string(),
+                text: "I went to schoo".to_string(),
+                cursor_utf16: "I went to schoo".encode_utf16().count(),
+                limit: 10,
+            },
+        )
+        .expect("completion")
+        .expect("completion response");
+        assert_eq!(response.from, "I went to ".encode_utf16().count());
+        assert_eq!(response.to, "I went to schoo".encode_utf16().count());
+        assert!(response.options.iter().any(|word| word == "school"));
+    }
+
+    #[test]
+    fn registry_bundles_english_by_default() {
+        let registry = SegmentationRegistry::new().expect("registry");
+        assert!(registry
+            .providers
+            .iter()
+            .any(|provider| provider.id() == "hunspell:en_US"));
+        let response = registry
+            .analyze_ranges(AnalyzeRequest {
+                chunks: vec![crate::segmentation::provider::AnalyzeChunk {
+                    text: "hello wrld".to_string(),
+                    start_utf16: 0,
+                }],
+            })
+            .expect("analysis");
+        assert!(response
+            .tokens
+            .iter()
+            .any(|token| token.provider == "hunspell:en_US"
+                && token.source_text == "wrld"
+                && !token.known));
+    }
+
+    #[test]
+    fn registry_analyzes_typst_content_only_for_english() {
+        let registry = SegmentationRegistry::new().expect("registry");
+        let source = r#"#import "chapters/intro-file.typ": template
+#include "stories/rabbit-story.typ"
+#let previewRoot = true
+#set text(font: "Fira Mono")
+
+This paragraph has a recieve typo.
+#figure(image("assets/photo-file.png"))[The captin text is checked.]
+"#;
+        let response = registry
+            .analyze_ranges(AnalyzeRequest {
+                chunks: vec![crate::segmentation::provider::AnalyzeChunk {
+                    text: source.to_string(),
+                    start_utf16: 0,
+                }],
+            })
+            .expect("analysis");
+        let english_tokens: Vec<_> = response
+            .tokens
+            .iter()
+            .filter(|token| token.provider == "hunspell:en_US")
+            .collect();
+
+        assert!(english_tokens
+            .iter()
+            .any(|token| token.source_text == "recieve" && !token.known));
+        assert!(english_tokens
+            .iter()
+            .any(|token| token.source_text == "captin" && !token.known));
+        for skipped in [
+            "import",
+            "chapters",
+            "intro",
+            "file",
+            "typ",
+            "include",
+            "rabbit",
+            "story",
+            "previewRoot",
+            "true",
+            "Fira",
+            "Mono",
+            "assets",
+            "photo",
+        ] {
+            assert!(
+                !english_tokens
+                    .iter()
+                    .any(|token| token.source_text == skipped),
+                "{skipped} should not be spellchecked"
+            );
+        }
     }
 }

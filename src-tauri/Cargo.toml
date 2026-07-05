@@ -25,6 +25,7 @@ fontdb = "0.23"
 dunce = "1.0"
 ttf-parser = "0.25"
 khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-features = false }
+spellbook = "0.4.2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

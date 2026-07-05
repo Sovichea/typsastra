@@ -24,7 +24,7 @@ A lightweight, local-first Typst code editor with advanced Unicode font fallback
 * **Template-Aware Chapter Editing**: Imported chapters can reuse their main document's local template in standalone live preview. Cross-chapter references render as clear placeholders until the complete document is previewed, while the source remains standard Typst.
 * **Managed Toolchain**: The settings panel installs stable Tinymist releases. Tinymist's embedded Typst compiler handles preview, diagnostics, and export; no separate Typst installation is required.
 * **Document Typography Controls**: Choose Latin and complex-script fonts independently from the toolbar, adjust complex-script sizing relative to the Latin size, and apply either selection to the current document or its local template.
-* **Khmer Language Support**: Optional real-time dictionary spellcheck underlines unknown Khmer words and offers corrections from the editor context menu. Typing suggestions can be controlled independently, and unknown words can be added to a persistent personal dictionary. See [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Experimental Khmer render preparation can generate non-destructive zero-width word-break opportunities for preview/export in dev builds, but it is off by default.
+* **Local Language Tools**: Optional real-time dictionary spellcheck underlines unknown words and offers corrections from the editor context menu. Typing suggestions can be controlled independently, and unknown words can be added to a persistent personal dictionary. Typstry bundles Khmer support through its custom segmenter and English (US) support through Hunspell-format dictionary resources. See [Language Tools Providers](./LANGUAGE_TOOLS.md) and [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Experimental Khmer render preparation can generate non-destructive zero-width word-break opportunities for preview/export in dev builds, but it is off by default.
 * **Interactive Document Outline**: Browse collapsible heading levels beside the file explorer and navigate both source and preview from a single click.
 * **Writable Example Workspace**: Open installed examples from the welcome screen, including Unicode-focused documents, a Khmer technical document, and a three-chapter thesis demonstrating external labels.
 * **Focus-Driven UI**: A custom, frameless window design, persistent multi-tab workspace state (preserving open tabs, split ratios, and cursor positions), and integrated native-feel search and replace.
@@ -93,7 +93,7 @@ The selected Unicode fallback is also included in Typstry's own UI font stack fo
 
 The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin rule, the complex-script rule, or both. **Apply to document** writes a managed `typstry:typography` block into the active file. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typstry-template.typ` when no editable local template can be identified.
 
-Language spellcheck and typing word suggestions can be controlled independently in Editor settings. Khmer analysis is provided by the modular Rust segmentation layer backed by the `khmer_segmenter` submodule; implementation details and modern Khmer encoding policy are documented in [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
+Language spellcheck and typing word suggestions can be controlled independently in Editor settings. Language analysis is provided by the modular Rust provider registry; bundled providers include the custom Khmer segmenter and English (US) Hunspell-format dictionary support. Provider architecture is documented in [Language Tools Providers](./LANGUAGE_TOOLS.md), and modern Khmer encoding policy is documented in [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
 
 Typst formatting is available from **Edit → Format Document** or `Ctrl+Shift+F`. **Format on save** is an Editor setting and defaults off.
 
@@ -309,9 +309,10 @@ The current development release is `v0.1.2`.
 - [x] Settings panel / configuration file (`settings.json`)
   - [x] UI for appearance, editor, and preview preferences
   - [x] Native persistent settings storage and legacy preference migration
-- [x] Integrate a modular Khmer language engine
+- [x] Integrate modular local language tools
   - [x] Pin [Khmer Segmenter](https://github.com/Sovichea/khmer_segmenter) as a Git submodule and Rust dependency
   - [x] Add real-time spellcheck, current-word suggestions, and context-menu corrections
+  - [x] Bundle English (US) Hunspell-format dictionary support through the Rust provider registry
   - [x] Add experimental ZWS preprocessing for preview and PDF export without modifying source files
 - [ ] Embed an AI Copilot / Agent for context-aware Typst auto-completion and document drafting
   - [ ] API integration for language model

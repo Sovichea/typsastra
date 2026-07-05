@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Text } from "@codemirror/state";
 import {
   applyTextForHashPrefix,
+  allowsLanguageWordCompletionOnLine,
   completionEditOffsets,
   displayLabelForHashPrefix,
   fontCompletionValueStart,
@@ -10,6 +11,19 @@ import {
   lspCompletionEditOffsets,
   quotedCompletionEditOffsets
 } from "../src/editor/autocomplete";
+
+describe("language word completion context", () => {
+  test("allows prose and content-block text", () => {
+    expect(allowsLanguageWordCompletionOnLine("This paragraph has sch", 19)).toBe(true);
+    expect(allowsLanguageWordCompletionOnLine('#figure(image("photo.png"))[The capt', 33)).toBe(true);
+  });
+
+  test("blocks Typst syntax and code strings", () => {
+    expect(allowsLanguageWordCompletionOnLine('#include "stories/rabbit', 19)).toBe(false);
+    expect(allowsLanguageWordCompletionOnLine('#set text(font: "Fira', 18)).toBe(false);
+    expect(allowsLanguageWordCompletionOnLine("#let previewRoot = tr", 5)).toBe(false);
+  });
+});
 
 describe("LSP autocomplete edits", () => {
   test("keeps a font completion range active across spaces", () => {

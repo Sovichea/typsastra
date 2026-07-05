@@ -1,0 +1,12 @@
+{
+  "id": "hunspell:en_US",
+  "languageTag": "en-US",
+  "displayName": "English (US)",
+  "engine": "spellbook",
+  "dictionaryFormat": "hunspell",
+  "boundaryMode": "unicode-word",
+  "supportLevel": "full",
+  "source": "LibreOffice dictionaries repository, en_US dictionary derived from SCOWL",
+  "sourceUrl": "https://github.com/LibreOffice/dictionaries/tree/master/en",
+  "licenseSummary": "SCOWL copyright/license and Ispell BSD-derived affix license; see README_en_US.txt"
+}

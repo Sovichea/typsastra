@@ -88,10 +88,30 @@ pub struct SuggestionResponse {
 pub struct ProviderCapabilities {
     pub id: String,
     pub pattern: String,
+    pub display_name: String,
+    pub language_tag: String,
+    pub engine: String,
+    pub support_level: String,
+    pub boundary_mode: String,
 }
 
 pub trait LanguageSegmenter: Send + Sync {
     fn id(&self) -> &'static str;
+    fn display_name(&self) -> &'static str {
+        self.id()
+    }
+    fn language_tag(&self) -> &'static str {
+        "und"
+    }
+    fn engine(&self) -> &'static str {
+        "custom"
+    }
+    fn support_level(&self) -> &'static str {
+        "full"
+    }
+    fn boundary_mode(&self) -> &'static str {
+        "custom"
+    }
     fn pattern(&self) -> &'static str;
     fn supports(&self, text: &str) -> bool;
     fn analyze(&self, text: &str) -> Result<TextAnalysis, String>;
