@@ -1,3 +1,17 @@
+#let khmer_digits(value) = {
+  str(value)
+    .replace("0", "០")
+    .replace("1", "១")
+    .replace("2", "២")
+    .replace("3", "៣")
+    .replace("4", "៤")
+    .replace("5", "៥")
+    .replace("6", "៦")
+    .replace("7", "៧")
+    .replace("8", "៨")
+    .replace("9", "៩")
+}
+
 #let khmer_folklore_book(body) = {
   // typstry:typography:start
   set text(font: "MiSans Latin", size: 11pt)
@@ -12,7 +26,7 @@
     ],
     footer: context {
       let page_number = counter(page).get().first()
-      align(center)[#text(size: 9pt)[#page_number]]
+      align(center)[#text(size: 9pt)[#khmer_digits(page_number)]]
     },
   )
 
