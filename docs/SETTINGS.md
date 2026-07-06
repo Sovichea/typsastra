@@ -75,7 +75,7 @@ Bundled providers include:
 - Khmer through the custom Khmer segmenter.
 - English (US) through Hunspell-format dictionary resources.
 
-Provider architecture is documented in [../LANGUAGE_TOOLS.md](../LANGUAGE_TOOLS.md), and modern Khmer encoding policy is documented in [../KHMER_SPELLCHECK.md](../KHMER_SPELLCHECK.md).
+Provider architecture is documented in [LANGUAGE_TOOLS.md](./LANGUAGE_TOOLS.md), and modern Khmer encoding policy is documented in [KHMER_SPELLCHECK.md](./KHMER_SPELLCHECK.md).
 
 Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
 
