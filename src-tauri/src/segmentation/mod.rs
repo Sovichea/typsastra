@@ -3,5 +3,5 @@ mod registry;
 
 pub use registry::{
     analyze_language_ranges, complete_language_word, get_provider_capabilities,
-    language_suggestions, SegmentationRegistry,
+    install_hunspell_dictionary, language_suggestions, list_hunspell_catalog, SegmentationRegistry,
 };

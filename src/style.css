@@ -36,6 +36,8 @@
   --ui-text: #333333;
   --ui-hover: #e4e6f1;
   --ui-select: #d7e8f5;
+  --autocomplete-select-bg: #0969da;
+  --autocomplete-select-text: #ffffff;
   --ui-header-text: #616161;
   --editor-cursor-color: #005cc5;
   --editor-cursor-contrast-color: #d73a49;
@@ -940,6 +942,93 @@ html {
 .settings-toggle input { margin: 0; }
 .settings-toggle span { display: flex; flex-direction: column; gap: 3px; }
 .settings-toggle small { color: var(--ui-header-text); font-size: 11px; }
+.settings-language-tools {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-self: end;
+  width: min(100%, 260px);
+  min-width: 0;
+  gap: 8px;
+}
+.settings-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-language-provider {
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--ui-bg) 92%, var(--ui-hover));
+}
+.settings-language-provider input { margin: 0; }
+.settings-language-provider span { min-width: 0; }
+.settings-language-provider-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-language-provider-meta {
+  margin-top: 2px;
+  color: var(--ui-header-text);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-language-tools .settings-secondary-button {
+  align-self: flex-start;
+}
+.settings-language-catalog {
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--ui-bg);
+}
+.settings-language-catalog.hidden { display: none; }
+.settings-language-catalog-header {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-header-text);
+  font-size: 11px;
+}
+.settings-language-catalog-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.settings-language-catalog-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.settings-language-catalog-row:last-child { border-bottom: 0; }
+.settings-language-catalog-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+.settings-language-catalog-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ui-header-text);
+}
+.settings-language-catalog-row button {
+  min-width: 74px;
+}
 .settings-file-meta { min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ui-header-text); }
 .settings-file-meta code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 430px; }
 .settings-footer-actions { display: flex; gap: 8px; flex-shrink: 0; }
@@ -952,6 +1041,12 @@ html {
   .settings-field { grid-template-columns: 1fr; }
   .settings-field input,
   .settings-field select { grid-column: 1; grid-row: auto; }
+  .settings-language-tools {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+    width: 100%;
+  }
   .settings-footer { align-items: flex-end; }
   .settings-footer-actions { flex-wrap: wrap; justify-content: flex-end; }
 }
@@ -1809,12 +1904,16 @@ button.welcome-item:disabled {
 }
 
 .cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background: var(--ui-select) !important;
-  color: var(--ui-text) !important;
+  background: var(--autocomplete-select-bg) !important;
+  color: var(--autocomplete-select-text) !important;
 }
 
 .cm-tooltip-autocomplete > ul > li:hover {
   background: var(--ui-hover) !important;
+}
+
+.cm-tooltip-autocomplete > ul > li[aria-selected]:hover {
+  background: var(--autocomplete-select-bg) !important;
 }
 
 .cm-completionIcon {
@@ -1826,7 +1925,7 @@ button.welcome-item:disabled {
 
 .cm-completionLabel {
   flex-grow: 1;
-  color: var(--ui-text) !important;
+  color: inherit !important;
   font-family: var(--font-family-sans);
   line-height: 1.55;
 }
@@ -1852,7 +1951,11 @@ button.welcome-item:disabled {
 }
 
 .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
-  color: var(--ui-text-muted) !important;
+  color: color-mix(in srgb, var(--autocomplete-select-text) 78%, transparent) !important;
+}
+
+.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionIcon {
+  color: color-mix(in srgb, var(--autocomplete-select-text) 72%, transparent) !important;
 }
 
 .cm-tooltip.cm-completionInfo,

@@ -339,7 +339,7 @@ export function createTypstAutocomplete(
               } catch (e) {
                 console.warn(`${provider.id} autocomplete error`, e);
               }
-              return null;
+              continue;
             }
           }
         }

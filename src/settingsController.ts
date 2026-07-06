@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm, message } from "@tauri-apps/plugin-dialog";
 import { cloneDefaultAppSettings, normalizeAppSettings, type AppSettings, type ThemeName } from "./settings";
 import {
   unicodeFontPreferenceOptions,
@@ -7,6 +7,24 @@ import {
 
 type SettingsPayload = { path: string; settings: unknown | null };
 type SystemFontCatalog = { all: string[]; monospace: string[] };
+type LanguageProviderOption = {
+  id: string;
+  pattern: string;
+  displayName?: string;
+  languageTag?: string;
+  engine?: string;
+  supportLevel?: string;
+  boundaryMode?: string;
+};
+type HunspellCatalogEntry = {
+  id: string;
+  locale: string;
+  displayName: string;
+  languageTag: string;
+  installed: boolean;
+  bundled: boolean;
+  source: string;
+};
 
 export class SettingsController {
   private settings: AppSettings = cloneDefaultAppSettings();
@@ -14,8 +32,12 @@ export class SettingsController {
   private saveTimer: number | null = null;
   private loadError: string | null = null;
   private systemFonts: SystemFontCatalog = { all: ["MiSans Latin"], monospace: ["Fira Mono"] };
+  private languageProviders: LanguageProviderOption[] = [];
 
-  constructor(private readonly applySettings: (settings: AppSettings) => void) {}
+  constructor(
+    private readonly applySettings: (settings: AppSettings) => void,
+    private readonly onLanguageProvidersChanged: (providers: LanguageProviderOption[]) => void = () => {}
+  ) {}
 
   public get value(): AppSettings {
     return this.settings;
@@ -62,6 +84,13 @@ export class SettingsController {
     window.clearTimeout(this.saveTimer);
     this.saveTimer = null;
     void this.persist();
+  }
+
+  public setLanguageProviders(providers: LanguageProviderOption[]): void {
+    this.languageProviders = [...providers].sort((left, right) =>
+      this.languageProviderLabel(left).localeCompare(this.languageProviderLabel(right))
+    );
+    this.populateLanguageProviders();
   }
 
   public initializePanel() {
@@ -126,6 +155,9 @@ export class SettingsController {
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
     onChange("settings-khmer-prep", (settings, control) => { settings.preview.khmerRenderPreparation = (control as HTMLInputElement).checked; });
     onChange("settings-developer-mode", (settings, control) => { settings.developerMode = (control as HTMLInputElement).checked; });
+    document.getElementById("settings-add-language")?.addEventListener("click", () => {
+      void this.toggleLanguageCatalog();
+    });
 
     document.getElementById("settings-reset")?.addEventListener("click", async () => {
       if (await confirm("Reset all application settings to their defaults?", { title: "Reset Settings", kind: "warning" })) {
@@ -210,6 +242,7 @@ export class SettingsController {
     setChecked("settings-cursor-sync", preview.cursorSync);
     setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
     setChecked("settings-developer-mode", this.settings.developerMode);
+    this.populateLanguageProviders();
 
     const path = document.getElementById("settings-file-path");
     if (path) {
@@ -243,6 +276,141 @@ export class SettingsController {
       ...unicodeFontPreferenceOptions,
       ...[...fallbackFamilies].sort().map(family => ({ id: family, label: family }))
     ]);
+  }
+
+  private populateLanguageProviders(): void {
+    const container = document.getElementById("settings-language-providers");
+    if (!container) return;
+    if (this.languageProviders.length === 0) {
+      const empty = document.createElement("small");
+      empty.textContent = "No language providers are installed.";
+      container.replaceChildren(empty);
+      return;
+    }
+
+    const explicit = this.settings.editor.languageProviders;
+    const enabled = explicit === null
+      ? new Set(this.languageProviders.map(provider => provider.id))
+      : new Set(explicit);
+
+    const controls = this.languageProviders.map(provider => {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = provider.id;
+      checkbox.checked = enabled.has(provider.id);
+      checkbox.addEventListener("change", () => {
+        const checked = new Set(
+          Array.from(container.querySelectorAll<HTMLInputElement>("input[type='checkbox']:checked"))
+            .map(input => input.value)
+        );
+        this.update(settings => {
+          const allEnabled = this.languageProviders.every(candidate => checked.has(candidate.id));
+          settings.editor.languageProviders = allEnabled ? null : [...checked].sort();
+        });
+      });
+
+      const title = document.createElement("div");
+      title.className = "settings-language-provider-title";
+      title.textContent = this.languageProviderLabel(provider);
+      const details = document.createElement("div");
+      details.className = "settings-language-provider-meta";
+      details.textContent = [
+        provider.languageTag,
+        provider.engine,
+        provider.supportLevel
+      ].filter(Boolean).join(" · ");
+      const text = document.createElement("span");
+      text.append(title, details);
+      const label = document.createElement("label");
+      label.className = "settings-language-provider";
+      label.append(text, checkbox);
+      return label;
+    });
+    container.replaceChildren(...controls);
+  }
+
+  private languageProviderLabel(provider: LanguageProviderOption): string {
+    return provider.displayName || provider.languageTag || provider.id;
+  }
+
+  private async toggleLanguageCatalog(): Promise<void> {
+    const catalog = document.getElementById("settings-language-catalog");
+    if (!catalog) return;
+    if (!catalog.classList.contains("hidden")) {
+      catalog.classList.add("hidden");
+      return;
+    }
+    catalog.classList.remove("hidden");
+    catalog.textContent = "Loading language catalog...";
+    await this.populateLanguageCatalog();
+  }
+
+  private async populateLanguageCatalog(): Promise<void> {
+    const catalog = document.getElementById("settings-language-catalog");
+    if (!catalog) return;
+    let entries: HunspellCatalogEntry[] = [];
+    try {
+      entries = await invoke<HunspellCatalogEntry[]>("list_hunspell_catalog");
+    } catch (error) {
+      catalog.textContent = `Failed to load language catalog: ${String(error)}`;
+      return;
+    }
+
+    const header = document.createElement("div");
+    header.className = "settings-language-catalog-header";
+    header.textContent = "Downloadable Hunspell dictionaries from LibreOffice. Complex-script dictionaries are included where available.";
+    const list = document.createElement("div");
+    list.className = "settings-language-catalog-list";
+    list.replaceChildren(...entries.map(entry => this.renderLanguageCatalogRow(entry)));
+    catalog.replaceChildren(header, list);
+  }
+
+  private renderLanguageCatalogRow(entry: HunspellCatalogEntry): HTMLElement {
+    const title = document.createElement("div");
+    title.className = "settings-language-catalog-title";
+    title.textContent = entry.displayName;
+    const meta = document.createElement("div");
+    meta.className = "settings-language-catalog-meta";
+    meta.textContent = [
+      entry.languageTag,
+      entry.bundled ? "bundled" : entry.installed ? "installed" : "Hunspell",
+      entry.source
+    ].filter(Boolean).join(" · ");
+    const text = document.createElement("div");
+    text.append(title, meta);
+
+    const button = document.createElement("button");
+    button.className = "settings-secondary-button";
+    button.type = "button";
+    button.textContent = entry.bundled ? "Bundled" : entry.installed ? "Installed" : "Download";
+    button.disabled = entry.bundled || entry.installed;
+    button.addEventListener("click", () => void this.installLanguage(entry, button));
+
+    const row = document.createElement("div");
+    row.className = "settings-language-catalog-row";
+    row.append(text, button);
+    return row;
+  }
+
+  private async installLanguage(entry: HunspellCatalogEntry, button: HTMLButtonElement): Promise<void> {
+    const original = button.textContent ?? "Download";
+    button.disabled = true;
+    button.textContent = "Downloading...";
+    try {
+      const providers = await invoke<LanguageProviderOption[]>("install_hunspell_dictionary", { locale: entry.locale });
+      this.setLanguageProviders(providers);
+      this.onLanguageProvidersChanged(providers);
+      this.update(settings => {
+        if (settings.editor.languageProviders !== null && !settings.editor.languageProviders.includes(entry.id)) {
+          settings.editor.languageProviders.push(entry.id);
+        }
+      });
+      await this.populateLanguageCatalog();
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = original;
+      await message(String(error), { title: `Install ${entry.displayName}`, kind: "error" });
+    }
   }
 
   private async refreshSystemFonts(): Promise<void> {

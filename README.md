@@ -60,6 +60,7 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
     "unicodeFont": "auto",
     "spellcheck": true,
     "wordCompletion": true,
+    "languageProviders": null,
     "userDictionary": [],
     "wordWrap": true,
     "tabSize": 2,
@@ -93,7 +94,7 @@ The selected Unicode fallback is also included in Typstry's own UI font stack fo
 
 The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin rule, the complex-script rule, or both. **Apply to document** writes a managed `typstry:typography` block into the active file. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typstry-template.typ` when no editable local template can be identified.
 
-Language spellcheck and typing word suggestions can be controlled independently in Editor settings. Language analysis is provided by the modular Rust provider registry; bundled providers include the custom Khmer segmenter and English (US) Hunspell-format dictionary support. Provider architecture is documented in [Language Tools Providers](./LANGUAGE_TOOLS.md), and modern Khmer encoding policy is documented in [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
+Language spellcheck and typing word suggestions can be controlled independently in Editor settings. The **Language tools** setting chooses which installed providers participate; `languageProviders: null` means all available providers are enabled, while an explicit array stores the selected provider IDs. **Add language...** downloads additional Hunspell dictionaries from a starter catalog that includes several complex-script languages as well as common Latin-script dictionaries. Language analysis is provided by the modular Rust provider registry; bundled providers include the custom Khmer segmenter and English (US) Hunspell-format dictionary support. Provider architecture is documented in [Language Tools Providers](./LANGUAGE_TOOLS.md), and modern Khmer encoding policy is documented in [Khmer Spellcheck and Word Completion](./KHMER_SPELLCHECK.md). Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
 
 Typst formatting is available from **Edit → Format Document** or `Ctrl+Shift+F`. **Format on save** is an Editor setting and defaults off.
 

@@ -121,6 +121,7 @@ export class SpellcheckController {
   private suggestionCache = new Map<string, string[]>();
   private readonly popup = document.createElement("div");
   private providers: ProviderCapabilities[] = [];
+  private enabledProviderIds: Set<string> | null = null;
   
   private pendingRanges: { from: number; to: number }[] = [];
   private activeRequest: { documentKey: string; revision: number; docIdentity: Text } | null = null;
@@ -140,11 +141,26 @@ export class SpellcheckController {
   }
 
   public getProviders(): ProviderCapabilities[] {
+    if (this.enabledProviderIds === null) return this.providers;
+    return this.providers.filter(provider => this.enabledProviderIds?.has(provider.id));
+  }
+
+  public getAllProviders(): ProviderCapabilities[] {
     return this.providers;
   }
 
+  public setProviders(providers: ProviderCapabilities[]): void {
+    this.providers = providers;
+    this.invalidate(true);
+    const doc = this.getEditor()?.state.doc;
+    if (doc) {
+      this.pendingRanges = [{ from: 0, to: doc.length }];
+      this.schedule();
+    }
+  }
+
   private getPatterns(): RegExp[] {
-    return this.providers.map(p => new RegExp(p.pattern, "u"));
+    return this.getProviders().map(p => new RegExp(p.pattern, "u"));
   }
 
   public extension(): Extension {
@@ -169,6 +185,23 @@ export class SpellcheckController {
     if (next.size === this.userDictionary.size
       && [...next].every(word => this.userDictionary.has(word))) return;
     this.userDictionary = next;
+    this.invalidate(true);
+    const doc = this.getEditor()?.state.doc;
+    if (doc) {
+      this.pendingRanges = [{ from: 0, to: doc.length }];
+      this.schedule();
+    }
+  }
+
+  public setEnabledProviders(providerIds: readonly string[] | null): void {
+    const next = providerIds === null ? null : new Set(providerIds);
+    const unchanged = next === null
+      ? this.enabledProviderIds === null
+      : this.enabledProviderIds !== null
+        && next.size === this.enabledProviderIds.size
+        && [...next].every(id => this.enabledProviderIds?.has(id));
+    if (unchanged) return;
+    this.enabledProviderIds = next;
     this.invalidate(true);
     const doc = this.getEditor()?.state.doc;
     if (doc) {
@@ -339,7 +372,7 @@ export class SpellcheckController {
       }))
       .filter(chunk => patterns.some(pat => pat.test(chunk.text)));
 
-    if (chunks.length === 0) {
+      if (chunks.length === 0) {
       this.activeRequest = null;
       this.applyAnalysisResponse({ tokens: [] }, rangesToAnalyze);
       this.checkQueuedRequest();
@@ -352,6 +385,12 @@ export class SpellcheckController {
       response = await invoke<AnalyzeResponse>("analyze_language_ranges", {
         request: { chunks }
       });
+      const enabledProviderIds = this.enabledProviderIds;
+      if (response && enabledProviderIds !== null) {
+        response = {
+          tokens: response.tokens.filter(token => enabledProviderIds.has(token.provider))
+        };
+      }
     } catch (error) {
       this.warnOnce("analyze_language_ranges", error);
     } finally {

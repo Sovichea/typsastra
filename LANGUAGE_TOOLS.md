@@ -34,19 +34,19 @@ English support uses:
 - A Typstry-built prefix index from `.dic` stems for typing word suggestions.
 - Conservative editor token filtering to avoid marking obvious Typst commands, identifiers, URLs, email fragments, acronyms, and one-letter fragments.
 
-## Future Hunspell-compatible languages
+## Downloadable Hunspell-compatible languages
 
-Additional languages should be added as dictionary resources plus metadata:
+Typstry can install additional Hunspell-compatible dictionaries from the Settings **Add language...** catalog. Downloaded dictionaries are stored in app-local data under:
 
 ```text
-src-tauri/resources/dictionaries/hunspell/<locale>/
+<app-local-data>/dictionaries/hunspell/<locale>/
   <locale>.aff
   <locale>.dic
-  README or LICENSE
-  metadata.json
 ```
 
-The provider registry should instantiate one provider per enabled/installed language ID, e.g. `hunspell:fr_FR`.
+The starter catalog uses verified raw dictionary paths from the LibreOffice dictionaries repository and intentionally includes Unicode/complex-script languages such as Arabic, Bengali, Tibetan, Gujarati, Hebrew, Hindi, Lao, Marathi, Nepali, Punjabi, Sinhala, Tamil, Telugu, Thai, and Vietnamese, plus common Latin-script dictionaries.
+
+The provider registry instantiates one provider per installed language ID, e.g. `hunspell:fr_FR`, and refreshes provider capabilities after installation without requiring an app restart.
 
 For languages with reliable whitespace or Unicode word boundaries, a Hunspell-compatible provider can provide full basic spellcheck/correction support quickly.
 

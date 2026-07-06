@@ -30,6 +30,7 @@ export type AppSettings = {
     indentationGuides: boolean;
     spellcheck: boolean;
     wordCompletion: boolean;
+    languageProviders: string[] | null;
     showZws: boolean;
     userDictionary: string[];
     formatOnSave: boolean;
@@ -64,6 +65,7 @@ export const defaultAppSettings: AppSettings = {
     indentationGuides: true,
     spellcheck: true,
     wordCompletion: true,
+    languageProviders: null,
     showZws: true,
     userDictionary: [],
     formatOnSave: false
@@ -93,6 +95,12 @@ function boundedNumber(value: unknown, fallback: number, min: number, max: numbe
 
 function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function stringListOrNull(value: unknown): string[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value)) return null;
+  return [...new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map(item => item.trim()))].sort();
 }
 
 export function normalizeAppSettings(value: unknown): AppSettings {
@@ -127,6 +135,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides),
       spellcheck: booleanValue(editor.spellcheck, defaultAppSettings.editor.spellcheck),
       wordCompletion: booleanValue(editor.wordCompletion, defaultAppSettings.editor.wordCompletion),
+      languageProviders: stringListOrNull(editor.languageProviders),
       showZws: booleanValue(editor.showZws, defaultAppSettings.editor.showZws),
       userDictionary: Array.isArray(editor.userDictionary)
         ? [...new Set(editor.userDictionary.filter((word): word is string => typeof word === "string" && word.trim().length > 0).map(word => word.trim()))].sort()

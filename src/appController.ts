@@ -137,7 +137,10 @@ export class TypstryWorkspaceController {
   private lspSyncGenerations = new Map<string, number>();
   private workspaceChangeQueue: Promise<void> = Promise.resolve();
   private readonly externalConflictPaths = new Set<string>();
-  private readonly settingsController = new SettingsController(settings => this.applySettingsToRuntime(settings));
+  private readonly settingsController = new SettingsController(
+    settings => this.applySettingsToRuntime(settings),
+    providers => this.handleLanguageProvidersChanged(providers)
+  );
   private readonly toolchainController = new ToolchainController({
     getSelectedVersion: () => this.settingsController.value.toolchain.tinymistVersion,
     setSelectedVersion: version => this.settingsController.update(settings => {
@@ -335,6 +338,7 @@ export class TypstryWorkspaceController {
   public async bootstrap() {
     await this.settingsController.load();
     await this.spellcheckController.initialize();
+    this.settingsController.setLanguageProviders(this.spellcheckController.getAllProviders());
     this.recentProjectsController.initialize();
     this.initCodeMirror();
     this.documentOutlineController.initialize();
@@ -414,6 +418,7 @@ export class TypstryWorkspaceController {
     document.documentElement.style.setProperty("--editor-line-height", String(appearance.editorLineHeight));
     this.forwardSyncDebounceMs = preview.syncDebounceMs;
     this.editorFontManager.configure(editor.codeFont, editor.unicodeFont);
+    this.spellcheckController.setEnabledProviders(editor.languageProviders);
     this.spellcheckController.setEnabled(editor.spellcheck);
     this.spellcheckController.setUserDictionary(editor.userDictionary);
 
@@ -463,6 +468,22 @@ export class TypstryWorkspaceController {
     const zwsLabel = document.getElementById("zws-label");
     if (zwsLabel) zwsLabel.textContent = editor.showZws ? "Invisibles: On" : "Invisibles: Off";
     if (!preview.cursorSync) this.previewSyncController.clearForward();
+  }
+
+  private handleLanguageProvidersChanged(providers: Parameters<SpellcheckController["setProviders"]>[0]): void {
+    this.spellcheckController.setProviders(providers);
+    const editor = this.settingsController.value.editor;
+    this.spellcheckController.setEnabledProviders(editor.languageProviders);
+    if (!this.editorInstance) return;
+    this.editorInstance.dispatch({
+      effects: completionCompartment.reconfigure(createTypstAutocomplete(
+        () => this.lspClient,
+        () => this.getActiveLspUri(),
+        () => this.flushPendingLspSync(),
+        editor.wordCompletion,
+        () => this.spellcheckController.getProviders()
+      ))
+    });
   }
 
   private initWordWrap() {

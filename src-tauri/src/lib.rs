@@ -23,7 +23,7 @@ use render_prepare::{
 };
 use segmentation::{
     analyze_language_ranges, complete_language_word, get_provider_capabilities,
-    language_suggestions, SegmentationRegistry,
+    install_hunspell_dictionary, language_suggestions, list_hunspell_catalog, SegmentationRegistry,
 };
 use toolchain::active_tinymist;
 
@@ -1353,6 +1353,12 @@ pub fn run() {
             }
             if let Ok(data_dir) = app.path().app_local_data_dir() {
                 font_store::remove_legacy_font_cache(&data_dir);
+                if let Err(error) = app
+                    .state::<SegmentationRegistry>()
+                    .reload_installed(&data_dir)
+                {
+                    eprintln!("Failed to load installed language dictionaries: {error}");
+                }
             }
             if let Err(error) = font_store::ensure_base_fonts_installed() {
                 eprintln!("Failed to install bundled fonts for the current user: {error}");
@@ -1387,6 +1393,8 @@ pub fn run() {
             analyze_language_ranges,
             language_suggestions,
             get_provider_capabilities,
+            list_hunspell_catalog,
+            install_hunspell_dictionary,
             open_devtools,
             complete_language_word,
             prepare_examples_workspace,

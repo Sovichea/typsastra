@@ -353,6 +353,8 @@ type ThemeColorVariables = {
   border: string;
   hover: string;
   select: string;
+  autocompleteSelect?: string;
+  autocompleteSelectText?: string;
   header: string;
   mode: "dark" | "light";
   monospace: string;
@@ -472,6 +474,14 @@ export async function applyUIThemeVariables(themeName: string) {
     document.documentElement.style.setProperty("--ui-border", colors.border);
     document.documentElement.style.setProperty("--ui-hover", colors.hover);
     document.documentElement.style.setProperty("--ui-select", colors.select);
+    document.documentElement.style.setProperty(
+        "--autocomplete-select-bg",
+        colors.autocompleteSelect ?? (colors.mode === "dark" ? "#3b82f6" : "#0969da")
+    );
+    document.documentElement.style.setProperty(
+        "--autocomplete-select-text",
+        colors.autocompleteSelectText ?? "#ffffff"
+    );
     document.documentElement.style.setProperty("--ui-header-text", colors.header);
     document.documentElement.style.setProperty("--ui-monospace-color", colors.monospace);
     document.documentElement.style.setProperty("--editor-cursor-color", colors.cursor);
