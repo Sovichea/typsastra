@@ -1,4 +1,4 @@
-// @allow-preview
+// @standalone-preview
 
 = រឿងឪពុកចាស់ និងកូនប្រុសបីនាក់
 

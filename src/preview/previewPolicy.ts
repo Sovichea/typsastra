@@ -4,18 +4,18 @@ export type PreviewTarget = {
   rootPath: string | null;
   mainPath: string | null;
   imported: boolean;
-  liveUpdates: boolean;
+  standalone: boolean;
 };
 
 export type PreviewRefreshStyle = "on-type" | "on-save";
 
-export function allowsLiveImportPreview(contents: string): boolean {
+export function allowsStandalonePreview(contents: string): boolean {
   const firstLine = contents.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0];
-  return firstLine === "// @allow-preview" || firstLine === "//@allow-preview";
+  return firstLine === "// @standalone-preview" || firstLine === "//@standalone-preview";
 }
 
-export function previewRefreshStyle(target: PreviewTarget): PreviewRefreshStyle {
-  return target.liveUpdates ? "on-type" : "on-save";
+export function previewRefreshStyle(renderMode: PreviewRefreshStyle): PreviewRefreshStyle {
+  return renderMode;
 }
 
 export function previewSessionIdentity(rootPath: string, style: PreviewRefreshStyle): { key: string; taskId: string } {

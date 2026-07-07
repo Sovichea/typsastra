@@ -26,6 +26,7 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
     "formatOnSave": false
   },
   "preview": {
+    "renderMode": "on-type",
     "cursorSync": true,
     "syncDebounceMs": 120,
     "highlightDurationMs": 2200,
@@ -42,6 +43,10 @@ Invalid or missing fields fall back to bounded defaults. Existing theme and word
 ## Toolchain
 
 The Toolchain panel installs stable Tinymist releases and shows each release's embedded Typst version. Tinymist is the only toolchain download: its embedded compiler handles diagnostics, fallback SVG compilation, and PDF export, so a separate Typst installation is not required.
+
+## Preview
+
+`renderMode` accepts `"on-type"` or `"on-save"`. It controls Tinymist refresh timing for every preview root. Imported files normally preview through their top-level importer; a first-line `// @standalone-preview` directive gives an imported file its own preview root without overriding the selected render mode.
 
 ## Fonts and typography
 

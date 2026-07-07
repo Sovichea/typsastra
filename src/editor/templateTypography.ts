@@ -113,7 +113,7 @@ export function ensureTypographyTemplateApplication(mainText: string): Typograph
   const bomOffset = mainText.startsWith("\uFEFF") ? 1 : 0;
   const lineEnd = mainText.indexOf("\n", bomOffset);
   const firstLine = mainText.slice(bomOffset, lineEnd < 0 ? mainText.length : lineEnd).replace(/\r$/, "");
-  const from = firstLine === "// @allow-preview" || firstLine === "//@allow-preview"
+  const from = firstLine === "// @standalone-preview" || firstLine === "//@standalone-preview"
     ? (lineEnd < 0 ? mainText.length : lineEnd + 1)
     : bomOffset;
   return { from, to: from, insert };

@@ -1,4 +1,4 @@
-// @allow-preview
+// @standalone-preview
 = Introduction <introduction>
 
 Large documents are easier to maintain when each chapter has its own source file. This thesis uses three chapters while preserving one document-wide numbering and reference system.

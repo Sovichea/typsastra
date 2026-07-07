@@ -1,4 +1,4 @@
-// @allow-preview
+// @standalone-preview
 
 = រឿងក្តាម និងកុក
 

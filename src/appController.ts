@@ -25,7 +25,7 @@ import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, relative
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewInteractionStatus } from "./preview/previewFrame";
 import { PreviewSyncController, type InverseSyncResult } from "./preview/previewSyncController";
-import { allowsLiveImportPreview, previewRefreshStyle, previewSessionIdentity, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
+import { allowsStandalonePreview, previewRefreshStyle, previewSessionIdentity, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
 import { TabStripController } from "./editor/tabStripController";
@@ -83,7 +83,7 @@ type EditorTab = {
   previewTaskId: string | null;
   previewSessionKey: string | null;
   previewImported: boolean;
-  previewLiveUpdates: boolean;
+  previewStandalone: boolean;
   version: number;
   latestVersion: number;
   selectionAnchor: number;
@@ -96,7 +96,7 @@ type EditorTab = {
 
 type PreviewSessionState = Pick<
   EditorTab,
-  "previewRootPath" | "previewMainPath" | "previewTaskId" | "previewSessionKey" | "previewImported" | "previewLiveUpdates"
+  "previewRootPath" | "previewMainPath" | "previewTaskId" | "previewSessionKey" | "previewImported" | "previewStandalone"
 >;
 
 type ActivateEditorTabOptions = {
@@ -124,7 +124,7 @@ export class TypstryWorkspaceController {
   private previewTaskId: string | null = null;
   private previewSessionKey: string | null = null;
   private previewImported = false;
-  private previewLiveUpdates = true;
+  private previewStandalone = true;
   private pinnedLspMainPath: string | null = null;
   private workspaceRootPath: string | null = null;
   private currentVersion = 1;
@@ -147,6 +147,7 @@ export class TypstryWorkspaceController {
   private openTabs: EditorTab[] = [];
   private readonly openedDocumentUris = new Set<string>();
   private lastKhmerRenderPrepState: boolean | undefined = undefined;
+  private lastPreviewRenderMode: PreviewRefreshStyle | undefined = undefined;
   private preparedContentsCache = new Map<string, { content: string; preparedText: string; generatedPath: string }>();
   private lspSyncGenerations = new Map<string, number>();
   private workspaceChangeQueue: Promise<void> = Promise.resolve();
@@ -508,6 +509,8 @@ export class TypstryWorkspaceController {
 
     const khmerPrepChanged = this.lastKhmerRenderPrepState !== undefined && this.lastKhmerRenderPrepState !== preview.khmerRenderPreparation;
     this.lastKhmerRenderPrepState = preview.khmerRenderPreparation;
+    const previewRenderModeChanged = this.lastPreviewRenderMode !== undefined && this.lastPreviewRenderMode !== preview.renderMode;
+    this.lastPreviewRenderMode = preview.renderMode;
 
     const khmerPrepStatus = document.getElementById("khmer-prep-status");
     if (khmerPrepStatus) {
@@ -520,6 +523,8 @@ export class TypstryWorkspaceController {
 
     if (khmerPrepChanged) {
       void this.prepareRenderProjectIfNeeded().then(() => this.refreshActivePreviewRoot());
+    } else if (previewRenderModeChanged) {
+      void this.refreshActivePreviewRoot();
     }
 
     if (this.editorInstance) {
@@ -930,7 +935,7 @@ export class TypstryWorkspaceController {
       this.previewTaskId = tab.previewTaskId;
       this.previewSessionKey = tab.previewSessionKey;
       this.previewImported = tab.previewImported;
-      this.previewLiveUpdates = tab.previewLiveUpdates;
+      this.previewStandalone = tab.previewStandalone;
     }
     this.renderEditorTabs();
   }
@@ -965,7 +970,7 @@ export class TypstryWorkspaceController {
       this.previewTaskId = null;
       this.previewSessionKey = null;
       this.previewImported = false;
-      this.previewLiveUpdates = true;
+      this.previewStandalone = true;
       this.clearDiagnostics();
       this.clearPendingLspSync();
       this.previewSyncController.clearForward();
@@ -1249,7 +1254,7 @@ export class TypstryWorkspaceController {
         previewTaskId: null,
         previewSessionKey: null,
         previewImported: false,
-        previewLiveUpdates: true,
+        previewStandalone: true,
         version: 1,
         latestVersion: 1,
         selectionAnchor: 0,
@@ -1488,20 +1493,20 @@ export class TypstryWorkspaceController {
         mainPath: this.mapToCachePath(target.mainPath)
       };
     }
-    const style = previewRefreshStyle(mappedTarget);
+    const style = previewRefreshStyle(this.settingsController.value.preview.renderMode);
     const identity = mappedTarget.rootPath ? previewSessionIdentity(mappedTarget.rootPath, style) : null;
     tab.previewRootPath = mappedTarget.rootPath;
     tab.previewMainPath = mappedTarget.mainPath;
     tab.previewTaskId = identity?.taskId ?? null;
     tab.previewSessionKey = identity?.key ?? null;
     tab.previewImported = mappedTarget.imported;
-    tab.previewLiveUpdates = target.liveUpdates;
+    tab.previewStandalone = target.standalone;
     this.previewRootPath = tab.previewRootPath;
     this.previewMainPath = tab.previewMainPath;
     this.previewTaskId = tab.previewTaskId;
     this.previewSessionKey = tab.previewSessionKey;
     this.previewImported = tab.previewImported;
-    this.previewLiveUpdates = tab.previewLiveUpdates;
+    this.previewStandalone = tab.previewStandalone;
   }
 
   private capturePreviewSession(): PreviewSessionState {
@@ -1511,7 +1516,7 @@ export class TypstryWorkspaceController {
       previewTaskId: this.previewTaskId,
       previewSessionKey: this.previewSessionKey,
       previewImported: this.previewImported,
-      previewLiveUpdates: this.previewLiveUpdates
+      previewStandalone: this.previewStandalone
     };
   }
 
@@ -1539,13 +1544,13 @@ export class TypstryWorkspaceController {
     tab.previewTaskId = session.previewTaskId;
     tab.previewSessionKey = session.previewSessionKey;
     tab.previewImported = session.previewImported;
-    tab.previewLiveUpdates = session.previewLiveUpdates;
+    tab.previewStandalone = session.previewStandalone;
     this.previewRootPath = session.previewRootPath;
     this.previewMainPath = session.previewMainPath;
     this.previewTaskId = session.previewTaskId;
     this.previewSessionKey = session.previewSessionKey;
     this.previewImported = session.previewImported;
-    this.previewLiveUpdates = session.previewLiveUpdates;
+    this.previewStandalone = session.previewStandalone;
   }
 
   private async rootRelativeTypstPath(path: string): Promise<string | null> {
@@ -1563,7 +1568,7 @@ export class TypstryWorkspaceController {
     if (
       !this.workspaceRootPath
       || !target.imported
-      || !target.liveUpdates
+      || !target.standalone
       || !target.mainPath
       || !target.rootPath
       || filePathKey(target.rootPath) !== filePathKey(activePath)
@@ -1579,7 +1584,10 @@ export class TypstryWorkspaceController {
       const chapterRootPath = await this.rootRelativeTypstPath(activePath);
       if (!templateRootPath || !chapterRootPath) return target;
 
-      const identity = previewSessionIdentity(activePath, "on-type");
+      const identity = previewSessionIdentity(
+        activePath,
+        previewRefreshStyle(this.settingsController.value.preview.renderMode)
+      );
       const previewPath = await join(
         this.workspaceRootPath,
         `.${fileNameFromPath(activePath)}.${identity.taskId}.typstry-preview.typ`
@@ -1654,7 +1662,7 @@ export class TypstryWorkspaceController {
     this.appendDeveloperLog({
       kind: "info",
       source: "preview activation",
-      message: `Activating preview root="${this.previewRootPath}", main="${this.previewMainPath ?? ""}", task="${this.previewTaskId}", session="${this.previewSessionKey}", live=${this.previewLiveUpdates}.`
+      message: `Activating preview root="${this.previewRootPath}", main="${this.previewMainPath ?? ""}", task="${this.previewTaskId}", session="${this.previewSessionKey}", standalone=${this.previewStandalone}, refresh=${this.settingsController.value.preview.renderMode}.`
     });
     this.layoutController.dockPreview();
     if (this.previewFrame.activateSession(this.previewSessionKey)) {
@@ -1665,7 +1673,7 @@ export class TypstryWorkspaceController {
       });
       return true;
     }
-    const style: PreviewRefreshStyle = this.previewLiveUpdates ? "on-type" : "on-save";
+    const style = previewRefreshStyle(this.settingsController.value.preview.renderMode);
     const previewUrl = await this.startPreviewWithRestart(
       this.previewRootPath,
       activeContents,
@@ -1759,7 +1767,7 @@ export class TypstryWorkspaceController {
         activeTab.version = version;
         activeTab.latestVersion = version;
       }
-      if (this.previewImported && allowsLiveImportPreview(rawText) !== this.previewLiveUpdates) {
+      if (this.previewImported && allowsStandalonePreview(rawText) !== this.previewStandalone) {
         void this.refreshActivePreviewRoot();
       }
       this.pendingLspSyncPath = this.activeFilePath;
@@ -1803,7 +1811,7 @@ export class TypstryWorkspaceController {
 
     this.setLspStatus({ kind: "syncing", message: "Syncing preview" });
     this.previewSyncController.reset();
-    if (this.workspaceRootPath && this.previewLiveUpdates) {
+    if (this.workspaceRootPath && this.previewStandalone && this.settingsController.value.preview.renderMode === "on-type") {
       let target = await invoke<PreviewTarget>("resolve_preview_main", {
         filePath: path,
         workspaceRootPath: this.workspaceRootPath,
@@ -2118,7 +2126,7 @@ export class TypstryWorkspaceController {
       return;
     }
 
-    const externalLabels = this.previewImported && this.previewLiveUpdates
+    const externalLabels = this.previewImported && this.previewStandalone
       ? new Set(externalReferenceLabels(this.editorInstance.state.doc.toString()))
       : new Set<string>();
     const filteredDiagnostics = diagnostics.filter(diagnostic => {
@@ -2413,7 +2421,7 @@ export class TypstryWorkspaceController {
                previewTaskId: null,
                previewSessionKey: null,
                previewImported: false,
-               previewLiveUpdates: true,
+               previewStandalone: true,
                version: 1,
                latestVersion: 1,
                selectionAnchor: tabInfo.selectionAnchor || 0,
@@ -2602,7 +2610,7 @@ export class TypstryWorkspaceController {
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(target.mainPath);
     const identity = target.rootPath
-      ? previewSessionIdentity(target.rootPath, previewRefreshStyle(target))
+      ? previewSessionIdentity(target.rootPath, previewRefreshStyle(this.settingsController.value.preview.renderMode))
       : null;
     const unchanged = identity?.key === this.previewSessionKey;
     if (unchanged) return;
@@ -2704,7 +2712,7 @@ export class TypstryWorkspaceController {
     this.previewTaskId = null;
     this.previewSessionKey = null;
     this.previewImported = false;
-    this.previewLiveUpdates = true;
+    this.previewStandalone = true;
     this.openedDocumentUris.clear();
     this.openTabs = [];
     this.renderEditorTabs();

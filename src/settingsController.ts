@@ -167,6 +167,7 @@ export class SettingsController {
     onChange("settings-word-completion", (settings, control) => { settings.editor.wordCompletion = (control as HTMLInputElement).checked; });
     onChange("settings-show-zws", (settings, control) => { settings.editor.showZws = (control as HTMLInputElement).checked; });
     onChange("settings-format-on-save", (settings, control) => { settings.editor.formatOnSave = (control as HTMLInputElement).checked; });
+    onChange("settings-preview-render-mode", (settings, control) => { settings.preview.renderMode = control.value as AppSettings["preview"]["renderMode"]; });
     onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
@@ -245,6 +246,7 @@ export class SettingsController {
     setValue("settings-code-font", editor.codeFont);
     setValue("settings-unicode-font", editor.unicodeFont);
     setValue("settings-tab-size", String(editor.tabSize));
+    setValue("settings-preview-render-mode", preview.renderMode);
     setValue("settings-sync-debounce", String(preview.syncDebounceMs));
     setValue("settings-highlight-duration", String(preview.highlightDurationMs));
     setChecked("settings-word-wrap", editor.wordWrap);

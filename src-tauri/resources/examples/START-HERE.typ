@@ -27,4 +27,4 @@ Open any `main.typ` file from the explorer. These files are your own writable co
 
 When Typstry detects a script that needs another font, choose the font you prefer from the notification or Settings.
 
-Imported template sections start with `// @allow-preview`, so opening one directly enables its independent live preview.
+Imported template sections start with `// @standalone-preview`, so opening one directly enables its independent preview.

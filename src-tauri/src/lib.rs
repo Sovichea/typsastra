@@ -340,7 +340,7 @@ struct PreviewTarget {
     root_path: Option<String>,
     main_path: Option<String>,
     imported: bool,
-    live_updates: bool,
+    standalone: bool,
 }
 
 fn normalized_existing_path(path: &std::path::Path) -> std::path::PathBuf {
@@ -479,10 +479,10 @@ fn collect_typst_files(root: &std::path::Path, files: &mut Vec<std::path::PathBu
     }
 }
 
-fn allows_live_import_preview(contents: &str) -> bool {
+fn allows_standalone_preview(contents: &str) -> bool {
     matches!(
         contents.trim_start_matches('\u{feff}').lines().next(),
-        Some("// @allow-preview" | "//@allow-preview")
+        Some("// @standalone-preview" | "//@standalone-preview")
     )
 }
 
@@ -499,7 +499,7 @@ fn resolve_preview_target(
             root_path: None,
             main_path: None,
             imported: false,
-            live_updates: false,
+            standalone: false,
         });
     }
 
@@ -567,7 +567,7 @@ fn resolve_preview_target(
         )
     };
     let imported = !ancestors.is_empty();
-    let allow_preview = allows_live_import_preview(&active_contents);
+    let standalone_preview = allows_standalone_preview(&active_contents);
     let main_root = ancestors
         .iter()
         .filter(|(candidate, _)| preferred(candidate))
@@ -575,7 +575,7 @@ fn resolve_preview_target(
         .or_else(|| ancestors.iter().max_by_key(|(_, distance)| *distance))
         .map(|(candidate, _)| candidate.clone());
 
-    let root = if imported && allow_preview {
+    let root = if imported && standalone_preview {
         path.clone()
     } else {
         main_root.clone().unwrap_or_else(|| path.clone())
@@ -585,7 +585,7 @@ fn resolve_preview_target(
         root_path: Some(root.to_string_lossy().to_string()),
         main_path: main_root.map(|p| p.to_string_lossy().to_string()),
         imported,
-        live_updates: !imported || allow_preview,
+        standalone: !imported || standalone_preview,
     })
 }
 
@@ -936,7 +936,7 @@ mod preview_main_tests {
             )
         );
         assert!(resolved.imported);
-        assert!(!resolved.live_updates);
+        assert!(!resolved.standalone);
     }
 
     #[test]
@@ -963,11 +963,11 @@ mod preview_main_tests {
             )
         );
         assert!(!resolved.imported);
-        assert!(resolved.live_updates);
+        assert!(resolved.standalone);
     }
 
     #[test]
-    fn top_directive_enables_live_import_preview() {
+    fn top_directive_enables_standalone_import_preview() {
         let workspace = tempfile::tempdir().expect("create workspace");
         let main_path = workspace.path().join("main.typ");
         let draft_path = workspace.path().join("chapter.typ");
@@ -977,12 +977,12 @@ mod preview_main_tests {
         let resolved = resolve_preview_target(
             draft_path.to_string_lossy().to_string(),
             Some(workspace.path().to_string_lossy().to_string()),
-            Some("// @allow-preview\nUnsaved chapter".to_string()),
+            Some("// @standalone-preview\nUnsaved chapter".to_string()),
         )
         .expect("resolve preview");
 
         assert!(resolved.imported);
-        assert!(resolved.live_updates);
+        assert!(resolved.standalone);
         assert_eq!(
             resolved.root_path.as_deref(),
             Some(

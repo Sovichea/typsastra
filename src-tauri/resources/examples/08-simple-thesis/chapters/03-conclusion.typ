@@ -1,4 +1,4 @@
-// @allow-preview
+// @standalone-preview
 = Conclusion <conclusion>
 
 The example shows that a multi-file thesis can use ordinary Typst labels across chapter boundaries. The key result in @main-result follows from the chapter structure introduced in @introduction.

@@ -1,7 +1,7 @@
-// @allow-preview
+// @standalone-preview
 = Method <method>
 
-The document is assembled by `main.typ`, which includes all three chapter files. Each chapter starts with `// @allow-preview`, allowing an independent live preview that retains the thesis template.
+The document is assembled by `main.typ`, which includes all three chapter files. Each chapter starts with `// @standalone-preview`, allowing an independent preview that retains the thesis template.
 
 The method has three steps:
 

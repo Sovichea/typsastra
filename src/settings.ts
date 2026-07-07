@@ -10,6 +10,7 @@ export const themeNames = [
 ] as const;
 
 export type ThemeName = typeof themeNames[number];
+export type PreviewRenderMode = "on-type" | "on-save";
 
 export type AppSettings = {
   version: 1;
@@ -36,6 +37,7 @@ export type AppSettings = {
     formatOnSave: boolean;
   };
   preview: {
+    renderMode: PreviewRenderMode;
     cursorSync: boolean;
     syncDebounceMs: number;
     highlightDurationMs: number;
@@ -71,6 +73,7 @@ export const defaultAppSettings: AppSettings = {
     formatOnSave: false
   },
   preview: {
+    renderMode: "on-type",
     cursorSync: true,
     syncDebounceMs: 120,
     highlightDurationMs: 2200,
@@ -101,6 +104,12 @@ function stringListOrNull(value: unknown): string[] | null {
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value)) return null;
   return [...new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map(item => item.trim()))].sort();
+}
+
+function previewRenderMode(value: unknown): PreviewRenderMode {
+  return value === "on-save" || value === "on-type"
+    ? value
+    : defaultAppSettings.preview.renderMode;
 }
 
 export function normalizeAppSettings(value: unknown): AppSettings {
@@ -143,6 +152,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       formatOnSave: booleanValue(editor.formatOnSave, defaultAppSettings.editor.formatOnSave)
     },
     preview: {
+      renderMode: previewRenderMode(preview.renderMode),
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),
       syncDebounceMs: Math.round(boundedNumber(preview.syncDebounceMs, defaultAppSettings.preview.syncDebounceMs, 50, 2000)),
       highlightDurationMs: Math.round(boundedNumber(preview.highlightDurationMs, defaultAppSettings.preview.highlightDurationMs, 500, 10000)),
