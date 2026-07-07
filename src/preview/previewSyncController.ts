@@ -28,6 +28,8 @@ export type InverseSyncResult = {
 
 export class PreviewSyncController {
   private forwardTimer: number | null = null;
+  private forwardGeneration = 0;
+  private lastForwardTarget: { key: string; timestamp: number } | null = null;
   private pendingTextClick: (PreviewTextPoint & { timestamp: number }) | null = null;
 
   constructor(
@@ -45,8 +47,10 @@ export class PreviewSyncController {
   public schedule(delayMs: number): void {
     if (!this.canSync()) return;
     this.clearForward();
+    const generation = ++this.forwardGeneration;
     this.forwardTimer = window.setTimeout(() => {
       this.forwardTimer = null;
+      if (generation !== this.forwardGeneration) return;
       const cursor = this.dependencies.getEditor()?.state.selection.main.head;
       if (cursor !== undefined) void this.renderAtCursor(cursor);
     }, delayMs);
@@ -59,10 +63,10 @@ export class PreviewSyncController {
     if (!editor || !client || !path || !this.dependencies.getPreviewTaskId() || !this.dependencies.isReady()) return;
 
     this.clearForward();
-    await this.navigateToCursor(cursor);
+    await this.navigateToCursor(cursor, ++this.forwardGeneration);
   }
 
-  public async navigateToCursor(cursor: number): Promise<void> {
+  public async navigateToCursor(cursor: number, generation = ++this.forwardGeneration): Promise<void> {
     const editor = this.dependencies.getEditor();
     const client = this.dependencies.getClient();
     const path = this.dependencies.getActiveFilePath();
@@ -71,7 +75,9 @@ export class PreviewSyncController {
 
     if (this.dependencies.mapForwardPosition) {
       const mapped = await this.dependencies.mapForwardPosition(path, cursor);
+      if (generation !== this.forwardGeneration) return;
       if (mapped) {
+        if (this.isDuplicateForwardTarget(taskId, mapped.filepath, mapped.line, mapped.character)) return;
         await client.scrollPreview(taskId, {
           event: "panelScrollTo",
           filepath: mapped.filepath,
@@ -85,6 +91,8 @@ export class PreviewSyncController {
     const position = Math.max(0, Math.min(cursor, editor.state.doc.length));
     const line = editor.state.doc.lineAt(position);
     const character = client.lspCharacterFromStringOffset(line.text, position - line.from);
+    if (generation !== this.forwardGeneration) return;
+    if (this.isDuplicateForwardTarget(taskId, path, line.number - 1, character)) return;
     await client.scrollPreview(taskId, {
       event: "panelScrollTo",
       filepath: path,
@@ -105,6 +113,7 @@ export class PreviewSyncController {
 
   public suppressOnce(): void {
     this.clearForward();
+    this.forwardGeneration++;
   }
 
   public clearForward(): void {
@@ -114,6 +123,8 @@ export class PreviewSyncController {
 
   public reset(): void {
     this.clearForward();
+    this.forwardGeneration++;
+    this.lastForwardTarget = null;
     this.pendingTextClick = null;
   }
 
@@ -128,6 +139,16 @@ export class PreviewSyncController {
       && !!this.dependencies.getPreviewTaskId()
       && this.dependencies.isReady()
       && !!this.dependencies.getClient();
+  }
+
+  private isDuplicateForwardTarget(taskId: string, filepath: string, line: number, character: number): boolean {
+    const now = Date.now();
+    const key = `${taskId}\u0000${filepath}\u0000${line}\u0000${character}`;
+    if (this.lastForwardTarget?.key === key && now - this.lastForwardTarget.timestamp < 500) {
+      return true;
+    }
+    this.lastForwardTarget = { key, timestamp: now };
+    return false;
   }
 
   private refineFromTextClick(position: LspSourcePosition, fallback: number): InverseSyncResult {

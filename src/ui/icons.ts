@@ -185,6 +185,7 @@ export function initializeLucideIcons(): void {
   replaceSvg("#titlebar-close svg", "x", 12);
   replaceSvg("#preview-menu-btn svg", "ellipsisVertical", 16);
   replaceSvg("#undock-preview-btn svg", "externalLink", 16);
+  replaceSvg("#sidebar-toggle-button svg", "panelLeft", 15);
   replaceContents("#settings-close, #log-console-close", "x", 15);
   replaceContents("#editor-tabs-previous", "chevronLeft", 16);
   replaceContents("#editor-tabs-next", "chevronRight", 16);

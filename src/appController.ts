@@ -64,6 +64,10 @@ type StartupTimingEntry = {
   ms: number;
 };
 
+const DEFAULT_INPUT_WIDTH_PCT = 50;
+const DEFAULT_PREVIEW_WIDTH_PCT = 100 - DEFAULT_INPUT_WIDTH_PCT;
+const DEFAULT_EXPLORER_WIDTH_PX = 250;
+
 type ExamplesWorkspace = {
   workspacePath: string;
   entryPath: string;
@@ -112,6 +116,7 @@ export class TypstryWorkspaceController {
   private readonly startupStart = performance.now();
   private readonly startupTimings: StartupTimingEntry[] = [];
   private readonly loggedNativeStartupTimings = new Set<string>();
+  private sidebarVisible = true;
   private activeMode: EditorMode = "CODE";
   private activeFilePath: string | null = null;
   private previewRootPath: string | null = null;
@@ -181,6 +186,8 @@ export class TypstryWorkspaceController {
     this.previewSyncController.recordTextClick(point);
   }, status => {
     this.reportPreviewInteractionStatus(status);
+  }, zoomPercent => {
+    this.updatePreviewZoomLabel(zoomPercent);
   });
   private readonly previewSyncController = new PreviewSyncController({
     getEditor: () => this.editorInstance,
@@ -396,6 +403,7 @@ export class TypstryWorkspaceController {
     const resizer = document.getElementById("editor-preview-resizer");
     const explorerSidebar = document.getElementById("explorer-sidebar");
     const explorerResizer = document.getElementById("explorer-resizer");
+    const sidebarActivityBar = document.getElementById("sidebar-activity-bar");
     const appMenus = document.getElementById("app-menus");
 
     if (this.activeFilePath || this.workspaceRootPath) {
@@ -416,14 +424,74 @@ export class TypstryWorkspaceController {
     }
 
     if (this.workspaceRootPath) {
-      explorerSidebar?.classList.remove("hidden");
-      explorerResizer?.classList.remove("hidden");
+      sidebarActivityBar?.classList.remove("hidden");
+      this.applySidebarVisibility();
       appMenus?.classList.remove("hidden");
     } else {
       explorerSidebar?.classList.add("hidden");
       explorerResizer?.classList.add("hidden");
+      sidebarActivityBar?.classList.add("hidden");
       appMenus?.classList.add("hidden");
     }
+  }
+
+  private toggleSidebar(): void {
+    if (!this.workspaceRootPath) return;
+    this.sidebarVisible = !this.sidebarVisible;
+    this.applySidebarVisibility();
+    this.saveWorkspaceState();
+  }
+
+  private restoreDefaultLayout(): void {
+    if (!this.workspaceRootPath) return;
+    this.sidebarVisible = true;
+
+    const explorerSidebar = document.getElementById("explorer-sidebar");
+    if (explorerSidebar) explorerSidebar.style.width = `${DEFAULT_EXPLORER_WIDTH_PX}px`;
+    this.applySidebarVisibility();
+
+    const inputWrapper = document.getElementById("input-container-wrapper");
+    const previewWrapper = document.getElementById("preview-container-wrapper");
+    const previewResizer = document.getElementById("editor-preview-resizer");
+    const dockButton = document.getElementById("dock-preview-status-btn");
+
+    if (inputWrapper) {
+      inputWrapper.style.width = `${DEFAULT_INPUT_WIDTH_PCT}%`;
+      if (this.activeFilePath) inputWrapper.classList.remove("hidden");
+    }
+    if (previewWrapper) {
+      previewWrapper.style.width = `${DEFAULT_PREVIEW_WIDTH_PCT}%`;
+      if (this.activeFilePath) {
+        previewWrapper.classList.remove("hidden");
+        previewWrapper.style.display = "flex";
+      } else {
+        previewWrapper.style.display = "";
+      }
+    }
+    if (previewResizer) {
+      previewResizer.style.display = this.activeFilePath ? "block" : "";
+      previewResizer.classList.toggle("hidden", !this.activeFilePath);
+    }
+    dockButton?.classList.add("hidden");
+
+    const logConsole = document.getElementById("log-console");
+    if (logConsole) logConsole.style.height = "";
+    this.logConsoleController.setVisible(false);
+
+    this.updateWorkspaceViewportVisibility();
+    this.saveWorkspaceState();
+  }
+
+  private applySidebarVisibility(): void {
+    const explorerSidebar = document.getElementById("explorer-sidebar");
+    const explorerResizer = document.getElementById("explorer-resizer");
+    const sidebarToggle = document.getElementById("sidebar-toggle-button") as HTMLButtonElement | null;
+    explorerSidebar?.classList.toggle("hidden", !this.sidebarVisible);
+    if (explorerSidebar) explorerSidebar.style.display = "";
+    explorerResizer?.classList.toggle("hidden", !this.sidebarVisible);
+    sidebarToggle?.setAttribute("aria-expanded", String(this.sidebarVisible));
+    sidebarToggle?.setAttribute("aria-label", this.sidebarVisible ? "Hide sidebar" : "Show sidebar");
+    if (sidebarToggle) sidebarToggle.title = this.sidebarVisible ? "Hide sidebar" : "Show sidebar";
   }
 
   private applySettingsToRuntime(settings: AppSettings) {
@@ -1907,9 +1975,9 @@ export class TypstryWorkspaceController {
     }
   }
 
-  private updatePreviewZoomLabel() {
+  private updatePreviewZoomLabel(zoomPercent = this.previewFrame.currentZoomPercent) {
     const label = document.getElementById("preview-zoom-label");
-    if (label) label.textContent = `${this.previewFrame.currentZoomPercent}%`;
+    if (label) label.textContent = `${zoomPercent}%`;
   }
 
   private recordStartupTiming(source: string, label: string, start: number): void {
@@ -2305,8 +2373,8 @@ export class TypstryWorkspaceController {
         scrollLeft: tab.scrollLeft,
         foldRanges: tab.foldRanges
       })),
-      inputContainerWidthPct: inputContainer?.style.width ? parseFloat(inputContainer.style.width) : 50,
-      explorerSidebarWidthPx: explorerSidebar?.style.width ? parseInt(explorerSidebar.style.width, 10) : 250
+      inputContainerWidthPct: inputContainer?.style.width ? parseFloat(inputContainer.style.width) : DEFAULT_INPUT_WIDTH_PCT,
+      explorerSidebarWidthPx: explorerSidebar?.style.width ? parseInt(explorerSidebar.style.width, 10) : DEFAULT_EXPLORER_WIDTH_PX
     });
   }
 
@@ -2858,7 +2926,15 @@ export class TypstryWorkspaceController {
     });
 
     document.getElementById("action-toggle-sidebar")?.addEventListener("click", () => {
-      document.getElementById("explorer-sidebar")?.classList.toggle("hidden");
+      this.toggleSidebar();
+    });
+
+    document.getElementById("sidebar-toggle-button")?.addEventListener("click", () => {
+      this.toggleSidebar();
+    });
+
+    document.getElementById("action-restore-default-layout")?.addEventListener("click", () => {
+      this.restoreDefaultLayout();
     });
 
     document.getElementById("action-clear-logs")?.addEventListener("click", () => {

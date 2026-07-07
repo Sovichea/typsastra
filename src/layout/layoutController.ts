@@ -1,6 +1,8 @@
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 export class LayoutController {
+  private static readonly dragThresholdPx = 4;
+
   constructor(
     private readonly onLayoutChanged: () => void,
     private readonly onHideLogConsole: () => void,
@@ -41,25 +43,11 @@ export class LayoutController {
   private initializeResizers(): void {
     const explorerResizer = document.getElementById("explorer-resizer");
     const explorerSidebar = document.getElementById("explorer-sidebar");
-    let resizingExplorer = false;
     if (explorerResizer && explorerSidebar) {
-      explorerResizer.addEventListener("mousedown", () => {
-        resizingExplorer = true;
-        this.beginResize(explorerResizer, "col-resize");
-      });
-      document.addEventListener("mousemove", event => {
-        if (resizingExplorer) explorerSidebar.style.width = `${Math.max(150, Math.min(event.clientX, 800))}px`;
-      });
-      document.addEventListener("mouseup", () => {
-        if (!resizingExplorer) return;
-        resizingExplorer = false;
-        this.endResize(explorerResizer);
+      this.installDragResize(explorerResizer, "col-resize", event => {
+        explorerSidebar.style.width = `${Math.max(150, Math.min(event.clientX, 800))}px`;
+      }, () => {
         this.onLayoutChanged();
-      });
-      explorerResizer.addEventListener("dblclick", () => {
-        const hidden = explorerSidebar.style.display === "none" || explorerSidebar.classList.contains("hidden");
-        explorerSidebar.classList.toggle("hidden", !hidden);
-        explorerSidebar.style.display = hidden ? "block" : "none";
       });
     }
 
@@ -67,45 +55,24 @@ export class LayoutController {
     const input = document.getElementById("input-container-wrapper");
     const preview = document.getElementById("preview-container-wrapper");
     const viewport = document.getElementById("workspace-viewport");
-    let resizingEditor = false;
     if (editorResizer && input && preview && viewport) {
-      editorResizer.addEventListener("mousedown", () => {
-        resizingEditor = true;
-        this.beginResize(editorResizer, "col-resize");
-      });
-      document.addEventListener("mousemove", event => {
-        if (!resizingEditor) return;
+      this.installDragResize(editorResizer, "col-resize", event => {
         const rect = viewport.getBoundingClientRect();
         const percentage = Math.max(10, Math.min(((event.clientX - rect.left) / rect.width) * 100, 90));
         input.style.width = `${percentage}%`;
         preview.style.width = `${100 - percentage}%`;
-      });
-      document.addEventListener("mouseup", () => {
-        if (!resizingEditor) return;
-        resizingEditor = false;
-        this.endResize(editorResizer);
+      }, () => {
         this.onLayoutChanged();
       });
     }
 
     const logResizer = document.getElementById("log-console-resizer");
     const logConsole = document.getElementById("log-console");
-    let resizingLog = false;
     if (logResizer && logConsole) {
-      logResizer.addEventListener("mousedown", () => {
-        resizingLog = true;
-        this.beginResize(logResizer, "row-resize");
-      });
-      document.addEventListener("mousemove", event => {
-        if (!resizingLog) return;
+      this.installDragResize(logResizer, "row-resize", event => {
         const statusBarHeight = document.getElementById("status-bar")?.offsetHeight || 26;
         const height = window.innerHeight - event.clientY - statusBarHeight;
         logConsole.style.height = `${Math.max(100, Math.min(height, window.innerHeight * 0.8))}px`;
-      });
-      document.addEventListener("mouseup", () => {
-        if (!resizingLog) return;
-        resizingLog = false;
-        this.endResize(logResizer);
       });
       logResizer.addEventListener("dblclick", this.onHideLogConsole);
     }
@@ -154,5 +121,50 @@ export class LayoutController {
     document.body.classList.remove("typstry-resizing");
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
+  }
+
+  private installDragResize(
+    resizer: HTMLElement,
+    cursor: string,
+    onDrag: (event: MouseEvent) => void,
+    onEnd: () => void = () => {}
+  ): void {
+    let pending: { pointerId: number; x: number; y: number } | null = null;
+    let dragging = false;
+
+    resizer.addEventListener("pointerdown", event => {
+      if (event.button !== 0) return;
+      pending = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      dragging = false;
+      resizer.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+
+    resizer.addEventListener("pointermove", event => {
+      if (!pending || event.pointerId !== pending.pointerId) return;
+      if (!dragging) {
+        const distance = Math.hypot(event.clientX - pending.x, event.clientY - pending.y);
+        if (distance < LayoutController.dragThresholdPx) return;
+        dragging = true;
+        this.beginResize(resizer, cursor);
+      }
+      onDrag(event);
+    });
+
+    const finish = (event: PointerEvent): void => {
+      if (!pending || event.pointerId !== pending.pointerId) return;
+      const pointerId = pending.pointerId;
+      pending = null;
+      if (resizer.hasPointerCapture(pointerId)) resizer.releasePointerCapture(pointerId);
+      if (dragging) {
+        dragging = false;
+        this.endResize(resizer);
+        onEnd();
+      }
+    };
+
+    resizer.addEventListener("pointerup", finish);
+    resizer.addEventListener("pointercancel", finish);
+    resizer.addEventListener("lostpointercapture", finish);
   }
 }

@@ -111,6 +111,13 @@
                                     Toggle Sidebar
                                     <span class="hotkey">Ctrl+B</span>
                                 </div>
+                                <div class="dropdown-separator"></div>
+                                <div
+                                    class="dropdown-item"
+                                    id="action-restore-default-layout"
+                                >
+                                    Restore Default Layout
+                                </div>
                             </div>
                         </div>
                         <div class="menu-item dropdown-container">
@@ -196,6 +203,22 @@
                 </div>
             </div>
             <div id="app-container">
+                <nav
+                    id="sidebar-activity-bar"
+                    class="sidebar-activity-bar hidden"
+                    aria-label="Sidebar tools"
+                >
+                    <button
+                        type="button"
+                        id="sidebar-toggle-button"
+                        class="sidebar-activity-button"
+                        title="Hide sidebar"
+                        aria-label="Hide sidebar"
+                        aria-expanded="true"
+                    >
+                        <svg viewBox="0 0 16 16" width="15" height="15"></svg>
+                    </button>
+                </nav>
                 <aside id="explorer-sidebar" aria-label="Workspace sidebar">
                     <section class="sidebar-section workspace-explorer-section">
                         <div class="sidebar-section-header">

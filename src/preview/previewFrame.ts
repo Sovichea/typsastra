@@ -8,6 +8,8 @@ export type PreviewInteractionStatus = {
   reason?: string;
 };
 
+const DEFAULT_PREVIEW_ZOOM_PERCENT = 90;
+
 export class PreviewFrame {
   private iframe: HTMLIFrameElement | null = null;
   private svgIframe: HTMLIFrameElement | null = null;
@@ -23,7 +25,8 @@ export class PreviewFrame {
   constructor(
     private readonly pane: HTMLElement,
     private readonly onTextClick: (point: PreviewTextPoint) => void,
-    private readonly onInteractionStatus?: (status: PreviewInteractionStatus) => void
+    private readonly onInteractionStatus?: (status: PreviewInteractionStatus) => void,
+    private readonly onZoomChanged?: (zoomPercent: number) => void
   ) {
     window.addEventListener("message", event => {
       const data = event.data as { typstryPreviewStatus?: string; message?: string; source?: string; lineno?: number; colno?: number } | null;
@@ -130,6 +133,7 @@ export class PreviewFrame {
       this.configureDocument(iframe);
       const session = this.sessions.get(sessionKey);
       if (session) this.restoreScroll(session);
+      this.scheduleInitialZoom(iframe, sessionKey);
     });
     this.pane.appendChild(iframe);
     this.sessions.set(sessionKey, { iframe, url: previewUrl, usedAt: Date.now(), scrollKey });
@@ -260,6 +264,26 @@ export class PreviewFrame {
   private previewSrcdoc(html: string, previewUrl: string, scriptBlobUrl: string): string {
     const injection = `
 <base href="${escapeAttribute(previewUrl.endsWith("/") ? previewUrl : `${previewUrl}/`)}">
+<style id="typstry-preview-layout">
+  html, body {
+    box-sizing: border-box !important;
+    min-width: 100% !important;
+    min-height: 100% !important;
+    background: #d8d8d8 !important;
+  }
+  body {
+    margin: 0 !important;
+  }
+  #typst-container {
+    box-sizing: border-box !important;
+    min-width: 100% !important;
+    min-height: 100vh !important;
+  }
+  #typst-container > * {
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+</style>
 <script src="${escapeAttribute(scriptBlobUrl)}"></script>`;
     if (/<head\b[^>]*>/i.test(html)) {
       return html.replace(/<head\b([^>]*)>/i, `<head$1>${injection}`);
@@ -580,8 +604,31 @@ export class PreviewFrame {
 
     this.previewZoomPercent = next;
     if (this.activeSessionKey) this.zoomBySession.set(this.activeSessionKey, next);
+    this.onZoomChanged?.(next);
     this.reportDebug(this.mountedUrl, `Preview zoom ${direction}: estimated ${next}%.`);
     return next;
+  }
+
+  private scheduleInitialZoom(iframe: HTMLIFrameElement, sessionKey: string, attempt = 0): void {
+    if (this.zoomBySession.has(sessionKey)) return;
+    window.setTimeout(() => {
+      const session = this.sessions.get(sessionKey);
+      if (!session || session.iframe !== iframe || this.zoomBySession.has(sessionKey)) return;
+      if (this.activeSessionKey !== sessionKey || this.iframe !== iframe) return;
+
+      const doc = iframe.contentDocument;
+      const rendered = doc?.querySelector("#typst-container svg, #typst-container canvas, #typst-container > *");
+      if (!rendered) {
+        if (attempt < 12) this.scheduleInitialZoom(iframe, sessionKey, attempt + 1);
+        return;
+      }
+
+      this.previewZoomPercent = 100;
+      const zoom = this.zoomPreview("out");
+      if (zoom !== DEFAULT_PREVIEW_ZOOM_PERCENT && attempt < 12) {
+        this.scheduleInitialZoom(iframe, sessionKey, attempt + 1);
+      }
+    }, attempt === 0 ? 250 : 150);
   }
 
 
