@@ -29,6 +29,7 @@ export type ContextMenuDependencies = {
 };
 
 const previewItems = `
+  <div class="dropdown-item" id="ctx-preview-undock">Undock Preview</div>
   <div class="dropdown-item" id="ctx-preview-open-external">Open in External Viewer</div>
   <div class="dropdown-separator"></div>
   <div class="dropdown-item" id="ctx-export-pdf">Export PDF</div>`;
@@ -94,6 +95,7 @@ export class ContextMenuController {
       case "ctx-fs-copy-rel-path": return this.copyRelativePath();
       case "ctx-fs-copy-abs-path": if (this.targetPath) await writeText(this.targetPath); return;
       case "ctx-preview-open-external": return this.openPreviewPdf();
+      case "ctx-preview-undock": document.getElementById("undock-preview-btn")?.click(); return;
       case "ctx-tab-close": if (this.targetPath) await this.dependencies.closeTabInteractive(this.targetPath); return;
       case "ctx-tab-close-others": if (this.targetPath) await this.dependencies.closeOtherTabs(this.targetPath); return;
       case "ctx-restart-workspace": await this.dependencies.restartWorkspace(); return;

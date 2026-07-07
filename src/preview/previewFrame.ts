@@ -103,6 +103,7 @@ export class PreviewFrame {
     this.iframe = session.iframe;
     this.mountedUrl = session.url;
     this.previewZoomPercent = this.zoomBySession.get(sessionKey) ?? 100;
+    this.onZoomChanged?.(this.previewZoomPercent);
     this.restoreScroll(session);
     return true;
   }
@@ -294,6 +295,11 @@ export class PreviewFrame {
   private previewBootstrapScript(previewUrl: string, dataPlaneUrl?: string): string {
     return `
 (() => {
+  window.addEventListener("wheel", event => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, { capture: true, passive: false });
   const postStatus = (kind, message, extra) => {
     try {
       parent.postMessage({
@@ -681,6 +687,11 @@ export class PreviewFrame {
         const point = this.textPointFromMouseEvent(doc, event);
         if (point) this.onTextClick(point);
       }, true);
+      doc.addEventListener("wheel", event => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, { capture: true, passive: false });
       doc.addEventListener("contextmenu", event => event.preventDefault());
       this.reportInteractionStatus({ kind: "installed", url: iframe.src });
     } catch (error) {

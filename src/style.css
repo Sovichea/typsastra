@@ -32,6 +32,7 @@
   --editor-unicode-font: sans-serif;
   --font-family-sans: var(--ui-font), var(--editor-unicode-font), sans-serif;
   --font-family-mono: var(--editor-code-font);
+  --editor-tab-bar-height: 34px;
   --ui-bg: #fcfcfc;
   --ui-text: #333333;
   --ui-hover: #e4e6f1;
@@ -437,7 +438,8 @@ html {
 }
 
 .editor-tab-strip {
-  min-height: 34px;
+  height: var(--editor-tab-bar-height);
+  min-height: var(--editor-tab-bar-height);
   display: flex;
   align-items: stretch;
   min-width: 0;
@@ -498,7 +500,7 @@ html {
 .editor-tab {
   min-width: 120px;
   max-width: 220px;
-  height: 34px;
+  height: var(--editor-tab-bar-height);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1157,14 +1159,25 @@ body.typstry-resizing #preview-render-pane::after {
   min-height: 0;
   flex-shrink: 0;
   background-color: var(--ui-bg);
+  container-name: preview-pane;
+  container-type: inline-size;
 }
 
 .preview-actions {
-  position: absolute;
-  top: 10px;
-  right: 20px;
+  position: relative;
   z-index: 10;
+  flex: 0 0 var(--editor-tab-bar-height);
+  height: var(--editor-tab-bar-height);
+  width: 100%;
+  min-width: 0;
+  padding: 2px 8px;
+  display: flex;
+  gap: 8px;
   align-items: center;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-bg);
 }
 
 .preview-action-button,
@@ -1177,7 +1190,7 @@ body.typstry-resizing #preview-render-pane::after {
 
 .preview-action-button {
   min-width: 30px;
-  height: 30px;
+  height: 28px;
   padding: 4px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -1191,7 +1204,7 @@ body.typstry-resizing #preview-render-pane::after {
 }
 
 .preview-zoom-controls {
-  height: 30px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   overflow: hidden;
@@ -1200,7 +1213,7 @@ body.typstry-resizing #preview-render-pane::after {
 
 .preview-zoom-button {
   min-width: 30px;
-  height: 28px;
+  height: 26px;
   padding: 0;
   border-width: 0;
   border-radius: 0;
@@ -1217,6 +1230,22 @@ body.typstry-resizing #preview-render-pane::after {
   font: 11px var(--font-family-sans);
   text-align: center;
   user-select: none;
+}
+
+@container preview-pane (max-width: 340px) {
+  .preview-actions {
+    gap: 4px;
+    padding-inline: 5px;
+  }
+
+  .preview-zoom-label {
+    min-width: 38px;
+    padding-inline: 4px;
+  }
+
+  #undock-preview-btn {
+    display: none !important;
+  }
 }
 
 #preview-render-pane {
