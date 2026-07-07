@@ -144,12 +144,14 @@ export class LayoutController {
 
   private beginResize(resizer: HTMLElement, cursor: string): void {
     resizer.classList.add("resizing");
+    document.body.classList.add("typstry-resizing");
     document.body.style.cursor = cursor;
     document.body.style.userSelect = "none";
   }
 
   private endResize(resizer: HTMLElement): void {
     resizer.classList.remove("resizing");
+    document.body.classList.remove("typstry-resizing");
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
   }

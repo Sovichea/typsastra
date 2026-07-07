@@ -368,10 +368,25 @@ export class PreviewFrame {
       reportDebug("DOM " + label + " summary failed: " + String(error));
     }
   };
-  window.addEventListener("load", () => summarizeDom("native-load"));
+  let typstrySawNativeLoad = false;
+  window.addEventListener("load", () => {
+    typstrySawNativeLoad = true;
+    summarizeDom("native-load");
+  });
   window.setTimeout(() => summarizeDom("250ms"), 250);
   window.setTimeout(() => {
-    reportDebug("Dispatching synthetic load event for Tinymist preview startup.");
+    const container = document.getElementById("typst-container");
+    const hasRenderedPreview = document.querySelector("svg,canvas") || (container && container.children.length > 0);
+    if (typstrySawNativeLoad || hasRenderedPreview) {
+      reportDebug(
+        "Skipping synthetic load event for Tinymist preview startup; nativeLoad="
+        + typstrySawNativeLoad
+        + ", hasRenderedPreview="
+        + Boolean(hasRenderedPreview)
+      );
+      return;
+    }
+    reportDebug("Dispatching synthetic load event for Tinymist preview startup because native load was not observed.");
     window.dispatchEvent(new Event("load"));
   }, 500);
   window.setTimeout(() => summarizeDom("1000ms"), 1000);

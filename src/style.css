@@ -796,6 +796,15 @@ html {
   background-color: #007fd4;
 }
 
+body.typstry-resizing,
+body.typstry-resizing * {
+  cursor: inherit !important;
+}
+
+body.typstry-resizing iframe {
+  pointer-events: none !important;
+}
+
 .hidden {
   display: none !important;
 }
