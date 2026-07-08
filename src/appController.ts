@@ -45,6 +45,7 @@ import {
   ensureTypographyTemplateApplication,
   externalReferenceLabels,
   findLocalTemplateApplication,
+  findTemplateFunctionName,
   newTypographyTemplate,
   templatePreviewSource,
   templateTypographyEdit
@@ -1451,6 +1452,33 @@ export class TypstryWorkspaceController {
         await this.saveActiveFile();
         editor.focus();
         return;
+      }
+
+      const activeText = this.editorInstance.state.doc.toString();
+      const hasExistingBlock = activeText.includes("// typstry:typography:start");
+      const detectedTemplateFunc = findTemplateFunctionName(activeText);
+
+      if (hasExistingBlock || detectedTemplateFunc) {
+        const funcName = detectedTemplateFunc || "typstry-typography";
+        const edit = templateTypographyEdit(activeText, funcName, config);
+        if (edit) {
+          const editor = this.editorInstance;
+          editor.dispatch({
+            changes: {
+              from: edit.from,
+              to: edit.to,
+              insert: edit.insert
+            },
+            selection: { anchor: edit.from },
+            scrollIntoView: true,
+            userEvent: "input"
+          });
+          await this.saveActiveFile();
+          editor.focus();
+          this.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
+          await this.refreshActivePreviewRoot();
+          return;
+        }
       }
 
       const mainPath = this.previewMainPath ?? this.activeFilePath;

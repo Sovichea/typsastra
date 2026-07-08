@@ -3,6 +3,7 @@ import {
   externalReferenceLabels,
   ensureTypographyTemplateApplication,
   findLocalTemplateApplication,
+  findTemplateFunctionName,
   newTypographyTemplate,
   templatePreviewSource,
   templateTypographyEdit
@@ -27,6 +28,12 @@ describe("template typography", () => {
       importPath: "styles/thesis.typ",
       showExpression: 'thesis.with(title: "Draft")'
     });
+  });
+
+  test("detects template functions in file", () => {
+    expect(findTemplateFunctionName("#let project(title: none, body) = {\n  body\n}")).toEqual("project");
+    expect(findTemplateFunctionName("#let project(body, author: none) = {\n  body\n}")).toEqual("project");
+    expect(findTemplateFunctionName("#let project(title: none) = {\n  title\n}")).toBeNull();
   });
 
   test("inserts set and show rules inside a template function", () => {

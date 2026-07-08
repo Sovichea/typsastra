@@ -61,6 +61,26 @@ export function findLocalTemplateApplication(mainText: string): LocalTemplateApp
   return null;
 }
 
+export function findTemplateFunctionName(text: string): string | null {
+  const matches = [...text.matchAll(/#let\s+([A-Za-z_][\w-]*)\s*\(/g)];
+  for (const match of matches) {
+    const functionName = match[1];
+    const openingParenthesis = text.indexOf("(", match.index);
+    const closingParenthesis = matchingDelimiter(text, openingParenthesis, "(", ")");
+    if (closingParenthesis >= 0) {
+      const parameters = text.slice(openingParenthesis + 1, closingParenthesis);
+      if (/(?:^|[,\s])body(?:[,\s]|$)/.test(parameters)) {
+        const bodyOpening = text.indexOf("{", closingParenthesis);
+        if (bodyOpening >= 0 && /^\s*=\s*\{/.test(text.slice(closingParenthesis + 1, bodyOpening + 1))) {
+          return functionName;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+
 export function renderTemplateTypographyBlock(config: DocumentTypography): string {
   return renderTypographyBlock(config)
     .trimEnd()
