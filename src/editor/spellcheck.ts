@@ -1,4 +1,5 @@
-import { StateEffect, StateField, type Extension, type Text } from "@codemirror/state";
+import { StateEffect, StateField, type EditorState, type Extension, type Text } from "@codemirror/state";
+import { syntaxTree } from "@codemirror/language";
 import { Decoration, EditorView, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
@@ -115,6 +116,17 @@ function coalesceRanges(ranges: { from: number; to: number }[]): { from: number;
   return coalesced;
 }
 
+export function isTypstProseRange(state: EditorState, from: number, to: number): boolean {
+  if (from < 0 || to <= from || to > state.doc.length) return false;
+  if (typeof (state as { field?: unknown }).field !== "function") return true;
+  const tree = syntaxTree(state);
+  const proseToken = (position: number, bias: -1 | 1): boolean => {
+    const names = new Set(tree.resolveInner(position, bias).name.split(" "));
+    return names.has("content") || names.has("heading") || names.has("term");
+  };
+  return proseToken(from, 1) && proseToken(to, -1);
+}
+
 export class SpellcheckController {
   private enabled = true;
   private timer: number | null = null;
@@ -123,6 +135,7 @@ export class SpellcheckController {
   private suggestionRequestGeneration = 0;
   private visibilityRefreshGeneration = 0;
   private completionActive = false;
+  private activeTypingPosition: number | null = null;
   private readonly warnedFailures = new Set<string>();
   private userDictionary = new Set<string>();
   private ignoredWords = new Set<string>();
@@ -245,6 +258,12 @@ export class SpellcheckController {
     this.suggestionRequestGeneration++;
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
+    if (update.transactions?.some(transaction =>
+      transaction.isUserEvent("input.type")
+      || transaction.isUserEvent("delete.backward")
+      || transaction.isUserEvent("delete.forward"))) {
+      this.typingStarted(update.state.selection.main.head);
+    }
 
     // Map existing issues offsets through the changes
     this.issues = this.issues.map(issue => {
@@ -278,8 +297,20 @@ export class SpellcheckController {
     this.schedule();
   }
 
-  public selectionChanged(): void {
+  public selectionChanged(preserveActiveTyping = false): void {
     this.suggestionRequestGeneration++;
+    if (!preserveActiveTyping) this.activeTypingPosition = null;
+    this.queueVisibilityRefresh();
+  }
+
+  public dismissActiveTyping(): void {
+    if (this.activeTypingPosition === null) return;
+    this.activeTypingPosition = null;
+    this.queueVisibilityRefresh();
+  }
+
+  public typingStarted(position: number): void {
+    this.activeTypingPosition = position;
     this.queueVisibilityRefresh();
   }
 
@@ -467,7 +498,9 @@ export class SpellcheckController {
     // Map new tokens to SpellingIssues
     const cursor = editor.state.selection.main.head;
     const newIssues = response.tokens
-      .filter(token => !token.known && !this.userDictionary.has(token.normalizedText))
+      .filter(token => !token.known
+        && !this.userDictionary.has(token.normalizedText)
+        && isTypstProseRange(editor.state, token.sourceFromUtf16, token.sourceToUtf16))
       .map(token => ({
         provider: token.provider,
         documentKey,
@@ -534,7 +567,10 @@ export class SpellcheckController {
   }
 
   private shouldHideKnownPrefix(issue: SpellingIssue, cursor: number): boolean {
-    return issue.knownPrefix && cursor === issue.to && this.completionActive;
+    return cursor === issue.to && (
+      this.activeTypingPosition === cursor
+      || (issue.knownPrefix && this.completionActive)
+    );
   }
 
   private analysisIsCurrent(documentKey: string, revision: number, docIdentity: Text): boolean {

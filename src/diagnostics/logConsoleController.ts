@@ -23,6 +23,26 @@ type LogConsoleEntry = LogConsoleEntryInput & {
   timestamp: Date;
 };
 
+export function duplicatesStructuredDiagnostic(
+  entry: Pick<LogConsoleEntryInput, "channel" | "message">,
+  diagnostics: readonly Pick<LogConsoleEntryInput, "message">[]
+): boolean {
+  if (entry.channel === "dev") return false;
+  const message = canonicalDiagnosticMessage(entry.message);
+  return message.length > 0 && diagnostics.some(
+    diagnostic => canonicalDiagnosticMessage(diagnostic.message) === message
+  );
+}
+
+function canonicalDiagnosticMessage(message: string): string {
+  return message
+    .normalize("NFKC")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .trim();
+}
+
 export class LogConsoleController {
   private nextEntryId = 1;
   private diagnostics: LogConsoleEntry[] = [];
@@ -54,6 +74,7 @@ export class LogConsoleController {
 
   public setDiagnostics(entries: LogConsoleEntryInput[]): void {
     this.diagnostics = entries.map(entry => this.createEntry({ ...entry, channel: "lsp" }));
+    this.logs = this.logs.filter(log => !duplicatesStructuredDiagnostic(log, this.diagnostics));
     this.render();
   }
 
@@ -63,7 +84,9 @@ export class LogConsoleController {
   }
 
   public appendLog(entry: LogConsoleEntryInput): void {
-    this.logs.unshift(this.createEntry({ ...entry, channel: entry.channel ?? "lsp" }));
+    const log = this.createEntry({ ...entry, channel: entry.channel ?? "lsp" });
+    if (duplicatesStructuredDiagnostic(log, this.diagnostics)) return;
+    this.logs.unshift(log);
     this.logs = this.logs.slice(0, 100);
     this.render();
   }
@@ -121,7 +144,12 @@ export class LogConsoleController {
   }
 
   private filteredEntries(): LogConsoleEntry[] {
-    const all = [...this.diagnostics, ...this.spellcheckIssues, ...this.logs];
+    const structured = this.diagnostics.filter(entry => entry.filePath && entry.line !== undefined);
+    const visibleLogs = this.logs.filter(log =>
+      (log.filePath && log.line !== undefined)
+      || !duplicatesStructuredDiagnostic(log, structured)
+    );
+    const all = [...this.diagnostics, ...this.spellcheckIssues, ...visibleLogs];
     if (this.activeTab === "all") return all;
     return all.filter(entry => entry.channel === this.activeTab);
   }

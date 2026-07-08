@@ -60,6 +60,12 @@ export function looksLikeStalePrefixDiagnostic(
 ): boolean {
   if (to <= from || from < 0 || to > doc.length) return false;
 
+  // This guard exists for transient Tinymist value diagnostics such as
+  // `"tr" is an invalid argument` after the source has already become
+  // `true`. File, import, label, and other diagnostics must never be hidden
+  // merely because their range covers a prefix of a longer token.
+  if (!/invalid argument/i.test(message)) return false;
+
   const source = doc.sliceString(from, to);
   if (source.length < 2) return false;
 

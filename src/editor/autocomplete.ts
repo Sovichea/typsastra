@@ -242,21 +242,18 @@ export function allowsLanguageWordCompletionOnLine(lineText: string, wordFrom: n
 
 function isInsideTypstCodeString(lineText: string, position: number): boolean {
   const before = lineText.slice(0, Math.max(0, Math.min(position, lineText.length)));
-  const openQuote = lastUnescapedQuote(before);
-  if (openQuote === null) return false;
+  const quotes: number[] = [];
+  for (let index = 0; index < before.length; index++) {
+    if (before[index] === '"' && !isEscaped(before, index)) quotes.push(index);
+  }
+  if (quotes.length % 2 === 0) return false;
+  const openQuote = quotes[quotes.length - 1];
+  if (before.slice(0, openQuote).includes("#")) return true;
   const after = lineText.slice(position);
   const closeQuote = firstUnescapedQuote(after);
   if (closeQuote === null) return false;
   const afterClose = after.slice(closeQuote + 1).trimStart();
-  return before.slice(0, openQuote).includes("#")
-    || /^[),:\]]/.test(afterClose);
-}
-
-function lastUnescapedQuote(text: string): number | null {
-  for (let index = text.length - 1; index >= 0; index -= 1) {
-    if (text[index] === '"' && !isEscaped(text, index)) return index;
-  }
-  return null;
+  return /^[),:\]]/.test(afterClose);
 }
 
 function firstUnescapedQuote(text: string): number | null {

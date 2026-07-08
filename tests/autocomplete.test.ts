@@ -20,6 +20,7 @@ describe("language word completion context", () => {
 
   test("blocks Typst syntax and code strings", () => {
     expect(allowsLanguageWordCompletionOnLine('#include "stories/rabbit', 19)).toBe(false);
+    expect(allowsLanguageWordCompletionOnLine('#import "templates/chapt', 19)).toBe(false);
     expect(allowsLanguageWordCompletionOnLine('#set text(font: "Fira', 18)).toBe(false);
     expect(allowsLanguageWordCompletionOnLine("#let previewRoot = tr", 5)).toBe(false);
   });

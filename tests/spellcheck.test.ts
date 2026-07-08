@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, mock, test, afterEach } from "bun:test";
-import { Text } from "@codemirror/state";
+import { EditorState, Text } from "@codemirror/state";
+import { typstLanguage } from "../src/editor/typstLanguage";
 
 type Invocation = { command: string; resolve: (value: unknown) => void; reject: (error: unknown) => void; args?: any };
 const invocations: Invocation[] = [];
@@ -217,6 +218,34 @@ describe("spellcheck request safety", () => {
 
     expect(fixture.controller.issues[0].ignored).toBe(true);
     expect((fixture.visibleIssueSnapshots.at(-1) as any[])[0].ignored).toBe(true);
+  });
+
+  test("hides an unknown Hunspell token while typing until dismissed", async () => {
+    const fixture = await controllerFor("mispell");
+    fixture.controller.typingStarted("mispell".length);
+    const analyzeRequest = await startAnalysis(fixture.controller);
+    analyzeRequest.resolve(analysis("mispell"));
+    await wait(20);
+    expect(fixture.visibleIssueSnapshots.at(-1)).toEqual([]);
+
+    fixture.controller.dismissActiveTyping();
+    await Promise.resolve();
+    expect(fixture.visibleIssueSnapshots.at(-1)).toHaveLength(1);
+  });
+
+  test("classifies Typst prose separately from syntax and quoted paths", async () => {
+    const { isTypstProseRange } = await import("../src/editor/spellcheck");
+    const doc = '#let syntaxName = typo\n#include "wrong-file.typ"\nThis paragraf is visible\n#text[Content misspel]';
+    const state = EditorState.create({ doc, extensions: [typstLanguage] });
+    const range = (word: string) => {
+      const from = doc.indexOf(word);
+      return isTypstProseRange(state, from, from + word.length);
+    };
+
+    expect(range("syntaxName")).toBe(false);
+    expect(range("wrong-file")).toBe(false);
+    expect(range("paragraf")).toBe(true);
+    expect(range("misspel")).toBe(true);
   });
 
   test("turns rejected native analysis into controlled state", async () => {
