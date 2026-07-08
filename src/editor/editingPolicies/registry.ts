@@ -54,6 +54,14 @@ export class ScriptEditingPolicyRegistry {
     return null;
   }
 
+  incompleteComposition(state: EditorState): { policyId: string; range: EditingRange } | null {
+    for (const policy of this.policies) {
+      const range = policy.incompleteCompositionRange?.(state) ?? null;
+      if (range !== null) return { policyId: policy.id, range };
+    }
+    return null;
+  }
+
   forwardDeletionRange(text: string, offset: number, temporaryBoundary: number | null = null): EditingRange | null {
     if (offset < 0 || offset >= text.length) return null;
     const nextBoundary = this.boundaries(text, temporaryBoundary)

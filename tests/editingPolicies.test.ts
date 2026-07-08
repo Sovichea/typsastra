@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { EditorState } from "@codemirror/state";
 import { ScriptEditingPolicyRegistry, createDefaultEditingPolicyRegistry } from "../src/editor/editingPolicies/registry";
 import { khmerEditingPolicy } from "../src/editor/editingPolicies/khmer/policy";
+import { khmerCompositionBoundaryState } from "../src/editor/editingPolicies/khmer/composition";
 import type { ScriptEditingPolicy } from "../src/editor/editingPolicies/types";
 
 const thaiTestPolicy: ScriptEditingPolicy = {
@@ -42,5 +44,19 @@ describe("script editing policy registry", () => {
 
     expect(registry.boundaries(text)).toEqual(before);
     expect(registry.backwardDeletionRange("\u1798\u17D2\u1794", 3)).toEqual({ from: 1, to: 3 });
+  });
+
+  test("exposes a trailing COENG as an incomplete Khmer composition", () => {
+    let state = EditorState.create({ doc: "កក", extensions: [khmerCompositionBoundaryState] });
+    state = state.update({
+      changes: { from: 1, insert: "្" },
+      selection: { anchor: 2 },
+      userEvent: "input.type"
+    }).state;
+
+    expect(createDefaultEditingPolicyRegistry().incompleteComposition(state)).toEqual({
+      policyId: "khmer",
+      range: { from: 0, to: 2 }
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { StateEffect, StateField, type Extension, type Text } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
+import { editingPolicyRegistry } from "./editingPolicies/registry";
 
 export type EditorToken = {
   provider: string;
@@ -39,6 +40,7 @@ export type SpellingIssue = {
   word: string;
   knownPrefix: boolean;
   ignored: boolean;
+  synthetic?: boolean;
 };
 
 const setSpellingIssues = StateEffect.define<SpellingIssue[]>();
@@ -304,6 +306,8 @@ export class SpellcheckController {
   }
 
   public issueAt(position: number): SpellingIssue | null {
+    // Incomplete-composition issues are informational editor state, not
+    // dictionary entries, so they deliberately do not open spelling actions.
     return this.issues
       .filter(issue => position >= issue.from && position < issue.to && this.isCurrentIssue(issue, false))
       .sort((a, b) => (a.to - a.from) - (b.to - b.from))[0] ?? null;
@@ -481,7 +485,7 @@ export class SpellcheckController {
     nextIssues.sort((a, b) => a.from - b.from);
     this.issues = nextIssues;
 
-    const visible = this.issues.filter(issue => !this.shouldHideKnownPrefix(issue, cursor));
+    const visible = this.visibleIssues(editor, cursor);
     editor.dispatch({ effects: setSpellingIssues.of(visible) });
     this.onIssuesChanged?.(visible);
 
@@ -489,19 +493,44 @@ export class SpellcheckController {
 
   private emitVisibleIssues(cursor = this.getEditor().state.selection.main.head): void {
     const editor = this.getEditor();
-    const visible = this.issues.filter(issue => issue.revision === this.revision
-      && issue.docIdentity === editor.state.doc
-      && !this.shouldHideKnownPrefix(issue, cursor));
+    const visible = this.visibleIssues(editor, cursor);
     this.onIssuesChanged?.(visible);
   }
 
   private applyVisibleIssues(cursor = this.getEditor().state.selection.main.head): void {
     const editor = this.getEditor();
+    const visible = this.visibleIssues(editor, cursor);
+    editor.dispatch({ effects: setSpellingIssues.of(visible) });
+    this.onIssuesChanged?.(visible);
+  }
+
+  private visibleIssues(editor: EditorView, cursor: number): SpellingIssue[] {
     const visible = this.issues.filter(issue => issue.revision === this.revision
       && issue.docIdentity === editor.state.doc
       && !this.shouldHideKnownPrefix(issue, cursor));
-    editor.dispatch({ effects: setSpellingIssues.of(visible) });
-    this.onIssuesChanged?.(visible);
+    const incomplete = this.incompleteCompositionIssue(editor);
+    if (incomplete && !this.shouldHideKnownPrefix(incomplete, cursor)) visible.push(incomplete);
+    return visible;
+  }
+
+  private incompleteCompositionIssue(editor: EditorView): SpellingIssue | null {
+    if (typeof (editor.state as { field?: unknown }).field !== "function") return null;
+    const incomplete = editingPolicyRegistry.incompleteComposition(editor.state);
+    if (!incomplete) return null;
+    const sourceText = editor.state.doc.sliceString(incomplete.range.from, incomplete.range.to);
+    return {
+      provider: `${incomplete.policyId}-editing-policy`,
+      documentKey: this.documentKey,
+      revision: this.revision,
+      docIdentity: editor.state.doc,
+      from: incomplete.range.from,
+      to: incomplete.range.to,
+      sourceText,
+      word: sourceText,
+      knownPrefix: true,
+      ignored: false,
+      synthetic: true
+    };
   }
 
   private shouldHideKnownPrefix(issue: SpellingIssue, cursor: number): boolean {

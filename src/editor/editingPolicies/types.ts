@@ -15,5 +15,6 @@ export interface ScriptEditingPolicy {
   backwardDeletionRange(text: string, offset: number): EditingRange | null;
   forwardDeletionRange(text: string, offset: number, nextBoundary: number): EditingRange | null;
   temporaryBoundary?(state: EditorState): number | null;
+  incompleteCompositionRange?(state: EditorState): EditingRange | null;
 }
 import type { EditorState, Extension } from "@codemirror/state";

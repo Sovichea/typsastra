@@ -74,6 +74,15 @@ export function getTemporaryKhmerBoundary(state: EditorState): number | null {
   return state.field(boundaryState, false) ?? null;
 }
 
+export function getIncompleteKhmerCompositionRange(state: EditorState): { from: number; to: number } | null {
+  const boundary = getTemporaryKhmerBoundary(state);
+  if (boundary === null) return null;
+  const text = state.doc.sliceString(0);
+  const coengFrom = previousCodePointOffset(text, boundary);
+  const baseFrom = previousCodePointOffset(text, coengFrom);
+  return isValidCompositionBoundary(text, boundary) ? { from: baseFrom, to: boundary } : null;
+}
+
 function insertedTrailingCoengBoundary(transaction: Transaction): number | null {
   let boundary: number | null = null;
   let changedRangeCount = 0;

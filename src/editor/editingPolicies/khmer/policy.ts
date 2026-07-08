@@ -1,4 +1,4 @@
-import { getTemporaryKhmerBoundary, khmerCompositionBoundaryState } from "./composition";
+import { getIncompleteKhmerCompositionRange, getTemporaryKhmerBoundary, khmerCompositionBoundaryState } from "./composition";
 import type { EditingRange, ScriptEditingPolicy } from "../types";
 import { codePointAtOffset, previousCodePointOffset } from "../unicode";
 
@@ -9,6 +9,7 @@ export const khmerEditingPolicy: ScriptEditingPolicy = {
   scripts: ["Khmr"],
   editorExtensions: [khmerCompositionBoundaryState],
   temporaryBoundary: getTemporaryKhmerBoundary,
+  incompleteCompositionRange: getIncompleteKhmerCompositionRange,
 
   ownsCodePoint(codePoint) {
     return codePoint >= 0x1780 && codePoint <= 0x17FF;
