@@ -513,4 +513,19 @@ export class EditorToolbarController {
     editor.dispatch({ changes, scrollIntoView: true, userEvent: "input" });
     editor.focus();
   }
+
+  public setDisabled(disabled: boolean): void {
+    if (disabled) {
+      this.toolbar.classList.add("disabled");
+      this.toolbar.querySelectorAll("button, select, input").forEach(el => {
+        el.setAttribute("disabled", "true");
+      });
+    } else {
+      this.toolbar.classList.remove("disabled");
+      this.toolbar.querySelectorAll("button, select, input").forEach(el => {
+        el.removeAttribute("disabled");
+      });
+      this.updateTypographyAvailability();
+    }
+  }
 }

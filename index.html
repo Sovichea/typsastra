@@ -1693,6 +1693,10 @@
                                 </button>
                             </div>
                             <div id="code-render-pane"></div>
+                            <div id="image-viewer-pane" class="hidden" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:auto;background:var(--ui-bg);padding:20px;box-sizing:border-box;">
+                                <img id="image-viewer-img" src="" alt="" style="max-width:100%;max-height:calc(100% - 60px);object-fit:contain;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,0.12);" />
+                                <div id="image-viewer-info" style="margin-top:12px;font-size:12px;font-family:var(--font-family-sans);color:var(--ui-header-text);text-align:center;"></div>
+                            </div>
                         </div>
                         <div
                             id="wysiwym-editor-pane"

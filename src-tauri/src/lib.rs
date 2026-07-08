@@ -109,6 +109,30 @@ fn read_workspace_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn read_workspace_file_as_base64(path: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let ext = std::path::Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "bmp" => "image/bmp",
+        "avif" => "image/avif",
+        _ => "application/octet-stream",
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
+#[tauri::command]
 fn workspace_path_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
@@ -1595,6 +1619,7 @@ pub fn run() {
             compile_typst_preview,
             check_typst_document,
             read_workspace_file,
+            read_workspace_file_as_base64,
             workspace_path_exists,
             cleanup_workspace_preview_files,
             export_workspace_as_zip,

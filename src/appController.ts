@@ -74,6 +74,12 @@ type ExamplesWorkspace = {
   entryPath: string;
 };
 
+
+function isBinaryImagePath(path: string): boolean {
+  const ext = path.split('.').pop()?.toLowerCase();
+  return ["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "avif"].includes(ext ?? "");
+}
+
 type EditorTab = {
   path: string;
   content: string;
@@ -841,6 +847,7 @@ export class TypstryWorkspaceController {
   private persistActiveTabState() {
     const tab = this.getActiveTab();
     if (!tab || !this.editorInstance) return;
+    if (isBinaryImagePath(tab.path)) return;
 
     const content = this.activeMode === "WYSIWYM"
       ? this.mapWysiwymToMarkup()
@@ -1055,6 +1062,69 @@ export class TypstryWorkspaceController {
 
     this.isLoadingFile = true;
     try {
+      const codeRenderPane = document.getElementById("code-render-pane");
+      const imageViewerPane = document.getElementById("image-viewer-pane");
+      const imageViewerImg = document.getElementById("image-viewer-img") as HTMLImageElement;
+      const imageViewerInfo = document.getElementById("image-viewer-info");
+
+      if (isBinaryImagePath(path)) {
+        codeRenderPane?.classList.add("hidden");
+        imageViewerPane?.classList.remove("hidden");
+        if (imageViewerImg) imageViewerImg.style.display = "none"; // Hide image element in editor
+        if (imageViewerInfo) {
+          imageViewerInfo.innerHTML = `
+            <div class="preview-disabled-placeholder" style="padding:0;background:transparent;">
+              <div class="preview-disabled-icon" style="font-size:32px;margin-bottom:12px;">💾</div>
+              <div class="preview-disabled-title" style="font-size:16px;">Binary File</div>
+              <div class="preview-disabled-msg" style="font-size:13px;max-width:300px;">Cannot load raw binary in the text editor.</div>
+            </div>
+          `;
+        }
+        
+        document.getElementById("wysiwym-editor-pane")?.classList.add("hidden");
+
+        this.previewFrame.setMessage(
+          `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
+          `<img src="${tab.content}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,0.12);" />` +
+          `</div>`
+        );
+        this.editorToolbarController.setDisabled(true);
+        this.activeFilePath = path;
+        this.isLoadingFile = false;
+        this.updateWorkspaceViewportVisibility();
+        this.saveWorkspaceState();
+        return;
+      } else {
+        codeRenderPane?.classList.remove("hidden");
+        imageViewerPane?.classList.add("hidden");
+        if (imageViewerImg) imageViewerImg.style.display = "block"; // Reset styling
+        if (this.activeMode === "WYSIWYM") {
+          document.getElementById("wysiwym-editor-pane")?.classList.remove("hidden");
+        }
+        
+        const ext = path.split('.').pop()?.toLowerCase();
+        if (ext === "typ") {
+          this.editorToolbarController.setDisabled(false);
+        } else {
+          this.editorToolbarController.setDisabled(true);
+          if (ext === "svg") {
+            this.previewFrame.setMessage(
+              `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
+              tab.content +
+              `</div>`
+            );
+          } else {
+            this.previewFrame.setMessage(
+              `<div class="preview-disabled-placeholder">` +
+              `<div class="preview-disabled-icon">🚫</div>` +
+              `<div class="preview-disabled-title">Preview Unavailable</div>` +
+              `<div class="preview-disabled-msg">Live preview is not supported for ${ext?.toUpperCase() || "this"} files.</div>` +
+              `</div>`
+            );
+          }
+        }
+      }
+
       this.editorInstance.dispatch({
         changes: { from: 0, to: this.editorInstance.state.doc.length, insert: tab.content },
         selection: {
@@ -1111,19 +1181,23 @@ export class TypstryWorkspaceController {
     this.renderEditorTabs();
     this.editorFontManager.updateDocument(tab.content);
     this.spellcheckController.schedule();
-    void this.documentOutlineController.update(
-      path, 
-      tab.content, 
-      this.workspaceRootPath || "", 
-      async (p) => {
-        try {
-          return await invoke<string>("read_workspace_file", { path: p });
-        } catch {
-          return null;
+    if (path.toLowerCase().endsWith(".typ")) {
+      void this.documentOutlineController.update(
+        path, 
+        tab.content, 
+        this.workspaceRootPath || "", 
+        async (p) => {
+          try {
+            return await invoke<string>("read_workspace_file", { path: p });
+          } catch {
+            return null;
+          }
         }
-      }
-    );
-    this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head, this.activeFilePath);
+      );
+      this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head, this.activeFilePath);
+    } else {
+      this.documentOutlineController.clear();
+    }
 
 
     if (this.lspReady && this.lspClient) {
@@ -1290,7 +1364,9 @@ export class TypstryWorkspaceController {
     }
 
     try {
-      const contents = normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
+      const contents = isBinaryImagePath(path)
+        ? await invoke<string>("read_workspace_file_as_base64", { path })
+        : normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
       const newTab: EditorTab = {
         path,
         content: contents,
@@ -1815,18 +1891,20 @@ export class TypstryWorkspaceController {
   }
 
   private handleContentMutation(rawText: string) {
-    void this.documentOutlineController.update(
-      this.activeFilePath, 
-      rawText, 
-      this.workspaceRootPath || "", 
-      async (p) => {
-        try {
-          return await invoke<string>("read_workspace_file", { path: p });
-        } catch {
-          return null;
+    if (this.activeFilePath && this.activeFilePath.toLowerCase().endsWith(".typ")) {
+      void this.documentOutlineController.update(
+        this.activeFilePath, 
+        rawText, 
+        this.workspaceRootPath || "", 
+        async (p) => {
+          try {
+            return await invoke<string>("read_workspace_file", { path: p });
+          } catch {
+            return null;
+          }
         }
-      }
-    );
+      );
+    }
     if (!this.isLoadingFile) {
       this.updateActiveTabContent(rawText);
     }
@@ -2530,7 +2608,9 @@ export class TypstryWorkspaceController {
       if (state.openTabs.length) {
         for (const tabInfo of state.openTabs) {
           try {
-             const contents = normalizeEditorText(await invoke<string>("read_workspace_file", { path: tabInfo.path }));
+             const contents = isBinaryImagePath(tabInfo.path)
+               ? await invoke<string>("read_workspace_file_as_base64", { path: tabInfo.path })
+               : normalizeEditorText(await invoke<string>("read_workspace_file", { path: tabInfo.path }));
              this.openTabs.push({
                path: tabInfo.path,
                content: contents,
@@ -2631,7 +2711,9 @@ export class TypstryWorkspaceController {
 
       let contents: string;
       try {
-        contents = normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
+        contents = isBinaryImagePath(tab.path)
+          ? await invoke<string>("read_workspace_file_as_base64", { path: tab.path })
+          : normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
       } catch (error) {
         console.warn(`Unable to reload ${tab.path}:`, error);
         continue;
@@ -2669,6 +2751,13 @@ export class TypstryWorkspaceController {
       return;
     }
 
+    if (isBinaryImagePath(tab.path)) {
+      const img = document.getElementById("image-viewer-img") as HTMLImageElement;
+      if (img) img.src = contents;
+      this.renderEditorTabs();
+      return;
+    }
+
     const selection = this.editorInstance.state.selection.main;
     this.isLoadingFile = true;
     try {
@@ -2685,19 +2774,23 @@ export class TypstryWorkspaceController {
 
     this.renderEditorTabs();
     this.editorFontManager.updateDocument(contents);
-    void this.documentOutlineController.update(
-      tab.path, 
-      contents, 
-      this.workspaceRootPath || "", 
-      async (p) => {
-        try {
-          return await invoke<string>("read_workspace_file", { path: p });
-        } catch {
-          return null;
+    if (tab.path.toLowerCase().endsWith(".typ")) {
+      void this.documentOutlineController.update(
+        tab.path, 
+        contents, 
+        this.workspaceRootPath || "", 
+        async (p) => {
+          try {
+            return await invoke<string>("read_workspace_file", { path: p });
+          } catch {
+            return null;
+          }
         }
-      }
-    );
-    this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head, this.activeFilePath);
+      );
+      this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head, this.activeFilePath);
+    } else {
+      this.documentOutlineController.clear();
+    }
     if (this.activeMode === "WYSIWYM") this.mapMarkupToWysiwym(contents);
 
     const version = ++this.currentVersion;
@@ -2741,6 +2834,18 @@ export class TypstryWorkspaceController {
 
   private async refreshActivePreviewRoot(): Promise<void> {
     if (!this.activeFilePath) return;
+    const ext = this.activeFilePath.split('.').pop()?.toLowerCase();
+    if (ext === "svg") {
+      this.previewFrame.setMessage(
+        `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
+        this.editorInstance.state.doc.toString() +
+        `</div>`
+      );
+      return;
+    }
+    if (isBinaryImagePath(this.activeFilePath) || ext !== "typ") {
+      return;
+    }
     if (!this.pinnedMainFilePath) {
       this.previewFrame.setMessage(this.noMainFileMessage());
       return;
