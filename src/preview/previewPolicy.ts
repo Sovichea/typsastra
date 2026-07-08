@@ -5,6 +5,7 @@ export type PreviewTarget = {
   mainPath: string | null;
   imported: boolean;
   standalone: boolean;
+  disabled: boolean;
 };
 
 export type PreviewRefreshStyle = "on-type" | "on-save";

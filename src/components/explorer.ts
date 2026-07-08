@@ -30,7 +30,11 @@ function getFileIconSvg(filename: string): string {
 export class WorkspaceExplorer {
   private loadGeneration = 0;
 
-  constructor(private container: HTMLElement, private onFileSelected: (filePath: string, options?: { temporary?: boolean }) => void) {}
+  constructor(
+    private container: HTMLElement,
+    private onFileSelected: (filePath: string, options?: { temporary?: boolean }) => void,
+    private isPinnedMainFile?: (filePath: string) => boolean
+  ) {}
 
   public async loadWorkspace(rootPath: string) {
     const generation = ++this.loadGeneration;
@@ -96,7 +100,8 @@ export class WorkspaceExplorer {
       li.className = node.isDirectory ? `tree-folder${isExpanded ? "" : " collapsed"}` : "tree-file";
 
       const label = document.createElement("div");
-      label.className = `tree-item explorer-item-target${selectedPath === node.path ? " selected" : ""}`;
+      const isPinnedMain = this.isPinnedMainFile ? this.isPinnedMainFile(node.path) : false;
+      label.className = `tree-item explorer-item-target${selectedPath === node.path ? " selected" : ""}${isPinnedMain ? " pinned-main" : ""}`;
       label.dataset.path = node.path;
       label.dataset.isDir = String(node.isDirectory);
       // Base padding + depth padding

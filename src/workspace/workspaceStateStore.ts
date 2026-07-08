@@ -9,6 +9,7 @@ export type StoredWorkspaceTab = {
 
 export type StoredWorkspaceState = {
   activeFilePath: string | null;
+  pinnedMainFilePath: string | null;
   openTabs: StoredWorkspaceTab[];
   inputContainerWidthPct: number;
   explorerSidebarWidthPx: number;
@@ -38,6 +39,7 @@ export class WorkspaceStateStore {
         : [];
       return {
         activeFilePath: typeof value.activeFilePath === "string" ? value.activeFilePath : null,
+        pinnedMainFilePath: typeof value.pinnedMainFilePath === "string" ? value.pinnedMainFilePath : null,
         openTabs,
         inputContainerWidthPct: this.numberOr(value.inputContainerWidthPct, 50),
         explorerSidebarWidthPx: this.numberOr(value.explorerSidebarWidthPx, 250)

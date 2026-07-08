@@ -27,6 +27,8 @@ export type ContextMenuDependencies = {
   replaceSpelling: (issue: SpellingIssue, replacement: string) => void;
   addSpellingToDictionary: (issue: SpellingIssue) => void;
   setSpellingIgnored: (issue: SpellingIssue, ignored: boolean) => void;
+  isPinnedMainFile: (path: string) => boolean;
+  setPinnedMainFile: (path: string | null) => void | Promise<void>;
 };
 
 const previewItems = `
@@ -72,6 +74,12 @@ export class ContextMenuController {
       case "ctx-fs-delete": return this.deleteTarget();
       case "ctx-fs-paste": return this.pasteFile();
       case "ctx-open-project": document.getElementById("action-open-folder")?.click(); return;
+      case "ctx-set-main-file":
+        if (this.targetPath) {
+          const isCurrentMain = this.dependencies.isPinnedMainFile(this.targetPath);
+          await this.dependencies.setPinnedMainFile(isCurrentMain ? null : this.targetPath);
+        }
+        return;
       case "ctx-export-pdf": document.getElementById("action-export-pdf")?.click(); return;
       case "ctx-copy-text": return this.copyEditorText(false);
       case "ctx-cut-text": return this.copyEditorText(true);
@@ -374,7 +382,11 @@ export class ContextMenuController {
   }
 
   private explorerItems(): string {
-    return `<div class="dropdown-item" id="ctx-new-file">New File</div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-rename">Rename</div><div class="dropdown-item" id="ctx-fs-delete">Delete</div>${this.targetIsDirectory ? "" : '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy">Copy File</div>'}${this.copiedFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File</div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
+    const isTyp = !this.targetIsDirectory && this.targetPath.toLowerCase().endsWith(".typ");
+    const mainAction = isTyp
+      ? `<div class="dropdown-item" id="ctx-set-main-file">${this.dependencies.isPinnedMainFile(this.targetPath) ? "Unset as Main File" : "Set as Main File"}</div><div class="dropdown-separator"></div>`
+      : "";
+    return `${mainAction}<div class="dropdown-item" id="ctx-new-file">New File</div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-rename">Rename</div><div class="dropdown-item" id="ctx-fs-delete">Delete</div>${this.targetIsDirectory ? "" : '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy">Copy File</div>'}${this.copiedFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File</div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
   }
 
   private explorerBackgroundItems(): string {

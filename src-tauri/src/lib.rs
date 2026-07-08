@@ -362,6 +362,7 @@ struct PreviewTarget {
     main_path: Option<String>,
     imported: bool,
     standalone: bool,
+    disabled: bool,
 }
 
 fn normalized_existing_path(path: &std::path::Path) -> std::path::PathBuf {
@@ -511,6 +512,7 @@ fn resolve_preview_target(
     file_path: String,
     workspace_root_path: Option<String>,
     file_contents: Option<String>,
+    pinned_main_path: Option<String>,
 ) -> Result<PreviewTarget, String> {
     use std::collections::{HashMap, VecDeque};
 
@@ -521,6 +523,7 @@ fn resolve_preview_target(
             main_path: None,
             imported: false,
             standalone: false,
+            disabled: false,
         });
     }
 
@@ -587,14 +590,42 @@ fn resolve_preview_target(
             Some("main.typ" | "index.typ" | "document.typ")
         )
     };
-    let imported = !ancestors.is_empty();
     let standalone_preview = allows_standalone_preview(&active_contents);
-    let main_root = ancestors
-        .iter()
-        .filter(|(candidate, _)| preferred(candidate))
-        .max_by_key(|(_, distance)| *distance)
-        .or_else(|| ancestors.iter().max_by_key(|(_, distance)| *distance))
-        .map(|(candidate, _)| candidate.clone());
+
+    let mut preview_disabled = false;
+    let main_root = if let Some(ref pinned) = pinned_main_path {
+        let pinned_buf = normalized_existing_path(&std::path::PathBuf::from(pinned));
+        let is_pinned_active = pinned_buf == path;
+
+        if is_pinned_active {
+            None
+        } else if ancestors.contains_key(&pinned_buf) {
+            Some(pinned_buf)
+        } else {
+            if !standalone_preview {
+                preview_disabled = true;
+            }
+            None
+        }
+    } else {
+        ancestors
+            .iter()
+            .filter(|(candidate, _)| preferred(candidate))
+            .max_by_key(|(_, distance)| *distance)
+            .or_else(|| ancestors.iter().max_by_key(|(_, distance)| *distance))
+            .map(|(candidate, _)| candidate.clone())
+    };
+
+    let imported = if pinned_main_path.is_some() {
+        if let Some(ref pinned) = pinned_main_path {
+            let pinned_buf = normalized_existing_path(&std::path::PathBuf::from(pinned));
+            pinned_buf != path && ancestors.contains_key(&pinned_buf)
+        } else {
+            false
+        }
+    } else {
+        !ancestors.is_empty()
+    };
 
     let root = if imported && standalone_preview {
         path.clone()
@@ -607,6 +638,7 @@ fn resolve_preview_target(
         main_path: main_root.map(|p| p.to_string_lossy().to_string()),
         imported,
         standalone: !imported || standalone_preview,
+        disabled: preview_disabled,
     })
 }
 
@@ -615,8 +647,9 @@ fn resolve_preview_main(
     file_path: String,
     workspace_root_path: Option<String>,
     file_contents: Option<String>,
+    pinned_main_path: Option<String>,
 ) -> Result<PreviewTarget, String> {
-    resolve_preview_target(file_path, workspace_root_path, file_contents)
+    resolve_preview_target(file_path, workspace_root_path, file_contents, pinned_main_path)
 }
 
 #[derive(serde::Serialize)]

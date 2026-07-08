@@ -2368,4 +2368,56 @@ button.welcome-item:disabled {
   border: 1px solid var(--ui-border);
 }
 
+.tree-item.pinned-main {
+  font-weight: 700 !important;
+}
+.tree-item.pinned-main .tree-text {
+  color: #3db489;
+}
+
+.preview-disabled-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  padding: 30px;
+  background-color: var(--ui-bg);
+  color: var(--ui-header-text);
+  text-align: center;
+  box-sizing: border-box;
+  font-family: var(--font-family-sans);
+}
+
+.preview-disabled-icon {
+  font-size: 32px;
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+
+.preview-disabled-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: var(--ui-text);
+}
+
+.preview-disabled-msg {
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 420px;
+  margin-bottom: 12px;
+}
+
+.preview-disabled-hint {
+  font-size: 12px;
+  font-family: var(--editor-code-font), monospace;
+  background: var(--ui-hover);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--ui-border);
+  color: var(--ui-header-text);
+}
+
 

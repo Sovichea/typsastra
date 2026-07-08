@@ -127,6 +127,7 @@ export class TypstryWorkspaceController {
   private previewImported = false;
   private previewStandalone = true;
   private pinnedLspMainPath: string | null = null;
+  private pinnedMainFilePath: string | null = null;
   private workspaceRootPath: string | null = null;
   private currentVersion = 1;
   private isLoadingFile = false;
@@ -346,7 +347,9 @@ export class TypstryWorkspaceController {
       settings.editor.ignoredWords = ignored
         ? [...new Set([...settings.editor.ignoredWords, issue.word])]
         : settings.editor.ignoredWords.filter(word => word !== issue.word);
-    })
+    }),
+    isPinnedMainFile: path => this.isPinnedMainFile(path),
+    setPinnedMainFile: path => this.setPinnedMainFile(path)
   });
   private readonly documentOutlineController = new DocumentOutlineController(
     document.getElementById("document-outline-tree")!,
@@ -768,9 +771,13 @@ export class TypstryWorkspaceController {
   }
 
   private initExplorer() {
-    this.explorer = new WorkspaceExplorer(document.getElementById("workspace-explorer-tree")!, (path: string, options?: { temporary?: boolean }) => {
-      void this.loadFile(path, options);
-    });
+    this.explorer = new WorkspaceExplorer(
+      document.getElementById("workspace-explorer-tree")!,
+      (path: string, options?: { temporary?: boolean }) => {
+        void this.loadFile(path, options);
+      },
+      (path: string) => this.isPinnedMainFile(path)
+    );
   }
 
   private renderEditorTabs() {
@@ -1075,21 +1082,28 @@ export class TypstryWorkspaceController {
       if (options.preservePreviewSession.previewSessionKey) {
         this.previewFrame.activateSession(options.preservePreviewSession.previewSessionKey);
       }
+    } else if (!this.pinnedMainFilePath) {
+      this.previewFrame.setMessage(this.noMainFileMessage());
     } else {
       previewTarget = await invoke<PreviewTarget>("resolve_preview_main", {
         filePath: path,
         workspaceRootPath: this.workspaceRootPath,
-        fileContents: tab.content
+        fileContents: tab.content,
+        pinnedMainPath: this.pinnedMainFilePath
       });
-      previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
-      const existingMainSession = this.captureCurrentMainSessionForImportedTarget(previewTarget);
-      if (existingMainSession) {
-        this.applyPreviewSessionToTab(tab, existingMainSession);
-        if (existingMainSession.previewSessionKey) {
-          this.previewFrame.activateSession(existingMainSession.previewSessionKey);
-        }
-      } else {
+      if (previewTarget.disabled) {
         this.applyPreviewTargetToTab(tab, previewTarget);
+      } else {
+        previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
+        const existingMainSession = this.captureCurrentMainSessionForImportedTarget(previewTarget);
+        if (existingMainSession) {
+          this.applyPreviewSessionToTab(tab, existingMainSession);
+          if (existingMainSession.previewSessionKey) {
+            this.previewFrame.activateSession(existingMainSession.previewSessionKey);
+          }
+        } else {
+          this.applyPreviewTargetToTab(tab, previewTarget);
+        }
       }
     }
     this.clearPendingLspSync();
@@ -1127,6 +1141,10 @@ export class TypstryWorkspaceController {
         // Inverse sync may switch from a main file into one of its includes. Keep the
         // preview session that produced the click instead of resolving and mounting a
         // separate include-file preview, otherwise scroll state and DOM interception reset.
+      } else if (!this.pinnedMainFilePath) {
+        this.previewFrame.setMessage(this.noMainFileMessage());
+      } else if (previewTarget?.disabled) {
+        this.previewFrame.setMessage(this.disabledPreviewMessage());
       } else if (this.previewRootPath) {
         const previewReady = await this.activatePreviewSession(tab.content);
         if (!previewReady) {
@@ -1138,7 +1156,13 @@ export class TypstryWorkspaceController {
     } else {
       void this.runFallbackDiagnostics(path, tab.content, this.currentVersion);
       if (!options.preservePreviewSession) {
-        await this.renderCompilerPreview(path, tab.content);
+        if (!this.pinnedMainFilePath) {
+          this.previewFrame.setMessage(this.noMainFileMessage());
+        } else if (previewTarget?.disabled) {
+          this.previewFrame.setMessage(this.disabledPreviewMessage());
+        } else {
+          await this.renderCompilerPreview(path, tab.content);
+        }
       }
     }
 
@@ -1863,7 +1887,8 @@ export class TypstryWorkspaceController {
       let target = await invoke<PreviewTarget>("resolve_preview_main", {
         filePath: path,
         workspaceRootPath: this.workspaceRootPath,
-        fileContents: text
+        fileContents: text,
+        pinnedMainPath: this.pinnedMainFilePath
       });
       target = await this.prepareTemplateAwarePreview(target, path, text);
     }
@@ -2463,6 +2488,7 @@ export class TypstryWorkspaceController {
     
     this.workspaceStateStore.save(this.workspaceRootPath, {
       activeFilePath: this.activeFilePath,
+      pinnedMainFilePath: this.pinnedMainFilePath,
       openTabs: this.openTabs.map(tab => ({
         path: tab.path,
         selectionAnchor: tab.selectionAnchor,
@@ -2488,6 +2514,10 @@ export class TypstryWorkspaceController {
           inputContainer.style.width = `${state.inputContainerWidthPct}%`;
           previewContainerWrapper.style.width = `${100 - state.inputContainerWidthPct}%`;
         }
+      }
+
+      if (state.pinnedMainFilePath) {
+        this.pinnedMainFilePath = state.pinnedMainFilePath;
       }
       
       if (state.explorerSidebarWidthPx) {
@@ -2688,14 +2718,46 @@ export class TypstryWorkspaceController {
     }
   }
 
+  private noMainFileMessage(): string {
+    return (
+      `<div class="preview-disabled-placeholder">` +
+      `<div class="preview-disabled-title" style="color:#3db489;font-size:18px;margin-bottom:12px;">No Main File Selected</div>` +
+      `<div class="preview-disabled-msg">Right-click any <code style="background:var(--ui-hover);padding:1px 5px;border-radius:3px;">.typ</code> file in the Explorer and choose <strong>Set as Main File</strong> to enable live preview and export.</div>` +
+      `</div>`
+    );
+  }
+
+  private disabledPreviewMessage(): string {
+    return (
+      `<div class="preview-disabled-placeholder">` +
+      `<div class="preview-disabled-icon">🚫</div>` +
+      `<div class="preview-disabled-title">Preview Unavailable</div>` +
+      `<div class="preview-disabled-msg">This file is not imported or included by the main document. Only the main file and its dependencies are previewed.</div>` +
+      `<div class="preview-disabled-hint">// standalone-preview</div>` +
+      `<div class="preview-disabled-msg" style="margin-top: 8px; font-size: 12px; opacity: 0.75;">Add this directive at the top of the file to preview it standalone.</div>` +
+      `</div>`
+    );
+  }
+
   private async refreshActivePreviewRoot(): Promise<void> {
     if (!this.activeFilePath) return;
+    if (!this.pinnedMainFilePath) {
+      this.previewFrame.setMessage(this.noMainFileMessage());
+      return;
+    }
     const contents = this.editorInstance.state.doc.toString();
     let target = await invoke<PreviewTarget>("resolve_preview_main", {
       filePath: this.activeFilePath,
       workspaceRootPath: this.workspaceRootPath,
-      fileContents: contents
+      fileContents: contents,
+      pinnedMainPath: this.pinnedMainFilePath
     });
+    if (target.disabled) {
+      const activeTab = this.getActiveTab();
+      if (activeTab) this.applyPreviewTargetToTab(activeTab, target);
+      this.previewFrame.setMessage(this.disabledPreviewMessage());
+      return;
+    }
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(target.mainPath);
     const identity = target.rootPath
@@ -2789,7 +2851,23 @@ export class TypstryWorkspaceController {
     }
   }
 
+  private isPinnedMainFile(path: string): boolean {
+    return this.pinnedMainFilePath !== null && filePathKey(this.pinnedMainFilePath) === filePathKey(path);
+  }
+
+  private async setPinnedMainFile(path: string | null): Promise<void> {
+    this.pinnedMainFilePath = path;
+    this.saveWorkspaceState();
+    
+    if (this.workspaceRootPath) {
+      await this.explorer.loadWorkspace(this.workspaceRootPath);
+    }
+    
+    await this.refreshActivePreviewRoot();
+  }
+
   private closeProject() {
+    this.pinnedMainFilePath = null;
     this.saveWorkspaceState();
     void this.updatePinnedMain(null, true);
     this.workspaceWatcher.stop();
