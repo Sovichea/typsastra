@@ -5,21 +5,19 @@ import { codePointAtOffset, previousCodePointOffset } from "../unicode";
 const COENG = "\u17D2";
 
 export const khmerEditingPolicy: ScriptEditingPolicy = {
+  contractVersion: 1,
   id: "khmer",
   scripts: ["Khmr"],
+  codePointRanges: [{ from: 0x1780, to: 0x1800 }],
   editorExtensions: [khmerCompositionBoundaryState],
   temporaryBoundary: getTemporaryKhmerBoundary,
   incompleteCompositionRange: getIncompleteKhmerCompositionRange,
-
-  ownsCodePoint(codePoint) {
-    return codePoint >= 0x1780 && codePoint <= 0x17FF;
-  },
 
   shouldMergeBoundary(text, boundary) {
     const previousFrom = previousCodePointOffset(text, boundary);
     const left = codePointAtOffset(text, previousFrom);
     const right = codePointAtOffset(text, boundary);
-    if (left === null || right === null || !this.ownsCodePoint(left) || !this.ownsCodePoint(right)) return false;
+    if (left === null || right === null || !isKhmerCodePoint(left) || !isKhmerCodePoint(right)) return false;
     return text.slice(previousFrom, boundary) === COENG || isKhmerDependentMark(right);
   },
 
@@ -40,6 +38,10 @@ export const khmerEditingPolicy: ScriptEditingPolicy = {
 
 function isKhmerDependentMark(codePoint: number): boolean {
   return (codePoint >= 0x17B6 && codePoint <= 0x17D3) || codePoint === 0x17DD;
+}
+
+function isKhmerCodePoint(codePoint: number): boolean {
+  return codePoint >= 0x1780 && codePoint < 0x1800;
 }
 
 function isKhmerConsonant(codePoint: number | null): boolean {

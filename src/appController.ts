@@ -40,7 +40,7 @@ import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { typographyEdit, type DocumentTypography } from "./editor/documentTypography";
-import { SpellcheckController, type ProviderCapabilities, type SpellingIssue } from "./editor/spellcheck";
+import { SpellcheckController, type SpellingIssue } from "./editor/spellcheck";
 
 import {
   ensureTypographyTemplateApplication,
@@ -2583,7 +2583,7 @@ export class TypstryWorkspaceController {
   private async finishStartupInitialization(): Promise<void> {
     try {
       const providers = await this.timeStartup("finish native startup initialization", () =>
-        invoke<ProviderCapabilities[]>("finish_startup_initialization")
+        invoke<unknown>("finish_startup_initialization")
       );
       this.spellcheckController.setProviders(providers);
       this.settingsController.setLanguageProviders(this.spellcheckController.getAllProviders());

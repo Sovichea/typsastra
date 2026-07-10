@@ -14,9 +14,9 @@ khmer/policy.ts          pure Khmer boundary and deletion rules
 khmer/composition.ts     transient CodeMirror state and visual shaping guard
 ```
 
-`src/editor/grapheme.ts` is the language-neutral CodeMirror command layer. It asks the registry for boundaries and deletion ranges, handles selections and multiple cursors, merges overlapping changes, and dispatches one transaction.
+`src/editor/grapheme.ts` is the language-neutral CodeMirror command layer. Arrow movement, shift-selection, Backspace, Delete, cursor snapping, and transaction filtering all ask the registry for boundaries or deletion ranges. The command layer handles selections and multiple cursors, merges overlapping changes, and dispatches one transaction. Script-specific keybindings must not be added outside this route.
 
-Each ISO 15924 script code has at most one owner. The registry rejects duplicate policy IDs and duplicate script ownership. At a boundary, tailoring is allowed only when both adjacent code points belong to the same registered policy. This prevents a newly registered policy from changing Khmer clusters.
+The policy contract is versioned as `1`. Each policy declares unique ISO 15924 script codes and half-open Unicode scalar ranges. The registry rejects unsupported contract versions, duplicate policy IDs, duplicate script ownership, malformed ranges, and overlapping code-point ownership. At a boundary, tailoring is allowed only when both adjacent code points belong to the same registered policy. This prevents a newly registered policy from changing Khmer clusters.
 
 ## Current Khmer behavior
 
@@ -36,12 +36,10 @@ Create a directory such as `src/editor/editingPolicies/thai/` and implement `Scr
 
 ```ts
 export const thaiEditingPolicy: ScriptEditingPolicy = {
+  contractVersion: 1,
   id: "thai",
   scripts: ["Thai"],
-
-  ownsCodePoint(codePoint) {
-    return codePoint >= 0x0E00 && codePoint <= 0x0E7F;
-  },
+  codePointRanges: [{ from: 0x0E00, to: 0x0E80 }],
 
   shouldMergeBoundary(text, boundary) {
     // Return true only when this policy owns both sides and the Unicode
@@ -56,6 +54,17 @@ export const thaiEditingPolicy: ScriptEditingPolicy = {
 
   forwardDeletionRange(text, offset, nextBoundary) {
     return nextBoundary > offset ? { from: offset, to: nextBoundary } : null;
+  },
+
+  movementBoundary(text, offset, direction, unicodeBoundary) {
+    // Optional. Return null to use the Unicode boundary. The registry rejects
+    // invalid UTF-16 positions and falls back to unicodeBoundary.
+    return null;
+  },
+
+  selectionBoundary(text, offset, direction, unicodeBoundary) {
+    // Optional and independent from ordinary movement tailoring.
+    return null;
   }
 };
 ```
@@ -82,13 +91,18 @@ The registry installs these extensions and queries the active temporary boundary
 
 ## Contract and constraints
 
+- Set `contractVersion: 1`. A future incompatible contract must use a new version.
 - Use UTF-16 offsets because CodeMirror uses UTF-16 positions.
 - Never split a surrogate pair.
 - Start from the Unicode grapheme baseline and tailor only demonstrated script behavior.
-- `scripts` must use unique ISO 15924 codes.
-- `ownsCodePoint` must not claim another policy's characters.
+- `scripts` must use unique four-letter ISO 15924 codes.
+- `codePointRanges` uses inclusive `from` and exclusive `to` Unicode scalar values.
+- Code-point ranges must not overlap within one policy or with any registered policy.
 - `shouldMergeBoundary` must not merge across scripts.
+- Optional movement and selection hooks receive the Unicode baseline and may return `null` to retain it.
+- Invalid hook results, including positions inside surrogate pairs, fall back to the Unicode baseline.
 - Return half-open ranges `[from, to)` within the current logical line.
+- Invalid or surrogate-splitting deletion ranges fall back to the Unicode deletion range.
 - Return `null` when the policy cannot safely handle an operation.
 - Preserve ordinary selection deletion; custom rules apply to empty cursors.
 - Do not perform normalization, dictionary lookup, spellcheck, or IPC in an editing policy.
@@ -106,6 +120,9 @@ Add pure unit tests and include these cases:
 - multiple cursors and overlapping ranges;
 - non-BMP text before and after the script;
 - duplicate registration rejection;
+- unsupported contract version and overlapping code-point ownership rejection;
+- cross-script merge rejection;
+- optional movement and selection hook validation;
 - Khmer boundary and deletion results remain unchanged after registering the new policy.
 
 Run:

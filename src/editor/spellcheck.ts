@@ -2,7 +2,10 @@ import { StateEffect, StateField, type EditorState, type Extension, type Text } 
 import { syntaxTree } from "@codemirror/language";
 import { Decoration, EditorView, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
-import type { LanguageProviderCapabilities } from "../languageSupport";
+import {
+  parseLanguageProviderCapabilitiesList,
+  type LanguageProviderCapabilities
+} from "../languageSupport";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
 
 export type EditorToken = {
@@ -18,6 +21,15 @@ export type EditorToken = {
 
 export type AnalyzeResponse = {
   tokens: EditorToken[];
+  failures: ProviderFailure[];
+};
+
+export type ProviderFailure = {
+  provider: string;
+  operation: string;
+  sourceFromUtf16: number;
+  sourceToUtf16: number;
+  message: string;
 };
 
 export type ProviderCapabilities = LanguageProviderCapabilities;
@@ -147,7 +159,9 @@ export class SpellcheckController {
 
   public async initialize(): Promise<void> {
     try {
-      this.providers = await invoke<ProviderCapabilities[]>("get_provider_capabilities");
+      this.providers = parseLanguageProviderCapabilitiesList(
+        await invoke<unknown>("get_provider_capabilities")
+      );
     } catch (error) {
       console.error("Failed to fetch provider capabilities:", error);
     }
@@ -162,8 +176,8 @@ export class SpellcheckController {
     return this.providers;
   }
 
-  public setProviders(providers: ProviderCapabilities[]): void {
-    this.providers = providers;
+  public setProviders(providers: unknown): void {
+    this.providers = parseLanguageProviderCapabilitiesList(providers);
     this.invalidate(true);
     const doc = this.getEditor()?.state.doc;
     if (doc) {
@@ -433,7 +447,7 @@ export class SpellcheckController {
 
       if (chunks.length === 0) {
       this.activeRequest = null;
-      this.applyAnalysisResponse({ tokens: [] }, rangesToAnalyze);
+      this.applyAnalysisResponse({ tokens: [], failures: [] }, rangesToAnalyze);
       this.checkQueuedRequest();
       return;
     }
@@ -444,11 +458,16 @@ export class SpellcheckController {
       response = await invoke<AnalyzeResponse>("analyze_language_ranges", {
         request: { chunks }
       });
+      response = { tokens: response.tokens, failures: response.failures ?? [] };
       const enabledProviderIds = this.enabledProviderIds;
       if (response && enabledProviderIds !== null) {
         response = {
-          tokens: response.tokens.filter(token => enabledProviderIds.has(token.provider))
+          tokens: response.tokens.filter(token => enabledProviderIds.has(token.provider)),
+          failures: response.failures.filter(failure => enabledProviderIds.has(failure.provider))
         };
+      }
+      for (const failure of response.failures) {
+        this.warnOnce(`${failure.operation}:${failure.provider}`, failure.message);
       }
     } catch (error) {
       this.warnOnce("analyze_language_ranges", error);
@@ -483,11 +502,17 @@ export class SpellcheckController {
     const documentKey = this.documentKey;
     const revision = this.revision;
 
-    // Remove existing issues that fall within analyzedRanges
+    const failedRanges = response.failures ?? [];
+    // Remove successful providers' existing issues inside analyzed ranges, but
+    // retain a provider's last valid issues where its new analysis failed.
     let nextIssues = this.issues.filter(issue => {
-      return !analyzedRanges.some(range => {
+      const wasAnalyzed = analyzedRanges.some(range => {
         return !(issue.to <= range.from || issue.from >= range.to);
       });
+      if (!wasAnalyzed) return true;
+      return failedRanges.some(failure => failure.provider === issue.provider
+        && issue.from < failure.sourceToUtf16
+        && failure.sourceFromUtf16 < issue.to);
     });
 
     // Map new tokens to SpellingIssues
@@ -509,7 +534,11 @@ export class SpellcheckController {
         ignored: this.ignoredWords.has(token.normalizedText)
       }));
 
-    nextIssues = [...nextIssues, ...newIssues];
+    const deduplicated = new Map<string, SpellingIssue>();
+    for (const issue of [...nextIssues, ...newIssues]) {
+      deduplicated.set(`${issue.provider}:${issue.from}:${issue.to}`, issue);
+    }
+    nextIssues = [...deduplicated.values()];
     nextIssues.sort((a, b) => a.from - b.from);
     this.issues = nextIssues;
 

@@ -4,13 +4,49 @@ import { typstLanguage } from "../src/editor/typstLanguage";
 
 type Invocation = { command: string; resolve: (value: unknown) => void; reject: (error: unknown) => void; args?: any };
 const invocations: Invocation[] = [];
+const providerCapability = (overrides: Record<string, unknown>) => ({
+  schemaVersion: 1,
+  id: "test",
+  pattern: "[A-Za-z]+",
+  displayName: "Test",
+  languageTag: "en-US",
+  scripts: ["Latn"],
+  engine: "test",
+  supportLevel: "enhanced",
+  stability: "stable",
+  boundaryMode: "unicode-word",
+  boundaryQuality: "tested",
+  correctionQuality: "dictionary",
+  supportsSpellcheck: true,
+  supportsCorrections: true,
+  supportsCompletion: true,
+  supportsSegmentation: false,
+  supportsCustomDictionary: true,
+  hasEditingPolicy: false,
+  ...overrides
+});
 
 mock.module("@tauri-apps/api/core", () => ({
   invoke: (command: string, args?: any) => {
     if (command === "get_provider_capabilities") {
       return Promise.resolve([
-        { id: "khmer-segmenter", pattern: "[\\u1780-\\u17ff]+", supportsCorrections: false },
-        { id: "test-corrections", pattern: "[A-Za-z]+", supportsCorrections: true }
+        providerCapability({
+          id: "khmer-segmenter",
+          pattern: "[\\u1780-\\u17ff]+",
+          displayName: "Khmer",
+          languageTag: "km",
+          scripts: ["Khmr"],
+          engine: "khmer_segmenter",
+          supportLevel: "deep",
+          stability: "experimental",
+          boundaryMode: "custom-segmenter",
+          boundaryQuality: "dedicated",
+          correctionQuality: "none",
+          supportsCorrections: false,
+          supportsSegmentation: true,
+          hasEditingPolicy: true
+        }),
+        providerCapability({ id: "test-corrections" })
       ]);
     }
     return new Promise((resolve, reject) => invocations.push({ command, resolve, reject, args }));
@@ -50,7 +86,8 @@ const analysis = (text: string, knownPrefix = false) => ({
     normalizedText: text,
     known: false,
     knownPrefix
-  }]
+  }],
+  failures: []
 });
 
 let activeController: any = null;
@@ -158,6 +195,52 @@ describe("spellcheck request safety", () => {
 
     expect(fixture.controller.issues).toHaveLength(1);
     expect(fixture.visibleIssueSnapshots.at(-1)).toHaveLength(1);
+  });
+
+  test("preserves a failed provider's issues while applying successful provider results", async () => {
+    const fixture = await controllerFor("wrong ខុស");
+    const first = await startAnalysis(fixture.controller);
+    first.resolve({
+      tokens: [{
+        provider: "test-corrections",
+        sourceFromUtf16: 0,
+        sourceToUtf16: 5,
+        sourceText: "wrong",
+        normalizedText: "wrong",
+        known: false,
+        knownPrefix: false
+      }],
+      failures: []
+    });
+    await wait(20);
+    expect(fixture.controller.issues).toHaveLength(1);
+
+    fixture.controller.pendingRanges = [{ from: 0, to: fixture.state.doc.length }];
+    const second = await startAnalysis(fixture.controller);
+    second.resolve({
+      tokens: [{
+        provider: "khmer-segmenter",
+        sourceFromUtf16: 6,
+        sourceToUtf16: 9,
+        sourceText: "ខុស",
+        normalizedText: "ខុស",
+        known: false,
+        knownPrefix: false
+      }],
+      failures: [{
+        provider: "test-corrections",
+        operation: "analyze",
+        sourceFromUtf16: 0,
+        sourceToUtf16: 10,
+        message: "provider offline"
+      }]
+    });
+    await wait(20);
+
+    expect(fixture.controller.issues.map((issue: any) => issue.provider).sort()).toEqual([
+      "khmer-segmenter",
+      "test-corrections"
+    ]);
   });
 
   test("discards a response after tab activation", async () => {

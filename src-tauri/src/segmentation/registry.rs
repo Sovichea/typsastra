@@ -1,7 +1,7 @@
 use super::provider::{
     AnalyzeRequest, AnalyzeResponse, CompletionRequest, CompletionResponse, EditorToken,
-    LanguageSegmenter, ProviderCapabilities, SegmentToken, SuggestionRequest, SuggestionResponse,
-    TextAnalysis,
+    LanguageSegmenter, ProviderCapabilities, ProviderFailure, SegmentToken, SuggestionRequest,
+    SuggestionResponse, TextAnalysis, PROVIDER_CAPABILITY_SCHEMA_VERSION,
 };
 use crate::render_prepare::scanner::{scan_typst_content, ScanState};
 use khmer_segmenter::kdict::{KDict, KHypDict};
@@ -38,19 +38,25 @@ struct HunspellCatalogSpec {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HunspellCatalogEntry {
+    pub schema_version: u32,
     pub id: String,
     pub locale: String,
     pub display_name: String,
     pub language_tag: String,
+    pub scripts: Vec<String>,
     pub installed: bool,
     pub bundled: bool,
     pub source: String,
     pub support_level: String,
     pub stability: String,
     pub boundary_mode: String,
+    pub boundary_quality: String,
+    pub correction_quality: String,
     pub supports_spellcheck: bool,
     pub supports_corrections: bool,
     pub supports_completion: bool,
+    pub supports_segmentation: bool,
+    pub supports_custom_dictionary: bool,
     pub has_editing_policy: bool,
 }
 
@@ -396,6 +402,10 @@ impl LanguageSegmenter for KhmerProvider {
         "km"
     }
 
+    fn scripts(&self) -> &[&str] {
+        &["Khmr"]
+    }
+
     fn engine(&self) -> &'static str {
         "khmer_segmenter"
     }
@@ -412,6 +422,10 @@ impl LanguageSegmenter for KhmerProvider {
         "custom-segmenter"
     }
 
+    fn boundary_quality(&self) -> &'static str {
+        "dedicated"
+    }
+
     fn supports_corrections(&self) -> bool {
         // TODO: Re-enable when Khmer analysis can return reliable intended-word
         // spans instead of unknown fragments inside an unspaced run.
@@ -419,6 +433,10 @@ impl LanguageSegmenter for KhmerProvider {
     }
 
     fn supports_completion(&self) -> bool {
+        true
+    }
+
+    fn supports_segmentation(&self) -> bool {
         true
     }
 
@@ -648,6 +666,7 @@ struct GenericHunspellProvider {
     id: &'static str,
     display_name: &'static str,
     language_tag: &'static str,
+    scripts: Vec<&'static str>,
     pattern: &'static str,
     dictionary: spellbook::Dictionary,
     completion_words: Vec<String>,
@@ -679,6 +698,7 @@ impl GenericHunspellProvider {
             id: Box::leak(format!("hunspell:{locale}").into_boxed_str()),
             display_name: Box::leak(display_name.to_owned().into_boxed_str()),
             language_tag: Box::leak(language_tag.to_owned().into_boxed_str()),
+            scripts: vec![script_for_language_tag(language_tag)],
             pattern: Box::leak(pattern.to_owned().into_boxed_str()),
             dictionary,
             completion_words,
@@ -741,6 +761,10 @@ impl LanguageSegmenter for GenericHunspellProvider {
 
     fn language_tag(&self) -> &'static str {
         self.language_tag
+    }
+
+    fn scripts(&self) -> &[&str] {
+        &self.scripts
     }
 
     fn engine(&self) -> &'static str {
@@ -919,6 +943,10 @@ impl LanguageSegmenter for EnglishHunspellProvider {
         "en-US"
     }
 
+    fn scripts(&self) -> &[&str] {
+        &["Latn"]
+    }
+
     fn engine(&self) -> &'static str {
         "spellbook"
     }
@@ -929,6 +957,10 @@ impl LanguageSegmenter for EnglishHunspellProvider {
 
     fn boundary_mode(&self) -> &'static str {
         "unicode-word"
+    }
+
+    fn boundary_quality(&self) -> &'static str {
+        "tested"
     }
 
     fn supports_completion(&self) -> bool {
@@ -1125,6 +1157,24 @@ fn character_matches_language_tag(character: char, language_tag: &str) -> bool {
     }
 }
 
+fn script_for_language_tag(language_tag: &str) -> &'static str {
+    match language_tag.split('-').next().unwrap_or(language_tag) {
+        "ar" => "Arab",
+        "bn" => "Beng",
+        "bo" => "Tibt",
+        "gu" => "Gujr",
+        "he" => "Hebr",
+        "hi" | "mr" | "ne" => "Deva",
+        "lo" => "Laoo",
+        "pa" => "Guru",
+        "si" => "Sinh",
+        "ta" => "Taml",
+        "te" => "Telu",
+        "th" => "Thai",
+        _ => "Latn",
+    }
+}
+
 fn should_skip_generic_token(text: &str, from: usize, to: usize) -> bool {
     let word = &text[from..to];
     if word.contains('_') || word.chars().any(|c| c.is_ascii_digit()) {
@@ -1185,19 +1235,25 @@ fn is_hunspell_installed(data_dir: &Path, locale: &str) -> bool {
 
 fn catalog_entry(data_dir: Option<&Path>, spec: &HunspellCatalogSpec) -> HunspellCatalogEntry {
     HunspellCatalogEntry {
+        schema_version: PROVIDER_CAPABILITY_SCHEMA_VERSION,
         id: format!("hunspell:{}", spec.locale),
         locale: spec.locale.to_string(),
         display_name: spec.display_name.to_string(),
         language_tag: spec.language_tag.to_string(),
+        scripts: vec![script_for_language_tag(spec.language_tag).to_string()],
         installed: data_dir.is_some_and(|dir| is_hunspell_installed(dir, spec.locale)),
         bundled: false,
         source: "LibreOffice dictionaries".to_string(),
         support_level: "basic".to_string(),
         stability: "stable".to_string(),
         boundary_mode: "unicode-word".to_string(),
+        boundary_quality: "general".to_string(),
+        correction_quality: "dictionary".to_string(),
         supports_spellcheck: true,
         supports_corrections: true,
         supports_completion: false,
+        supports_segmentation: false,
+        supports_custom_dictionary: true,
         has_editing_policy: false,
     }
 }
@@ -1380,17 +1436,27 @@ impl SegmentationRegistry {
             .provider_snapshot()?
             .iter()
             .map(|provider| ProviderCapabilities {
+                schema_version: PROVIDER_CAPABILITY_SCHEMA_VERSION,
                 id: provider.id().to_owned(),
                 pattern: provider.pattern().to_owned(),
                 display_name: provider.display_name().to_owned(),
                 language_tag: provider.language_tag().to_owned(),
+                scripts: provider
+                    .scripts()
+                    .iter()
+                    .map(|script| (*script).to_owned())
+                    .collect(),
                 engine: provider.engine().to_owned(),
                 support_level: provider.support_level().to_owned(),
                 stability: provider.stability().to_owned(),
                 boundary_mode: provider.boundary_mode().to_owned(),
+                boundary_quality: provider.boundary_quality().to_owned(),
+                correction_quality: provider.correction_quality().to_owned(),
                 supports_spellcheck: provider.supports_spellcheck(),
                 supports_corrections: provider.supports_corrections(),
                 supports_completion: provider.supports_completion(),
+                supports_segmentation: provider.supports_segmentation(),
+                supports_custom_dictionary: provider.supports_custom_dictionary(),
                 has_editing_policy: provider.has_editing_policy(),
             })
             .collect())
@@ -1410,8 +1476,10 @@ impl SegmentationRegistry {
     }
 
     pub fn analyze_ranges(&self, request: AnalyzeRequest) -> Result<AnalyzeResponse, String> {
-        let mut merged_tokens: Vec<EditorToken> = Vec::new();
         let providers = self.provider_snapshot()?;
+        let mut candidates = Vec::<ProviderTokenCandidate>::new();
+        let mut failures = Vec::<ProviderFailure>::new();
+        let mut seen_failures = HashSet::<(String, usize, usize, String)>::new();
 
         for chunk in request.chunks {
             let byte_to_utf16 = byte_to_utf16_offsets(&chunk.text);
@@ -1421,93 +1489,178 @@ impl SegmentationRegistry {
                 }
                 let span_text = &chunk.text[span_from_byte..span_to_byte];
                 let span_start_utf16 = chunk.start_utf16 + byte_to_utf16[span_from_byte];
-                let active_providers: Vec<_> = providers
+                let span_end_utf16 = span_start_utf16 + span_text.encode_utf16().count();
+                let utf16_to_byte = utf16_to_byte_boundaries(span_text);
+
+                for provider in providers
                     .iter()
                     .filter(|provider| provider.supports(span_text))
-                    .collect();
-
-                if active_providers.is_empty() {
-                    continue;
-                }
-
-                // Build UTF-16 to byte offset lookup map in one linear pass
-                let mut utf16_to_byte = vec![0; span_text.encode_utf16().count() + 1];
-                let mut current_utf16 = 0;
-                for (byte_offset, character) in span_text.char_indices() {
-                    let len_u16 = character.len_utf16();
-                    utf16_to_byte[current_utf16] = byte_offset;
-                    if len_u16 > 1 {
-                        utf16_to_byte[current_utf16 + 1] = byte_offset;
-                    }
-                    current_utf16 += len_u16;
-                }
-                utf16_to_byte[current_utf16] = span_text.len();
-
-                let get_byte_range =
-                    |from: usize, to: usize, map: &[usize]| -> std::ops::Range<usize> {
-                        let start = map.get(from).copied().unwrap_or(0);
-                        let end = map.get(to).copied().unwrap_or(0);
-                        start..end
+                {
+                    let analysis = match provider.analyze(span_text) {
+                        Ok(analysis) => analysis,
+                        Err(message) => {
+                            push_provider_failure(
+                                &mut failures,
+                                &mut seen_failures,
+                                provider.id(),
+                                span_start_utf16,
+                                span_end_utf16,
+                                message,
+                            );
+                            continue;
+                        }
                     };
 
-                let default_provider = active_providers[0];
-                let analysis = default_provider.analyze(span_text)?;
-                let mut span_tokens: Vec<EditorToken> = analysis
-                    .tokens
-                    .iter()
-                    .map(|token| {
-                        let range = get_byte_range(token.from, token.to, &utf16_to_byte);
-                        let source_text = span_text[range].to_owned();
-                        EditorToken {
-                            provider: default_provider.id().to_owned(),
-                            source_from_utf16: token.from + span_start_utf16,
-                            source_to_utf16: token.to + span_start_utf16,
-                            source_text,
-                            normalized_text: token.text.clone(),
-                            known: token.known,
-                            known_prefix: token.known_prefix,
-                            hyphenated: token.hyphenated.clone(),
-                        }
-                    })
-                    .collect();
-
-                for provider in active_providers.iter().skip(1) {
-                    let analysis = provider.analyze(span_text)?;
                     for token in analysis.tokens {
-                        let range = get_byte_range(token.from, token.to, &utf16_to_byte);
-                        let source_text = span_text[range].to_owned();
-                        if provider.supports(&source_text) {
-                            let from_adjusted = token.from + span_start_utf16;
-                            let to_adjusted = token.to + span_start_utf16;
-
-                            span_tokens.retain(|existing| {
-                                existing.source_to_utf16 <= from_adjusted
-                                    || existing.source_from_utf16 >= to_adjusted
-                            });
-
-                            span_tokens.push(EditorToken {
+                        let Some(source_range) =
+                            utf16_byte_range(&utf16_to_byte, token.from, token.to, span_text.len())
+                        else {
+                            push_provider_failure(
+                                &mut failures,
+                                &mut seen_failures,
+                                provider.id(),
+                                span_start_utf16,
+                                span_end_utf16,
+                                format!(
+                                    "returned invalid UTF-16 token range {}..{} for a {}-unit span",
+                                    token.from,
+                                    token.to,
+                                    utf16_to_byte.len().saturating_sub(1)
+                                ),
+                            );
+                            continue;
+                        };
+                        let source_text = span_text[source_range].to_owned();
+                        if source_text.is_empty() || !provider.supports(&source_text) {
+                            continue;
+                        }
+                        candidates.push(ProviderTokenCandidate {
+                            priority: provider_priority(provider.as_ref()),
+                            provider_id: provider.id().to_owned(),
+                            token: EditorToken {
                                 provider: provider.id().to_owned(),
-                                source_from_utf16: from_adjusted,
-                                source_to_utf16: to_adjusted,
+                                source_from_utf16: token.from + span_start_utf16,
+                                source_to_utf16: token.to + span_start_utf16,
                                 source_text,
-                                normalized_text: token.text.clone(),
+                                normalized_text: token.text,
                                 known: token.known,
                                 known_prefix: token.known_prefix,
-                                hyphenated: token.hyphenated.clone(),
-                            });
-                        }
+                                hyphenated: token.hyphenated,
+                            },
+                        });
                     }
                 }
-
-                span_tokens.sort_by_key(|t| t.source_from_utf16);
-                merged_tokens.extend(span_tokens);
             }
         }
 
         Ok(AnalyzeResponse {
-            tokens: merged_tokens,
+            tokens: merge_provider_tokens(candidates),
+            failures,
         })
     }
+}
+
+struct ProviderTokenCandidate {
+    priority: u8,
+    provider_id: String,
+    token: EditorToken,
+}
+
+fn provider_priority(provider: &dyn LanguageSegmenter) -> u8 {
+    let support = match provider.support_level() {
+        "deep" => 30,
+        "enhanced" => 20,
+        _ => 10,
+    };
+    let boundary = match provider.boundary_quality() {
+        "dedicated" => 3,
+        "tested" => 2,
+        _ => 1,
+    };
+    support + boundary
+}
+
+fn merge_provider_tokens(mut candidates: Vec<ProviderTokenCandidate>) -> Vec<EditorToken> {
+    candidates.sort_by(|left, right| {
+        right
+            .priority
+            .cmp(&left.priority)
+            .then_with(|| left.provider_id.cmp(&right.provider_id))
+            .then_with(|| {
+                left.token
+                    .source_from_utf16
+                    .cmp(&right.token.source_from_utf16)
+            })
+            .then_with(|| left.token.source_to_utf16.cmp(&right.token.source_to_utf16))
+    });
+    let mut accepted = Vec::<EditorToken>::new();
+    for candidate in candidates {
+        if accepted.iter().any(|existing| {
+            existing.source_from_utf16 < candidate.token.source_to_utf16
+                && candidate.token.source_from_utf16 < existing.source_to_utf16
+        }) {
+            continue;
+        }
+        accepted.push(candidate.token);
+    }
+    accepted.sort_by(|left, right| {
+        left.source_from_utf16
+            .cmp(&right.source_from_utf16)
+            .then_with(|| left.source_to_utf16.cmp(&right.source_to_utf16))
+            .then_with(|| left.provider.cmp(&right.provider))
+    });
+    accepted
+}
+
+fn push_provider_failure(
+    failures: &mut Vec<ProviderFailure>,
+    seen: &mut HashSet<(String, usize, usize, String)>,
+    provider: &str,
+    source_from_utf16: usize,
+    source_to_utf16: usize,
+    message: String,
+) {
+    let key = (
+        provider.to_owned(),
+        source_from_utf16,
+        source_to_utf16,
+        message.clone(),
+    );
+    if !seen.insert(key) {
+        return;
+    }
+    failures.push(ProviderFailure {
+        provider: provider.to_owned(),
+        operation: "analyze".to_string(),
+        source_from_utf16,
+        source_to_utf16,
+        message,
+    });
+}
+
+fn utf16_to_byte_boundaries(text: &str) -> Vec<Option<usize>> {
+    let mut map = vec![None; text.encode_utf16().count() + 1];
+    let mut utf16_offset = 0;
+    for (byte_offset, character) in text.char_indices() {
+        map[utf16_offset] = Some(byte_offset);
+        utf16_offset += character.len_utf16();
+    }
+    map[utf16_offset] = Some(text.len());
+    map
+}
+
+fn utf16_byte_range(
+    map: &[Option<usize>],
+    from: usize,
+    to: usize,
+    text_len: usize,
+) -> Option<std::ops::Range<usize>> {
+    if from >= to {
+        return None;
+    }
+    let start = map.get(from).copied().flatten()?;
+    let end = map.get(to).copied().flatten()?;
+    (start < end && end <= text_len).then_some(start..end)
 }
 
 fn byte_to_utf16_offsets(text: &str) -> Vec<usize> {
@@ -1539,19 +1692,25 @@ pub fn list_hunspell_catalog(
         .app_local_data_dir()
         .map_err(|error| format!("Failed to locate app data directory: {error}"))?;
     let mut entries = vec![HunspellCatalogEntry {
+        schema_version: PROVIDER_CAPABILITY_SCHEMA_VERSION,
         id: "hunspell:en_US".to_string(),
         locale: "en_US".to_string(),
         display_name: "English (US)".to_string(),
         language_tag: "en-US".to_string(),
+        scripts: vec!["Latn".to_string()],
         installed: true,
         bundled: true,
         source: "Bundled with Typstry".to_string(),
         support_level: "enhanced".to_string(),
         stability: "stable".to_string(),
         boundary_mode: "unicode-word".to_string(),
+        boundary_quality: "tested".to_string(),
+        correction_quality: "dictionary".to_string(),
         supports_spellcheck: true,
         supports_corrections: true,
         supports_completion: true,
+        supports_segmentation: false,
+        supports_custom_dictionary: true,
         has_editing_policy: false,
     }];
     entries.extend(
@@ -1958,6 +2117,97 @@ mod tests {
         }
     }
 
+    struct GreekMockProvider;
+    impl LanguageSegmenter for GreekMockProvider {
+        fn id(&self) -> &'static str {
+            "mock-greek"
+        }
+        fn display_name(&self) -> &'static str {
+            "Mock Greek"
+        }
+        fn language_tag(&self) -> &'static str {
+            "el"
+        }
+        fn scripts(&self) -> &[&str] {
+            &["Grek"]
+        }
+        fn support_level(&self) -> &'static str {
+            "enhanced"
+        }
+        fn boundary_quality(&self) -> &'static str {
+            "tested"
+        }
+        fn pattern(&self) -> &'static str {
+            "[\u{0370}-\u{03ff}]+"
+        }
+        fn supports(&self, text: &str) -> bool {
+            text.chars()
+                .any(|character| ('\u{0370}'..='\u{03ff}').contains(&character))
+        }
+        fn analyze(&self, text: &str) -> Result<TextAnalysis, String> {
+            let mut tokens = Vec::new();
+            let mut start = None::<usize>;
+            let mut utf16 = 0;
+            for character in text.chars() {
+                let is_greek = ('\u{0370}'..='\u{03ff}').contains(&character);
+                match (start, is_greek) {
+                    (None, true) => start = Some(utf16),
+                    (Some(from), false) => {
+                        tokens.push(SegmentToken {
+                            text: "mock-greek-word".to_string(),
+                            from,
+                            to: utf16,
+                            known: false,
+                            known_prefix: false,
+                            hyphenated: None,
+                        });
+                        start = None;
+                    }
+                    _ => {}
+                }
+                utf16 += character.len_utf16();
+            }
+            if let Some(from) = start {
+                tokens.push(SegmentToken {
+                    text: "mock-greek-word".to_string(),
+                    from,
+                    to: utf16,
+                    known: false,
+                    known_prefix: false,
+                    hyphenated: None,
+                });
+            }
+            Ok(TextAnalysis {
+                provider: self.id(),
+                normalized_changed: false,
+                tokens,
+            })
+        }
+        fn suggestions(&self, _word: &str, _limit: usize) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    struct FailingProvider;
+    impl LanguageSegmenter for FailingProvider {
+        fn id(&self) -> &'static str {
+            "mock-failing"
+        }
+        fn pattern(&self) -> &'static str {
+            "[A-Za-z]+"
+        }
+        fn supports(&self, text: &str) -> bool {
+            text.chars()
+                .any(|character| character.is_ascii_alphabetic())
+        }
+        fn analyze(&self, _text: &str) -> Result<TextAnalysis, String> {
+            Err("intentional provider failure".to_string())
+        }
+        fn suggestions(&self, _word: &str, _limit: usize) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
     #[test]
     fn test_khmer_hyphenation_lookup() {
         let provider = KhmerProvider::new().unwrap();
@@ -1980,7 +2230,7 @@ mod tests {
 
     #[test]
     fn merges_tokens_from_multiple_providers() {
-        use crate::segmentation::provider::{AnalyzeChunk, AnalyzeRequest};
+        use crate::segmentation::provider::AnalyzeRequest;
 
         let registry = SegmentationRegistry {
             providers: Arc::new(RwLock::new(vec![
@@ -1991,7 +2241,7 @@ mod tests {
 
         let response = registry
             .analyze_ranges(AnalyzeRequest {
-                chunks: vec![AnalyzeChunk {
+                chunks: vec![crate::segmentation::provider::AnalyzeChunk {
                     text: "សាលារៀន hello invalidword".to_string(),
                     start_utf16: 0,
                 }],
@@ -2022,6 +2272,55 @@ mod tests {
         assert!(mock_tokens
             .iter()
             .any(|t| t.source_text == "invalidword" && !t.known));
+    }
+
+    #[test]
+    fn merges_mixed_scripts_with_exact_utf16_ranges_and_isolates_failures() {
+        let registry = SegmentationRegistry {
+            providers: Arc::new(RwLock::new(vec![
+                Arc::new(KhmerProvider::new().unwrap()),
+                Arc::new(EnglishHunspellProvider::new().unwrap()),
+                Arc::new(GreekMockProvider),
+                Arc::new(FailingProvider),
+            ])),
+        };
+        let text = "😀 សាលារៀន hello κόσμος";
+        let response = registry
+            .analyze_ranges(AnalyzeRequest {
+                chunks: vec![crate::segmentation::provider::AnalyzeChunk {
+                    text: text.to_string(),
+                    start_utf16: 7,
+                }],
+            })
+            .expect("mixed analysis");
+
+        for (provider, source) in [
+            ("khmer-segmenter", "សាលារៀន"),
+            ("hunspell:en_US", "hello"),
+            ("mock-greek", "κόσμος"),
+        ] {
+            let token = response
+                .tokens
+                .iter()
+                .find(|token| token.provider == provider && token.source_text == source)
+                .unwrap_or_else(|| panic!("missing {provider} token for {source}"));
+            let byte_from = text.find(source).expect("source range");
+            let expected_from = 7 + text[..byte_from].encode_utf16().count();
+            assert_eq!(token.source_from_utf16, expected_from);
+            assert_eq!(
+                token.source_to_utf16,
+                expected_from + source.encode_utf16().count()
+            );
+        }
+        assert!(response.failures.iter().any(|failure| {
+            failure.provider == "mock-failing"
+                && failure.message == "intentional provider failure"
+                && failure.source_from_utf16 == 7
+        }));
+        assert!(response
+            .tokens
+            .iter()
+            .any(|token| token.provider == "hunspell:en_US"));
     }
 
     #[test]
@@ -2099,6 +2398,14 @@ mod tests {
         assert!(khmer.supports_completion);
         assert!(khmer.has_editing_policy);
         assert!(!khmer.supports_corrections);
+        let serialized = serde_json::to_value(khmer).expect("serialized capabilities");
+        assert_eq!(
+            serialized["schemaVersion"],
+            PROVIDER_CAPABILITY_SCHEMA_VERSION
+        );
+        assert_eq!(serialized["scripts"][0], "Khmr");
+        assert_eq!(serialized["boundaryQuality"], "dedicated");
+        assert!(serialized.get("schema_version").is_none());
 
         let english = capabilities
             .iter()

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const PROVIDER_CAPABILITY_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SegmentToken {
@@ -49,6 +51,17 @@ pub struct EditorToken {
 #[serde(rename_all = "camelCase")]
 pub struct AnalyzeResponse {
     pub tokens: Vec<EditorToken>,
+    pub failures: Vec<ProviderFailure>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderFailure {
+    pub provider: String,
+    pub operation: String,
+    pub source_from_utf16: usize,
+    pub source_to_utf16: usize,
+    pub message: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -86,17 +99,23 @@ pub struct SuggestionResponse {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderCapabilities {
+    pub schema_version: u32,
     pub id: String,
     pub pattern: String,
     pub display_name: String,
     pub language_tag: String,
+    pub scripts: Vec<String>,
     pub engine: String,
     pub support_level: String,
     pub stability: String,
     pub boundary_mode: String,
+    pub boundary_quality: String,
+    pub correction_quality: String,
     pub supports_spellcheck: bool,
     pub supports_corrections: bool,
     pub supports_completion: bool,
+    pub supports_segmentation: bool,
+    pub supports_custom_dictionary: bool,
     pub has_editing_policy: bool,
 }
 
@@ -107,6 +126,9 @@ pub trait LanguageSegmenter: Send + Sync {
     }
     fn language_tag(&self) -> &'static str {
         "und"
+    }
+    fn scripts(&self) -> &[&str] {
+        &[]
     }
     fn engine(&self) -> &'static str {
         "custom"
@@ -120,14 +142,30 @@ pub trait LanguageSegmenter: Send + Sync {
     fn boundary_mode(&self) -> &'static str {
         "custom"
     }
+    fn boundary_quality(&self) -> &'static str {
+        "general"
+    }
     fn supports_spellcheck(&self) -> bool {
         true
     }
     fn supports_corrections(&self) -> bool {
         true
     }
+    fn correction_quality(&self) -> &'static str {
+        if self.supports_corrections() {
+            "dictionary"
+        } else {
+            "none"
+        }
+    }
     fn supports_completion(&self) -> bool {
         false
+    }
+    fn supports_segmentation(&self) -> bool {
+        false
+    }
+    fn supports_custom_dictionary(&self) -> bool {
+        true
     }
     fn has_editing_policy(&self) -> bool {
         false

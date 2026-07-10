@@ -6,9 +6,10 @@ import { khmerCompositionBoundaryState } from "../src/editor/editingPolicies/khm
 import type { ScriptEditingPolicy } from "../src/editor/editingPolicies/types";
 
 const thaiTestPolicy: ScriptEditingPolicy = {
+  contractVersion: 1,
   id: "thai-test",
   scripts: ["Thai"],
-  ownsCodePoint: codePoint => codePoint >= 0x0E00 && codePoint <= 0x0E7F,
+  codePointRanges: [{ from: 0x0E00, to: 0x0E80 }],
   shouldMergeBoundary: () => false,
   backwardDeletionRange: (_text, offset) => offset > 0 ? { from: offset - 1, to: offset } : null,
   forwardDeletionRange: (_text, offset, nextBoundary) => nextBoundary > offset
@@ -24,6 +25,14 @@ describe("script editing policy registry", () => {
 
     const duplicateKhmer = { ...thaiTestPolicy, id: "other-khmer", scripts: ["Khmr"] };
     expect(() => registry.register(duplicateKhmer)).toThrow("already owned");
+
+    const overlappingKhmer = {
+      ...thaiTestPolicy,
+      id: "overlapping-khmer",
+      scripts: ["Laoo"],
+      codePointRanges: [{ from: 0x17F0, to: 0x1805 }]
+    };
+    expect(() => registry.register(overlappingKhmer)).toThrow("overlaps Unicode ownership");
   });
 
   test("selects exactly one policy from the operation target", () => {
@@ -44,6 +53,36 @@ describe("script editing policy registry", () => {
 
     expect(registry.boundaries(text)).toEqual(before);
     expect(registry.backwardDeletionRange("\u1798\u17D2\u1794", 3)).toEqual({ from: 1, to: 3 });
+  });
+
+  test("never permits a policy to merge across script ownership", () => {
+    const registry = createDefaultEditingPolicyRegistry();
+    registry.register({ ...thaiTestPolicy, shouldMergeBoundary: () => true });
+    expect(registry.boundaries("\u0E01\u1780")).toEqual([
+      { from: 0, to: 1 },
+      { from: 1, to: 2 }
+    ]);
+  });
+
+  test("validates optional movement hooks against UTF-16 boundaries", () => {
+    const registry = createDefaultEditingPolicyRegistry();
+    registry.register({
+      ...thaiTestPolicy,
+      movementBoundary: () => 2
+    });
+    const text = "\u0E01😀";
+    expect(registry.movementBoundary(text, 0, "forward", 1)).toBe(1);
+  });
+
+  test("falls back to Unicode deletion when a policy returns an invalid range", () => {
+    const registry = createDefaultEditingPolicyRegistry();
+    registry.register({
+      ...thaiTestPolicy,
+      backwardDeletionRange: () => ({ from: -1, to: 1 }),
+      forwardDeletionRange: () => ({ from: 1, to: 99 })
+    });
+    expect(registry.backwardDeletionRange("\u0E01", 1)).toEqual({ from: 0, to: 1 });
+    expect(registry.forwardDeletionRange("\u0E01", 0)).toEqual({ from: 0, to: 1 });
   });
 
   test("exposes a trailing COENG as an incomplete Khmer composition", () => {

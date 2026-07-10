@@ -16,6 +16,45 @@ The frontend remains provider-neutral:
 - Typing suggestions call `complete_language_word` with the active provider ID.
 - Replacements are still guarded by document key, revision, document identity, and source text.
 
+## Capability contract
+
+Provider capability records use schema version `1`. Rust serializes the records in camelCase, and `src/languageSupport.ts` validates every field at runtime before generic frontend controllers can consume it. Unsupported versions, missing fields, invalid enum values, and inconsistent correction flags are rejected as controlled initialization errors. Provider-specific internal fields are not copied into the frontend contract.
+
+Each record declares:
+
+```text
+schemaVersion
+id, displayName, languageTag, scripts
+engine
+supportLevel, stability
+boundaryMode, boundaryQuality
+correctionQuality
+supportsSpellcheck
+supportsCorrections
+supportsCompletion
+supportsSegmentation
+supportsCustomDictionary
+hasEditingPolicy
+pattern
+```
+
+`supportLevel` is `basic`, `enhanced`, or `deep`. `boundaryQuality` is `general`, `tested`, or `dedicated`. `correctionQuality` is `none`, `dictionary`, or `intended-word`. Capability booleans are enforced on the request path: a provider that does not advertise completion or corrections cannot be invoked for that feature.
+
+## Mixed-language analysis
+
+`analyze_language_ranges` runs every provider that owns text in each submitted Typst prose span. Providers do not stop the registry after the first match.
+
+Candidate tokens are merged deterministically:
+
+1. higher support depth wins an overlapping range;
+2. within the same depth, dedicated boundaries outrank tested boundaries, which outrank general boundaries;
+3. provider ID and source range provide stable tie-breaking;
+4. final tokens are returned in source order and never overlap.
+
+Every token retains the provider ID that created it, so completion and corrections route back to the same provider.
+
+Provider analysis errors are returned in `AnalyzeResponse.failures` with provider ID, operation, source range, and message. Successful tokens from other providers remain usable. The frontend keeps the failed provider's last valid issues only inside the failed ranges, applies successful provider results, and emits one deduplicated warning. Registry or IPC failures remain request-level errors because no provider result can be trusted in that case.
+
 ## Bundled providers
 
 ### Khmer

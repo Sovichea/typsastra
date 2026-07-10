@@ -1,25 +1,35 @@
 export type LanguageSupportLevel = "basic" | "enhanced" | "deep";
 export type ProviderStability = "stable" | "experimental";
+export type BoundaryQuality = "general" | "tested" | "dedicated";
+export type CorrectionQuality = "none" | "dictionary" | "intended-word";
+export const LANGUAGE_PROVIDER_CAPABILITY_SCHEMA_VERSION = 1 as const;
 
-export type LanguageProviderCapabilities = {
+type LanguageCapabilityMetadata = {
+  schemaVersion: typeof LANGUAGE_PROVIDER_CAPABILITY_SCHEMA_VERSION;
   id: string;
-  pattern: string;
-  displayName?: string;
-  languageTag?: string;
-  engine?: string;
-  supportLevel?: LanguageSupportLevel | string;
-  stability?: ProviderStability | string;
-  boundaryMode?: string;
-  supportsSpellcheck?: boolean;
-  supportsCorrections?: boolean;
-  supportsCompletion?: boolean;
-  hasEditingPolicy?: boolean;
-};
-
-export type LanguageCatalogCapabilities = Omit<LanguageProviderCapabilities, "pattern"> & {
-  locale: string;
   displayName: string;
   languageTag: string;
+  scripts: string[];
+  supportLevel: LanguageSupportLevel;
+  stability: ProviderStability;
+  boundaryMode: string;
+  boundaryQuality: BoundaryQuality;
+  correctionQuality: CorrectionQuality;
+  supportsSpellcheck: boolean;
+  supportsCorrections: boolean;
+  supportsCompletion: boolean;
+  supportsSegmentation: boolean;
+  supportsCustomDictionary: boolean;
+  hasEditingPolicy: boolean;
+};
+
+export type LanguageProviderCapabilities = LanguageCapabilityMetadata & {
+  pattern: string;
+  engine: string;
+};
+
+export type LanguageCatalogCapabilities = LanguageCapabilityMetadata & {
+  locale: string;
   installed: boolean;
   bundled: boolean;
   source: string;
@@ -70,11 +80,14 @@ export function providerStabilityLabel(value: string | undefined): string {
 }
 
 export function providerFeatureLabels(provider: Pick<LanguageProviderCapabilities,
-  "supportsSpellcheck" | "supportsCorrections" | "supportsCompletion" | "hasEditingPolicy">): string[] {
+  "supportsSpellcheck" | "supportsCorrections" | "supportsCompletion" | "supportsSegmentation"
+  | "supportsCustomDictionary" | "hasEditingPolicy">): string[] {
   const features: string[] = [];
   if (provider.supportsSpellcheck !== false) features.push("Spellcheck");
   if (provider.supportsCorrections === true) features.push("Corrections");
   if (provider.supportsCompletion === true) features.push("Word completion");
+  if (provider.supportsSegmentation === true) features.push("Segmentation");
+  if (provider.supportsCustomDictionary === true) features.push("Personal dictionary");
   if (provider.hasEditingPolicy === true) features.push("Script-aware editing");
   return features;
 }
@@ -90,4 +103,127 @@ export function boundaryModeLabel(value: string | undefined): string | null {
     default:
       return value ? value.split("-").join(" ") : null;
   }
+}
+
+export function parseLanguageProviderCapabilitiesList(value: unknown): LanguageProviderCapabilities[] {
+  if (!Array.isArray(value)) throw new Error("Language provider capabilities must be an array.");
+  return rejectDuplicateIds(
+    value.map((entry, index) => parseLanguageProviderCapabilities(entry, `providers[${index}]`)),
+    "provider"
+  );
+}
+
+export function parseLanguageCatalog(value: unknown): LanguageCatalogCapabilities[] {
+  if (!Array.isArray(value)) throw new Error("Language catalog must be an array.");
+  return rejectDuplicateIds(value.map((entry, index) => {
+    const path = `catalog[${index}]`;
+    const record = capabilityRecord(entry, path);
+    return {
+      ...parseCapabilityMetadata(record, path),
+      locale: requiredString(record, "locale", path),
+      installed: requiredBoolean(record, "installed", path),
+      bundled: requiredBoolean(record, "bundled", path),
+      source: requiredString(record, "source", path)
+    };
+  }), "catalog entry");
+}
+
+function parseLanguageProviderCapabilities(value: unknown, path: string): LanguageProviderCapabilities {
+  const record = capabilityRecord(value, path);
+  return {
+    ...parseCapabilityMetadata(record, path),
+    pattern: requiredString(record, "pattern", path),
+    engine: requiredString(record, "engine", path)
+  };
+}
+
+function parseCapabilityMetadata(record: Record<string, unknown>, path: string): LanguageCapabilityMetadata {
+  const schemaVersion = record.schemaVersion;
+  if (schemaVersion !== LANGUAGE_PROVIDER_CAPABILITY_SCHEMA_VERSION) {
+    throw new Error(`${path}.schemaVersion must be ${LANGUAGE_PROVIDER_CAPABILITY_SCHEMA_VERSION}.`);
+  }
+  const supportLevel = requiredEnum(record, "supportLevel", ["basic", "enhanced", "deep"] as const, path);
+  const stability = requiredEnum(record, "stability", ["stable", "experimental"] as const, path);
+  const boundaryQuality = requiredEnum(record, "boundaryQuality", ["general", "tested", "dedicated"] as const, path);
+  const correctionQuality = requiredEnum(
+    record,
+    "correctionQuality",
+    ["none", "dictionary", "intended-word"] as const,
+    path
+  );
+  const supportsCorrections = requiredBoolean(record, "supportsCorrections", path);
+  if (supportsCorrections !== (correctionQuality !== "none")) {
+    throw new Error(`${path} has inconsistent correction capability metadata.`);
+  }
+  const scripts = requiredStringArray(record, "scripts", path);
+  if (scripts.some(script => !/^[A-Z][a-z]{3}$/.test(script))) {
+    throw new Error(`${path}.scripts must contain ISO 15924 codes.`);
+  }
+  return {
+    schemaVersion,
+    id: requiredString(record, "id", path),
+    displayName: requiredString(record, "displayName", path),
+    languageTag: requiredString(record, "languageTag", path),
+    scripts,
+    supportLevel,
+    stability,
+    boundaryMode: requiredString(record, "boundaryMode", path),
+    boundaryQuality,
+    correctionQuality,
+    supportsSpellcheck: requiredBoolean(record, "supportsSpellcheck", path),
+    supportsCorrections,
+    supportsCompletion: requiredBoolean(record, "supportsCompletion", path),
+    supportsSegmentation: requiredBoolean(record, "supportsSegmentation", path),
+    supportsCustomDictionary: requiredBoolean(record, "supportsCustomDictionary", path),
+    hasEditingPolicy: requiredBoolean(record, "hasEditingPolicy", path)
+  };
+}
+
+function rejectDuplicateIds<T extends { id: string }>(entries: T[], label: string): T[] {
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    if (ids.has(entry.id)) throw new Error(`Duplicate ${label} ID '${entry.id}'.`);
+    ids.add(entry.id);
+  }
+  return entries;
+}
+
+function capabilityRecord(value: unknown, path: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${path} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function requiredString(record: Record<string, unknown>, key: string, path: string): string {
+  const value = record[key];
+  if (typeof value !== "string" || value.length === 0) throw new Error(`${path}.${key} must be a non-empty string.`);
+  return value;
+}
+
+function requiredBoolean(record: Record<string, unknown>, key: string, path: string): boolean {
+  const value = record[key];
+  if (typeof value !== "boolean") throw new Error(`${path}.${key} must be a boolean.`);
+  return value;
+}
+
+function requiredStringArray(record: Record<string, unknown>, key: string, path: string): string[] {
+  const value = record[key];
+  if (!Array.isArray(value) || value.length === 0 || value.some(item => typeof item !== "string" || item.length === 0)) {
+    throw new Error(`${path}.${key} must be a non-empty string array.`);
+  }
+  return [...value] as string[];
+}
+
+function requiredEnum<const T extends readonly string[]>(
+  record: Record<string, unknown>,
+  key: string,
+  options: T,
+  path: string
+): T[number] {
+  const value = record[key];
+  if (typeof value !== "string" || !options.includes(value)) {
+    throw new Error(`${path}.${key} must be one of: ${options.join(", ")}.`);
+  }
+  return value as T[number];
 }

@@ -6,6 +6,8 @@ import {
 } from "./editor/fontCatalog";
 import {
   boundaryModeLabel,
+  parseLanguageCatalog,
+  parseLanguageProviderCapabilitiesList,
   providerFeatureLabels,
   providerStabilityLabel,
   supportLevelPresentation,
@@ -374,7 +376,7 @@ export class SettingsController {
     if (!catalog) return;
     let entries: HunspellCatalogEntry[] = [];
     try {
-      entries = await invoke<HunspellCatalogEntry[]>("list_hunspell_catalog");
+      entries = parseLanguageCatalog(await invoke<unknown>("list_hunspell_catalog"));
     } catch (error) {
       catalog.textContent = `Failed to load language catalog: ${String(error)}`;
       return;
@@ -446,7 +448,9 @@ export class SettingsController {
     button.disabled = true;
     button.textContent = "Downloading...";
     try {
-      const providers = await invoke<LanguageProviderOption[]>("install_hunspell_dictionary", { locale: entry.locale });
+      const providers = parseLanguageProviderCapabilitiesList(
+        await invoke<unknown>("install_hunspell_dictionary", { locale: entry.locale })
+      );
       this.setLanguageProviders(providers);
       this.onLanguageProvidersChanged(providers);
       this.update(settings => {

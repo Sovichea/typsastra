@@ -426,20 +426,20 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 
 ### Task checklist
 
-- [ ] **P2.1 — Freeze the editing-policy contract.** Document required and optional hooks, UTF-16 range rules, ownership rules, and fallback behavior in the TypeScript interface.
-- [ ] **P2.2 — Enforce policy ownership.** Add registry validation for duplicate IDs, duplicate ISO 15924 ownership, overlapping code-point ownership, and cross-script boundary tailoring. Depends on `P2.1`.
-- [ ] **P2.3 — Centralize policy routing.** Audit CodeMirror keybindings and transaction helpers so all script-specific movement and deletion go through the registry.
-- [ ] **P2.4 — Define provider capabilities.** Add a versioned Rust and TypeScript capability schema for spellcheck, corrections, completion, segmentation, custom dictionaries, locale, script, stability, and boundary quality.
-- [ ] **P2.5 — Validate capability serialization.** Add IPC contract tests proving Rust capability responses deserialize into the frontend contract without provider-specific fields leaking into generic controllers. Depends on `P2.4`.
-- [ ] **P2.6 — Implement multi-provider range routing.** Run every provider that owns submitted text, coalesce input ranges, and merge non-overlapping results deterministically. Depends on `P2.4`.
-- [ ] **P2.7 — Isolate provider failures.** Return successful provider results alongside structured per-provider failures and prevent rejected requests from clearing valid issues. Depends on `P2.6`.
-- [ ] **P2.8 — Add conformance fixtures.** Register mock policies and providers in tests and verify ownership, routing, merging, failure isolation, and UTF-16 offsets.
+- [x] **P2.1 — Freeze the editing-policy contract.** Document required and optional hooks, UTF-16 range rules, ownership rules, and fallback behavior in the TypeScript interface.
+- [x] **P2.2 — Enforce policy ownership.** Add registry validation for duplicate IDs, duplicate ISO 15924 ownership, overlapping code-point ownership, and cross-script boundary tailoring. Depends on `P2.1`.
+- [x] **P2.3 — Centralize policy routing.** Audit CodeMirror keybindings and transaction helpers so all script-specific movement and deletion go through the registry.
+- [x] **P2.4 — Define provider capabilities.** Add a versioned Rust and TypeScript capability schema for spellcheck, corrections, completion, segmentation, custom dictionaries, locale, script, stability, and boundary quality.
+- [x] **P2.5 — Validate capability serialization.** Add IPC contract tests proving Rust capability responses deserialize into the frontend contract without provider-specific fields leaking into generic controllers. Depends on `P2.4`.
+- [x] **P2.6 — Implement multi-provider range routing.** Run every provider that owns submitted text, coalesce input ranges, and merge non-overlapping results deterministically. Depends on `P2.4`.
+- [x] **P2.7 — Isolate provider failures.** Return successful provider results alongside structured per-provider failures and prevent rejected requests from clearing valid issues. Depends on `P2.6`.
+- [x] **P2.8 — Add conformance fixtures.** Register mock policies and providers in tests and verify ownership, routing, merging, failure isolation, and UTF-16 offsets.
 
 ### Acceptance criteria
 
-- [ ] Registering a mock second script policy does not change any Khmer movement or deletion result.
-- [ ] Registering a mock second language provider requires no CodeMirror integration change.
-- [ ] A mixed Khmer, Latin, and mock-script document produces independent results with correct UTF-16 ranges.
+- [x] Registering a mock second script policy does not change any Khmer movement or deletion result.
+- [x] Registering a mock second language provider requires no CodeMirror integration change.
+- [x] A mixed Khmer, Latin, and mock-script document produces independent results with correct UTF-16 ranges.
 
 ## Phase 3: Make Khmer the documented reference implementation
 

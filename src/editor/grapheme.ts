@@ -15,27 +15,60 @@ export function graphemeBoundaries(text: string, temporaryBoundary: number | nul
   return editingPolicyRegistry.boundaries(text, temporaryBoundary);
 }
 
-export function previousGraphemeBoundary(doc: Text, position: number, temporaryBoundary: number | null = null): number {
+export function previousGraphemeBoundary(
+  doc: Text,
+  position: number,
+  temporaryBoundary: number | null = null,
+  selection = false
+): number {
   const line = doc.lineAt(Math.max(0, Math.min(position, doc.length)));
   const local = position - line.from;
   const localTemporaryBoundary = temporaryBoundary === null ? null : temporaryBoundary - line.from;
   let previous = 0;
   for (const boundary of graphemeBoundaries(line.text, localTemporaryBoundary)) {
     if (boundary.to >= local) {
-      return line.from + (local <= boundary.from ? previous : boundary.from);
+      const unicodeBoundary = local <= boundary.from ? previous : boundary.from;
+      return line.from + editingPolicyRegistry.movementBoundary(
+        line.text,
+        local,
+        "backward",
+        unicodeBoundary,
+        selection
+      );
     }
     previous = boundary.to;
   }
   return line.from + previous;
 }
 
-export function nextGraphemeBoundary(doc: Text, position: number, temporaryBoundary: number | null = null): number {
+export function nextGraphemeBoundary(
+  doc: Text,
+  position: number,
+  temporaryBoundary: number | null = null,
+  selection = false
+): number {
   const line = doc.lineAt(Math.max(0, Math.min(position, doc.length)));
   const local = position - line.from;
   const localTemporaryBoundary = temporaryBoundary === null ? null : temporaryBoundary - line.from;
   for (const boundary of graphemeBoundaries(line.text, localTemporaryBoundary)) {
-    if (boundary.from <= local && local < boundary.to) return line.from + boundary.to;
-    if (local < boundary.from) return line.from + boundary.from;
+    if (boundary.from <= local && local < boundary.to) {
+      return line.from + editingPolicyRegistry.movementBoundary(
+        line.text,
+        local,
+        "forward",
+        boundary.to,
+        selection
+      );
+    }
+    if (local < boundary.from) {
+      return line.from + editingPolicyRegistry.movementBoundary(
+        line.text,
+        local,
+        "forward",
+        boundary.from,
+        selection
+      );
+    }
   }
   return line.to;
 }
@@ -192,8 +225,8 @@ export function moveSelectionByGrapheme(
   const ranges = selection.ranges.map(range => {
     const head = snapPositionToGraphemeBoundary(doc, range.head, temporaryBoundary);
     const target = direction === "backward"
-      ? previousGraphemeBoundary(doc, head, temporaryBoundary)
-      : nextGraphemeBoundary(doc, head, temporaryBoundary);
+      ? previousGraphemeBoundary(doc, head, temporaryBoundary, extend)
+      : nextGraphemeBoundary(doc, head, temporaryBoundary, extend);
     if (extend) {
       const anchor = snapPositionToGraphemeBoundary(doc, range.anchor, temporaryBoundary);
       return anchor === target ? EditorSelection.cursor(target) : EditorSelection.range(anchor, target);
