@@ -3230,6 +3230,7 @@ export class TypstryWorkspaceController {
     this.latestDocumentVersion = version;
     tab.version = version;
     tab.latestVersion = version;
+    let lspUpdated = false;
     if (this.lspReady && this.lspClient) {
       const lspRes = await this.getLspUriAndContent(tab.path, contents);
       if (lspRes) {
@@ -3237,9 +3238,20 @@ export class TypstryWorkspaceController {
         await this.openDocumentIfNeeded(lspUri, lspContent, version);
         await this.lspClient.notifyTextChange(lspUri, lspContent, version);
         await this.lspClient.notifyTextSave(lspUri, lspContent);
-        this.setLspStatus({ kind: "preview-ready", message: "Reloaded external file change" });
+        lspUpdated = true;
       }
     }
+    if (tab.path.toLowerCase().endsWith(".typ")) {
+      if (this.settingsController.value.preview.renderMode === "on-save") {
+        void this.renderPdfPreview(contents);
+      } else {
+        this.schedulePdfPreview(contents);
+      }
+    }
+    this.setLspStatus({
+      kind: lspUpdated ? "preview-ready" : "sync-pending",
+      message: lspUpdated ? "Reloaded external file change" : "Reloaded external file; preview update queued"
+    });
   }
 
   private noMainFileMessage(): string {
