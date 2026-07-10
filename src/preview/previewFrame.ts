@@ -18,6 +18,7 @@ type PageDimensions = {
 
 type ActivePageRender = {
   generation: number;
+  renderKey: string;
   task: { cancel(): void } | null;
   page: { cleanup(): void } | null;
 };
@@ -233,7 +234,7 @@ export class PreviewFrame {
       slot.style.height = `${dimensions.height * zoom}px`;
       if (!options.preserveExistingPages) {
         slot.replaceChildren();
-        delete slot.dataset.renderGeneration;
+        delete slot.dataset.renderKey;
       }
     }
   }
@@ -269,10 +270,11 @@ export class PreviewFrame {
     if (!this.pdfDoc || generation !== this.pdfGeneration || this.activeRenders.has(pageNo)) return;
     const doc = this.iframe?.contentDocument;
     const slot = doc?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
-    if (!doc || !slot || slot.dataset.renderGeneration === String(generation)) return;
-    const replacingExistingPage = slot.firstElementChild !== null;
+    if (!doc || !slot) return;
+    const renderKey = this.currentPageRenderKey(generation);
+    if (slot.dataset.renderKey === renderKey) return;
 
-    const active: ActivePageRender = { generation, task: null, page: null };
+    const active: ActivePageRender = { generation, renderKey, task: null, page: null };
     this.activeRenders.set(pageNo, active);
     try {
       const pdfjs = await this.pdfJs();
@@ -288,7 +290,6 @@ export class PreviewFrame {
       canvas.className = "pdf-page-canvas";
       canvas.width = Math.max(1, Math.floor(renderViewport.width));
       canvas.height = Math.max(1, Math.floor(renderViewport.height));
-      if (!replacingExistingPage) slot.appendChild(canvas);
 
       const context = canvas.getContext("2d", { alpha: false });
       if (!context) throw new Error("Canvas rendering is unavailable.");
@@ -302,7 +303,6 @@ export class PreviewFrame {
       const textLayerElement = doc.createElement("div");
       textLayerElement.className = "textLayer";
       textLayerElement.style.setProperty("--scale-factor", String(cssViewport.scale));
-      if (!replacingExistingPage) slot.appendChild(textLayerElement);
       const textLayer = new pdfjs.TextLayer({
         textContentSource: textContent,
         container: textLayerElement,
@@ -325,12 +325,9 @@ export class PreviewFrame {
         link.style.height = `${Math.abs(rect[3] - rect[1])}px`;
         annotationLinks.push(link);
       }
-      if (replacingExistingPage) {
-        slot.replaceChildren(canvas, textLayerElement, ...annotationLinks);
-      } else {
-        slot.append(...annotationLinks);
-      }
-      slot.dataset.renderGeneration = String(generation);
+      slot.replaceChildren(canvas, textLayerElement, ...annotationLinks);
+      slot.dataset.renderKey = renderKey;
+      delete slot.dataset.renderGeneration;
     } catch (error) {
       if (!(error instanceof Error && error.name === "RenderingCancelledException")) {
         console.error(`Failed to render PDF page ${pageNo}:`, error);
@@ -343,8 +340,14 @@ export class PreviewFrame {
 
   private renderIsCurrent(pageNo: number, active: ActivePageRender, slot: HTMLElement): boolean {
     return active.generation === this.pdfGeneration
+      && active.renderKey === this.currentPageRenderKey(active.generation)
       && this.activeRenders.get(pageNo) === active
       && slot.isConnected;
+  }
+
+  private currentPageRenderKey(generation: number): string {
+    const outputScale = Math.min(window.devicePixelRatio || 1, MAX_OUTPUT_SCALE);
+    return `${generation}:${this.previewZoomPercent}:${outputScale}`;
   }
 
   private unrenderPage(pageNo: number): void {
@@ -356,7 +359,7 @@ export class PreviewFrame {
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`)
     if (!slot) return;
     slot.replaceChildren();
-    delete slot.dataset.renderGeneration;
+    delete slot.dataset.renderKey;
   }
 
   private cancelAllPageRenders(): void {
