@@ -186,7 +186,7 @@ export function initializeLucideIcons(): void {
   replaceSvg("#titlebar-maximize svg", "square", 11);
   replaceSvg("#titlebar-close svg", "x", 12);
   replaceSvg("#preview-menu-btn svg", "ellipsisVertical", 16);
-  const isPreview = window.location.search.includes("mode=preview");
+  const isPreview = new URLSearchParams(window.location.search).get("mode") === "preview";
   replaceSvg("#undock-preview-btn svg", isPreview ? "minimize2" : "externalLink", 16);
   replaceSvg("#sidebar-toggle-button svg", "panelLeft", 15);
   replaceContents("#settings-close, #log-console-close", "x", 15);

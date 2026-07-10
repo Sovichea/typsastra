@@ -66,6 +66,10 @@ const DEFAULT_PREVIEW_WIDTH_PCT = 100 - DEFAULT_INPUT_WIDTH_PCT;
 const DEFAULT_EXPLORER_WIDTH_PX = 250;
 const SYNC_RIPPLE_GREEN = "#3db489";
 
+function isPreviewOnlyWindow(): boolean {
+  return new URLSearchParams(window.location.search).get("mode") === "preview";
+}
+
 type ExamplesWorkspace = {
   workspacePath: string;
   entryPath: string;
@@ -218,8 +222,11 @@ export class TypstryWorkspaceController {
   );
   private editorVisualToolbar = document.getElementById("editor-visual-toolbar")!;
   private codeRenderPane = document.getElementById("code-render-pane")!;
-  private wysiwymPane = document.getElementById("wysiwym-editor-pane")!;
-  private wysiwymContainer = this.wysiwymPane.querySelector<HTMLElement>(".wysiwym-container")!;
+  // WYSIWYM is intentionally disabled for this release. Keep a detached
+  // container so the future adapter code can remain compiled without putting
+  // the WYSIWYM pane into the active editor layout.
+  private wysiwymPane = document.getElementById("wysiwym-editor-pane") as HTMLElement | null;
+  private wysiwymContainer = this.wysiwymPane?.querySelector<HTMLElement>(".wysiwym-container") ?? document.createElement("div");
   private readonly wysiwymAdapter = new WysiwymAdapter(this.wysiwymContainer);
   private previewPane = document.getElementById("preview-render-pane")!;
   private readonly previewFrame = new PreviewFrame(this.previewPane, point => {
@@ -338,11 +345,13 @@ export class TypstryWorkspaceController {
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
 
   public async bootstrap() {
-    const isPreviewWindow = window.location.search.includes("mode=preview");
+    const isPreviewWindow = isPreviewOnlyWindow();
     if (isPreviewWindow) {
       await this.bootstrapPreviewWindow();
       return;
     }
+    document.documentElement.classList.remove("preview-only-mode");
+    document.body.classList.remove("preview-only-mode");
 
     await this.timeStartup("load settings", () => this.settingsController.load());
     for (const entry of this.settingsController.getTimings()) this.recordStartupTimingEntry(entry);
@@ -366,6 +375,7 @@ export class TypstryWorkspaceController {
     this.timeStartupSync("update workspace visibility", () => this.updateWorkspaceViewportVisibility());
 
     await this.timeStartup("show main window", () => getCurrentWindow().show());
+    this.refreshEditorLayout("main window shown");
     this.recordStartupTiming("frontend startup", "frontend bootstrap until window shown", this.startupStart);
     void this.logNativeStartupTimingsToConsole();
     void this.finishStartupInitialization();
@@ -389,6 +399,7 @@ export class TypstryWorkspaceController {
   }
 
   private async bootstrapPreviewWindow() {
+    document.documentElement.classList.add("preview-only-mode");
     document.body.classList.add("preview-only-mode");
     
     document.getElementById("preview-zoom-in-btn")?.addEventListener("click", () => {
@@ -818,6 +829,21 @@ export class TypstryWorkspaceController {
       this.previewSyncController.suppressForwardFor(500);
     }, { passive: true });
     this.editorFontManager.updateDocument(initialDocument);
+  }
+
+  private refreshEditorLayout(reason: string): void {
+    const editor = this.editorInstance;
+    if (!editor) return;
+    const refresh = () => {
+      if (this.editorInstance !== editor) return;
+      editor.requestMeasure();
+      this.appendDeveloperLog({
+        kind: "log",
+        source: "editor layout",
+        message: `Requested CodeMirror layout refresh after ${reason}.`
+      });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(refresh));
   }
 
   private shouldForwardSyncSelectionUpdate(update: { selectionSet: boolean; transactions: readonly { isUserEvent(event: string): boolean }[] }): boolean {
@@ -1301,6 +1327,7 @@ export class TypstryWorkspaceController {
     }
 
     this.updateWorkspaceViewportVisibility();
+    this.refreshEditorLayout("tab activation");
     this.editorInstance.focus();
     this.saveWorkspaceState();
   }
@@ -2402,7 +2429,7 @@ export class TypstryWorkspaceController {
   }
 
   private async handlePdfPreviewClick(point: PreviewClickPoint): Promise<void> {
-    const isPreviewWindow = window.location.search.includes("mode=preview");
+    const isPreviewWindow = isPreviewOnlyWindow();
     if (isPreviewWindow) {
       import("@tauri-apps/api/event").then(({ emit }) => {
         emit("pdf-click", point);
@@ -2912,6 +2939,7 @@ export class TypstryWorkspaceController {
   }
 
   private switchViewLayoutMode() {
+    if (!this.wysiwymPane) return;
     if (this.activeMode === "CODE") {
       this.activeMode = "WYSIWYM";
       this.mapMarkupToWysiwym(this.editorInstance.state.doc.toString());
