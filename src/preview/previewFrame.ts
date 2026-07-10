@@ -204,7 +204,7 @@ export class PreviewFrame {
     const viewer = doc.getElementById("viewer-container");
     if (!viewer || !this.pdfDoc) return;
     if (!preserveExistingPages) {
-      viewer.replaceChildren();
+      replaceElementChildren(viewer);
     }
     for (let pageNo = 1; pageNo <= this.pdfDoc.numPages; pageNo += 1) {
       let slot = viewer.querySelector<HTMLElement>(`:scope > .pdf-page-container[data-page-no="${pageNo}"]`);
@@ -233,7 +233,7 @@ export class PreviewFrame {
       slot.style.width = `${dimensions.width * zoom}px`;
       slot.style.height = `${dimensions.height * zoom}px`;
       if (!options.preserveExistingPages) {
-        slot.replaceChildren();
+        replaceElementChildren(slot);
         delete slot.dataset.renderKey;
       }
     }
@@ -298,23 +298,64 @@ export class PreviewFrame {
       await task.promise;
       active.task = null;
       if (!this.renderIsCurrent(pageNo, active, slot)) return;
+      replaceElementChildren(slot, canvas);
+      slot.dataset.renderKey = renderKey;
+      delete slot.dataset.renderGeneration;
 
+      const textLayerElement = await this.renderTextLayer(pdfjs, page, cssViewport, doc);
+      if (!this.renderIsCurrent(pageNo, active, slot)) return;
+
+      const annotationLinks = await this.renderAnnotationLinks(page, cssViewport, doc);
+      if (!this.renderIsCurrent(pageNo, active, slot)) return;
+
+      const children = textLayerElement
+        ? [canvas, textLayerElement, ...annotationLinks]
+        : [canvas, ...annotationLinks];
+      replaceElementChildren(slot, ...children);
+      slot.dataset.renderKey = renderKey;
+      delete slot.dataset.renderGeneration;
+    } catch (error) {
+      if (!(error instanceof Error && error.name === "RenderingCancelledException")) {
+        console.error(`Failed to render PDF page ${pageNo}:`, error);
+      }
+    } finally {
+      if (this.activeRenders.get(pageNo) === active) this.activeRenders.delete(pageNo);
+      active.page?.cleanup();
+    }
+  }
+
+  private async renderTextLayer(pdfjs: PdfJsModule, page: any, viewport: any, doc: Document): Promise<HTMLElement | null> {
+    const TextLayer = (pdfjs as unknown as { TextLayer?: new (options: {
+      textContentSource: unknown;
+      container: HTMLElement;
+      viewport: unknown;
+    }) => { render(): Promise<void> | void } }).TextLayer;
+    if (typeof TextLayer !== "function") return null;
+    try {
       const textContent = await page.getTextContent();
       const textLayerElement = doc.createElement("div");
       textLayerElement.className = "textLayer";
-      textLayerElement.style.setProperty("--scale-factor", String(cssViewport.scale));
-      const textLayer = new pdfjs.TextLayer({
+      textLayerElement.style.setProperty("--scale-factor", String(viewport.scale));
+      const textLayer = new TextLayer({
         textContentSource: textContent,
         container: textLayerElement,
-        viewport: cssViewport
+        viewport
       });
       await textLayer.render();
-      if (!this.renderIsCurrent(pageNo, active, slot)) return;
+      return textLayerElement;
+    } catch (error) {
+      console.warn("Failed to render PDF text layer:", error);
+      return null;
+    }
+  }
 
+  private async renderAnnotationLinks(page: any, viewport: any, doc: Document): Promise<HTMLElement[]> {
+    if (typeof page?.getAnnotations !== "function") return [];
+    try {
       const annotationLinks: HTMLElement[] = [];
       for (const annotation of await page.getAnnotations()) {
         if (annotation.subtype !== "Link" || !annotation.url) continue;
-        const rect = viewportRectangle(cssViewport, annotation.rect);
+        const rect = viewportRectangle(viewport, annotation.rect);
         if (!rect) continue;
         const link = doc.createElement("a");
         link.className = "annotation-link";
@@ -325,16 +366,10 @@ export class PreviewFrame {
         link.style.height = `${Math.abs(rect[3] - rect[1])}px`;
         annotationLinks.push(link);
       }
-      slot.replaceChildren(canvas, textLayerElement, ...annotationLinks);
-      slot.dataset.renderKey = renderKey;
-      delete slot.dataset.renderGeneration;
+      return annotationLinks;
     } catch (error) {
-      if (!(error instanceof Error && error.name === "RenderingCancelledException")) {
-        console.error(`Failed to render PDF page ${pageNo}:`, error);
-      }
-    } finally {
-      if (this.activeRenders.get(pageNo) === active) this.activeRenders.delete(pageNo);
-      active.page?.cleanup();
+      console.warn("Failed to render PDF annotation links:", error);
+      return [];
     }
   }
 
@@ -358,7 +393,7 @@ export class PreviewFrame {
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`)
     if (!slot) return;
-    slot.replaceChildren();
+    replaceElementChildren(slot);
     delete slot.dataset.renderKey;
   }
 
@@ -641,6 +676,15 @@ function viewportRectangle(viewport: any, rect: unknown): [number, number, numbe
   const second = viewport.convertToViewportPoint(x2, y2);
   if (!Array.isArray(first) || !Array.isArray(second)) return null;
   return [first[0], first[1], second[0], second[1]];
+}
+
+function replaceElementChildren(element: Element, ...children: Node[]): void {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+  for (const child of children) {
+    element.appendChild(child);
+  }
 }
 
 async function waitForPreviewScrollToSettle(
