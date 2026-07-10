@@ -1,6 +1,4 @@
-export type PreviewTextPoint = {
-  text: string;
-  offset: number;
+export type PreviewClickPoint = {
   pageNo?: number;
   documentPosition?: { page_no: number; x: number; y: number };
 };
@@ -24,18 +22,6 @@ type ActivePageRender = {
   page: { cleanup(): void } | null;
 };
 
-type PdfClickItem = {
-  text: string;
-  left: number;
-  right: number;
-  baseline: number;
-  height: number;
-};
-
-type SourceTextScrollOptions = {
-  ripple?: boolean;
-};
-
 const ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
 const DEFAULT_ZOOM_PERCENT = 90;
 const MAX_OUTPUT_SCALE = 2;
@@ -54,14 +40,12 @@ export class PreviewFrame {
   private observer: IntersectionObserver | null = null;
   private pageDimensions = new Map<number, PageDimensions>();
   private activeRenders = new Map<number, ActivePageRender>();
-  private pageTextCache = new Map<number, string>();
-  private pageClickItems = new Map<number, PdfClickItem[]>();
   private pdfGeneration = 0;
   private forwardRippleGeneration = 0;
 
   constructor(
     private readonly pane: HTMLElement,
-    private readonly onTextClick: (point: PreviewTextPoint) => void,
+    private readonly onPreviewClick: (point: PreviewClickPoint) => void,
     private readonly onInteractionStatus?: (status: PreviewInteractionStatus) => void,
     private readonly onZoomChanged?: (zoomPercent: number) => void
   ) {}
@@ -140,8 +124,6 @@ export class PreviewFrame {
       this.observer?.disconnect();
       this.observer = null;
       this.cancelAllPageRenders();
-      this.pageTextCache.clear();
-      this.pageClickItems.clear();
       nextPdfDoc = null;
       this.pdfDoc = pdfDoc;
       this.pdfLoadingTask = nextLoadingTask;
@@ -232,7 +214,6 @@ export class PreviewFrame {
     const doc = this.iframe?.contentDocument;
     if (!doc) return;
     const zoom = this.previewZoomPercent / 100;
-    this.pageClickItems.clear();
     for (const slot of doc.querySelectorAll<HTMLElement>(".pdf-page-container")) {
       const pageNo = Number(slot.dataset.pageNo);
       const dimensions = this.pageDimensions.get(pageNo);
@@ -309,7 +290,6 @@ export class PreviewFrame {
       if (!this.renderIsCurrent(pageNo, active, slot)) return;
 
       const textContent = await page.getTextContent();
-      this.pageClickItems.set(pageNo, pdfClickItems(textContent.items, cssViewport));
       const textLayerElement = doc.createElement("div");
       textLayerElement.className = "textLayer";
       textLayerElement.style.setProperty("--scale-factor", String(cssViewport.scale));
@@ -320,7 +300,6 @@ export class PreviewFrame {
         viewport: cssViewport
       });
       await textLayer.render();
-      attachPdfTextMetadata(textLayerElement, textContent.items);
       if (!this.renderIsCurrent(pageNo, active, slot)) return;
 
       const annotationLinks: HTMLElement[] = [];
@@ -364,7 +343,6 @@ export class PreviewFrame {
     active?.task?.cancel();
     active?.page?.cleanup();
     this.activeRenders.delete(pageNo);
-    this.pageClickItems.delete(pageNo);
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`)
     if (!slot) return;
@@ -394,52 +372,12 @@ export class PreviewFrame {
       try { await loadingTask.destroy(); } catch {}
     }
     this.pageDimensions.clear();
-    this.pageTextCache.clear();
-    this.pageClickItems.clear();
   }
 
   public scrollToPage(pageNo: number): void {
     this.iframe?.contentDocument
       ?.querySelector(`.pdf-page-container[data-page-no="${pageNo}"]`)
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  public async scrollToText(pageNo: number, text: string, options: SourceTextScrollOptions = {}): Promise<void> {
-    const slot = this.iframe?.contentDocument
-      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
-    if (!slot) return;
-    slot.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    await this.renderPage(pageNo, this.pdfGeneration);
-    const normalized = text.trim();
-    const match = [...slot.querySelectorAll<HTMLElement>(".textLayer span")]
-      .find(span => {
-        const candidate = span.textContent?.trim() ?? "";
-        return candidate.length > 0 && (candidate.includes(normalized) || normalized.includes(candidate));
-      });
-    match?.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (match && options.ripple) {
-      void this.showForwardSyncRipple(match);
-    }
-  }
-
-  public async scrollToSourceText(text: string, preferredPage?: number, options: SourceTextScrollOptions = {}): Promise<boolean> {
-    if (!this.pdfDoc) return false;
-    const probes = sourceTextProbes(text);
-    if (probes.length === 0) return false;
-    const anchorPage = preferredPage ?? this.captureScrollAnchor()?.pageNo;
-    const pages = pageSearchOrder(this.pdfDoc.numPages, anchorPage);
-    for (const pageNo of pages) {
-      const pageText = await this.getPageText(pageNo);
-      const compactPageText = pageText.replace(/\s+/gu, "");
-      const probe = probes.find(candidate => {
-        const normalized = normalizeSearchText(candidate);
-        return pageText.includes(normalized) || compactPageText.includes(normalized.replace(/\s+/gu, ""));
-      });
-      if (!probe) continue;
-      await this.scrollToText(pageNo, firstSearchToken(probe), options);
-      return true;
-    }
-    return false;
   }
 
   public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<void> {
@@ -458,21 +396,6 @@ export class PreviewFrame {
     if (options.ripple) {
       await this.showForwardSyncRippleAtDocumentPosition(position);
     }
-  }
-
-  private async showForwardSyncRipple(target: HTMLElement): Promise<void> {
-    const generation = ++this.forwardRippleGeneration;
-    const view = this.iframe?.contentWindow;
-    const doc = this.iframe?.contentDocument;
-    if (!view || !doc) return;
-
-    await waitForPreviewScrollToSettle(view, 100, 100);
-    if (generation !== this.forwardRippleGeneration || !target.isConnected) return;
-
-    const rect = target.getBoundingClientRect();
-    const x = rect.left + rect.width / 2;
-    const y = rect.top + rect.height / 2;
-    this.renderForwardSyncRipple(doc, x, y);
   }
 
   private async showForwardSyncRippleAtDocumentPosition(position: { page_no: number; x: number; y: number }): Promise<void> {
@@ -503,18 +426,6 @@ export class PreviewFrame {
     window.setTimeout(() => {
       if (ripple.isConnected) ripple.remove();
     }, 1000);
-  }
-
-  private async getPageText(pageNo: number): Promise<string> {
-    const cached = this.pageTextCache.get(pageNo);
-    if (cached !== undefined) return cached;
-    if (!this.pdfDoc) return "";
-    const page = await this.pdfDoc.getPage(pageNo);
-    const content = await page.getTextContent();
-    const text = normalizeSearchText(content.items.map((item: any) => item.str ?? "").join(" "));
-    this.pageTextCache.set(pageNo, text);
-    page.cleanup();
-    return text;
   }
 
   private captureScrollAnchor(): { pageNo: number; offset: number } | null {
@@ -557,79 +468,19 @@ export class PreviewFrame {
       const mouse = event as MouseEvent;
       const pageNo = Number(slot.dataset.pageNo);
       this.debugInverse(`Click received: page=${pageNo}, x=${mouse.clientX.toFixed(1)}, y=${mouse.clientY.toFixed(1)}, target=${target?.tagName ?? "unknown"}.`);
-      const pdfPoint = this.pdfTextPointAtClick(pageNo, slot, mouse);
-      if (pdfPoint) {
-        this.debugInverse(`PDF hit resolved: page=${pageNo}, offset=${pdfPoint.offset}/${pdfPoint.text.length}, text=${debugText(pdfPoint.text, pdfPoint.offset)}.`);
-        this.onTextClick({ ...pdfPoint, pageNo });
-        return;
-      }
-      const span = target?.closest<HTMLElement>(".textLayer span")
-        ?? closestTextSpanAtPoint(slot, mouse.clientX, mouse.clientY);
-      if (!span) {
-        this.debugInverse(`Click rejected: page=${pageNo}, no PDF item or text-layer span matched.`);
-        return;
-      }
-      const point = textPointAtClick(span, mouse);
-      if (point) {
-        this.debugInverse(`DOM fallback resolved: page=${pageNo}, offset=${point.offset}/${point.text.length}, text=${debugText(point.text, point.offset)}.`);
-        this.onTextClick({ ...point, pageNo });
-      } else {
-        this.debugInverse(`DOM fallback rejected: page=${pageNo}, line reconstruction failed.`);
-      }
+      const point = this.pdfDocumentPointAtClick(pageNo, slot, mouse);
+      this.debugInverse(`PDF coordinate resolved: page=${pageNo}, x=${point.documentPosition?.x.toFixed(2)}, y=${point.documentPosition?.y.toFixed(2)}.`);
+      this.onPreviewClick(point);
     }, true);
   }
 
-  private pdfTextPointAtClick(pageNo: number, slot: HTMLElement, event: MouseEvent): PreviewTextPoint | null {
-    const items = this.pageClickItems.get(pageNo);
-    if (!items?.length) {
-      this.debugInverse(`PDF hit unavailable: page=${pageNo}, text item metadata is empty.`);
-      return null;
-    }
+  private pdfDocumentPointAtClick(pageNo: number, slot: HTMLElement, event: MouseEvent): PreviewClickPoint {
     const slotRect = slot.getBoundingClientRect();
     const x = event.clientX - slotRect.left;
     const y = event.clientY - slotRect.top;
-    let clicked: PdfClickItem | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const item of items) {
-      const top = item.baseline - item.height;
-      const dx = x < item.left ? item.left - x : x > item.right ? x - item.right : 0;
-      const dy = y < top ? top - y : y > item.baseline ? y - item.baseline : 0;
-      const distance = Math.hypot(dx, dy);
-      if (distance < bestDistance) {
-        clicked = item;
-        bestDistance = distance;
-      }
-    }
-    if (!clicked || bestDistance > Math.max(8, clicked.height)) {
-      this.debugInverse(`PDF hit rejected: page=${pageNo}, items=${items.length}, nearestDistance=${bestDistance.toFixed(1)}, tolerance=${clicked ? Math.max(8, clicked.height).toFixed(1) : "n/a"}.`);
-      return null;
-    }
-    const baselineItems = items
-      .filter(item => Math.abs(item.baseline - clicked!.baseline) <= Math.max(1.5, clicked!.height * 0.25))
-      .sort((a, b) => a.left - b.left);
-    const clickedIndex = baselineItems.indexOf(clicked);
-    if (clickedIndex < 0) return null;
-    let from = clickedIndex;
-    let to = clickedIndex;
-    while (from > 0 && pdfItemGap(baselineItems[from - 1], baselineItems[from]) <= clicked.height * 4) from -= 1;
-    while (to + 1 < baselineItems.length && pdfItemGap(baselineItems[to], baselineItems[to + 1]) <= clicked.height * 4) to += 1;
-
-    let text = "";
-    let offset = 0;
-    let previous: PdfClickItem | null = null;
-    for (const item of baselineItems.slice(from, to + 1)) {
-      if (previous && pdfItemGap(previous, item) > Math.min(previous.height, item.height) * 0.12) text += " ";
-      if (item === clicked) {
-        const ratio = item.right > item.left ? (x - item.left) / (item.right - item.left) : 0;
-        offset = text.length + nearestCodePointOffset(item.text, Math.max(0, Math.min(1, ratio)));
-      }
-      text += item.text;
-      previous = item;
-    }
     const zoom = this.previewZoomPercent / 100;
     return {
-      text,
-      offset,
+      pageNo,
       documentPosition: { page_no: pageNo, x: x / zoom, y: y / zoom }
     };
   }
@@ -754,151 +605,6 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[character] ?? character);
 }
 
-function debugText(text: string, offset: number): string {
-  const start = Math.max(0, offset - 20);
-  const sample = text.slice(start, Math.min(text.length, offset + 36));
-  const codePoints = [...sample].map(character => `U+${character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(" ");
-  return `${JSON.stringify(sample)} [${codePoints}]`;
-}
-
-function normalizeSearchText(value: string): string {
-  return value.replace(/[\u200b\u200c\u200d]/gu, "").replace(/\s+/gu, " ").trim();
-}
-
-function sourceTextProbes(source: string): string[] {
-  const plain = normalizeSearchText(source
-    .replace(/^\s*(?:=+|[-+])\s*/u, "")
-    .replace(/[#*_`\[\]{}()]/gu, " "));
-  const words = plain.split(" ").filter(word => word.length >= 2);
-  const probes = [plain];
-  for (let size = Math.min(8, words.length); size >= 2; size -= 1) {
-    for (let start = 0; start + size <= words.length; start += 1) probes.push(words.slice(start, start + size).join(" "));
-  }
-  probes.push(...words.filter(word => word.length >= 3));
-  return [...new Set(probes.filter(probe => probe.length >= 3))].sort((a, b) => b.length - a.length);
-}
-
-function firstSearchToken(value: string): string {
-  return value.split(/\s+/u).find(token => token.length >= 2) ?? value;
-}
-
-function pageSearchOrder(count: number, preferred?: number): number[] {
-  const pages = Array.from({ length: count }, (_, index) => index + 1);
-  if (!preferred || preferred < 1 || preferred > count) return pages;
-  return pages.sort((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred));
-}
-
-function textPointAtClick(clicked: HTMLElement, event: MouseEvent): PreviewTextPoint | null {
-  const layer = clicked.closest<HTMLElement>(".textLayer");
-  const spans = [...(layer?.querySelectorAll<HTMLElement>("span") ?? [])];
-  const clickedRect = clicked.getBoundingClientRect();
-  const clickedTop = positionedTop(clicked);
-  const baselineSpans = spans.filter(span => {
-    const top = positionedTop(span);
-    if (clickedTop !== null && top !== null) return Math.abs(top - clickedTop) <= 1.5;
-    const rect = span.getBoundingClientRect();
-    const overlap = Math.min(rect.bottom, clickedRect.bottom) - Math.max(rect.top, clickedRect.top);
-    return overlap >= Math.min(rect.height, clickedRect.height) * 0.35;
-  }).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-  const clickedIndex = baselineSpans.indexOf(clicked);
-  if (clickedIndex < 0) return null;
-  let from = clickedIndex;
-  let to = clickedIndex;
-  while (from > 0 && horizontalGap(baselineSpans[from - 1], baselineSpans[from]) <= clickedRect.height * 4) from -= 1;
-  while (to + 1 < baselineSpans.length && horizontalGap(baselineSpans[to], baselineSpans[to + 1]) <= clickedRect.height * 4) to += 1;
-  const sameLine = baselineSpans.slice(from, to + 1);
-  if (sameLine.length === 0) return null;
-  const localOffset = caretOffsetAtPoint(clicked, event.clientX);
-  let text = "";
-  let offset = 0;
-  let previous: HTMLElement | null = null;
-  for (const span of sameLine) {
-    const separator = previous && hasWordGap(previous, span) ? " " : "";
-    text += separator;
-    const value = span.dataset.typstryPdfText ?? span.textContent ?? "";
-    if (span === clicked) offset = text.length + localOffset;
-    text += value;
-    previous = span;
-  }
-  return { text, offset };
-}
-
-function horizontalGap(left: HTMLElement, right: HTMLElement): number {
-  return Math.max(0, right.getBoundingClientRect().left - left.getBoundingClientRect().right);
-}
-
-function positionedTop(element: HTMLElement): number | null {
-  const baseline = Number.parseFloat(element.dataset.typstryPdfBaseline ?? "");
-  if (Number.isFinite(baseline)) return baseline;
-  const value = Number.parseFloat(element.style.top);
-  return Number.isFinite(value) ? value : null;
-}
-
-function caretOffsetAtPoint(element: HTMLElement, x: number): number {
-  const value = element.dataset.typstryPdfText ?? element.textContent ?? "";
-  const rect = element.getBoundingClientRect();
-  const ratio = rect.width > 0 ? (x - rect.left) / rect.width : 0;
-  return nearestCodePointOffset(value, Math.max(0, Math.min(1, ratio)));
-}
-
-function nearestCodePointOffset(value: string, ratio: number): number {
-  const offsets = [0];
-  for (let index = 0; index < value.length;) {
-    index += String.fromCodePoint(value.codePointAt(index)!).length;
-    offsets.push(index);
-  }
-  return offsets[Math.round(ratio * (offsets.length - 1))] ?? value.length;
-}
-
-function hasWordGap(left: HTMLElement, right: HTMLElement): boolean {
-  const leftRect = left.getBoundingClientRect();
-  const rightRect = right.getBoundingClientRect();
-  const gap = rightRect.left - leftRect.right;
-  const height = Math.max(1, Math.min(leftRect.height, rightRect.height));
-  return gap > height * 0.12;
-}
-
-function attachPdfTextMetadata(layer: HTMLElement, rawItems: readonly any[]): void {
-  const items = rawItems.filter(item => typeof item?.str === "string" && item.str.length > 0);
-  const spans = [...layer.querySelectorAll<HTMLElement>(":scope > span")];
-  for (let index = 0; index < Math.min(items.length, spans.length); index += 1) {
-    const item = items[index];
-    const span = spans[index];
-    span.dataset.typstryPdfText = item.str;
-    const transform = item.transform;
-    if (Array.isArray(transform) && transform.length >= 6) {
-      span.dataset.typstryPdfBaseline = String(transform[5]);
-    }
-  }
-}
-
-function closestTextSpanAtPoint(slot: HTMLElement, x: number, y: number): HTMLElement | null {
-  let best: { span: HTMLElement; distance: number } | null = null;
-  for (const span of slot.querySelectorAll<HTMLElement>(".textLayer span")) {
-    const rect = span.getBoundingClientRect();
-    const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
-    const dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
-    const distance = Math.hypot(dx, dy);
-    if (!best || distance < best.distance) best = { span, distance };
-  }
-  if (!best) return null;
-  const height = Math.max(12, best.span.getBoundingClientRect().height);
-  return best.distance <= height * 1.5 ? best.span : null;
-}
-
-function pdfClickItems(rawItems: readonly any[], viewport: any): PdfClickItem[] {
-  const items: PdfClickItem[] = [];
-  for (const item of rawItems) {
-    if (typeof item?.str !== "string" || item.str.length === 0 || !Array.isArray(item.transform)) continue;
-    const [left, baseline] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
-    const width = Math.max(0, Number(item.width) * viewport.scale);
-    const sourceHeight = Number(item.height) || Math.hypot(Number(item.transform[2]) || 0, Number(item.transform[3]) || 0);
-    const height = Math.max(1, Math.abs(sourceHeight * viewport.scale));
-    items.push({ text: item.str, left, right: left + width, baseline, height });
-  }
-  return items;
-}
-
 function viewportRectangle(viewport: any, rect: unknown): [number, number, number, number] | null {
   if (!Array.isArray(rect) || rect.length < 4 || typeof viewport?.convertToViewportPoint !== "function") {
     return null;
@@ -912,10 +618,6 @@ function viewportRectangle(viewport: any, rect: unknown): [number, number, numbe
   const second = viewport.convertToViewportPoint(x2, y2);
   if (!Array.isArray(first) || !Array.isArray(second)) return null;
   return [first[0], first[1], second[0], second[1]];
-}
-
-function pdfItemGap(left: PdfClickItem, right: PdfClickItem): number {
-  return Math.max(0, right.left - left.right);
 }
 
 async function waitForPreviewScrollToSettle(

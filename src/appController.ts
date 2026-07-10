@@ -24,8 +24,8 @@ import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, relativeFilePath } from "./platform/paths";
 import { isBinaryImagePath, isSupportedInAppPath } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
-import { PreviewFrame, type PreviewInteractionStatus, type PreviewTextPoint } from "./preview/previewFrame";
-import { PreviewSyncController, type InverseSyncResult } from "./preview/previewSyncController";
+import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus } from "./preview/previewFrame";
+import { PreviewSyncController } from "./preview/previewSyncController";
 import { allowsStandalonePreview, previewRefreshStyle, previewSessionIdentity, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
@@ -2064,7 +2064,7 @@ export class TypstryWorkspaceController {
       source: "inverse sync",
       message: `Compiler source response: uri=${uri ?? "n/a"}, line=${position.line}, character=${position.character ?? 0}.`
     });
-    if (!this.previewSyncController.hasRecentTextClick()) {
+    if (!this.previewSyncController.hasRecentPreviewClick()) {
       this.appendDeveloperLog({
         kind: "warning",
         source: "inverse sync",
@@ -2101,10 +2101,12 @@ export class TypstryWorkspaceController {
       const cacheContent = this.preparedContentsCache.get(filePathKey(targetPath))?.preparedText || "";
       cursor = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, position, cacheContent) ?? 0;
     } else {
-      const defaultCursorPos = this.editorPositionFromLspPosition(position) ?? 0;
-      const result = this.previewSyncController.mapInversePosition(position, defaultCursorPos);
-      this.reportInverseSyncResult(result, position);
-      cursor = result.cursor;
+      cursor = this.editorPositionFromLspPosition(position) ?? 0;
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "inverse sync",
+        message: `Compiler inverse position mapped directly: line=${position.line + 1}, character=${position.character ?? 0}, offset=${cursor}.`
+      });
     }
 
     await this.applyInverseSyncSelection(cursor);
@@ -2318,7 +2320,7 @@ export class TypstryWorkspaceController {
     return null;
   }
 
-  private async handlePdfPreviewClick(point: PreviewTextPoint): Promise<void> {
+  private async handlePdfPreviewClick(point: PreviewClickPoint): Promise<void> {
     const position = point.documentPosition;
     const client = this.lspClient;
     const rootPath = this.previewRootPath;
@@ -2341,7 +2343,7 @@ export class TypstryWorkspaceController {
       });
       return;
     }
-    this.previewSyncController.recordTextClick(point);
+    this.previewSyncController.recordPreviewClick(point);
     this.appendDeveloperLog({
       kind: "info",
       source: "inverse sync",
@@ -2504,38 +2506,19 @@ export class TypstryWorkspaceController {
       return;
     }
     if (status.kind === "installed") {
-      this.setLspStatus({ kind: "preview-ready", message: "Inverse sync refinement active" });
+      this.setLspStatus({ kind: "preview-ready", message: "Inverse sync source-map active" });
       this.appendDeveloperLog({
         kind: "info",
         source: "inverse sync",
-        message: `Preview DOM interception installed for ${status.url}`
+        message: `Preview source-map click interception installed for ${status.url}`
       });
       return;
     }
-    this.setLspStatus({ kind: "preview-ready", message: "Inverse sync refinement blocked" });
+    this.setLspStatus({ kind: "preview-ready", message: "Inverse sync source-map blocked" });
     this.appendDeveloperLog({
       kind: "warning",
       source: "inverse sync",
-      message: `Preview DOM interception blocked for ${status.url}: ${status.reason ?? "unknown reason"}. Inverse sync will use Tinymist's raw source position only.`
-    });
-  }
-
-  private reportInverseSyncResult(result: InverseSyncResult, position: LspSourcePosition): void {
-    if (!this.settingsController.value.developerMode) return;
-    if (result.refined) {
-      this.setLspStatus({ kind: "preview-ready", message: `Inverse sync refined to line ${(result.sourceLine ?? position.line) + 1}` });
-      this.appendDeveloperLog({
-        kind: "info",
-        source: "inverse sync",
-        message: `Refined preview click: line ${position.line + 1}, fallback offset ${result.fallback}, source offset ${result.sourceOffset}, preview offset ${result.previewOffset}/${result.previewTextLength}, sample "${result.clickedTextSample ?? ""}".`
-      });
-      return;
-    }
-    this.setLspStatus({ kind: "preview-ready", message: `Inverse sync fallback: ${result.reason}` });
-    this.appendDeveloperLog({
-      kind: "warning",
-      source: "inverse sync",
-      message: `Fallback used (${result.reason}): line ${position.line + 1}, fallback offset ${result.fallback}, preview offset ${result.previewOffset ?? "n/a"}/${result.previewTextLength ?? "n/a"}, sample "${result.clickedTextSample ?? ""}".`
+      message: `Preview source-map click interception blocked for ${status.url}: ${status.reason ?? "unknown reason"}. Inverse sync will use Tinymist's raw source position only.`
     });
   }
 

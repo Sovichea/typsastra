@@ -1,7 +1,6 @@
 import { EditorView } from "@codemirror/view";
-import type { LspSourcePosition, PreviewDocumentPosition, TinymistLspClient } from "../compiler/lsp";
-import type { PreviewTextPoint } from "./previewFrame";
-import { findPreviewTextMatchInSource, findPreviewTextMatchInSourceLine } from "./sourceHighlight";
+import type { TinymistLspClient } from "../compiler/lsp";
+import type { PreviewClickPoint } from "./previewFrame";
 
 export type PreviewSyncDependencies = {
   getEditor: () => EditorView | undefined;
@@ -15,51 +14,23 @@ export type PreviewSyncDependencies = {
   mapForwardPosition?: (path: string, cursor: number) => Promise<{ filepath: string; line: number; character: number } | null>;
 };
 
-export type InverseSyncResult = {
-  cursor: number;
-  refined: boolean;
-  reason: "refined" | "no-click" | "stale-click" | "empty-click" | "no-editor" | "no-source-match";
-  fallback: number;
-  previewTextLength?: number;
-  previewOffset?: number;
-  sourceLine?: number;
-  sourceOffset?: number;
-  clickedTextSample?: string;
-};
-
 export class PreviewSyncController {
   private forwardTimer: number | null = null;
   private forwardGeneration = 0;
   private forwardSuppressedUntil = 0;
   private lastForwardTarget: { key: string; timestamp: number } | null = null;
-  private pendingTextClick: (PreviewTextPoint & { timestamp: number }) | null = null;
+  private pendingPreviewClick: (PreviewClickPoint & { timestamp: number }) | null = null;
 
   constructor(
     private readonly dependencies: PreviewSyncDependencies
   ) {}
 
-  public recordTextClick(point: PreviewTextPoint): void {
-    this.pendingTextClick = { ...point, timestamp: Date.now() };
+  public recordPreviewClick(point: PreviewClickPoint): void {
+    this.pendingPreviewClick = { ...point, timestamp: Date.now() };
   }
 
-  public navigateFromTextClick(point: PreviewTextPoint): boolean {
-    this.recordTextClick(point);
-    const editor = this.dependencies.getEditor();
-    if (!editor || !point.text.trim()) return false;
-    const preferred = editor.state.selection.main.head;
-    const match = findPreviewTextMatchInSource(editor.state.doc.toString(), point.text, point.offset, preferred);
-    if (!match) return false;
-    this.suppressOnce();
-    editor.dispatch({
-      selection: { anchor: match.sourceOffset },
-      effects: EditorView.scrollIntoView(match.sourceOffset, { y: "center" })
-    });
-    editor.focus();
-    return true;
-  }
-
-  public hasRecentTextClick(maxAgeMs = 1500): boolean {
-    return this.pendingTextClick !== null && Date.now() - this.pendingTextClick.timestamp <= maxAgeMs;
+  public hasRecentPreviewClick(maxAgeMs = 1500): boolean {
+    return this.pendingPreviewClick !== null && Date.now() - this.pendingPreviewClick.timestamp <= maxAgeMs;
   }
 
   public schedule(delayMs: number): void {
@@ -126,16 +97,6 @@ export class PreviewSyncController {
     });
   }
 
-  public async navigateToPosition(position: PreviewDocumentPosition): Promise<void> {
-    const client = this.dependencies.getClient();
-    const taskId = this.dependencies.getPreviewTaskId();
-    if (!client || !taskId || !this.dependencies.getPreviewRootPath() || !this.dependencies.isReady()) return;
-    await client.scrollPreview(taskId, {
-      event: "panelScrollByPosition",
-      position
-    });
-  }
-
   public suppressOnce(): void {
     this.clearForward();
     this.forwardGeneration++;
@@ -157,15 +118,11 @@ export class PreviewSyncController {
     this.forwardGeneration++;
     this.forwardSuppressedUntil = 0;
     this.lastForwardTarget = null;
-    this.pendingTextClick = null;
+    this.pendingPreviewClick = null;
   }
 
   private isForwardSuppressed(): boolean {
     return Date.now() < this.forwardSuppressedUntil;
-  }
-
-  public mapInversePosition(position: LspSourcePosition, fallback: number): InverseSyncResult {
-    return this.refineFromTextClick(position, fallback);
   }
 
   private canSync(): boolean {
@@ -187,57 +144,4 @@ export class PreviewSyncController {
     return false;
   }
 
-  private refineFromTextClick(position: LspSourcePosition, fallback: number): InverseSyncResult {
-    const click = this.pendingTextClick;
-    this.pendingTextClick = null;
-    const editor = this.dependencies.getEditor();
-    if (!editor) return { cursor: fallback, refined: false, reason: "no-editor", fallback };
-    if (!click) return { cursor: fallback, refined: false, reason: "no-click", fallback };
-    if (Date.now() - click.timestamp > 1500) {
-      return this.inverseFallback("stale-click", fallback, click, position);
-    }
-    if (!click.text.trim()) {
-      return this.inverseFallback("empty-click", fallback, click, position);
-    }
-    const doc = editor.state.doc;
-    const line = doc.line(Math.max(1, Math.min(position.line + 1, doc.lines)));
-    const match = findPreviewTextMatchInSourceLine(line.text, click.text, click.offset, Math.max(0, fallback - line.from));
-    if (!match) return this.inverseFallback("no-source-match", fallback, click, position);
-    const cursor = Math.max(line.from, Math.min(line.from + match.sourceOffset, line.to));
-    return {
-      cursor,
-      refined: true,
-      reason: "refined",
-      fallback,
-      previewTextLength: click.text.length,
-      previewOffset: click.offset,
-      sourceLine: position.line,
-      sourceOffset: match.sourceOffset,
-      clickedTextSample: sampleClickText(click.text, click.offset)
-    };
-  }
-
-  private inverseFallback(
-    reason: InverseSyncResult["reason"],
-    fallback: number,
-    click: PreviewTextPoint,
-    position: LspSourcePosition
-  ): InverseSyncResult {
-    return {
-      cursor: fallback,
-      refined: false,
-      reason,
-      fallback,
-      previewTextLength: click.text.length,
-      previewOffset: click.offset,
-      sourceLine: position.line,
-      clickedTextSample: sampleClickText(click.text, click.offset)
-    };
-  }
-}
-
-function sampleClickText(text: string, offset: number): string {
-  const start = Math.max(0, offset - 24);
-  const end = Math.min(text.length, offset + 48);
-  return text.slice(start, end).replace(/\s+/g, " ");
 }
