@@ -392,4 +392,17 @@ mod tests {
             "10-khmer-segmentation-comparison/main.typ must exist in the resources directory"
         );
     }
+
+    #[test]
+    fn test_readme_example_exists() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let base_path = manifest_dir.join("resources/examples/11-typstry-readme");
+        assert!(base_path.join("main.typ").is_file());
+        assert!(base_path.join("template.typ").is_file());
+        assert!(base_path.join("import.typ").is_file());
+        assert!(base_path.join("readme.typ").is_file());
+        assert!(base_path.join("refs.bib").is_file());
+        assert!(base_path.join("assets/typstry-icon.png").is_file());
+        assert!(base_path.join("assets/typstry-wordmark.png").is_file());
+    }
 }
