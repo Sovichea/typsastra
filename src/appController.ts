@@ -71,6 +71,7 @@ function isPreviewOnlyWindow(): boolean {
   return new URLSearchParams(window.location.search).get("mode") === "preview";
 }
 
+
 type ExamplesWorkspace = {
   workspacePath: string;
   entryPath: string;
@@ -88,6 +89,7 @@ type EditorTab = {
   previewSessionKey: string | null;
   previewImported: boolean;
   previewStandalone: boolean;
+  previewDisabled: boolean;
   version: number;
   latestVersion: number;
   selectionAnchor: number;
@@ -100,7 +102,7 @@ type EditorTab = {
 
 type PreviewSessionState = Pick<
   EditorTab,
-  "previewRootPath" | "previewMainPath" | "previewTaskId" | "previewSessionKey" | "previewImported" | "previewStandalone"
+  "previewRootPath" | "previewMainPath" | "previewTaskId" | "previewSessionKey" | "previewImported" | "previewStandalone" | "previewDisabled"
 >;
 
 type ActivateEditorTabOptions = {
@@ -159,6 +161,7 @@ export class TypstryWorkspaceController {
   private previewSessionKey: string | null = null;
   private previewImported = false;
   private previewStandalone = true;
+  private previewDisabled = false;
   private pinnedLspMainPath: string | null = null;
   private pinnedMainFilePath: string | null = null;
   private workspaceRootPath: string | null = null;
@@ -1064,6 +1067,7 @@ export class TypstryWorkspaceController {
       this.previewSessionKey = tab.previewSessionKey;
       this.previewImported = tab.previewImported;
       this.previewStandalone = tab.previewStandalone;
+      this.previewDisabled = tab.previewDisabled;
     }
     this.renderEditorTabs();
   }
@@ -1099,6 +1103,7 @@ export class TypstryWorkspaceController {
       this.previewSessionKey = null;
       this.previewImported = false;
       this.previewStandalone = true;
+      this.previewDisabled = false;
       this.clearDiagnostics();
       this.clearPendingLspSync();
       this.previewSyncController.clearForward();
@@ -1340,7 +1345,7 @@ export class TypstryWorkspaceController {
         this.previewFrame.setMessage(`<div style="padding: 20px; color: #5f6368; font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`);
       }
     } else if (!options.skipPreviewActivation) {
-      if (!options.preservePreviewSession && this.previewRootPath) {
+      if (!options.preservePreviewSession && this.previewRootPath && !this.previewDisabled) {
         void this.renderPdfPreview(tab.content);
       }
     }
@@ -1502,6 +1507,7 @@ export class TypstryWorkspaceController {
         previewSessionKey: null,
         previewImported: false,
         previewStandalone: true,
+        previewDisabled: false,
         version: 1,
         latestVersion: 1,
         selectionAnchor: 0,
@@ -1566,7 +1572,7 @@ export class TypstryWorkspaceController {
         this.renderEditorTabs();
       }
       this.setLspStatus({ kind: "preview-ready", message: "File saved" });
-      if (this.settingsController.value.preview.renderMode === "on-save") {
+      if (this.settingsController.value.preview.renderMode === "on-save" && !this.previewDisabled) {
         void this.renderPdfPreview(content);
       }
 
@@ -1841,12 +1847,14 @@ export class TypstryWorkspaceController {
     tab.previewSessionKey = identity?.key ?? null;
     tab.previewImported = target.imported;
     tab.previewStandalone = target.standalone;
+    tab.previewDisabled = target.disabled;
     this.previewRootPath = tab.previewRootPath;
     this.previewMainPath = tab.previewMainPath;
     this.previewTaskId = tab.previewTaskId;
     this.previewSessionKey = tab.previewSessionKey;
     this.previewImported = tab.previewImported;
     this.previewStandalone = tab.previewStandalone;
+    this.previewDisabled = tab.previewDisabled;
   }
 
   private capturePreviewSession(): PreviewSessionState {
@@ -1856,7 +1864,8 @@ export class TypstryWorkspaceController {
       previewTaskId: this.previewTaskId,
       previewSessionKey: this.previewSessionKey,
       previewImported: this.previewImported,
-      previewStandalone: this.previewStandalone
+      previewStandalone: this.previewStandalone,
+      previewDisabled: this.previewDisabled
     };
   }
 
@@ -1881,12 +1890,14 @@ export class TypstryWorkspaceController {
     tab.previewSessionKey = session.previewSessionKey;
     tab.previewImported = session.previewImported;
     tab.previewStandalone = session.previewStandalone;
+    tab.previewDisabled = session.previewDisabled;
     this.previewRootPath = session.previewRootPath;
     this.previewMainPath = session.previewMainPath;
     this.previewTaskId = session.previewTaskId;
     this.previewSessionKey = session.previewSessionKey;
     this.previewImported = session.previewImported;
     this.previewStandalone = session.previewStandalone;
+    this.previewDisabled = session.previewDisabled;
   }
 
   private async rootRelativeTypstPath(path: string): Promise<string | null> {
@@ -1988,6 +1999,7 @@ export class TypstryWorkspaceController {
   }
 
   private async renderPdfPreview(contents: string): Promise<void> {
+    if (this.previewDisabled) return;
     if (!this.activeFilePath || !this.lspReady || !this.lspClient) return;
     if (this.pdfPreviewRunning) {
       this.queuedPdfPreviewContents = contents;
@@ -2112,6 +2124,7 @@ export class TypstryWorkspaceController {
   }
 
   private schedulePdfPreview(contents: string) {
+    if (this.previewDisabled) return;
     if (this.settingsController.value.preview.renderMode !== "on-type") return;
     if (this.pdfPreviewTimer) window.clearTimeout(this.pdfPreviewTimer);
     this.pdfPreviewTimer = window.setTimeout(() => {
@@ -2175,6 +2188,7 @@ export class TypstryWorkspaceController {
       && this.activeFilePath
       && this.activeFilePath.toLowerCase().endsWith(".typ")
       && this.settingsController.value.preview.renderMode === "on-type"
+      && !this.previewDisabled
     ) {
       this.schedulePdfPreview(rawText);
     }
@@ -3184,6 +3198,7 @@ export class TypstryWorkspaceController {
                previewSessionKey: null,
                previewImported: false,
                previewStandalone: true,
+               previewDisabled: false,
                version: 1,
                latestVersion: 1,
                selectionAnchor: tabInfo.selectionAnchor || 0,
@@ -3390,7 +3405,7 @@ export class TypstryWorkspaceController {
         lspUpdated = true;
       }
     }
-    if (refreshPreview && tab.path.toLowerCase().endsWith(".typ")) {
+    if (refreshPreview && tab.path.toLowerCase().endsWith(".typ") && !tab.previewDisabled) {
       if (this.settingsController.value.preview.renderMode === "on-save") {
         void this.renderPdfPreview(contents);
       } else {
@@ -3693,26 +3708,6 @@ export class TypstryWorkspaceController {
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
-    void this.updatePinnedMain(null, true);
-    this.workspaceWatcher.stop();
-    if (this.workspaceRootPath) {
-      void invoke("cleanup_workspace_preview_files", { workspaceRootPath: this.workspaceRootPath });
-    }
-    this.externalConflictPaths.clear();
-    
-    this.workspaceRootPath = null;
-    this.activeFilePath = null;
-    this.spellcheckController.activateDocument("");
-    this.previewRootPath = null;
-    this.previewTaskId = null;
-    this.previewSessionKey = null;
-    this.previewImported = false;
-    this.previewStandalone = true;
-    this.openedDocumentUris.clear();
-    this.openTabs = [];
-    this.renderEditorTabs();
-    
-    // Clear editor
     this.editorInstance.dispatch({
       changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
     });
