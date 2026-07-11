@@ -3903,43 +3903,70 @@ export class TypstryWorkspaceController {
         this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
         const content = this.editorInstance.state.doc.toString();
         
-        let targetFilePath = this.activeFilePath;
-        let targetContent = content;
-        
-        if (this.settingsController.value.preview.khmerRenderPreparation) {
+        try {
+          const rootPath = this.previewStandalone
+            ? (this.previewRootPath ?? this.activeFilePath)
+            : (this.previewMainPath ?? this.previewRootPath ?? this.activeFilePath);
+          
+          if (!rootPath) throw new Error("No export root path available");
+
+          let targetFilePath = rootPath;
+          let targetContent = "";
+          if (filePathKey(targetFilePath) === filePathKey(this.activeFilePath)) {
+            targetContent = content;
+          } else {
+            targetContent = await invoke<string>("read_workspace_file", { path: targetFilePath }).catch(() => "");
+          }
+
           const cacheRoot = this.getCacheRootPath();
           if (cacheRoot && this.workspaceRootPath) {
-            const prepared = await invoke<{ generatedPath: string; preparedText: string }>("prepare_render_file", {
-              options: {
-                enableKhmerZws: true,
-                projectRoot: this.workspaceRootPath,
-                entryFile: this.activeFilePath,
-                cacheRoot,
-                generateSourceMap: false
-              },
-              filePath: this.activeFilePath,
-              sourceCode: content
-            });
-            targetFilePath = prepared.generatedPath;
-            targetContent = prepared.preparedText;
-          }
-        }
+            const originalRootPath = this.mapToOriginalPath(rootPath);
+            const originalActivePath = this.mapToOriginalPath(this.activeFilePath);
+            
+            const options = {
+              enableKhmerZws: this.settingsController.value.preview.khmerRenderPreparation,
+              projectRoot: this.workspaceRootPath,
+              entryFile: originalRootPath,
+              cacheRoot,
+              generateSourceMap: false
+            };
 
-        try {
+            const result = await invoke<{ generatedEntryFile: string }>("prepare_render_project", { options });
+            
+            const tabsToOverlay = this.openTabs
+              .filter(tab => tab.path.toLowerCase().endsWith(".typ"))
+              .filter(tab => this.workspaceRootPath && relativeFilePath(this.workspaceRootPath, this.mapToOriginalPath(tab.path)) !== null);
+            
+            for (const tab of tabsToOverlay) {
+              const originalTabPath = this.mapToOriginalPath(tab.path);
+              const sourceCode = filePathKey(originalTabPath) === filePathKey(originalActivePath)
+                ? content
+                : tab.content;
+              
+              await invoke("prepare_render_file", {
+                options,
+                filePath: originalTabPath,
+                sourceCode
+              });
+            }
+
+            targetFilePath = result.generatedEntryFile;
+            targetContent = await invoke<string>("read_workspace_file", { path: targetFilePath }).catch(() => "");
+          }
+
           const pdfPath = await invoke<string>("compile_typst_document", {
             sourceCode: targetContent,
             filePath: targetFilePath
           });
+
+          const originalPdfPath = (this.previewStandalone
+            ? this.activeFilePath
+            : (this.previewMainPath ?? this.activeFilePath)).replace(/\.typ$/, ".pdf");
           
-          let finalPdfPath = pdfPath;
-          if (this.settingsController.value.preview.khmerRenderPreparation) {
-            const originalPdfPath = this.activeFilePath.replace(/\.typ$/, ".pdf");
-            await invoke("copy_workspace_file", { source: pdfPath, dest: originalPdfPath });
-            await invoke("move_to_trash", { path: pdfPath });
-            finalPdfPath = originalPdfPath;
-          }
+          await invoke("copy_workspace_file", { source: pdfPath, dest: originalPdfPath });
+          await invoke("move_to_trash", { path: pdfPath });
           
-          this.setLspStatus({ kind: "preview-ready", message: `Exported to ${finalPdfPath}` });
+          this.setLspStatus({ kind: "preview-ready", message: `Exported to ${originalPdfPath}` });
         } catch (error) {
           this.setLspStatus({ kind: "error", message: `Export failed: ${error}` });
         }
