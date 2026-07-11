@@ -1752,8 +1752,8 @@ export class TypstryWorkspaceController {
         }
       }
 
-      const mainPath = this.previewMainPath ?? this.activeFilePath;
-      const mainText = await this.workspaceText(mainPath);
+      const mainPath = this.previewStandalone ? this.activeFilePath : (this.previewMainPath ?? this.activeFilePath);
+      const mainText = await this.workspaceText(mainPath!);
       const application = findLocalTemplateApplication(mainText);
       let updatedLocalTemplate = false;
 
@@ -1870,6 +1870,7 @@ export class TypstryWorkspaceController {
   }
 
   private captureCurrentMainSessionForImportedTarget(target: PreviewTarget): PreviewSessionState | null {
+    if (target.standalone) return null;
     if (!target.imported || !target.mainPath || !this.previewRootPath || !this.previewSessionKey) {
       return null;
     }
@@ -2048,7 +2049,7 @@ export class TypstryWorkspaceController {
       }).catch(err => console.error("Error emitting pdf-update", err));
     } catch (error) {
       if (generation !== this.pdfPreviewGeneration) return;
-      console.error("PDF Preview compilation failed:", error);
+      console.error("PDF Preview compilation failed:", JSON.stringify(error, null, 2));
       this.previewFrame.setError(
         "Preview Render Failed",
         String(error)
@@ -2073,7 +2074,7 @@ export class TypstryWorkspaceController {
 
   private async preparePdfPreviewExportPath(contents: string): Promise<string | null> {
     if (!this.activeFilePath) return null;
-    const rootPath = this.previewMainPath ?? this.previewRootPath ?? this.activeFilePath;
+    const rootPath = this.previewStandalone ? (this.previewRootPath ?? this.activeFilePath) : (this.previewMainPath ?? this.previewRootPath ?? this.activeFilePath);
     if (!rootPath) return null;
 
     const shouldMirror = this.settingsController.value.preview.renderMode === "on-type";

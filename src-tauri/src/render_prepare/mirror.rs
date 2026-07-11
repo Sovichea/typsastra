@@ -60,6 +60,15 @@ pub fn mirror_project(
     )
     .map_err(|e| e.to_string())?;
 
+    if options.entry_file.exists() && options.entry_file.is_file() {
+        if let Ok(rel_path) = options.entry_file.strip_prefix(project_root) {
+            let rel_path_buf = rel_path.to_path_buf();
+            if !files_to_process.iter().any(|(p, _)| p == &rel_path_buf) {
+                files_to_process.push((rel_path_buf, false));
+            }
+        }
+    }
+
     for (rel_path, is_dir) in files_to_process {
         let src_path = project_root.join(&rel_path);
         let dest_path = render_dir.join(&rel_path);
