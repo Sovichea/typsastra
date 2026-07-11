@@ -9,6 +9,9 @@ export type PreviewInteractionStatus = {
   reason?: string;
 };
 
+import { PERFORMANCE_BUDGETS, type PerformanceMetric } from "../performance/diagnostics";
+import { pagesToEvict } from "./virtualization";
+
 type PdfJsModule = typeof import("pdfjs-dist");
 
 type PageDimensions = {
@@ -37,18 +40,22 @@ export class PreviewFrame {
   private lastInteractionStatusKey = "";
   private pdfJsPromise: Promise<PdfJsModule> | null = null;
   private pdfLoadingTask: { destroy(): Promise<void> } | null = null;
+  private pendingPdfLoadingTask: { destroy(): Promise<void> } | null = null;
   private pdfDoc: any = null;
   private observer: IntersectionObserver | null = null;
   private pageDimensions = new Map<number, PageDimensions>();
   private activeRenders = new Map<number, ActivePageRender>();
   private pdfGeneration = 0;
+  private firstRenderedGeneration = 0;
   private forwardRippleGeneration = 0;
+  private zoomStartedAt: number | null = null;
 
   constructor(
     private readonly pane: HTMLElement,
     private readonly onPreviewClick: (point: PreviewClickPoint) => void,
     private readonly onInteractionStatus?: (status: PreviewInteractionStatus) => void,
-    private readonly onZoomChanged?: (zoomPercent: number) => void
+    private readonly onZoomChanged?: (zoomPercent: number) => void,
+    private readonly onPerformance?: (metric: Omit<PerformanceMetric, "recordedAt">) => void
   ) {
     this.pane.addEventListener("wheel", event => {
       if (event.ctrlKey) {
@@ -84,6 +91,7 @@ export class PreviewFrame {
 
   private setZoom(percent: number): number {
     if (percent === this.previewZoomPercent) return percent;
+    this.zoomStartedAt = performance.now();
     const anchor = this.captureScrollAnchor();
     this.previewZoomPercent = percent;
     this.onZoomChanged?.(percent);
@@ -95,7 +103,11 @@ export class PreviewFrame {
   }
 
   public async loadPdfData(base64Data: string, identity = "compiler-pdf"): Promise<void> {
+    const startedAt = performance.now();
     const generation = ++this.pdfGeneration;
+    const obsoleteLoadingTask = this.pendingPdfLoadingTask;
+    this.pendingPdfLoadingTask = null;
+    if (obsoleteLoadingTask) void obsoleteLoadingTask.destroy().catch(() => {});
     const previousScroll = this.captureScrollAnchor();
     this.clearErrorOverlay();
     this.clearMessageHost();
@@ -119,6 +131,7 @@ export class PreviewFrame {
         standardFontDataUrl: "/standard_fonts/"
       });
       nextLoadingTask = loadingTask as unknown as { destroy(): Promise<void> };
+      this.pendingPdfLoadingTask = nextLoadingTask;
       const pdfDoc = await loadingTask.promise;
       nextPdfDoc = pdfDoc;
       if (generation !== this.pdfGeneration) {
@@ -140,6 +153,7 @@ export class PreviewFrame {
       this.pdfDoc = pdfDoc;
       this.pdfLoadingTask = nextLoadingTask;
       nextLoadingTask = null;
+      this.pendingPdfLoadingTask = null;
       this.pageDimensions = nextDimensions;
       this.mountedUrl = identity;
       this.createPageSlots(iframeDoc, true);
@@ -147,11 +161,17 @@ export class PreviewFrame {
       this.installPageObserver(iframe);
       this.restoreScrollAnchor(previousScroll);
       this.reportInteractionStatus({ kind: "installed", url: identity });
+      this.onPerformance?.({
+        name: "preview.load",
+        milliseconds: performance.now() - startedAt,
+        detail: { pageCount: pdfDoc.numPages, pdfBytes: bytes.byteLength }
+      });
       void cleanupPdfResources(oldPdfDoc, oldLoadingTask);
     } catch (error) {
       if (generation !== this.pdfGeneration) return;
       this.setError("PDF Loading Failed", String(error));
     } finally {
+      if (this.pendingPdfLoadingTask === nextLoadingTask) this.pendingPdfLoadingTask = null;
       if (nextPdfDoc) {
         try { await nextPdfDoc.destroy(); } catch {}
       } else if (nextLoadingTask) {
@@ -275,6 +295,7 @@ export class PreviewFrame {
     if (slot.dataset.renderKey === renderKey) return;
 
     const active: ActivePageRender = { generation, renderKey, task: null, page: null };
+    const startedAt = performance.now();
     this.activeRenders.set(pageNo, active);
     try {
       const pdfjs = await this.pdfJs();
@@ -314,6 +335,22 @@ export class PreviewFrame {
       replaceElementChildren(slot, ...children);
       slot.dataset.renderKey = renderKey;
       delete slot.dataset.renderGeneration;
+      this.trimResidentPages(pageNo);
+      const isFirstRenderedPage = this.firstRenderedGeneration !== generation;
+      if (isFirstRenderedPage) this.firstRenderedGeneration = generation;
+      this.onPerformance?.({
+        name: isFirstRenderedPage ? "preview.first-page" : "preview.page-render",
+        milliseconds: performance.now() - startedAt,
+        detail: { pageNo, zoomPercent: this.previewZoomPercent, residentPages: this.renderedPageNumbers().length }
+      });
+      if (this.zoomStartedAt !== null) {
+        this.onPerformance?.({
+          name: "preview.zoom",
+          milliseconds: performance.now() - this.zoomStartedAt,
+          detail: { zoomPercent: this.previewZoomPercent, pageNo }
+        });
+        this.zoomStartedAt = null;
+      }
     } catch (error) {
       if (!(error instanceof Error && error.name === "RenderingCancelledException")) {
         console.error(`Failed to render PDF page ${pageNo}:`, error);
@@ -397,6 +434,21 @@ export class PreviewFrame {
     delete slot.dataset.renderKey;
   }
 
+  private renderedPageNumbers(): number[] {
+    const doc = this.iframe?.contentDocument;
+    if (!doc) return [];
+    return [...doc.querySelectorAll<HTMLElement>(".pdf-page-container[data-render-key]")]
+      .map(slot => Number(slot.dataset.pageNo))
+      .filter(Number.isFinite);
+  }
+
+  private trimResidentPages(focusPage: number): void {
+    const rendered = this.renderedPageNumbers();
+    if (rendered.length <= PERFORMANCE_BUDGETS.maxResidentPdfPages) return;
+    pagesToEvict(rendered, focusPage, PERFORMANCE_BUDGETS.maxResidentPdfPages)
+      .forEach(pageNo => this.unrenderPage(pageNo));
+  }
+
   private cancelAllPageRenders(): void {
     for (const [pageNo, render] of this.activeRenders) {
       render.task?.cancel();
@@ -410,13 +462,18 @@ export class PreviewFrame {
     this.observer = null;
     this.cancelAllPageRenders();
     const loadingTask = this.pdfLoadingTask;
+    const pendingLoadingTask = this.pendingPdfLoadingTask;
     const pdfDoc = this.pdfDoc;
     this.pdfLoadingTask = null;
+    this.pendingPdfLoadingTask = null;
     this.pdfDoc = null;
     if (pdfDoc) {
       try { await pdfDoc.destroy(); } catch {}
     } else if (loadingTask) {
       try { await loadingTask.destroy(); } catch {}
+    }
+    if (pendingLoadingTask && pendingLoadingTask !== loadingTask) {
+      try { await pendingLoadingTask.destroy(); } catch {}
     }
     this.pageDimensions.clear();
   }

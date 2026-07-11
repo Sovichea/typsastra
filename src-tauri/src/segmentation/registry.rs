@@ -422,6 +422,9 @@ struct KhmerProvider {
     top_frequent_words: Vec<IndexedWord>,
 }
 
+const MAX_INTERACTIVE_COMPLETION_CANDIDATES: usize = 1024;
+const MAX_INTERACTIVE_SUGGESTION_CANDIDATES: usize = 1000;
+
 impl KhmerProvider {
     fn new() -> Result<Self, String> {
         let segmenter =
@@ -705,7 +708,7 @@ impl LanguageSegmenter for KhmerProvider {
         }
 
         // Bound candidate count before edit distance calculation
-        if candidates.len() > 1000 {
+        if candidates.len() > MAX_INTERACTIVE_SUGGESTION_CANDIDATES {
             let length = word_clusters.len();
             candidates.sort_by(|a, b| {
                 let a_diff = a.clusters.len().abs_diff(length);
@@ -716,7 +719,7 @@ impl LanguageSegmenter for KhmerProvider {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
             });
-            candidates.truncate(1000);
+            candidates.truncate(MAX_INTERACTIVE_SUGGESTION_CANDIDATES);
         }
 
         // Compute edit distance and rank
@@ -778,6 +781,7 @@ impl LanguageSegmenter for KhmerProvider {
                             || ('\u{17e0}'..='\u{17e9}').contains(&c)
                     })
             })
+            .take(MAX_INTERACTIVE_COMPLETION_CANDIDATES)
             .map(|candidate| {
                 (
                     self.completion_costs
@@ -2477,6 +2481,13 @@ mod tests {
             continued.options.first().map(String::as_str),
             Some("សាលារៀន")
         );
+    }
+
+    #[test]
+    fn bounds_khmer_interactive_completion_candidates() {
+        let provider = KhmerProvider::new().expect("Khmer provider");
+        let results = provider.autocomplete("ក", usize::MAX);
+        assert!(results.len() <= MAX_INTERACTIVE_COMPLETION_CANDIDATES);
     }
 
     #[test]

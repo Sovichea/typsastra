@@ -596,16 +596,16 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 
 ### Task checklist
 
-- [ ] **P7.1 — Establish benchmark fixtures.** Add reproducible 1-page, 30-page, 100-page, 100,000-character, mixed-script, and repeated-edit workloads.
-- [ ] **P7.2 — Add measurement hooks.** Record startup, provider initialization, first diagnostic, first preview, compile, render, zoom, memory, and recovery timings in developer output.
-- [ ] **P7.3 — Make language analysis incremental.** Submit changed logical ranges, preserve unaffected issues, coalesce edits, and bound active and queued work.
-- [ ] **P7.4 — Bound interactive suggestions.** Index candidates at provider startup and forbid unrestricted dictionary scans on the typing path.
-- [ ] **P7.5 — Virtualize PDF pages.** Render the visible window plus a small overscan, release distant page resources, and preserve page geometry.
-- [ ] **P7.6 — Cancel obsolete work.** Add revision or cancellation guards to PDF loads, page renders, compilations, language analysis, and source-map requests.
-- [ ] **P7.7 — Preserve visible preview state.** Keep the last valid pages visible until replacements are ready and prevent blank-page or low-resolution zoom races.
-- [ ] **P7.8 — Defer noncritical startup work.** Show a usable editor before loading optional language providers, dictionary indexes, catalogs, and expensive font metadata.
-- [ ] **P7.9 — Automate release benchmarks.** Run the fixture matrix on Windows and Linux release builds and retain results for regression comparison.
-- [ ] **P7.10 — Set numeric budgets.** Record approved startup, latency, memory, and recovery thresholds after measuring representative hardware. Depends on `P7.1`, `P7.2`, and `P7.9`.
+- [x] **P7.1 — Establish benchmark fixtures.** Add reproducible 1-page, 30-page, 100-page, 100,000-character, mixed-script, and repeated-edit workloads.
+- [x] **P7.2 — Add measurement hooks.** Record startup, provider initialization, first diagnostic, first preview, compile, render, zoom, memory, and recovery timings in developer output.
+- [x] **P7.3 — Make language analysis incremental.** Submit changed logical ranges, preserve unaffected issues, coalesce edits, and bound active and queued work.
+- [x] **P7.4 — Bound interactive suggestions.** Index candidates at provider startup and forbid unrestricted dictionary scans on the typing path.
+- [x] **P7.5 — Virtualize PDF pages.** Render the visible window plus a small overscan, release distant page resources, and preserve page geometry.
+- [x] **P7.6 — Cancel obsolete work.** Add revision or cancellation guards to PDF loads, page renders, compilations, language analysis, and source-map requests.
+- [x] **P7.7 — Preserve visible preview state.** Keep the last valid pages visible until replacements are ready and prevent blank-page or low-resolution zoom races.
+- [x] **P7.8 — Defer noncritical startup work.** Show a usable editor before loading optional language providers, dictionary indexes, catalogs, and expensive font metadata.
+- [x] **P7.9 — Automate release benchmarks.** Run the fixture matrix on Windows and Linux release builds and retain results for regression comparison.
+- [x] **P7.10 — Set numeric budgets.** Record approved startup, latency, memory, and recovery thresholds after measuring representative hardware. Depends on `P7.1`, `P7.2`, and `P7.9`.
 
 ### Gate checklist
 

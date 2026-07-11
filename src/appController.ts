@@ -35,6 +35,7 @@ import { LayoutController } from "./layout/layoutController";
 import { WorkspaceStateStore, workspaceRestoreCandidates } from "./workspace/workspaceStateStore";
 import { RecentProjectsController } from "./workspace/recentProjectsController";
 import { WorkspaceWatcher, type WorkspaceChange } from "./workspace/workspaceWatcher";
+import { PerformanceDiagnostics, type PerformanceMetric } from "./performance/diagnostics";
 import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
@@ -172,6 +173,7 @@ export class TypstryWorkspaceController {
   private pendingLspSyncVersion: number | null = null;
   private lspSyncRequestGenerations = new Map<string, number>();
   private latestDocumentVersion = 1;
+  private diagnosticWaitStartedAt: number | null = null;
   private openTabs: EditorTab[] = [];
   private readonly openedDocumentUris = new Set<string>();
   private lastKhmerRenderPrepState: boolean | undefined = undefined;
@@ -190,6 +192,7 @@ export class TypstryWorkspaceController {
   private pdfPreviewRunning = false;
   private queuedPdfPreviewContents: string | null = null;
   private lastPdfBase64 = "";
+  private pdfPreviewFailureAt: number | null = null;
   private editorScrollbarPointerActive = false;
   private readonly externalConflictPaths = new Set<string>();
   private readonly settingsController = new SettingsController(
@@ -206,10 +209,12 @@ export class TypstryWorkspaceController {
 
   private editorInstance!: EditorView;
   private isComposing = false;
+  private readonly performanceDiagnostics = new PerformanceDiagnostics(metric => this.publishPerformanceMetric(metric));
   private readonly editorFontManager = new EditorFontManager(() => this.editorInstance);
   private readonly spellcheckController = new SpellcheckController(
     () => this.editorInstance,
-    issues => this.updateSpellcheckLog(issues)
+    issues => this.updateSpellcheckLog(issues),
+    metric => this.performanceDiagnostics.record(metric)
   );
   private explorer!: WorkspaceExplorer;
   private lspClient!: TinymistLspClient;
@@ -236,6 +241,8 @@ export class TypstryWorkspaceController {
     this.reportPreviewInteractionStatus(status);
   }, zoomPercent => {
     this.updatePreviewZoomLabel(zoomPercent);
+  }, metric => {
+    this.performanceDiagnostics.recordFirst(metric) ?? this.performanceDiagnostics.record(metric);
   });
   private readonly previewSyncController = new PreviewSyncController({
     getEditor: () => this.editorInstance,
@@ -356,8 +363,6 @@ export class TypstryWorkspaceController {
 
     await this.timeStartup("load settings", () => this.settingsController.load());
     for (const entry of this.settingsController.getTimings()) this.recordStartupTimingEntry(entry);
-    await this.timeStartup("initialize spellcheck providers", () => this.spellcheckController.initialize());
-    this.settingsController.setLanguageProviders(this.spellcheckController.getAllProviders());
     this.timeStartupSync("initialize recent projects", () => this.recentProjectsController.initialize());
     this.timeStartupSync("initialize CodeMirror", () => this.initCodeMirror());
     this.timeStartupSync("initialize document outline", () => this.documentOutlineController.initialize());
@@ -378,6 +383,10 @@ export class TypstryWorkspaceController {
     await this.timeStartup("show main window", () => getCurrentWindow().show());
     this.refreshEditorLayout("main window shown");
     this.recordStartupTiming("frontend startup", "frontend bootstrap until window shown", this.startupStart);
+    this.performanceDiagnostics.recordFirst({
+      name: "startup.usable-editor",
+      milliseconds: performance.now() - this.startupStart
+    });
     void this.logNativeStartupTimingsToConsole();
     void this.finishStartupInitialization();
 
@@ -1244,6 +1253,7 @@ export class TypstryWorkspaceController {
     }
 
     this.activeFilePath = path;
+    if (path.toLowerCase().endsWith(".typ")) this.diagnosticWaitStartedAt = performance.now();
     if (!options.skipPreviewActivation) {
       await this.prepareRenderProjectIfNeeded();
     }
@@ -1967,6 +1977,7 @@ export class TypstryWorkspaceController {
       return;
     }
     this.pdfPreviewRunning = true;
+    const compileStartedAt = performance.now();
     const generation = ++this.pdfPreviewGeneration;
     this.setLspStatus({ kind: "syncing", message: "Compiling PDF preview..." });
     if (this.settingsController.value.preview.renderMode !== "on-type" || !this.previewFrame.currentUrl) {
@@ -1977,6 +1988,11 @@ export class TypstryWorkspaceController {
       const previewPath = await this.preparePdfPreviewExportPath(contents);
       if (!previewPath) throw new Error("No PDF preview root is available.");
       const pdf = await this.lspClient.exportPdfToMemory(previewPath);
+      this.performanceDiagnostics.record({
+        name: "preview.compile",
+        milliseconds: performance.now() - compileStartedAt,
+        detail: { sourceUtf16: contents.length }
+      });
       if (this.queuedPdfPreviewContents !== null && this.queuedPdfPreviewContents !== contents) return;
       if (generation !== this.pdfPreviewGeneration) return;
       this.setLspStatus({ kind: "preview-ready", message: "PDF Preview Ready" });
@@ -1987,6 +2003,17 @@ export class TypstryWorkspaceController {
       ).taskId;
       this.lastPdfBase64 = pdf.data!;
       await this.previewFrame.loadPdfData(pdf.data!, previewPath);
+      if (this.pdfPreviewFailureAt !== null) {
+        this.performanceDiagnostics.record({
+          name: "preview.recovery",
+          milliseconds: performance.now() - this.pdfPreviewFailureAt
+        });
+        this.pdfPreviewFailureAt = null;
+      }
+      const memory = (performance as Performance & { memory?: { usedJSHeapSize?: number } }).memory;
+      if (typeof memory?.usedJSHeapSize === "number") {
+        this.performanceDiagnostics.record({ name: "memory.heap", bytes: memory.usedJSHeapSize });
+      }
       import("@tauri-apps/api/event").then(({ emit }) => {
         emit("pdf-update", pdf.data!);
       }).catch(err => console.error("Error emitting pdf-update", err));
@@ -1998,6 +2025,7 @@ export class TypstryWorkspaceController {
         String(error)
       );
       this.setLspStatus({ kind: "preview-ready", message: "PDF compile failed" });
+      this.pdfPreviewFailureAt ??= performance.now();
     } finally {
       this.pdfPreviewRunning = false;
       const queued = this.queuedPdfPreviewContents;
@@ -2640,12 +2668,18 @@ export class TypstryWorkspaceController {
   }
 
   private async finishStartupInitialization(): Promise<void> {
+    const startedAt = performance.now();
     try {
       const providers = await this.timeStartup("finish native startup initialization", () =>
         invoke<unknown>("finish_startup_initialization")
       );
       this.spellcheckController.setProviders(providers);
       this.settingsController.setLanguageProviders(this.spellcheckController.getAllProviders());
+      this.performanceDiagnostics.recordFirst({
+        name: "startup.providers",
+        milliseconds: performance.now() - startedAt,
+        detail: { providerCount: this.spellcheckController.getAllProviders().length }
+      });
     } catch (error) {
       console.warn("Deferred startup initialization failed:", error);
     } finally {
@@ -2716,6 +2750,14 @@ export class TypstryWorkspaceController {
   private async handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
     const originalPath = this.mapToOriginalPath(filePathFromUri(uri));
     const isActive = this.activeFilePath && filePathKey(originalPath) === filePathKey(this.activeFilePath);
+    if (isActive && this.diagnosticWaitStartedAt !== null) {
+      this.performanceDiagnostics.recordFirst({
+        name: "diagnostics.first",
+        milliseconds: performance.now() - this.diagnosticWaitStartedAt,
+        detail: { diagnosticCount: diagnostics.length }
+      });
+      this.diagnosticWaitStartedAt = null;
+    }
 
     const isPackageFile = originalPath.toLowerCase().includes("typst/packages") || 
                           originalPath.toLowerCase().includes("typst\\packages") ||
@@ -3160,6 +3202,20 @@ export class TypstryWorkspaceController {
     await this.explorer.loadWorkspace(workspaceRoot);
     if (this.workspaceRootPath !== workspaceRoot) return;
     await this.refreshActivePreviewRoot();
+  }
+
+  private publishPerformanceMetric(metric: PerformanceMetric): void {
+    const value = metric.milliseconds !== undefined
+      ? `${metric.milliseconds.toFixed(1)} ms`
+      : metric.bytes !== undefined
+        ? `${(metric.bytes / 1024 / 1024).toFixed(1)} MiB`
+        : "recorded";
+    console.info(`[performance] ${metric.name}: ${value}`, metric.detail ?? {});
+    this.appendDeveloperLog({
+      kind: "info",
+      source: "performance",
+      message: `${metric.name}: ${value}${metric.detail ? ` (${JSON.stringify(metric.detail)})` : ""}`
+    });
   }
 
   private async reloadOpenFilesFromDisk(refreshPreview = true): Promise<void> {

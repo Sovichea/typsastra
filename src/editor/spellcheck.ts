@@ -7,6 +7,7 @@ import {
   type LanguageProviderCapabilities
 } from "../languageSupport";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
+import type { PerformanceMetric } from "../performance/diagnostics";
 
 export type EditorToken = {
   provider: string;
@@ -68,7 +69,7 @@ const spellingField = StateField.define<DecorationSet>({
   provide: field => EditorView.decorations.from(field)
 });
 
-function expandRange(doc: Text, from: number, to: number, patterns: RegExp[]): { from: number, to: number } {
+export function expandSpellcheckRange(doc: Text, from: number, to: number, patterns: RegExp[]): { from: number, to: number } {
   const matchesAny = (char: string) => patterns.some(pat => pat.test(char));
   let newFrom = from;
   while (newFrom > 0 && matchesAny(doc.sliceString(newFrom - 1, newFrom))) {
@@ -101,7 +102,7 @@ function expandRange(doc: Text, from: number, to: number, patterns: RegExp[]): {
   };
 }
 
-function coalesceRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
+export function coalesceSpellcheckRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
   if (ranges.length === 0) return [];
   const sorted = [...ranges].sort((a, b) => a.from - b.from);
   const coalesced: { from: number; to: number }[] = [];
@@ -154,16 +155,24 @@ export class SpellcheckController {
 
   constructor(
     private readonly getEditor: () => EditorView,
-    private readonly onIssuesChanged?: (issues: readonly SpellingIssue[]) => void
+    private readonly onIssuesChanged?: (issues: readonly SpellingIssue[]) => void,
+    private readonly onPerformance?: (metric: Omit<PerformanceMetric, "recordedAt">) => void
   ) {}
 
   public async initialize(): Promise<void> {
+    const startedAt = performance.now();
     try {
       this.providers = parseLanguageProviderCapabilitiesList(
         await invoke<unknown>("get_provider_capabilities")
       );
     } catch (error) {
       console.error("Failed to fetch provider capabilities:", error);
+    } finally {
+      this.onPerformance?.({
+        name: "startup.providers",
+        milliseconds: performance.now() - startedAt,
+        detail: { providerCount: this.providers.length }
+      });
     }
   }
 
@@ -300,8 +309,8 @@ export class SpellcheckController {
       newRanges.push({ from: fromB, to: toB });
     });
 
-    newRanges = newRanges.map(r => expandRange(update.state.doc, r.from, r.to, patterns));
-    this.pendingRanges = coalesceRanges([...this.pendingRanges, ...newRanges]);
+    newRanges = newRanges.map(r => expandSpellcheckRange(update.state.doc, r.from, r.to, patterns));
+    this.pendingRanges = coalesceSpellcheckRanges([...this.pendingRanges, ...newRanges]);
 
     this.schedule();
   }
@@ -417,7 +426,7 @@ export class SpellcheckController {
       if (!this.queuedRequest) {
         this.queuedRequest = { ranges: [...this.pendingRanges] };
       } else {
-        this.queuedRequest.ranges = coalesceRanges([...this.queuedRequest.ranges, ...this.pendingRanges]);
+        this.queuedRequest.ranges = coalesceSpellcheckRanges([...this.queuedRequest.ranges, ...this.pendingRanges]);
       }
       this.pendingRanges = [];
       return;
@@ -474,6 +483,16 @@ export class SpellcheckController {
     } finally {
       const duration = performance.now() - startTime;
       console.log(`[Spellcheck] Range-based analysis completed in ${duration.toFixed(2)}ms for ${chunks.length} chunk(s)`);
+      this.onPerformance?.({
+        name: "language.analysis",
+        milliseconds: duration,
+        detail: {
+          chunkCount: chunks.length,
+          submittedUtf16: chunks.reduce((total, chunk) => total + chunk.text.length, 0),
+          documentUtf16: docIdentity.length,
+          queuedRequests: this.queuedRequest ? 1 : 0
+        }
+      });
 
       this.activeRequest = null;
 

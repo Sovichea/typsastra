@@ -8,6 +8,7 @@ bun-debug.log
 # Vite Build Output
 dist/
 dist-ssr/
+artifacts/
 
 # Generated PDF.js resources
 public/cmaps/
