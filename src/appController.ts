@@ -2343,8 +2343,19 @@ export class TypstryWorkspaceController {
       : null;
     const resolvedTargetPath = existingTargetTab?.path ?? targetPath;
     if (resolvedTargetPath && filePathKey(resolvedTargetPath) !== filePathKey(this.activeFilePath ?? "")) {
+      let isStandalone = false;
+      if (existingTargetTab) {
+        isStandalone = allowsStandalonePreview(existingTargetTab.content);
+      } else {
+        try {
+          const contents = await invoke<string>("read_workspace_file", { path: resolvedTargetPath });
+          isStandalone = allowsStandalonePreview(contents);
+        } catch {
+          // ignore
+        }
+      }
       await this.loadFile(resolvedTargetPath, {
-        preservePreviewSession: this.capturePreviewSession()
+        preservePreviewSession: isStandalone ? undefined : this.capturePreviewSession()
       });
     }
 
