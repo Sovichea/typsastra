@@ -31,6 +31,12 @@
                                     Open Workspace...
                                     <span class="hotkey">Ctrl+K Ctrl+O</span>
                                 </div>
+                                <div
+                                    class="dropdown-item"
+                                    id="action-import-project"
+                                >
+                                    Import Typstry Project...
+                                </div>
                                 <div class="dropdown-separator"></div>
                                 <div
                                     class="dropdown-item"
@@ -47,9 +53,15 @@
                                 </div>
                                 <div
                                     class="dropdown-item"
-                                    id="action-export-zip"
+                                    id="action-export-project"
                                 >
-                                    Export Workspace as ZIP...
+                                    Export Typstry Project...
+                                </div>
+                                <div
+                                    class="dropdown-item"
+                                    id="action-export-source-zip"
+                                >
+                                    Export Source ZIP...
                                 </div>
                                 <div class="dropdown-separator"></div>
                                 <div
@@ -289,6 +301,19 @@
                                     >Ctrl-K Ctrl-O</span
                                 >
                             </div>
+                            <button
+                                class="welcome-item"
+                                id="welcome-import-project"
+                                type="button"
+                            >
+                                <span class="welcome-item-icon"></span>
+                                <span class="welcome-item-text"
+                                    >Import Typstry Project</span
+                                >
+                                <span class="welcome-item-hotkey"
+                                    >.typstry</span
+                                >
+                            </button>
                             <button
                                 class="welcome-item"
                                 id="welcome-open-examples"

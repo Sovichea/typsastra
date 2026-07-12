@@ -194,11 +194,11 @@ Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop i
 
 ### Checklist
 
-- [ ] **V1-I.1 Define the archive schema.** Add typed Rust and TypeScript representations, schema documentation, sample valid archives, and compatibility rules.
-- [ ] **V1-I.2 Split the export commands.** Rename the existing behavior to source ZIP export and add version-bound project export.
-- [ ] **V1-I.3 Record the effective compiler.** Read the active managed Tinymist and its embedded Typst version at export time; fail clearly when no validated toolchain is active.
-- [ ] **V1-I.4 Add deterministic manifest generation.** Normalize archive paths, sort entries, calculate SHA-256 hashes, and use a stable schema encoding.
-- [ ] **V1-I.5 Harden archive writing.** Exclude generated/private directories, handle Unicode filenames, preserve empty directories only when necessary, and reject files that change during export.
+- [x] **V1-I.1 Define the archive schema.** Add typed Rust and TypeScript representations, schema documentation, sample valid archives, and compatibility rules.
+- [x] **V1-I.2 Split the export commands.** Rename the existing behavior to source ZIP export and add version-bound project export.
+- [x] **V1-I.3 Record the effective compiler.** Read the active managed Tinymist and its embedded Typst version at export time; fail clearly when no validated toolchain is active.
+- [x] **V1-I.4 Add deterministic manifest generation.** Normalize archive paths, sort entries, calculate SHA-256 hashes, and use a stable schema encoding.
+- [x] **V1-I.5 Harden archive writing.** Exclude generated/private directories, handle Unicode filenames, preserve empty directories only when necessary, and reject files that change during export.
 - [ ] **V1-I.6 Add preflight inspection.** Read and validate the manifest before extraction; impose entry-count, per-file, total-uncompressed-size, path-length, and compression-ratio limits.
 - [ ] **V1-I.7 Prevent unsafe extraction.** Reject absolute paths, `..`, symlinks/reparse points, duplicate normalized paths, reserved Windows device names, and case-folding collisions.
 - [ ] **V1-I.8 Add transactional import.** Extract to a staging directory, verify every hash, clean up failed imports, and never overwrite a non-empty destination.

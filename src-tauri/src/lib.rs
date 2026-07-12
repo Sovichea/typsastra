@@ -15,6 +15,7 @@ use tokio_tungstenite::{
 
 mod examples;
 mod font_store;
+mod project_archive;
 mod render_prepare;
 mod scaled_fonts;
 mod segmentation;
@@ -1236,7 +1237,7 @@ mod preview_main_tests {
             .join("04-projects")
             .join("03-typstry-readme");
         let main = root.join("main.typ");
-        let khmer = root.join("chapters").join("ការស្រាវជ្រាវ.typ");
+        let khmer = root.join("chapters").join("khmer-research.typ");
         let standalone = root.join("chapters").join("research-workflow.typ");
 
         let khmer_target = resolve_preview_target(
@@ -1712,71 +1713,47 @@ async fn start_preview_ws_proxy(target_url: String) -> Result<String, String> {
     Ok(format!("ws://127.0.0.1:{proxy_port}"))
 }
 
-fn zip_directory_recursive(
-    writer: &mut zip::ZipWriter<std::fs::File>,
-    root: &std::path::Path,
-    current_dir: &std::path::Path,
-) -> Result<(), String> {
-    use std::io::{Read, Write};
-    let entries =
-        std::fs::read_dir(current_dir).map_err(|e| format!("Failed to read directory: {}", e))?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name == ".git" || name == "node_modules" || name == "target" || name == ".typstry" {
-            continue;
-        }
-
-        let rel_path = path
-            .strip_prefix(root)
-            .map_err(|e| format!("Failed to strip prefix: {}", e))?;
-        let rel_path_str = rel_path.to_string_lossy().replace('\\', "/");
-
-        if path.is_dir() {
-            let _ = writer.add_directory(
-                format!("{}/", rel_path_str),
-                zip::write::FileOptions::<()>::default(),
-            );
-            zip_directory_recursive(writer, root, &path)?;
-        } else if path.is_file() {
-            writer
-                .start_file(
-                    rel_path_str,
-                    zip::write::FileOptions::<()>::default()
-                        .compression_method(zip::CompressionMethod::Deflated),
-                )
-                .map_err(|e| format!("Failed to start file in zip: {}", e))?;
-            let mut file = std::fs::File::open(&path)
-                .map_err(|e| format!("Failed to open file {:?}: {}", path, e))?;
-            let mut buffer = Vec::new();
-            file.read_to_end(&mut buffer)
-                .map_err(|e| format!("Failed to read file contents: {}", e))?;
-            writer
-                .write_all(&buffer)
-                .map_err(|e| format!("Failed to write file contents to zip: {}", e))?;
-        }
-    }
-    Ok(())
+#[tauri::command]
+async fn export_source_zip(workspace_path: String, zip_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_archive::export_source_zip(Path::new(&workspace_path), Path::new(&zip_path))
+    })
+    .await
+    .map_err(|error| format!("Source ZIP export task failed: {error}"))?
 }
 
 #[tauri::command]
-fn export_workspace_as_zip(workspace_path: String, zip_path: String) -> Result<(), String> {
-    let root = std::path::Path::new(&workspace_path);
-    if !root.is_dir() {
-        return Err("Workspace path is not a directory.".to_string());
-    }
-
-    let zip_file = std::fs::File::create(&zip_path)
-        .map_err(|e| format!("Failed to create zip file: {}", e))?;
-    let mut zip = zip::ZipWriter::new(zip_file);
-
-    zip_directory_recursive(&mut zip, root, root)?;
-
-    zip.finish()
-        .map_err(|e| format!("Failed to finish zip archive: {}", e))?;
-
-    Ok(())
+async fn export_typstry_project(
+    app_handle: tauri::AppHandle,
+    workspace_path: String,
+    archive_path: String,
+    main_file_path: String,
+) -> Result<project_archive::ProjectManifest, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get data dir: {error}"))?;
+    let toolchain = toolchain::status(&data_dir);
+    let typst_version = toolchain.typst_version.ok_or_else(|| {
+        "Cannot export a version-bound project because no validated Typst toolchain is active."
+            .to_string()
+    })?;
+    let tinymist_version = toolchain.tinymist_version.ok_or_else(|| {
+        "Cannot export a version-bound project because no validated Tinymist toolchain is active."
+            .to_string()
+    })?;
+    tauri::async_runtime::spawn_blocking(move || {
+        project_archive::export_typstry_project(project_archive::ProjectExport {
+            workspace_root: Path::new(&workspace_path),
+            archive_path: Path::new(&archive_path),
+            main_file_path: Path::new(&main_file_path),
+            app_version: env!("CARGO_PKG_VERSION"),
+            typst_version: &typst_version,
+            tinymist_version: &tinymist_version,
+        })
+    })
+    .await
+    .map_err(|error| format!("Typstry project export task failed: {error}"))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1842,7 +1819,8 @@ pub fn run() {
             read_workspace_file_as_base64,
             workspace_path_exists,
             cleanup_workspace_preview_files,
-            export_workspace_as_zip,
+            export_source_zip,
+            export_typstry_project,
             save_workspace_file,
             create_workspace_dir,
             rename_workspace_file,

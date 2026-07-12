@@ -363,7 +363,8 @@ mod tests {
     #[test]
     fn test_khmer_example_exists_in_resources() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let khmer_path = manifest_dir.join("resources/examples/03-language-tools/01-khmer-deep-support/main.typ");
+        let khmer_path = manifest_dir
+            .join("resources/examples/03-language-tools/01-khmer-deep-support/main.typ");
         assert!(
             khmer_path.is_file(),
             "03-language-tools/01-khmer-deep-support/main.typ must exist in the resources directory"
@@ -373,7 +374,8 @@ mod tests {
     #[test]
     fn khmer_folklore_example_is_multifile() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let example_dir = manifest_dir.join("resources/examples/04-projects/02-khmer-folklore-book");
+        let example_dir =
+            manifest_dir.join("resources/examples/04-projects/02-khmer-folklore-book");
         assert!(example_dir.join("main.typ").is_file());
         assert!(example_dir
             .join("stories/01-rabbit-and-snail.typ")
@@ -386,8 +388,8 @@ mod tests {
     #[test]
     fn khmer_segmentation_comparison_example_exists() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let example_path =
-            manifest_dir.join("resources/examples/03-language-tools/02-khmer-segmentation-comparison/main.typ");
+        let example_path = manifest_dir
+            .join("resources/examples/03-language-tools/02-khmer-segmentation-comparison/main.typ");
         assert!(
             example_path.is_file(),
             "03-language-tools/02-khmer-segmentation-comparison/main.typ must exist in the resources directory"
@@ -404,7 +406,7 @@ mod tests {
         assert!(base_path.join("readme.typ").is_file());
         assert!(base_path.join("refs.bib").is_file());
         assert!(base_path.join("chapters/research-workflow.typ").is_file());
-        assert!(base_path.join("chapters/ការស្រាវជ្រាវ.typ").is_file());
+        assert!(base_path.join("chapters/khmer-research.typ").is_file());
         assert!(base_path.join("assets/typstry-icon.png").is_file());
         assert!(base_path.join("assets/typstry-wordmark.png").is_file());
     }

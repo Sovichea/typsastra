@@ -35,6 +35,7 @@ import { LayoutController } from "./layout/layoutController";
 import { WorkspaceStateStore, workspaceRestoreCandidates } from "./workspace/workspaceStateStore";
 import { RecentProjectsController } from "./workspace/recentProjectsController";
 import { WorkspaceWatcher, type WorkspaceChange } from "./workspace/workspaceWatcher";
+import { workspaceViewportState } from "./workspace/workspaceVisibility";
 import { PerformanceDiagnostics, type PerformanceMetric } from "./performance/diagnostics";
 import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
@@ -469,14 +470,15 @@ export class TypstryWorkspaceController {
     const explorerResizer = document.getElementById("explorer-resizer");
     const sidebarActivityBar = document.getElementById("sidebar-activity-bar");
     const appMenus = document.getElementById("app-menus");
+    const viewport = workspaceViewportState(this.activeFilePath, this.workspaceRootPath);
 
-    if (this.activeFilePath || this.workspaceRootPath) {
-      welcomeScreen?.classList.add("hidden");
-    } else {
+    if (viewport.showWelcome) {
       welcomeScreen?.classList.remove("hidden");
+    } else {
+      welcomeScreen?.classList.add("hidden");
     }
 
-    if (this.activeFilePath) {
+    if (viewport.showEditor) {
       inputWrapper?.classList.remove("hidden");
       previewWrapper?.classList.remove("hidden");
       resizer?.classList.remove("hidden");
@@ -487,7 +489,7 @@ export class TypstryWorkspaceController {
       resizer?.classList.add("hidden");
     }
 
-    if (this.workspaceRootPath) {
+    if (viewport.showWorkspaceChrome) {
       sidebarActivityBar?.classList.remove("hidden");
       this.applySidebarVisibility();
       appMenus?.classList.remove("hidden");
@@ -3631,7 +3633,8 @@ export class TypstryWorkspaceController {
 
   private async openWorkspace(selected: string) {
     if (this.workspaceRootPath && this.workspaceRootPath !== selected) {
-      this.closeProject();
+      const closed = await this.closeProject();
+      if (!closed) return;
     }
     await invoke("cleanup_workspace_preview_files", { workspaceRootPath: selected });
     this.workspaceRootPath = selected;
@@ -3678,7 +3681,7 @@ export class TypstryWorkspaceController {
   private async restartWorkspace() {
     if (this.workspaceRootPath) {
       const currentWorkspace = this.workspaceRootPath;
-      this.closeProject();
+      await this.closeProject({ confirmUnsaved: false });
       await this.openWorkspace(currentWorkspace);
     }
   }
@@ -3724,12 +3727,52 @@ export class TypstryWorkspaceController {
     await this.refreshActivePreviewRoot();
   }
 
-  private closeProject() {
-    this.saveWorkspaceState();
-    this.pinnedMainFilePath = null;
-    if (this.pdfSyncRegisteredTaskId && this.lspClient) {
-      void this.lspClient.stopPreview(this.pdfSyncRegisteredTaskId).catch(() => {});
+  private async closeProject(options: { confirmUnsaved?: boolean } = {}): Promise<boolean> {
+    const confirmUnsaved = options.confirmUnsaved ?? true;
+    if (confirmUnsaved && this.openTabs.some(tab => tab.isDirty)) {
+      const shouldClose = await confirm(
+        "Close this project with unsaved changes? The editor state will be kept for workspace recovery, but the files are not saved to disk.",
+        { title: "Unsaved Changes", kind: "warning" }
+      );
+      if (!shouldClose) return false;
     }
+
+    this.saveWorkspaceState();
+    this.workspaceWatcher.stop();
+
+    const previewTaskIds = new Set([
+      this.previewTaskId,
+      this.pdfPreviewSourceMapTaskId,
+      this.pdfSyncRegisteredTaskId
+    ].filter((taskId): taskId is string => Boolean(taskId)));
+    if (this.lspClient) {
+      for (const taskId of previewTaskIds) {
+        void this.lspClient.stopPreview(taskId).catch(() => {});
+      }
+    }
+
+    if (this.pdfPreviewTimer !== null) window.clearTimeout(this.pdfPreviewTimer);
+    this.pdfPreviewTimer = null;
+    this.pdfPreviewGeneration += 1;
+    this.pdfForwardSyncGeneration += 1;
+    this.queuedPdfPreviewContents = null;
+    this.pendingPdfForwardSync = null;
+
+    this.workspaceRootPath = null;
+    this.activeFilePath = null;
+    this.openTabs = [];
+    this.pinnedMainFilePath = null;
+    this.pinnedLspMainPath = null;
+    this.previewRootPath = null;
+    this.previewMainPath = null;
+    this.previewTaskId = null;
+    this.previewSessionKey = null;
+    this.previewImported = false;
+    this.previewStandalone = true;
+    this.previewDisabled = false;
+    this.pdfPreviewSourceMapRootPath = null;
+    this.pdfPreviewSourceMapTaskId = null;
+    this.pdfPreviewGeneratedFiles.clear();
     this.pdfSyncPreviewTaskKey = null;
     this.pdfSyncRegisteredTaskId = null;
     this.pdfSourceMapStartup = null;
@@ -3737,17 +3780,35 @@ export class TypstryWorkspaceController {
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
-    this.editorInstance.dispatch({
-      changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
-    });
+    this.lastPdfBase64 = "";
+    this.openedDocumentUris.clear();
+    this.externalConflictPaths.clear();
+    this.clearPendingLspSync();
+    this.previewSyncController.clearForward();
+    this.clearDiagnostics();
+
+    this.isLoadingFile = true;
+    try {
+      this.editorInstance.dispatch({
+        changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
+      });
+      this.applyFoldRanges([]);
+    } finally {
+      this.isLoadingFile = false;
+    }
+    this.spellcheckController.activateDocument("");
+    this.editorFontManager.updateDocument("");
+    this.editorToolbarController.setDisabled(true);
+    if (this.activeMode === "WYSIWYM") this.mapMarkupToWysiwym("");
     
     // Clear workspace navigation
     document.getElementById("workspace-explorer-tree")!.innerHTML = "";
     this.documentOutlineController.clear();
     this.previewFrame.clear();
-    
+    this.renderEditorTabs();
     this.setLspStatus({ kind: "ready", message: "Project closed" });
     this.updateWorkspaceViewportVisibility();
+    return true;
   }
 
   private bindGlobalEvents() {
@@ -3897,13 +3958,26 @@ export class TypstryWorkspaceController {
         await this.openWorkspace(selected);
       }
     });
+
+    document.getElementById("action-import-project")?.addEventListener("click", async () => {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        filters: [{ name: "Typstry Project", extensions: ["typstry"] }]
+      });
+      if (typeof selected !== "string") return;
+      await message(
+        `Secure project import is not available in this implementation phase. Nothing was extracted from:\n\n${selected}`,
+        { title: "Import Typstry Project", kind: "info" }
+      );
+    });
     
     document.getElementById("action-restart-workspace")?.addEventListener("click", () => {
       void this.restartWorkspace();
     });
 
     document.getElementById("action-close-project")?.addEventListener("click", () => {
-      this.closeProject();
+      void this.closeProject();
     });
 
     document.getElementById("action-new-file")?.addEventListener("click", async () => {
@@ -4001,9 +4075,27 @@ export class TypstryWorkspaceController {
       }
     });
 
-    document.getElementById("action-export-zip")?.addEventListener("click", async () => {
+    document.getElementById("action-export-project")?.addEventListener("click", async () => {
       if (!this.workspaceRootPath) {
         alert("Please open a project workspace first.");
+        return;
+      }
+      if (this.openTabs.some(tab => tab.isDirty)) {
+        await message("Save all modified files before exporting so the archive matches the editor.", {
+          title: "Unsaved Files",
+          kind: "warning"
+        });
+        return;
+      }
+
+      const mainFilePath = this.previewMainPath ?? (
+        this.activeFilePath?.toLowerCase().endsWith(".typ") ? this.activeFilePath : null
+      );
+      if (!mainFilePath) {
+        await message("Set or open the project's main Typst file before exporting a version-bound project.", {
+          title: "Main File Required",
+          kind: "warning"
+        });
         return;
       }
 
@@ -4011,23 +4103,60 @@ export class TypstryWorkspaceController {
         const folderName = this.workspaceRootPath.split(/[/\\]/).pop() || "workspace";
         const selected = await save({
           filters: [{
-            name: "ZIP Archive",
-            extensions: ["zip"]
+            name: "Typstry Project",
+            extensions: ["typstry"]
           }],
-          defaultPath: `${folderName}.zip`
+          defaultPath: `${folderName}.typstry`
         });
 
         if (selected) {
-          this.setLspStatus({ kind: "running", message: "Exporting Workspace..." });
-          await invoke("export_workspace_as_zip", {
+          this.setLspStatus({ kind: "running", message: "Exporting Typstry project..." });
+          const manifest = await invoke<{ renderEnvironment: { fontsPackaged: boolean } }>("export_typstry_project", {
+            workspacePath: this.workspaceRootPath,
+            archivePath: selected,
+            mainFilePath
+          });
+          const fontStatus = manifest.renderEnvironment.fontsPackaged
+            ? ""
+            : " Toolchain is pinned; render fonts are not packaged in this implementation phase.";
+          this.setLspStatus({ kind: "preview-ready", message: `Typstry project exported to ${selected}.${fontStatus}` });
+        }
+      } catch (error) {
+        this.setLspStatus({ kind: "error", message: `Project export failed: ${error}` });
+        await message(String(error), { title: "Typstry Project Export Failed", kind: "error" });
+      }
+    });
+
+    document.getElementById("action-export-source-zip")?.addEventListener("click", async () => {
+      if (!this.workspaceRootPath) {
+        alert("Please open a project workspace first.");
+        return;
+      }
+      if (this.openTabs.some(tab => tab.isDirty)) {
+        await message("Save all modified files before exporting so the ZIP matches the editor.", {
+          title: "Unsaved Files",
+          kind: "warning"
+        });
+        return;
+      }
+
+      try {
+        const folderName = this.workspaceRootPath.split(/[/\\]/).pop() || "workspace";
+        const selected = await save({
+          filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+          defaultPath: `${folderName}.zip`
+        });
+        if (selected) {
+          this.setLspStatus({ kind: "running", message: "Exporting source ZIP..." });
+          await invoke("export_source_zip", {
             workspacePath: this.workspaceRootPath,
             zipPath: selected
           });
-          this.setLspStatus({ kind: "preview-ready", message: `Workspace exported to ${selected}` });
+          this.setLspStatus({ kind: "preview-ready", message: `Source ZIP exported to ${selected}` });
         }
       } catch (error) {
-        this.setLspStatus({ kind: "error", message: `Export failed: ${error}` });
-        await message(String(error), { title: "ZIP Export Failed", kind: "error" });
+        this.setLspStatus({ kind: "error", message: `Source ZIP export failed: ${error}` });
+        await message(String(error), { title: "Source ZIP Export Failed", kind: "error" });
       }
     });
 
@@ -4096,6 +4225,9 @@ export class TypstryWorkspaceController {
     // Welcome Screen Actions
     document.getElementById("welcome-open-project")?.addEventListener("click", () => {
       document.getElementById("action-open-folder")?.click();
+    });
+    document.getElementById("welcome-import-project")?.addEventListener("click", () => {
+      document.getElementById("action-import-project")?.click();
     });
     document.getElementById("welcome-open-examples")?.addEventListener("click", () => {
       void this.openExamplesWorkspace();

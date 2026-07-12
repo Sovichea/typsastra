@@ -1,0 +1,27 @@
+{
+  "format": "com.typstry.project",
+  "schemaVersion": 1,
+  "createdBy": {
+    "application": "Typstry",
+    "version": "1.0.0"
+  },
+  "project": {
+    "name": "ការស្រាវជ្រាវ",
+    "main": "main.typ"
+  },
+  "toolchain": {
+    "typstVersion": "0.13.1",
+    "tinymistVersion": "0.13.10",
+    "compatibility": "exact"
+  },
+  "renderEnvironment": {
+    "fontsPackaged": false
+  },
+  "fonts": [],
+  "integrity": {
+    "algorithm": "sha256",
+    "files": {
+      "main.typ": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+}
