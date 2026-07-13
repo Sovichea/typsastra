@@ -1112,6 +1112,7 @@ export class TypstellaWorkspaceController {
     tab.path = newPath;
     if (this.activeFilePath === oldPath) {
       this.activeFilePath = newPath;
+      this.explorer.setActiveFile(newPath);
       this.spellcheckController.activateDocument(filePathKey(newPath));
       this.previewRootPath = tab.previewRootPath;
       this.previewMainPath = tab.previewMainPath;
@@ -1166,6 +1167,7 @@ export class TypstellaWorkspaceController {
       if (nextTab) {
         await this.activateEditorTab(nextTab.path, false);
       } else {
+        this.explorer.setActiveFile(null);
         this.spellcheckController.activateDocument("");
         this.isLoadingFile = true;
         try {
@@ -1192,6 +1194,7 @@ export class TypstellaWorkspaceController {
   }
 
   private async activateEditorTab(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}) {
+    this.explorer.setActiveFile(path);
     if (this.workspaceRootPath) {
       void this.explorer.revealPath(path);
     }
@@ -4290,6 +4293,7 @@ export class TypstellaWorkspaceController {
     this.recommendedWorkspaceToolchain = null;
     this.selectedWorkspaceToolchain = null;
     this.activeFilePath = null;
+    this.explorer.setActiveFile(null);
     this.openTabs = [];
     this.pinnedMainFilePath = null;
     this.pinnedLspMainPath = null;

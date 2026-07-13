@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
 import { createAppIcon, type AppIconName } from "../ui/icons";
+import { filePathKey } from "../platform/paths";
 
 export interface FileNode { name: string; path: string; isDirectory: boolean; children?: FileNode[]; }
 
@@ -34,12 +35,24 @@ export function isHiddenWorkspaceEntry(name: string): boolean {
 export class WorkspaceExplorer {
   private loadGeneration = 0;
   private workspaceRootPath: string | null = null;
+  private activeFilePath: string | null = null;
 
   constructor(
     private container: HTMLElement,
     private onFileSelected: (filePath: string, options?: { temporary?: boolean }) => void,
     private isPinnedMainFile?: (filePath: string) => boolean
   ) {}
+
+  public setActiveFile(filePath: string | null): void {
+    this.activeFilePath = filePath;
+    const activeKey = filePath === null ? null : filePathKey(filePath);
+    this.container.querySelectorAll<HTMLElement>(".tree-item[data-path]").forEach(item => {
+      const active = activeKey !== null && filePathKey(item.dataset.path ?? "") === activeKey;
+      item.classList.toggle("active-file", active);
+      if (active) item.setAttribute("aria-current", "page");
+      else item.removeAttribute("aria-current");
+    });
+  }
 
   public async loadWorkspace(rootPath: string) {
     this.workspaceRootPath = rootPath;
@@ -149,9 +162,13 @@ export class WorkspaceExplorer {
 
       const label = document.createElement("div");
       const isPinnedMain = this.isPinnedMainFile ? this.isPinnedMainFile(node.path) : false;
-      label.className = `tree-item explorer-item-target${selectedPath === node.path ? " selected" : ""}${isPinnedMain ? " pinned-main" : ""}`;
+      const isActiveFile = !node.isDirectory
+        && this.activeFilePath !== null
+        && filePathKey(this.activeFilePath) === filePathKey(node.path);
+      label.className = `tree-item explorer-item-target${selectedPath === node.path ? " selected" : ""}${isActiveFile ? " active-file" : ""}${isPinnedMain ? " pinned-main" : ""}`;
       label.dataset.path = node.path;
       label.dataset.isDir = String(node.isDirectory);
+      if (isActiveFile) label.setAttribute("aria-current", "page");
       // Base padding + depth padding
       label.style.paddingLeft = `${depth * 12 + 8}px`;
 

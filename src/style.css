@@ -1946,6 +1946,12 @@ body.typstella-resizing #preview-render-pane::after {
   color: var(--ui-text);
 }
 
+.tree-item.active-file {
+  background-color: var(--ui-select);
+  box-shadow: inset 2px 0 #3db489;
+  color: var(--ui-text);
+}
+
 .tree-item:focus {
   outline: 1px solid #007fd4;
   outline-offset: -1px;
