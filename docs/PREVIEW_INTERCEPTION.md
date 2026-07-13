@@ -16,11 +16,16 @@ The preview viewer does not use extracted PDF text to resolve source locations. 
 
 ## Forward sync
 
-Forward sync starts from the editor cursor.
+Forward sync starts only from the explicit **Reveal Cursor in Preview** toolbar
+action or its keyboard shortcut. Cursor movement and tab activation never
+request preview scrolling.
 
 1. Typstella maps the editor cursor to the source file that Tinymist sees. If Khmer render preparation is active, this may be a generated cache file.
 2. Typstella sends a `panelScrollTo` request to a Tinymist source-map preview task.
-3. Tinymist returns a PDF document position, usually as a `jump,<page> <x> <y>` payload.
+   If the exact cursor boundary is not mappable, it tries a bounded set of
+   nearby Unicode code-point columns.
+3. Tinymist returns a PDF document position as a binary
+   `jump,<page> <x> <y>` data-plane frame.
 4. Typstella scrolls the PDF viewer to that page and coordinate.
 
 If the source-map socket is unavailable, Typstella logs the failure and does not pretend that the sync succeeded.

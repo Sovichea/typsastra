@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
+import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, tinymistPreviewNearbyByteColumns, tinymistPreviewNearbySourceColumns, tinymistPreviewSourceColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
 
 describe("preview policy", () => {
   test("keeps standalone preview disabled for v1.0", () => {
@@ -34,11 +34,21 @@ describe("preview policy", () => {
     })).toBe("/workspace/main.typ");
   });
 
-  test("uses UTF-8 byte columns for Tinymist preview source mapping", () => {
+  test("computes UTF-8 byte columns for render-cache offsets", () => {
     const line = "Latin ខ្មែរ text";
     const offset = line.indexOf(" text");
     expect(tinymistPreviewByteColumn(line, offset)).toBe(new TextEncoder().encode("Latin ខ្មែរ").length);
     expect(tinymistPreviewByteColumn("😀x", 2)).toBe(4);
+  });
+
+  test("creates nearby byte offsets only at Unicode boundaries", () => {
+    expect(tinymistPreviewNearbyByteColumns("a😀ខb", 3, 5)).toEqual([5, 8, 9, 1, 0]);
+  });
+
+  test("uses Unicode code-point columns for Tinymist preview requests", () => {
+    const line = `a\u{1F600}\u1781b`;
+    expect(tinymistPreviewSourceColumn(line, 3)).toBe(2);
+    expect(tinymistPreviewNearbySourceColumns(line, 3, 5)).toEqual([2, 3, 4, 1, 0]);
   });
 
   test("keeps original source paths for template-aware standalone wrappers", () => {

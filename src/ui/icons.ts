@@ -11,6 +11,7 @@ import {
   CircleX,
   CodeXml,
   Copy,
+  Crosshair,
   Download,
   Ellipsis,
   EllipsisVertical,
@@ -71,6 +72,7 @@ const iconNodes = {
   circleX: CircleX,
   codeXml: CodeXml,
   copy: Copy,
+  crosshair: Crosshair,
   download: Download,
   ellipsis: Ellipsis,
   ellipsisVertical: EllipsisVertical,
@@ -190,6 +192,7 @@ export function initializeLucideIcons(): void {
   replaceSvg("#titlebar-maximize svg", "square", 11);
   replaceSvg("#titlebar-close svg", "x", 12);
   replaceSvg("#preview-recompile-btn svg", "refresh", 16);
+  replaceSvg("#preview-forward-sync-btn svg", "crosshair", 16);
   replaceSvg("#preview-menu-btn svg", "ellipsisVertical", 16);
   const isPreview = new URLSearchParams(window.location.search).get("mode") === "preview";
   replaceSvg("#undock-preview-btn svg", isPreview ? "minimize2" : "externalLink", 16);

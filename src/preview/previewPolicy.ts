@@ -47,9 +47,58 @@ export function previewLspMainPath(target: Pick<PreviewTarget, "rootPath" | "mai
   return target.standalone ? target.rootPath : (target.mainPath ?? target.rootPath);
 }
 
+export function tinymistPreviewSourceColumn(lineText: string, utf16Offset: number): number {
+  const offset = Math.max(0, Math.min(utf16Offset, lineText.length));
+  return [...lineText.slice(0, offset)].length;
+}
+
+export function tinymistPreviewNearbySourceColumns(
+  lineText: string,
+  utf16Offset: number,
+  limit = 12
+): number[] {
+  const target = Math.max(0, Math.min(utf16Offset, lineText.length));
+  const boundaries = [0];
+  let offset = 0;
+  for (const character of lineText) {
+    offset += character.length;
+    boundaries.push(offset);
+  }
+  return boundaries
+    .sort((left, right) => {
+      const distance = Math.abs(left - target) - Math.abs(right - target);
+      return distance || right - left;
+    })
+    .slice(0, Math.max(1, limit))
+    .map(boundary => tinymistPreviewSourceColumn(lineText, boundary));
+}
+
+// Retained for render-cache offset tests and migrations. Tinymist's preview
+// control plane does not consume these byte-oriented values.
 export function tinymistPreviewByteColumn(lineText: string, utf16Offset: number): number {
   const offset = Math.max(0, Math.min(utf16Offset, lineText.length));
   return new TextEncoder().encode(lineText.slice(0, offset)).length;
+}
+
+export function tinymistPreviewNearbyByteColumns(
+  lineText: string,
+  utf16Offset: number,
+  limit = 12
+): number[] {
+  const target = Math.max(0, Math.min(utf16Offset, lineText.length));
+  const boundaries = [0];
+  let offset = 0;
+  for (const character of lineText) {
+    offset += character.length;
+    boundaries.push(offset);
+  }
+  return boundaries
+    .sort((left, right) => {
+      const distance = Math.abs(left - target) - Math.abs(right - target);
+      return distance || right - left;
+    })
+    .slice(0, Math.max(1, limit))
+    .map(boundary => tinymistPreviewByteColumn(lineText, boundary));
 }
 
 export function usesTemplateAwareStandaloneRoot(

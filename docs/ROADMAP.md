@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] **v0.9.0 prerelease:** Rebuild and re-enable forward sync only after rapid-click, long-paragraph, included-file, persistent data-plane, timeout, and source-offset reliability tests pass. Forward sync remains disabled before this milestone.
+- [ ] **v0.9.0 prerelease:** Rebuild and re-enable automatic forward sync only after rapid-click, long-paragraph, included-file, persistent data-plane, timeout, and source-offset reliability tests pass. Explicit toolbar/keyboard forward sync is available; cursor-driven scrolling remains disabled before this milestone.
 
 ## Completed
 

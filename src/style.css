@@ -1297,6 +1297,21 @@ body.typstella-resizing #preview-render-pane::after {
   background: var(--ui-hover);
 }
 
+.preview-action-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+.preview-action-button[aria-busy="true"] svg {
+  animation: preview-action-pulse 900ms ease-in-out infinite alternate;
+}
+
+@keyframes preview-action-pulse {
+  from { opacity: 0.35; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .preview-zoom-controls {
   height: 28px;
   display: inline-flex;
@@ -2595,7 +2610,8 @@ button.welcome-item:disabled {
   display: flex !important;
 }
 
-.preview-only-mode #preview-recompile-btn {
+.preview-only-mode #preview-recompile-btn,
+.preview-only-mode #preview-forward-sync-btn {
   display: none;
 }
 

@@ -26,7 +26,8 @@ import { isBinaryImagePath, isSupportedInAppPath } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus } from "./preview/previewFrame";
 import { PreviewSyncController } from "./preview/previewSyncController";
-import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewByteColumn, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
+import { tinymistDataPlanePositionText } from "./preview/tinymistDataPlane";
+import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewNearbySourceColumns, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, spellcheckConsoleGroupKey, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
 import { TabStripController } from "./editor/tabStripController";
@@ -219,6 +220,8 @@ export class TypstellaWorkspaceController {
   private pdfSyncSocketUrl = "";
   private pdfForwardSyncGeneration = 0;
   private pendingPdfForwardSync: { generation: number; requestedAt: number } | null = null;
+  private manualForwardSyncGeneration: number | null = null;
+  private queuedManualForwardSync: { path: string; cursor: number } | null = null;
   private pdfPreviewSourceMapRootPath: string | null = null;
   private pdfPreviewSourceMapTaskId: string | null = null;
   private pdfPreviewGeneratedFiles = new Map<string, { generatedPath: string; preparedText: string }>();
@@ -1257,11 +1260,13 @@ export class TypstellaWorkspaceController {
     if (persistCurrent && !sameActivePath) {
       this.persistActiveTabState();
     }
+    if (!sameActivePath) this.cancelManualForwardSync();
 
     if (!tab) {
       if (sameActivePath) {
         this.activeFilePath = null;
       }
+      this.updateManualForwardSyncAction();
       return;
     }
 
@@ -1304,6 +1309,7 @@ export class TypstellaWorkspaceController {
         this.editorToolbarController.setDisabled(true);
         this.activeFilePath = path;
         this.isLoadingFile = false;
+        this.updateManualForwardSyncAction();
         this.updateWorkspaceViewportVisibility();
         this.saveWorkspaceState();
         return;
@@ -1459,6 +1465,7 @@ export class TypstellaWorkspaceController {
 
     this.updateWorkspaceViewportVisibility();
     this.refreshEditorLayout("tab activation");
+    this.updateManualForwardSyncAction();
     this.editorInstance.focus();
     this.saveWorkspaceState();
   }
@@ -2203,6 +2210,7 @@ export class TypstellaWorkspaceController {
       });
       return;
     }
+    this.cancelManualForwardSync();
     this.pdfPreviewRunning = true;
     const compileStartedAt = performance.now();
     const generation = ++this.pdfPreviewGeneration;
@@ -2355,6 +2363,7 @@ export class TypstellaWorkspaceController {
       if (queued !== null && (queuedForced || queued !== contents)) {
         void this.renderPdfPreview(queued, queuedForced);
       }
+      this.updateManualForwardSyncAction();
     }
   }
 
@@ -2875,7 +2884,8 @@ export class TypstellaWorkspaceController {
     return true;
   }
 
-  private async handlePdfForwardSync(path: string, cursor: number): Promise<boolean> {
+  private async handlePdfForwardSync(path: string, cursor: number, requestedGeneration?: number): Promise<boolean> {
+    const generation = requestedGeneration ?? ++this.pdfForwardSyncGeneration;
     const client = this.lspClient;
     const rootPath = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath;
     const taskId = this.pdfPreviewSourceMapTaskId ?? this.previewTaskId;
@@ -2888,8 +2898,9 @@ export class TypstellaWorkspaceController {
       return false;
     }
 
-    const target = await this.forwardSyncTarget(path, cursor);
-    if (!target) {
+    const targets = await this.forwardSyncTargets(path, cursor);
+    if (generation !== this.pdfForwardSyncGeneration) return false;
+    if (targets.length === 0) {
       this.appendDeveloperLog({
         kind: "warning",
         source: "forward sync",
@@ -2899,6 +2910,7 @@ export class TypstellaWorkspaceController {
     }
 
     const sourceMapSession = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "forward sync");
+    if (generation !== this.pdfForwardSyncGeneration) return false;
     if (!sourceMapSession) {
       this.appendDeveloperLog({
         kind: "warning",
@@ -2908,7 +2920,6 @@ export class TypstellaWorkspaceController {
       return false;
     }
 
-    const generation = ++this.pdfForwardSyncGeneration;
     this.pendingPdfForwardSync = { generation, requestedAt: Date.now() };
     window.setTimeout(() => {
       if (this.pendingPdfForwardSync?.generation === generation) {
@@ -2918,24 +2929,131 @@ export class TypstellaWorkspaceController {
           source: "forward sync",
           message: "Forward sync timed out waiting for Tinymist source-map position."
         });
+        this.finishManualForwardSync(generation, "Reveal in preview timed out");
       }
     }, 5000);
 
-    await client.scrollPreview(sourceMapSession.taskId, {
-      event: "panelScrollTo",
-      filepath: nativeFilePath(target.filepath),
-      line: target.line,
-      character: target.character
-    });
+    void this.sendForwardSyncTargets(client, sourceMapSession.taskId, targets, generation);
+    const target = targets[0];
     this.appendDeveloperLog({
       kind: "info",
       source: "forward sync",
-      message: `Requested compiler preview position: ${target.filepath}:${target.line + 1}:${target.character}.`
+      message: `Requested compiler preview position: ${target.filepath}:${target.line + 1}:${target.character}; nearbyCandidates=${targets.length}.`
     });
     return true;
   }
 
-  private async forwardSyncTarget(path: string, cursor: number): Promise<{ filepath: string; line: number; character: number } | null> {
+  private async sendForwardSyncTargets(
+    client: TinymistLspClient,
+    taskId: string,
+    targets: Array<{ filepath: string; line: number; character: number }>,
+    generation: number
+  ): Promise<void> {
+    for (let index = 0; index < targets.length; index += 1) {
+      if (this.pendingPdfForwardSync?.generation !== generation) return;
+      const target = targets[index];
+      await client.scrollPreview(taskId, {
+        event: "panelScrollTo",
+        filepath: nativeFilePath(target.filepath),
+        line: target.line,
+        character: target.character
+      });
+      if (index + 1 < targets.length) await new Promise(resolve => window.setTimeout(resolve, 180));
+    }
+  }
+
+  private revealCursorInPreviewManually(): void {
+    const path = this.activeFilePath;
+    if (!path?.toLowerCase().endsWith(".typ")) {
+      this.setLspStatus({ kind: "preview-ready", message: "Open a Typst file to reveal it in preview" });
+      return;
+    }
+    const request = { path, cursor: this.editorInstance.state.selection.main.head };
+    if (this.manualForwardSyncGeneration !== null) {
+      // Tinymist source-map responses do not carry request IDs. Keep only the
+      // latest target and send it after the active request settles, so an old
+      // response can never be mistaken for a newer cursor position.
+      this.queuedManualForwardSync = request;
+      this.setLspStatus({ kind: "sync-pending", message: "Latest preview reveal queued" });
+      return;
+    }
+    if (!this.canRevealCursorInPreview()) {
+      this.setLspStatus({ kind: "preview-ready", message: "Wait for the compiled preview before revealing the cursor" });
+      return;
+    }
+    void this.runManualForwardSync(request);
+  }
+
+  private async runManualForwardSync(request: { path: string; cursor: number }): Promise<void> {
+    const generation = ++this.pdfForwardSyncGeneration;
+    this.manualForwardSyncGeneration = generation;
+    this.pendingPdfForwardSync = null;
+    this.updateManualForwardSyncAction();
+    this.setLspStatus({ kind: "sync-pending", message: "Locating cursor in preview..." });
+    try {
+      const requested = await this.handlePdfForwardSync(request.path, request.cursor, generation);
+      if (!requested && generation === this.manualForwardSyncGeneration) {
+        this.finishManualForwardSync(generation, "Could not locate cursor in preview");
+      }
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "forward sync",
+        message: `Manual forward sync failed: ${String(error)}`
+      });
+      this.finishManualForwardSync(generation, "Could not locate cursor in preview");
+    }
+  }
+
+  private finishManualForwardSync(generation: number, statusMessage: string): void {
+    if (this.manualForwardSyncGeneration !== generation) return;
+    this.manualForwardSyncGeneration = null;
+    this.setLspStatus({ kind: "preview-ready", message: statusMessage });
+    this.updateManualForwardSyncAction();
+    const queued = this.queuedManualForwardSync;
+    this.queuedManualForwardSync = null;
+    if (queued) void this.runManualForwardSync(queued);
+  }
+
+  private cancelManualForwardSync(): void {
+    if (
+      this.manualForwardSyncGeneration === null
+      && this.pendingPdfForwardSync === null
+      && this.queuedManualForwardSync === null
+    ) return;
+    ++this.pdfForwardSyncGeneration;
+    this.pendingPdfForwardSync = null;
+    this.manualForwardSyncGeneration = null;
+    this.queuedManualForwardSync = null;
+    this.updateManualForwardSyncAction();
+  }
+
+  private updateManualForwardSyncAction(): void {
+    const button = document.getElementById("preview-forward-sync-btn") as HTMLButtonElement | null;
+    if (!button) return;
+    const shortcut = navigator.userAgent.toLowerCase().includes("mac") ? "Cmd+Option+P" : "Ctrl+Alt+P";
+    const busy = this.manualForwardSyncGeneration !== null;
+    const available = this.canRevealCursorInPreview();
+    button.disabled = busy || !available;
+    button.setAttribute("aria-busy", String(busy));
+    button.title = busy
+      ? "Locating cursor in preview..."
+      : available
+        ? `Reveal Cursor in Preview (${shortcut})`
+        : "Reveal cursor is available when a compiled preview is ready";
+  }
+
+  private canRevealCursorInPreview(): boolean {
+    return Boolean(
+      this.activeFilePath?.toLowerCase().endsWith(".typ")
+      && this.lspReady
+      && this.previewFrame.currentUrl
+      && !this.pdfPreviewRunning
+      && !this.previewDisabled
+    );
+  }
+
+  private async forwardSyncTargets(path: string, cursor: number): Promise<Array<{ filepath: string; line: number; character: number }>> {
     const editor = this.editorInstance;
     const position = Math.max(0, Math.min(cursor, editor.state.doc.length));
     // Template-aware standalone wrappers use workspace-root (`/...`) imports.
@@ -2946,15 +3064,15 @@ export class TypstellaWorkspaceController {
       : this.pdfPreviewGeneratedFiles.get(filePathKey(path));
     if (!generated) {
       const line = editor.state.doc.lineAt(position);
-      return {
+      return tinymistPreviewNearbySourceColumns(line.text, position - line.from).map(character => ({
         filepath: path,
         line: line.number - 1,
-        character: tinymistPreviewByteColumn(line.text, position - line.from)
-      };
+        character
+      }));
     }
 
     const cacheRoot = this.getCacheRootPath();
-    if (!cacheRoot || !this.workspaceRootPath) return null;
+    if (!cacheRoot || !this.workspaceRootPath) return [];
 
     const originalContent = editor.state.doc.toString();
     const sourceByteOffset = new TextEncoder().encode(originalContent.slice(0, position)).length;
@@ -2966,16 +3084,16 @@ export class TypstellaWorkspaceController {
       relativePath,
       sourceOffset: sourceByteOffset
     }).catch(() => null);
-    if (generatedByteOffset === null || generatedByteOffset === undefined) return null;
+    if (generatedByteOffset === null || generatedByteOffset === undefined) return [];
 
     const generatedOffset = this.utf8ByteOffsetToStringOffset(generated.preparedText, generatedByteOffset);
     const generatedDoc = EditorState.create({ doc: generated.preparedText }).doc;
     const line = generatedDoc.lineAt(Math.max(0, Math.min(generatedOffset, generatedDoc.length)));
-    return {
+    return tinymistPreviewNearbySourceColumns(line.text, generatedOffset - line.from).map(character => ({
       filepath: generated.generatedPath,
       line: line.number - 1,
-      character: tinymistPreviewByteColumn(line.text, generatedOffset - line.from)
-    };
+      character
+    }));
   }
 
   private async ensurePdfSourceMapSocket(
@@ -3155,17 +3273,8 @@ export class TypstellaWorkspaceController {
   }
 
   private async handlePdfSyncSocketMessage(data: unknown): Promise<void> {
-    const text = await previewSocketMessageText(data);
-    if (!text) {
-      if (this.pendingPdfForwardSync) {
-        this.appendDeveloperLog({
-          kind: "info",
-          source: "forward sync",
-          message: `Ignored non-text source-map payload: ${Object.prototype.toString.call(data)}.`
-        });
-      }
-      return;
-    }
+    const text = await tinymistDataPlanePositionText(data);
+    if (!text) return;
     const positions = parseTinymistPreviewPositions(text);
     if (positions.length === 0) {
       if (this.pendingPdfForwardSync) {
@@ -3188,7 +3297,8 @@ export class TypstellaWorkspaceController {
       source: "forward sync",
       message: `Compiler document position: candidates=${positions.length}, page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}.`
     });
-    void this.previewFrame.revealDocumentPosition(position);
+    void this.previewFrame.revealDocumentPosition(position, { ripple: true });
+    this.finishManualForwardSync(pending.generation, "Cursor revealed in preview");
     import("@tauri-apps/api/event").then(({ emit }) => {
       emit("pdf-forward-sync", position);
     }).catch(err => console.error("Error emitting pdf-forward-sync", err));
@@ -3306,6 +3416,7 @@ export class TypstellaWorkspaceController {
     if (status.kind === "stopped" || status.kind === "error") {
       this.lspReady = false;
     }
+    this.updateManualForwardSyncAction();
   }
 
   private async handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
@@ -4655,6 +4766,8 @@ export class TypstellaWorkspaceController {
     this.queuedPdfPreviewContents = null;
     this.queuedPdfPreviewForced = false;
     this.pendingPdfForwardSync = null;
+    this.manualForwardSyncGeneration = null;
+    this.queuedManualForwardSync = null;
 
     this.workspaceRootPath = null;
     this.recommendedWorkspaceToolchain = null;
@@ -4765,6 +4878,12 @@ export class TypstellaWorkspaceController {
         e.preventDefault();
         void invoke("open_devtools");
       }
+
+      if (cmdOrCtrl && e.altKey && !e.shiftKey && keyCode === "KeyP") {
+        e.preventDefault();
+        this.revealCursorInPreviewManually();
+        return;
+      }
       
       // Block common function keys (except F3 which we handle conditionally)
       if (["F5", "F6", "F7", "F11"].includes(keyCode)) {
@@ -4865,7 +4984,12 @@ export class TypstellaWorkspaceController {
       this.recompilePreviewManually();
     });
 
+    document.getElementById("preview-forward-sync-btn")?.addEventListener("click", () => {
+      this.revealCursorInPreviewManually();
+    });
+
     this.updatePreviewZoomLabel();
+    this.updateManualForwardSyncAction();
 
     document.getElementById("action-open-folder")?.addEventListener("click", async () => {
       const selected = await open({ directory: true, multiple: false });
@@ -5436,45 +5560,8 @@ function nextAnimationFrame(): Promise<void> {
   return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }
 
-function isBinaryPayload(bytes: Uint8Array): boolean {
-  if (bytes.length >= 8 &&
-      bytes[0] === 100 && // d
-      bytes[1] === 105 && // i
-      bytes[2] === 102 && // f
-      bytes[3] === 102 && // f
-      bytes[4] === 45 &&  // -
-      bytes[5] === 118 && // v
-      bytes[6] === 49 &&  // 1
-      bytes[7] === 44)    // ,
-  {
-    return true;
-  }
-  return false;
-}
-
 function sanitizeLogText(str: string): string {
   return str.replace(/[\x00-\x1F\x7F-\x9F\uFFFD]/g, ".");
-}
-
-async function previewSocketMessageText(data: unknown): Promise<string | null> {
-  if (typeof data === "string") return data;
-  if (data instanceof ArrayBuffer) {
-    const bytes = new Uint8Array(data);
-    if (isBinaryPayload(bytes)) return null;
-    return new TextDecoder().decode(bytes);
-  }
-  if (ArrayBuffer.isView(data)) {
-    const view = data as ArrayBufferView;
-    const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-    if (isBinaryPayload(bytes)) return null;
-    return new TextDecoder().decode(bytes);
-  }
-  if (typeof Blob !== "undefined" && data instanceof Blob) {
-    const text = await data.text();
-    if (text.startsWith("diff-v1,")) return null;
-    return text;
-  }
-  return null;
 }
 
 function parseTinymistPreviewPositions(data: string): PreviewDocumentPosition[] {
