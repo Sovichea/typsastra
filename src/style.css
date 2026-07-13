@@ -2565,6 +2565,10 @@ button.welcome-item:disabled {
   display: flex !important;
 }
 
+.preview-only-mode #preview-recompile-btn {
+  display: none;
+}
+
 /* Pinned Main Tab Styling */
 .editor-tab.pinned-main-tab {
   position: sticky;

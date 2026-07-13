@@ -212,6 +212,7 @@ export class TypstellaWorkspaceController {
   private pdfPreparationRevision = 0;
   private pdfPreviewRunning = false;
   private queuedPdfPreviewContents: string | null = null;
+  private queuedPdfPreviewForced = false;
   private lastPdfBase64 = "";
   private pdfPreviewFailureAt: number | null = null;
   private editorScrollbarPointerActive = false;
@@ -615,6 +616,7 @@ export class TypstellaWorkspaceController {
         this.pdfPreviewTimer = null;
       }
       this.queuedPdfPreviewContents = null;
+      this.queuedPdfPreviewForced = false;
     }
 
     const khmerPrepStatus = document.getElementById("khmer-prep-status");
@@ -2072,7 +2074,7 @@ export class TypstellaWorkspaceController {
     await this.lspClient.notifyTextChange(lspUri, lspContent, version);
   }
 
-  private async renderPdfPreview(contents: string): Promise<void> {
+  private async renderPdfPreview(contents: string, force = false): Promise<void> {
     if (this.previewDisabled) {
       this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message: "Render skipped: preview is disabled." });
       return;
@@ -2085,12 +2087,16 @@ export class TypstellaWorkspaceController {
       });
       return;
     }
+    if (force) {
+      this.previewFrame.setLoading("Recompiling PDF preview...");
+    }
     if (this.pdfPreviewRunning) {
       this.queuedPdfPreviewContents = contents;
+      this.queuedPdfPreviewForced ||= force;
       this.appendDeveloperLog({
         kind: "info",
         source: "preview scheduler",
-        message: `Render queued behind active generation ${this.pdfPreviewGeneration}: sourceUtf16=${contents.length}.`
+        message: `Render queued behind active generation ${this.pdfPreviewGeneration}: sourceUtf16=${contents.length}; forced=${this.queuedPdfPreviewForced}.`
       });
       return;
     }
@@ -2104,7 +2110,7 @@ export class TypstellaWorkspaceController {
       message: `Render generation ${generation} started: mode=${this.settingsController.value.preview.renderMode}; active=${this.activeFilePath}; sourceUtf16=${contents.length}.`
     });
     this.setLspStatus({ kind: "syncing", message: "Compiling PDF preview..." });
-    if (!this.previewFrame.currentUrl) {
+    if (!force && !this.previewFrame.currentUrl) {
       this.previewFrame.setLoading("Compiling PDF preview...");
     }
     try {
@@ -2140,11 +2146,14 @@ export class TypstellaWorkspaceController {
         milliseconds: performance.now() - compileStartedAt,
         detail: { sourceUtf16: contents.length }
       });
-      if (this.queuedPdfPreviewContents !== null && this.queuedPdfPreviewContents !== contents) {
+      if (
+        this.queuedPdfPreviewContents !== null
+        && (this.queuedPdfPreviewForced || this.queuedPdfPreviewContents !== contents)
+      ) {
         this.appendDeveloperLog({
           kind: "info",
           source: "preview scheduler",
-          message: `Render generation ${generation} discarded: a newer queued revision exists (queuedUtf16=${this.queuedPdfPreviewContents.length}).`
+          message: `Render generation ${generation} discarded: a newer queued request exists (queuedUtf16=${this.queuedPdfPreviewContents.length}; forced=${this.queuedPdfPreviewForced}).`
         });
         return;
       }
@@ -2215,16 +2224,33 @@ export class TypstellaWorkspaceController {
     } finally {
       this.pdfPreviewRunning = false;
       const queued = this.queuedPdfPreviewContents;
+      const queuedForced = this.queuedPdfPreviewForced;
       this.queuedPdfPreviewContents = null;
+      this.queuedPdfPreviewForced = false;
       this.appendDeveloperLog({
         kind: "info",
         source: "preview scheduler",
-        message: `Render generation ${generation} released: queued=${queued !== null}; queuedChanged=${queued !== null && queued !== contents}.`
+        message: `Render generation ${generation} released: queued=${queued !== null}; queuedChanged=${queued !== null && queued !== contents}; queuedForced=${queuedForced}.`
       });
-      if (queued !== null && queued !== contents) {
-        void this.renderPdfPreview(queued);
+      if (queued !== null && (queuedForced || queued !== contents)) {
+        void this.renderPdfPreview(queued, queuedForced);
       }
     }
+  }
+
+  private recompilePreviewManually(): void {
+    if (!this.activeFilePath?.toLowerCase().endsWith(".typ")) return;
+    if (this.pdfPreviewTimer) {
+      window.clearTimeout(this.pdfPreviewTimer);
+      this.pdfPreviewTimer = null;
+    }
+    const contents = this.editorInstance.state.doc.toString();
+    this.appendDeveloperLog({
+      kind: "info",
+      source: "preview scheduler",
+      message: `Manual preview recompile requested: active=${this.activeFilePath}; sourceUtf16=${contents.length}.`
+    });
+    void this.renderPdfPreview(contents, true);
   }
 
   private ensurePreviewPreparationCurrent(revision: number): void {
@@ -4252,6 +4278,7 @@ export class TypstellaWorkspaceController {
     this.pdfPreviewGeneration += 1;
     this.pdfForwardSyncGeneration += 1;
     this.queuedPdfPreviewContents = null;
+    this.queuedPdfPreviewForced = false;
     this.pendingPdfForwardSync = null;
 
     this.workspaceRootPath = null;
@@ -4456,6 +4483,10 @@ export class TypstellaWorkspaceController {
     document.getElementById("preview-zoom-fit-btn")?.addEventListener("click", () => {
       this.previewFrame.zoomToFit();
       this.updatePreviewZoomLabel();
+    });
+
+    document.getElementById("preview-recompile-btn")?.addEventListener("click", () => {
+      this.recompilePreviewManually();
     });
 
     this.updatePreviewZoomLabel();
