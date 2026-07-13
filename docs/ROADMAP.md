@@ -89,4 +89,4 @@ The long-term research tasks and gates are in the [v2 implementation plan](./V2_
 
 ## Current release status
 
-Typsastra is beta software. The latest public release is v0.4.0.
+Typsastra is beta software. The latest public release is v0.4.1.
