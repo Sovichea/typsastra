@@ -3821,7 +3821,7 @@ export class TypstellaWorkspaceController {
     });
   }
 
-  private async refreshActivePreviewRoot(): Promise<void> {
+  private async refreshActivePreviewRoot(forceRender = false): Promise<void> {
     if (!this.activeFilePath) return;
     const ext = this.activeFilePath.split('.').pop()?.toLowerCase();
     if (ext === "svg") {
@@ -3869,7 +3869,7 @@ export class TypstellaWorkspaceController {
         )
       : null;
     const unchanged = identity?.key === this.previewSessionKey;
-    if (unchanged) return;
+    if (unchanged && !forceRender) return;
 
     const activeTab = this.getActiveTab();
     if (!activeTab) return;
@@ -4232,12 +4232,17 @@ export class TypstellaWorkspaceController {
   }
 
   private async setPinnedMainFile(path: string | null): Promise<void> {
+    const mainWasAlreadyActive = path !== null
+      && this.activeFilePath !== null
+      && filePathKey(path) === filePathKey(this.activeFilePath);
     this.pinnedMainFilePath = path;
     this.saveWorkspaceState();
     
     if (path) {
       await this.loadFile(path, { temporary: false });
       this.sortPinnedMainTabFirst();
+    } else {
+      await this.updatePinnedMain(null);
     }
     
     this.renderEditorTabs();
@@ -4246,7 +4251,7 @@ export class TypstellaWorkspaceController {
       await this.explorer.loadWorkspace(this.workspaceRootPath);
     }
     
-    await this.refreshActivePreviewRoot();
+    await this.refreshActivePreviewRoot(mainWasAlreadyActive);
   }
 
   private async closeProject(options: { confirmUnsaved?: boolean } = {}): Promise<boolean> {
