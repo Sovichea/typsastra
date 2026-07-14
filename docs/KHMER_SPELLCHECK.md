@@ -13,10 +13,10 @@ ISO 15924 script:  Khmr
 Support:           Deep · Experimental
 Policy contract:   1
 Capability schema: 1
-Upstream commit:   cb7f972843d60bfec767f38802ecb89c40c1c49f
+Upstream commit:   9da32875a76a27b142c58e2b13d4ff8938e9feeb
 ```
 
-The gitlink at `third_party/khmer_segmenter` pins the code, dictionary artifacts, and normalization behavior. `tests/fixtures/khmer/provider.json` records the same commit and exact expected output. Changing the submodule, dictionary, normalization, or post-processing requires an intentional fixture update and an explanation in the change review.
+The gitlink at `third_party/khmer_segmenter` pins the code, runtime dictionary artifacts, and normalization behavior. `tests/fixtures/khmer/provider.json` records the same commit and exact expected output. Source corpora used to prepare those artifacts are intentionally not redistributed in the submodule; they must be obtained from their credited original sources and kept in its ignored `dataset/` directory. Runtime artifacts retain the usage and attribution requirements of their upstream data sources. Changing the submodule, dictionary, normalization, or post-processing requires an intentional fixture update and an explanation in the change review.
 
 Typsastra does not add semantic or LLM-generated boundary repairs after the segmenter. The pinned deterministic output is the lexical baseline even when another compound convention could also be linguistically defensible.
 

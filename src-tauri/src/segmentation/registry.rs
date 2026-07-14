@@ -566,7 +566,7 @@ impl LanguageSegmenter for KhmerProvider {
     }
 
     fn license(&self) -> &'static str {
-        "MIT / Apache-2.0"
+        "MIT; lexical data retains upstream source terms"
     }
 
     fn stability(&self) -> &'static str {
@@ -2548,7 +2548,7 @@ mod tests {
 
     #[test]
     fn khmer_reference_provider_fixtures_are_locked() {
-        const PINNED_UPSTREAM: &str = "cb7f972843d60bfec767f38802ecb89c40c1c49f";
+        const PINNED_UPSTREAM: &str = "9da32875a76a27b142c58e2b13d4ff8938e9feeb";
         let fixture: KhmerReferenceFixture =
             serde_json::from_str(include_str!("../../../tests/fixtures/khmer/provider.json"))
                 .expect("Khmer provider reference fixture");
