@@ -41,7 +41,7 @@ export class WorkspaceExplorer {
 
   constructor(
     private container: HTMLElement,
-    private onFileSelected: (filePath: string, options?: { temporary?: boolean }) => void,
+    private onFileSelected: (filePath: string, options?: { temporary?: boolean; focusEditor?: boolean }) => void,
     private isPinnedMainFile?: (filePath: string) => boolean
   ) {
     this.container.tabIndex = 0;
@@ -101,7 +101,7 @@ export class WorkspaceExplorer {
     else if (event.key === "End") this.selectItem(items[items.length - 1]);
     else if (event.key === "Enter") {
       if (selected.dataset.isDir === "true") selected.click();
-      else if (selected.dataset.path) this.onFileSelected(selected.dataset.path, { temporary: false });
+      else if (selected.dataset.path) this.onFileSelected(selected.dataset.path, { temporary: false, focusEditor: false });
     } else if (event.key === "ArrowRight" && selected.dataset.isDir === "true") {
       const folder = selected.closest("li.tree-folder");
       if (folder?.classList.contains("collapsed")) selected.click();
@@ -284,10 +284,10 @@ export class WorkspaceExplorer {
         label.addEventListener("click", () => {
           this.container.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
           label.classList.add('selected');
-          this.onFileSelected(node.path, { temporary: true });
+          this.onFileSelected(node.path, { temporary: true, focusEditor: false });
         });
         label.addEventListener("dblclick", () => {
-          this.onFileSelected(node.path, { temporary: false });
+          this.onFileSelected(node.path, { temporary: false, focusEditor: false });
         });
       } else {
         const childrenContainer = document.createElement("div");

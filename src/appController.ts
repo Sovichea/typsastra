@@ -138,12 +138,14 @@ type PreviewSessionState = Pick<
 type ActivateEditorTabOptions = {
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  focusEditor?: boolean;
 };
 
 type LoadFileOptions = {
   temporary?: boolean;
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  focusEditor?: boolean;
 };
 
 function normalizeEditorText(text: string): string {
@@ -967,7 +969,7 @@ export class TypsastraWorkspaceController {
   private initExplorer() {
     this.explorer = new WorkspaceExplorer(
       document.getElementById("workspace-explorer-tree")!,
-      (path: string, options?: { temporary?: boolean }) => {
+      (path: string, options?: { temporary?: boolean; focusEditor?: boolean }) => {
         void this.loadFile(path, options);
       },
       (path: string) => this.isPinnedMainFile(path)
@@ -1266,7 +1268,7 @@ export class TypsastraWorkspaceController {
           this.previewFrame.activateSession(options.preservePreviewSession.previewSessionKey);
         }
       }
-      this.editorInstance.focus();
+      if (options.focusEditor !== false) this.editorInstance.focus();
       this.saveWorkspaceState();
       return;
     }
@@ -1480,7 +1482,7 @@ export class TypsastraWorkspaceController {
     this.updateWorkspaceViewportVisibility();
     this.refreshEditorLayout("tab activation");
     this.updateManualForwardSyncAction();
-    this.editorInstance.focus();
+    if (options.focusEditor !== false) this.editorInstance.focus();
     this.saveWorkspaceState();
   }
 
@@ -1609,7 +1611,8 @@ export class TypsastraWorkspaceController {
       }
       await this.activateEditorTab(existingTab.path, true, {
         preservePreviewSession: options.preservePreviewSession,
-        skipPreviewActivation: options.skipPreviewActivation
+        skipPreviewActivation: options.skipPreviewActivation,
+        focusEditor: options.focusEditor
       });
       return;
     }
@@ -1652,7 +1655,8 @@ export class TypsastraWorkspaceController {
       this.renderEditorTabs();
       await this.activateEditorTab(path, true, {
         preservePreviewSession: options.preservePreviewSession,
-        skipPreviewActivation: options.skipPreviewActivation
+        skipPreviewActivation: options.skipPreviewActivation,
+        focusEditor: options.focusEditor
       });
     } catch (e) {
       console.error("Failed to load file:", e);
@@ -3832,7 +3836,7 @@ export class TypsastraWorkspaceController {
     }
 
     if (heading.filePath !== this.activeFilePath) {
-      await this.loadFile(heading.filePath);
+      await this.loadFile(heading.filePath, { focusEditor: false });
     }
     if (this.activeMode === "WYSIWYM") this.switchViewLayoutMode();
     const currentHeading = this.documentOutlineController.findHeading(heading.id) ?? heading;
@@ -3843,7 +3847,6 @@ export class TypsastraWorkspaceController {
       effects: EditorView.scrollIntoView(cursor, { y: "start", yMargin: 28 })
     });
     this.documentOutlineController.setCursorPosition(cursor, this.activeFilePath);
-    this.editorInstance.focus();
     if (currentHeading.previewPosition) {
       this.previewFrame.scrollToPage(currentHeading.previewPosition.page_no);
     } else {
