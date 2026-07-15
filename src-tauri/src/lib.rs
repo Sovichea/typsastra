@@ -1162,10 +1162,18 @@ async fn compile_typst_document(
     use tauri::Manager;
     let path = std::path::Path::new(&file_path);
     let parent = path.parent().unwrap_or(std::path::Path::new(""));
-    let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
-
-    let input_path = parent.join(format!(".{}.export.typ", file_stem));
-    let output_path = path.with_extension("pdf");
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    // The source must remain beside the document so relative imports resolve,
+    // but its name must be short enough for deeply nested Windows workspaces.
+    let input_path = parent.join(format!("t-{:016x}.typ", nonce as u64));
+    // Keep compiler persistence outside the long workspace path entirely.
+    let output_path = std::env::temp_dir().join(format!(
+        "typsastra-export-{}-{nonce:x}.pdf",
+        std::process::id()
+    ));
 
     let data_dir = app_handle
         .path()
@@ -1174,7 +1182,11 @@ async fn compile_typst_document(
     let tinymist_cmd = active_tinymist(&data_dir)
         .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
 
-    let mut file = std::fs::File::create(&input_path).map_err(|e| format!("IO Failure: {}", e))?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&input_path)
+        .map_err(|e| format!("IO Failure: {}", e))?;
     std::io::Write::write_all(&mut file, source_code.as_bytes())
         .map_err(|e| format!("Buffer Flush Failure: {}", e))?;
 
@@ -1188,6 +1200,8 @@ async fn compile_typst_document(
     if has_packaged_workspace_fonts(parent) {
         command.arg("--ignore-system-fonts");
     }
+    // A previous interrupted export must never make a failed compile appear successful.
+    let _ = std::fs::remove_file(&output_path);
     let output =
         command
             .arg("--root")
@@ -1195,11 +1209,7 @@ async fn compile_typst_document(
             .arg(input_path.file_name().ok_or_else(|| {
                 "Failed to construct the temporary Typst export path.".to_string()
             })?)
-            .arg(
-                output_path
-                    .file_name()
-                    .ok_or_else(|| "Failed to construct the PDF export path.".to_string())?,
-            )
+            .arg(&output_path)
             .output()
             .map_err(|e| format!("Host binary execution blocked: {}", e))?;
 
@@ -1207,10 +1217,48 @@ async fn compile_typst_document(
 
     if !output.status.success() {
         let stderr_string = String::from_utf8_lossy(&output.stderr).to_string();
-        return Err(stderr_string);
+        let warning_only = warning_only_pdf_result(&output_path, &stderr_string);
+        if !warning_only {
+            let _ = std::fs::remove_file(&output_path);
+            return Err(stderr_string);
+        }
     }
 
     Ok(output_path.to_string_lossy().to_string())
+}
+
+fn warning_only_pdf_result(output_path: &Path, stderr: &str) -> bool {
+    output_path.is_file()
+        && stderr
+            .lines()
+            .any(|line| line.trim_start().starts_with("warning:"))
+        && !stderr
+            .lines()
+            .any(|line| line.trim_start().starts_with("error:"))
+}
+
+#[cfg(test)]
+mod export_compile_tests {
+    use super::warning_only_pdf_result;
+
+    #[test]
+    fn accepts_only_warning_output_that_produced_a_fresh_pdf() {
+        let directory = tempfile::tempdir().unwrap();
+        let pdf = directory.path().join("export.pdf");
+        assert!(!warning_only_pdf_result(
+            &pdf,
+            "warning: PDF contains optional content groups"
+        ));
+        std::fs::write(&pdf, b"%PDF-1.7").unwrap();
+        assert!(warning_only_pdf_result(
+            &pdf,
+            "warning: PDF contains optional content groups"
+        ));
+        assert!(!warning_only_pdf_result(
+            &pdf,
+            "warning: recovered output\nerror: compilation failed"
+        ));
+    }
 }
 
 #[tauri::command]
