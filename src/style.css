@@ -524,6 +524,8 @@ html {
 .editor-tab.active {
   background: var(--ui-bg);
   color: var(--ui-text);
+  font-weight: 600;
+  box-shadow: inset 0 2px 0 var(--editor-function-color, #007fd4);
 }
 
 .editor-tab-title {
@@ -2748,4 +2750,5 @@ button.welcome-item:disabled {
 
 .editor-tab.pinned-main-tab.active {
   background: var(--ui-bg);
+  box-shadow: inset 0 2px 0 #3db489, 2px 0 5px rgba(0, 0, 0, 0.12);
 }
