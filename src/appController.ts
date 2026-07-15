@@ -51,6 +51,7 @@ import { DocumentOutlineController, type DocumentHeading } from "./outline/docum
 import { parseTypographyBlock, typographyEdit, type DocumentFontFallback, type DocumentTypography } from "./editor/documentTypography";
 import { SpellcheckController, type SpellingIssue } from "./editor/spellcheck";
 import type { ImportedTypsastraProject, TypsastraProjectPreflight } from "./projectArchive";
+import { AppUpdateController } from "./appUpdateController";
 
 import {
   ensureTypographyTemplateApplication,
@@ -424,6 +425,9 @@ export class TypsastraWorkspaceController {
     document.getElementById("document-outline-section")!,
     heading => void this.navigateToOutlineHeading(heading)
   );
+  private readonly appUpdateController = new AppUpdateController(
+    () => this.openTabs.some(tab => tab.isDirty)
+  );
   private lspStatus = document.getElementById("lsp-status")!;
   private lspStatusDot = this.lspStatus.querySelector(".status-dot") as HTMLElement;
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
@@ -457,6 +461,7 @@ export class TypsastraWorkspaceController {
     this.timeStartupSync("update workspace visibility", () => this.updateWorkspaceViewportVisibility());
 
     await this.timeStartup("show main window", () => getCurrentWindow().show());
+    this.appUpdateController.initialize();
     this.refreshEditorLayout("main window shown");
     this.recordStartupTiming("frontend startup", "frontend bootstrap until window shown", this.startupStart);
     this.performanceDiagnostics.recordFirst({

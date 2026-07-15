@@ -24,6 +24,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -50,5 +51,16 @@
       }
     ]
   },
-  "identifier": "com.typsastra.editor"
+  "identifier": "com.typsastra.editor",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDEyRDlBRkEyRDhBOTdCRTIKUldUaWU2bllvcS9aRW1WUDBRRkZnNFJQZitEdlRiSWNNR1YyZ21hRnRKMXd1OUdKNVZHMUpMR3YK",
+      "endpoints": [
+        "https://github.com/Sovichea/typsastra/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

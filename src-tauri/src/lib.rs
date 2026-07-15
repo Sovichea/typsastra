@@ -2592,6 +2592,8 @@ pub fn run() {
     let setup_timings = startup_timings.clone();
     let pending_project_imports = PendingProjectImports::from_process_args();
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pending_project_imports)
         .manage(ProjectImportOperations::default())
         .plugin(tauri_plugin_single_instance::init(

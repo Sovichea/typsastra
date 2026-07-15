@@ -166,6 +166,33 @@ html {
   background-color: var(--ui-hover);
 }
 
+.app-update-badge {
+  height: 24px;
+  margin-right: 6px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--ui-accent-color) 45%, var(--ui-border));
+  border-radius: 4px;
+  background: var(--ui-navigation-background);
+  color: var(--ui-text);
+  font: 600 11px var(--font-family-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-update-badge:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ui-accent-color) 17%, var(--ui-bg));
+}
+
+.app-update-badge:focus-visible {
+  outline: 1px solid var(--ui-accent-color);
+  outline-offset: 1px;
+}
+
+.app-update-badge:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
 #titlebar-close:hover {
   background-color: #e81123 !important;
   color: #fff !important;

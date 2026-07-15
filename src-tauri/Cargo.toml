@@ -36,6 +36,7 @@ spellbook = "0.4.2"
 icu_segmenter = { version = "2.2", default-features = false, features = ["compiled_data"] }
 open = "5.3"
 typsastra-font-scaler = { path = "../crates/font-scaler" }
+tauri-plugin-process = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -47,6 +48,9 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging"
 ] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }

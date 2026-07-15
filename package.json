@@ -11,7 +11,8 @@
     "test:lao": "bun test tests/laoReference.test.ts tests/khmerReference.test.ts tests/editingPolicies.test.ts tests/languageSupport.test.ts",
     "conform": "bun test tests/editingPolicies.test.ts tests/khmerReference.test.ts tests/laoReference.test.ts tests/languageSupport.test.ts",
     "benchmark:performance": "bun scripts/run-performance-benchmarks.ts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev:update": "tauri dev --config src-tauri/tauri.update-test.conf.json"
   },
   "dependencies": {
     "@babel/runtime": "^8.0.0",
@@ -27,7 +28,9 @@
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "@uiw/codemirror-themes": "^4.25.10",
     "@uiw/codemirror-themes-all": "^4.25.10",
     "lucide": "^1.0.0",
