@@ -120,6 +120,7 @@ html {
   align-items: center;
   padding-left: 10px;
   flex: 1;
+  position: relative;
 }
 
 .titlebar-center {
@@ -262,8 +263,35 @@ html {
 }
 
 .titlebar-button,
-.menu-item {
+.menu-item,
+.app-update-badge {
   -webkit-app-region: no-drag;
+}
+
+/* macOS provides the native traffic-light controls. The simulation lets the
+   layout be reviewed on non-macOS development machines without fake controls
+   ever being shipped to macOS users. */
+.platform-macos-titlebar .titlebar-left {
+  padding-left: 78px;
+}
+
+.platform-macos-titlebar .titlebar-button {
+  display: none;
+}
+
+.platform-macos-titlebar.macos-titlebar-simulation .titlebar-left::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 52px;
+  height: 12px;
+  transform: translateY(-50%);
+  background:
+    radial-gradient(circle at 6px 6px, #ff5f57 0 5px, transparent 5.5px),
+    radial-gradient(circle at 26px 6px, #febc2e 0 5px, transparent 5.5px),
+    radial-gradient(circle at 46px 6px, #28c840 0 5px, transparent 5.5px);
+  pointer-events: none;
 }
 
 #app-container {

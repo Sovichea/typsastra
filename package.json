@@ -12,7 +12,8 @@
     "conform": "bun test tests/editingPolicies.test.ts tests/khmerReference.test.ts tests/laoReference.test.ts tests/languageSupport.test.ts",
     "benchmark:performance": "bun scripts/run-performance-benchmarks.ts",
     "tauri": "tauri",
-    "tauri:dev:update": "tauri dev --config src-tauri/tauri.update-test.conf.json"
+    "tauri:dev:update": "tauri dev --config src-tauri/tauri.update-test.conf.json",
+    "tauri:dev:macos-titlebar": "tauri dev --config src-tauri/tauri.macos-layout-test.conf.json"
   },
   "dependencies": {
     "@babel/runtime": "^8.0.0",
