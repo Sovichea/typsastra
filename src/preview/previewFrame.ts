@@ -980,6 +980,12 @@ export class PreviewFrame {
 }
 
 function decodeBase64(value: string): Uint8Array {
+  if (value.startsWith("data:")) {
+    const comma = value.indexOf(",");
+    if (comma >= 0) {
+      value = value.slice(comma + 1);
+    }
+  }
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);

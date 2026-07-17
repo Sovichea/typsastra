@@ -21,5 +21,5 @@ export function isBinaryImagePath(path: string): boolean {
 
 export function isSupportedInAppPath(path: string): boolean {
   const extension = fileExtension(path);
-  return IMAGE_EXTENSIONS.has(extension) || TEXT_EXTENSIONS.has(extension);
+  return IMAGE_EXTENSIONS.has(extension) || TEXT_EXTENSIONS.has(extension) || extension === "pdf";
 }

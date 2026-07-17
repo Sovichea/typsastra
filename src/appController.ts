@@ -23,7 +23,7 @@ import type { EditorTextEdit, LspDiagnostic, LspInverseSyncResult, LspLogEntry, 
 import type { AppSettings, DeveloperLogCategory } from "./settings";
 import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath, remapFilePath } from "./platform/paths";
-import { isBinaryImagePath, isSupportedInAppPath } from "./platform/fileTypes";
+import { isBinaryImagePath, isSupportedInAppPath, fileExtension } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus } from "./preview/previewFrame";
 import { PreviewSyncController } from "./preview/previewSyncController";
@@ -1157,7 +1157,7 @@ export class TypsastraWorkspaceController {
   private persistActiveTabState() {
     const tab = this.getActiveTab();
     if (!tab || !this.editorInstance) return;
-    if (!isSupportedInAppPath(tab.path) || isBinaryImagePath(tab.path)) return;
+    if (!isSupportedInAppPath(tab.path) || isBinaryImagePath(tab.path) || fileExtension(tab.path) === "pdf") return;
 
     const content = this.activeMode === "WYSIWYM"
       ? this.mapWysiwymToMarkup()
@@ -1213,13 +1213,13 @@ export class TypsastraWorkspaceController {
   }
 
   private foldCurrentFile(): void {
-    if (!this.getActiveTab() || !isSupportedInAppPath(this.activeFilePath ?? "") || isBinaryImagePath(this.activeFilePath ?? "")) return;
+    if (!this.getActiveTab() || !isSupportedInAppPath(this.activeFilePath ?? "") || isBinaryImagePath(this.activeFilePath ?? "") || fileExtension(this.activeFilePath ?? "") === "pdf") return;
     foldAll(this.editorInstance);
     this.editorInstance.focus();
   }
 
   private unfoldCurrentFile(): void {
-    if (!this.getActiveTab() || !isSupportedInAppPath(this.activeFilePath ?? "") || isBinaryImagePath(this.activeFilePath ?? "")) return;
+    if (!this.getActiveTab() || !isSupportedInAppPath(this.activeFilePath ?? "") || isBinaryImagePath(this.activeFilePath ?? "") || fileExtension(this.activeFilePath ?? "") === "pdf") return;
     unfoldAll(this.editorInstance);
     this.editorInstance.focus();
   }
@@ -1462,6 +1462,7 @@ export class TypsastraWorkspaceController {
     const activeEditorMatchesTab = tab !== undefined && (
       !isSupportedInAppPath(tab.path) ||
       isBinaryImagePath(tab.path) ||
+      fileExtension(tab.path) === "pdf" ||
       this.editorInstance.state.doc.toString() === tab.content
     );
     if (sameActivePath && tab && activeEditorMatchesTab) {
@@ -1511,22 +1512,13 @@ export class TypsastraWorkspaceController {
       const codeRenderPane = document.getElementById("code-render-pane");
       const imageViewerPane = document.getElementById("image-viewer-pane");
       const imageViewerImg = document.getElementById("image-viewer-img") as HTMLImageElement;
-      const imageViewerInfo = document.getElementById("image-viewer-info");
 
       const unsupportedFile = !isSupportedInAppPath(path);
-      if (unsupportedFile || isBinaryImagePath(path)) {
+      const isPdf = fileExtension(path) === "pdf";
+      if (unsupportedFile || isBinaryImagePath(path) || isPdf) {
         codeRenderPane?.classList.add("hidden");
         imageViewerPane?.classList.remove("hidden");
         if (imageViewerImg) imageViewerImg.style.display = "none"; // Hide image element in editor
-        if (imageViewerInfo) {
-          imageViewerInfo.innerHTML = `
-            <div class="preview-disabled-placeholder" style="padding:0;background:transparent;">
-              <div class="preview-disabled-icon" style="font-size:32px;margin-bottom:12px;">💾</div>
-              <div class="preview-disabled-title" style="font-size:16px;">Binary File</div>
-              <div class="preview-disabled-msg" style="font-size:13px;max-width:300px;">Cannot load raw binary in the text editor.</div>
-            </div>
-          `;
-        }
         
         this.renderNonTextEditorPlaceholder(path, unsupportedFile);
         document.getElementById("wysiwym-editor-pane")?.classList.add("hidden");
@@ -1535,6 +1527,9 @@ export class TypsastraWorkspaceController {
         this.documentOutlineController.clear();
         if (isBinaryImagePath(path)) {
           this.renderInteractiveImageViewer(tab.content);
+        } else if (isPdf) {
+          document.querySelector(".preview-actions")?.classList.add("hidden");
+          void this.previewFrame.loadPdfData(tab.content, path);
         } else {
           document.querySelector(".preview-actions")?.classList.add("hidden");
           this.previewFrame.setMessage(
@@ -1821,7 +1816,7 @@ export class TypsastraWorkspaceController {
     try {
       const contents = !isSupportedInAppPath(path)
         ? ""
-        : isBinaryImagePath(path)
+        : (isBinaryImagePath(path) || fileExtension(path) === "pdf")
           ? await invoke<string>("read_workspace_file_as_base64", { path })
           : normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
       const newTab: EditorTab = {
@@ -1906,7 +1901,7 @@ export class TypsastraWorkspaceController {
   }
 
   private async performSaveActiveFile(): Promise<void> {
-    if (!this.activeFilePath || !isSupportedInAppPath(this.activeFilePath) || isBinaryImagePath(this.activeFilePath)) {
+    if (!this.activeFilePath || !isSupportedInAppPath(this.activeFilePath) || isBinaryImagePath(this.activeFilePath) || fileExtension(this.activeFilePath) === "pdf") {
       return;
     }
 
@@ -4189,7 +4184,7 @@ export class TypsastraWorkspaceController {
       for (const { tabInfo, path } of restoredTabs) {
         if (!path) continue;
         try {
-          const contents = isBinaryImagePath(path)
+          const contents = (isBinaryImagePath(path) || fileExtension(path) === "pdf")
             ? await invoke<string>("read_workspace_file_as_base64", { path })
             : normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
           this.openTabs.push({
@@ -4403,7 +4398,7 @@ export class TypsastraWorkspaceController {
 
       let contents: string;
       try {
-        contents = isBinaryImagePath(tab.path)
+        contents = (isBinaryImagePath(tab.path) || fileExtension(tab.path) === "pdf")
           ? await invoke<string>("read_workspace_file_as_base64", { path: tab.path })
           : normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
       } catch (error) {
@@ -4450,6 +4445,14 @@ export class TypsastraWorkspaceController {
     if (isBinaryImagePath(tab.path)) {
       const img = document.getElementById("image-viewer-img") as HTMLImageElement;
       if (img) img.src = contents;
+      this.renderEditorTabs();
+      return;
+    }
+
+    if (fileExtension(tab.path) === "pdf") {
+      if (refreshPreview) {
+        void this.previewFrame.loadPdfData(contents, tab.path);
+      }
       this.renderEditorTabs();
       return;
     }
@@ -4544,13 +4547,15 @@ export class TypsastraWorkspaceController {
     const placeholder = document.createElement("div");
     placeholder.className = "preview-disabled-placeholder editor-file-placeholder";
 
+    const isPdf = fileExtension(path) === "pdf";
+
     const icon = document.createElement("div");
     icon.className = "preview-disabled-icon";
-    icon.textContent = unsupported ? "\u{1F4C4}" : "\u{1F4BE}";
+    icon.textContent = isPdf ? "\u{1F4C4}" : (unsupported ? "\u{1F4C4}" : "\u{1F4BE}");
 
     const title = document.createElement("div");
     title.className = "preview-disabled-title";
-    title.textContent = unsupported ? "Unsupported File" : "Binary File";
+    title.textContent = isPdf ? "PDF Document" : (unsupported ? "Unsupported File" : "Binary File");
 
     const fileName = document.createElement("div");
     fileName.className = "editor-file-placeholder-name";
@@ -4558,12 +4563,14 @@ export class TypsastraWorkspaceController {
 
     const description = document.createElement("div");
     description.className = "preview-disabled-msg";
-    description.textContent = unsupported
-      ? "This file format cannot be displayed in Typsastra."
-      : "Cannot load raw binary in the text editor.";
+    description.textContent = isPdf
+      ? "This document is displayed in the live preview pane."
+      : unsupported
+        ? "This file format cannot be displayed in Typsastra."
+        : "Cannot load raw binary in the text editor.";
 
     placeholder.append(icon, title, fileName, description);
-    if (unsupported) {
+    if (unsupported || isPdf) {
       const openButton = document.createElement("button");
       openButton.type = "button";
       openButton.className = "editor-file-placeholder-action";

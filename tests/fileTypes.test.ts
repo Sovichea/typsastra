@@ -10,7 +10,7 @@ describe("file types", () => {
   });
 
   test("rejects formats that should be opened externally", () => {
-    expect(isSupportedInAppPath("/docs/output.pdf")).toBe(false);
+    expect(isSupportedInAppPath("/docs/output.pdf")).toBe(true); // Now supported in-app
     expect(isSupportedInAppPath("/docs/archive.zip")).toBe(false);
     expect(isSupportedInAppPath("/docs/no-extension")).toBe(false);
   });
