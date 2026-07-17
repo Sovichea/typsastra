@@ -4605,7 +4605,7 @@ export class TypsastraWorkspaceController {
     this.previewFrame.setMessage(
       `<div id="interactive-image-container" style="position:relative;width:100%;height:100%;background:var(--ui-bg);overflow:hidden;display:flex;align-items:center;justify-content:center;user-select:none;box-sizing:border-box;">` +
       `<img id="interactive-image-el" alt="Image preview" draggable="false" style="max-width:none;max-height:none;position:absolute;cursor:grab;user-select:none;will-change:transform;visibility:hidden;" />` +
-      `<button id="interactive-image-fit-btn" style="position:absolute;bottom:16px;right:16px;z-index:10;background:#3db489;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-family:var(--font-family-sans);font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);font-weight:bold;">Fit to Window</button>` +
+      `<button id="interactive-image-fit-btn" style="position:absolute;bottom:16px;right:16px;z-index:10;background:var(--ui-accent-color);color:var(--ui-accent-contrast, #fff);border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-family:var(--font-family-sans);font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);font-weight:bold;">Fit to Window</button>` +
       `</div>`
     );
 
