@@ -121,6 +121,18 @@ export class PreviewFrame {
     return this.isFitToWidth;
   }
 
+  public syncTheme(): void {
+    const root = this.iframe?.contentDocument?.documentElement;
+    if (!root) return;
+    const hostStyle = getComputedStyle(document.documentElement);
+    const copy = (source: string, target: string, fallback: string) => {
+      root.style.setProperty(target, hostStyle.getPropertyValue(source).trim() || fallback);
+    };
+    copy("--ui-bg", "--preview-ui-bg", "#fcfcfc");
+    copy("--ui-header-text", "--preview-ui-header", "#616161");
+    copy("--ui-accent-color", "--preview-ui-accent", TYPSASTRA_GREEN);
+  }
+
   public suspendResizeLayout(): void {
     this.resizeLayoutSuspended = true;
     this.resizeLayoutPending = false;
@@ -329,6 +341,14 @@ export class PreviewFrame {
     const iframe = document.createElement("iframe");
     iframe.className = "preview-frame";
     iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
+      :root{--preview-ui-bg:#fcfcfc;--preview-ui-header:#616161;--preview-ui-accent:${TYPSASTRA_GREEN};--scrollbar-track:transparent;--scrollbar-thumb:color-mix(in srgb,var(--preview-ui-header) 62%,var(--preview-ui-bg));--scrollbar-hover:color-mix(in srgb,var(--preview-ui-accent) 72%,var(--preview-ui-header))}
+      @supports not selector(::-webkit-scrollbar){*{scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track);scrollbar-width:auto}}
+      *::-webkit-scrollbar{width:15px;height:15px}
+      *::-webkit-scrollbar-track{background:transparent}
+      *::-webkit-scrollbar-thumb{min-width:32px;min-height:32px;background:var(--scrollbar-thumb);background-clip:padding-box;border:1px solid transparent;border-radius:0}
+      *::-webkit-scrollbar-thumb:hover,*::-webkit-scrollbar-thumb:active{background:var(--scrollbar-hover);background-clip:padding-box}
+      *::-webkit-scrollbar-corner{background:transparent}
+      *::-webkit-scrollbar-button{display:none;width:0;height:0}
       html,body{margin:0;width:100%;height:100%;background:transparent}
       body{overflow:auto;font-family:sans-serif}
       #viewer-container{box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
@@ -698,6 +718,7 @@ export class PreviewFrame {
       this.debugInverse("Interaction installation deferred: iframe document unavailable.");
       return;
     }
+    this.syncTheme();
     if (doc.documentElement.dataset.typsastraInteractions === "true") return;
     doc.documentElement.dataset.typsastraInteractions = "true";
     this.debugInverse(`Interaction listener installed: readyState=${doc.readyState}, url=${doc.URL || "(empty)"}.`);

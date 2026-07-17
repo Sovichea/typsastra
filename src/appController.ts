@@ -715,7 +715,7 @@ export class TypsastraWorkspaceController {
       editor.manualCompletionLanguage,
     );
 
-    void applyUIThemeVariables(appearance.theme);
+    void applyUIThemeVariables(appearance.theme).then(() => this.previewFrame.syncTheme());
 
     const khmerPrepChanged = this.lastKhmerRenderPrepState !== undefined && this.lastKhmerRenderPrepState !== preview.khmerRenderPreparation;
     this.lastKhmerRenderPrepState = preview.khmerRenderPreparation;
