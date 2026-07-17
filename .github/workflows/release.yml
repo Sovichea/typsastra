@@ -53,6 +53,9 @@ jobs:
       - name: Install Frontend Dependencies
         run: bun install --frozen-lockfile
 
+      - name: Enable Updater Artifacts for Release
+        run: bun -e "const fs = require('fs'); const file = 'src-tauri/tauri.conf.json'; const c = fs.readFileSync(file, 'utf8'); fs.writeFileSync(file, c.replace('\"createUpdaterArtifacts\": false', '\"createUpdaterArtifacts\": true'));"
+
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
