@@ -3298,7 +3298,7 @@ export class TypsastraWorkspaceController {
   private updateManualForwardSyncAction(): void {
     const button = document.getElementById("preview-forward-sync-btn") as HTMLButtonElement | null;
     if (!button) return;
-    const shortcut = navigator.userAgent.toLowerCase().includes("mac") ? "Cmd+Option+P" : "Ctrl+Alt+P";
+    const shortcut = navigator.userAgent.toLowerCase().includes("mac") ? "Option+Enter" : "Alt+Enter";
     const busy = this.manualForwardSyncGeneration !== null;
     const available = this.canRevealCursorInPreview();
     button.disabled = busy || !available;
@@ -5386,7 +5386,7 @@ export class TypsastraWorkspaceController {
         void invoke("open_devtools");
       }
 
-      if (cmdOrCtrl && e.altKey && !e.shiftKey && keyCode === "KeyP") {
+      if (e.altKey && !cmdOrCtrl && !e.shiftKey && keyCode === "Enter") {
         e.preventDefault();
         this.revealCursorInPreviewManually();
         return;
