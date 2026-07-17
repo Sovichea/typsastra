@@ -47,7 +47,7 @@ Invalid or missing fields fall back to bounded defaults. Existing theme and word
 
 Workspace-specific state lives under the project’s `.typsastra/` directory. `config.json` is portable and stores project identity, the relative main document, and the recommended toolchain. `workspace.json` stores the local editing session using relative paths, including tabs, cursor/scroll/fold state, explorer expansion, layout, sidebar visibility, and the selected toolchain override. The session file, cache, and generated fonts are ignored by the managed `.gitignore`; `config.json` may be committed. `.typsastra/project.json` remains reserved for the signed Typsastra project-archive manifest.
 
-Typsastra project exports include `config.json` and `workspace.json` only from this directory. Render caches, generated PDFs, maps, generated fonts, and other internal metadata are never exported.
+Typsastra project exports include `config.json` and `workspace.json` only from this directory. Render caches, generated PDFs, maps, generated fonts, and other internal metadata are never exported. Font binaries are excluded everywhere in project and source ZIP exports regardless of location or license; recipients install required fonts separately.
 
 ## Toolchain
 

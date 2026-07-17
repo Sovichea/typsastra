@@ -88,5 +88,4 @@ WYSIWYM is not required for v1.x and must not distract from the stable code edit
 
 ## v2 release gate
 
-No v2 feature may compromise v1.x source portability, project/font reproducibility, deterministic Language Tools, recovery, or complex-script correctness. Real-time AI remains opt-in, and the code editor remains available regardless of WYSIWYM research outcome.
-
+No v2 feature may compromise v1.x source portability, font-free project interchange, deterministic Language Tools, recovery, or complex-script correctness. Real-time AI remains opt-in, and the code editor remains available regardless of WYSIWYM research outcome.

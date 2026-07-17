@@ -8,7 +8,7 @@ use unicode_normalization::UnicodeNormalization;
 use zip::write::FileOptions;
 
 pub const PROJECT_FORMAT: &str = "com.typsastra.project";
-pub const PROJECT_SCHEMA_VERSION: u32 = 1;
+pub const PROJECT_SCHEMA_VERSION: u32 = 2;
 pub const PROJECT_MANIFEST_PATH: &str = ".typsastra/project.json";
 pub const LEGACY_PROJECT_FORMAT: &str = "com.typstella.project";
 pub const LEGACY_PROJECT_MANIFEST_PATH: &str = ".typstella/project.json";
@@ -19,19 +19,15 @@ const MAX_TOTAL_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const MAX_PATH_BYTES: usize = 512;
 const MAX_COMPRESSION_RATIO: u64 = 200;
-const MAX_PACKAGED_FONT_BYTES: u64 = 64 * 1024 * 1024;
-const MAX_TOTAL_PACKAGED_FONT_BYTES: u64 = 256 * 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectManifest {
     pub format: String,
     pub schema_version: u32,
     pub created_by: CreatedBy,
     pub project: ProjectIdentity,
     pub toolchain: ProjectToolchain,
-    pub render_environment: RenderEnvironment,
-    pub fonts: Vec<ProjectFont>,
     pub integrity: ProjectIntegrity,
 }
 
@@ -65,43 +61,6 @@ pub enum ToolchainCompatibility {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RenderEnvironment {
-    pub fonts_packaged: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectFont {
-    pub id: String,
-    pub family: String,
-    pub postscript_name: String,
-    pub style: String,
-    pub weight: u16,
-    pub stretch: u16,
-    pub path: String,
-    pub sha256: String,
-    #[serde(default)]
-    pub face_index: u32,
-    #[serde(default)]
-    pub format: String,
-    #[serde(default)]
-    pub variable: bool,
-    #[serde(default)]
-    pub source: String,
-    pub license: ProjectFontLicense,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectFontLicense {
-    pub name: String,
-    pub redistributable: bool,
-    #[serde(default)]
-    pub modifiable: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ProjectIntegrity {
     pub algorithm: String,
     pub files: BTreeMap<String, String>,
@@ -121,7 +80,6 @@ pub struct ProjectExport<'a> {
     pub app_version: &'a str,
     pub typst_version: &'a str,
     pub tinymist_version: &'a str,
-    pub packaged_fonts: Option<Vec<ProjectFont>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -210,71 +168,6 @@ pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(),
         validate_archive_path(path)?;
         if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(format!("The integrity digest for '{path}' is not SHA-256."));
-        }
-    }
-    if manifest.render_environment.fonts_packaged != !manifest.fonts.is_empty() {
-        return Err("The packaged-font capability does not match the font manifest.".to_string());
-    }
-    let mut font_identities = HashSet::new();
-    let mut face_descriptors = HashSet::new();
-    let mut font_paths = HashSet::new();
-    for font in &manifest.fonts {
-        validate_archive_path(&font.path)?;
-        let font_prefix = if legacy {
-            ".typstella/fonts/package/"
-        } else {
-            ".typsastra/fonts/package/"
-        };
-        if !font.path.starts_with(font_prefix) {
-            return Err(format!(
-                "Packaged font path '{}' is outside the font package.",
-                font.path
-            ));
-        }
-        if !font.license.redistributable {
-            return Err(format!(
-                "Packaged font '{}' is not redistributable.",
-                font.postscript_name
-            ));
-        }
-        if !matches!(font.format.as_str(), "ttf" | "otf" | "ttc") {
-            return Err(format!(
-                "Packaged font '{}' has an unsupported format.",
-                font.postscript_name
-            ));
-        }
-        let expected = manifest.integrity.files.get(&font.path).ok_or_else(|| {
-            format!(
-                "Packaged font '{}' is missing from integrity.files.",
-                font.postscript_name
-            )
-        })?;
-        if expected != &font.sha256 {
-            return Err(format!(
-                "Packaged font '{}' has inconsistent hashes.",
-                font.postscript_name
-            ));
-        }
-        let identity = format!(
-            "{}#{}",
-            font.postscript_name.to_lowercase(),
-            font.face_index
-        );
-        let descriptor = format!(
-            "{}|{}|{}|{}",
-            font.family.to_lowercase(),
-            font.style.to_lowercase(),
-            font.weight,
-            font.stretch
-        );
-        if !font_identities.insert(identity)
-            || !face_descriptors.insert(descriptor)
-            || !font_paths.insert(font.path.to_lowercase())
-        {
-            return Err(format!(
-                "Duplicate packaged font identity '{}'.",
-                font.postscript_name
-            ));
         }
     }
     Ok(())
@@ -503,32 +396,7 @@ pub fn export_typsastra_project(options: ProjectExport<'_>) -> Result<ProjectMan
     }
     let main_relative = archive_path_for(&root, &main)?;
     let excluded_output = canonicalize_if_exists(options.archive_path);
-    let mut files = collect_workspace_files(&root, excluded_output.as_deref())?;
-    let packaged_fonts = options.packaged_fonts.unwrap_or_default();
-    for font in &packaged_fonts {
-        validate_archive_path(&font.path)?;
-        if !font.path.starts_with(".typsastra/fonts/package/") || !font.license.redistributable {
-            return Err(format!(
-                "Font {:?} is not a valid redistributable package asset.",
-                font.postscript_name
-            ));
-        }
-        let absolute_path = join_archive_path(&root, &font.path);
-        let bytes = read_stable_file(&absolute_path)?;
-        let actual = sha256_hex(&bytes);
-        if actual != font.sha256 {
-            return Err(format!(
-                "Packaged font {:?} changed before export.",
-                font.postscript_name
-            ));
-        }
-        files.push(FileSnapshot {
-            absolute_path,
-            archive_path: font.path.clone(),
-            sha256: actual,
-        });
-    }
-    files.sort_by(|left, right| left.archive_path.cmp(&right.archive_path));
+    let files = collect_workspace_files(&root, excluded_output.as_deref())?;
     if !files.iter().any(|file| file.archive_path == main_relative) {
         return Err("The project main file was excluded from the archive.".to_string());
     }
@@ -559,13 +427,6 @@ pub fn export_typsastra_project(options: ProjectExport<'_>) -> Result<ProjectMan
             tinymist_version: options.tinymist_version.to_string(),
             compatibility: ToolchainCompatibility::Exact,
         },
-        // V1-I.18 through V1-I.24 will replace this explicit capability marker with
-        // the verified project-local font payload. Do not infer full render
-        // reproducibility while it remains false.
-        render_environment: RenderEnvironment {
-            fonts_packaged: !packaged_fonts.is_empty(),
-        },
-        fonts: packaged_fonts,
         integrity: ProjectIntegrity {
             algorithm: "sha256".to_string(),
             files: integrity_files,
@@ -643,6 +504,11 @@ fn validate_open_archive(file: &mut zip::ZipArchive<File>) -> Result<ValidatedAr
             raw_name
         };
         validate_archive_path(path)?;
+        if !is_directory && is_font_binary_path(path) {
+            return Err(format!(
+                "Project archives do not support font binaries: '{path}'."
+            ));
+        }
         validate_portable_archive_path(path)?;
         if path.as_bytes().len() > MAX_PATH_BYTES {
             return Err(format!(
@@ -721,57 +587,6 @@ fn validate_open_archive(file: &mut zip::ZipArchive<File>) -> Result<ValidatedAr
     let manifest: ProjectManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("The project manifest is invalid JSON: {error}"))?;
     validate_manifest_compatibility(&manifest)?;
-    let font_paths = manifest
-        .fonts
-        .iter()
-        .map(|font| font.path.as_str())
-        .collect::<HashSet<_>>();
-    let mut total_font_bytes = 0_u64;
-    for entry in &entries {
-        if font_paths.contains(entry.path.as_str()) {
-            if entry.size > MAX_PACKAGED_FONT_BYTES {
-                return Err(format!(
-                    "Packaged font '{}' exceeds the 64 MiB limit.",
-                    entry.path
-                ));
-            }
-            total_font_bytes = total_font_bytes.saturating_add(entry.size);
-        }
-    }
-    if total_font_bytes > MAX_TOTAL_PACKAGED_FONT_BYTES {
-        return Err("The packaged fonts exceed the 256 MiB total limit.".to_string());
-    }
-    for font in &manifest.fonts {
-        let metadata = entries
-            .iter()
-            .find(|entry| entry.path == font.path)
-            .ok_or_else(|| {
-                format!(
-                    "Packaged font '{}' is missing from the archive.",
-                    font.postscript_name
-                )
-            })?;
-        let mut entry = file.by_index(metadata.index).map_err(|error| {
-            format!(
-                "Failed to inspect packaged font '{}': {error}",
-                font.postscript_name
-            )
-        })?;
-        let mut bytes = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut bytes).map_err(|error| {
-            format!(
-                "Failed to read packaged font '{}': {error}",
-                font.postscript_name
-            )
-        })?;
-        crate::project_fonts::validate_packaged_font_bytes(
-            &bytes,
-            font.face_index,
-            &font.sha256,
-            &font.postscript_name,
-        )?;
-    }
-
     let archive_files = entries
         .iter()
         .filter(|entry| !entry.is_directory && entry.path != manifest_path)
@@ -952,6 +767,9 @@ fn collect_directory(
             }
             let archive_path = archive_path_for(root, &path)?;
             validate_archive_path(&archive_path)?;
+            if is_font_binary_path(&archive_path) {
+                continue;
+            }
             if !is_exported_workspace_metadata_file(&archive_path) {
                 continue;
             }
@@ -990,6 +808,29 @@ fn is_exported_workspace_metadata_file(archive_path: &str) -> bool {
             archive_path,
             ".typsastra/config.json" | ".typsastra/workspace.json"
         )
+}
+
+fn is_font_binary_path(path: &str) -> bool {
+    let extension = path
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase());
+    matches!(
+        extension.as_deref(),
+        Some(
+            "ttf"
+                | "otf"
+                | "ttc"
+                | "otc"
+                | "woff"
+                | "woff2"
+                | "eot"
+                | "dfont"
+                | "fon"
+                | "fnt"
+                | "pfa"
+                | "pfb"
+        )
+    )
 }
 
 fn archive_path_for(root: &Path, path: &Path) -> Result<String, String> {
@@ -1148,6 +989,9 @@ mod tests {
         std::fs::write(workspace.path().join("main.typ"), "= Hello\n").unwrap();
         std::fs::create_dir(workspace.path().join("chapters")).unwrap();
         std::fs::write(workspace.path().join("chapters").join("ខ្មែរ.typ"), "= ខ្មែរ\n").unwrap();
+        std::fs::create_dir(workspace.path().join("fonts")).unwrap();
+        std::fs::write(workspace.path().join("fonts").join("Example.ttf"), "font").unwrap();
+        std::fs::write(workspace.path().join("fonts").join("Example.woff2"), "font").unwrap();
         std::fs::create_dir(workspace.path().join(".typsastra")).unwrap();
         std::fs::write(
             workspace.path().join(".typsastra").join("cache.txt"),
@@ -1183,7 +1027,6 @@ mod tests {
             app_version: "1.0.0",
             typst_version: "0.13.1",
             tinymist_version: "0.13.10",
-            packaged_fonts: None,
         })
         .unwrap()
     }
@@ -1214,7 +1057,7 @@ mod tests {
         assert!(validate_manifest_compatibility(&decoded).is_ok());
         assert_eq!(decoded.project.main, "main.typ");
         assert_eq!(decoded.toolchain.typst_version, "0.13.1");
-        assert!(!decoded.render_environment.fonts_packaged);
+        assert_eq!(decoded.schema_version, 2);
     }
 
     #[test]
@@ -1296,42 +1139,29 @@ mod tests {
     }
 
     #[test]
-    fn font_manifest_rejects_restricted_missing_and_duplicate_identities() {
+    fn exports_exclude_fonts_and_imports_reject_font_binaries() {
+        for extension in [
+            "ttf", "otf", "ttc", "otc", "woff", "woff2", "eot", "dfont", "fon", "fnt", "pfa", "pfb",
+        ] {
+            assert!(is_font_binary_path(&format!("fonts/Example.{extension}")));
+        }
+        assert!(is_font_binary_path("fonts/Example.TTF"));
+        assert!(!is_font_binary_path("figures/font-sample.svg"));
+
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
         let archive = output.path().join("fonts.typsastra");
-        let mut manifest = export_project(workspace.path(), &archive);
-        let path = ".typsastra/fonts/package/test.ttf".to_string();
-        let hash = "a".repeat(64);
-        let font = ProjectFont {
-            id: "Test-Regular:0".into(),
-            family: "Test".into(),
-            postscript_name: "Test-Regular".into(),
-            style: "normal".into(),
-            weight: 400,
-            stretch: 100,
-            path: path.clone(),
-            sha256: hash.clone(),
-            face_index: 0,
-            format: "ttf".into(),
-            variable: false,
-            source: "system".into(),
-            license: ProjectFontLicense {
-                name: "OFL-1.1".into(),
-                redistributable: true,
-                modifiable: true,
-            },
-        };
-        manifest.render_environment.fonts_packaged = true;
-        manifest.fonts.push(font.clone());
-        assert!(validate_manifest_compatibility(&manifest).is_err());
-        manifest.integrity.files.insert(path, hash);
-        assert!(validate_manifest_compatibility(&manifest).is_ok());
-        manifest.fonts.push(font);
-        assert!(validate_manifest_compatibility(&manifest).is_err());
-        manifest.fonts.pop();
-        manifest.fonts[0].license.redistributable = false;
-        assert!(validate_manifest_compatibility(&manifest).is_err());
+        export_project(workspace.path(), &archive);
+        let file = File::open(&archive).unwrap();
+        let mut zip = zip::ZipArchive::new(file).unwrap();
+        assert!(zip.by_name("fonts/Example.ttf").is_err());
+        assert!(zip.by_name("fonts/Example.woff2").is_err());
+
+        let crafted = output.path().join("font-bearing.typsastra");
+        write_custom_archive(&crafted, &[("fonts/Example.otf", b"font", None)]);
+        assert!(inspect_typsastra_project(&crafted)
+            .unwrap_err()
+            .contains("do not support font binaries"));
     }
 
     #[test]
@@ -1353,6 +1183,7 @@ mod tests {
         assert!(!names.iter().any(
             |name| name.contains(".typsastra/cache/") || name.contains("generated-preview.pdf")
         ));
+        assert!(!names.iter().any(|name| is_font_binary_path(name)));
     }
 
     #[test]
@@ -1395,6 +1226,8 @@ mod tests {
         let file = File::open(&archive).unwrap();
         let mut zip = zip::ZipArchive::new(file).unwrap();
         assert!(zip.by_name("main.typ").is_ok());
+        assert!(zip.by_name("fonts/Example.ttf").is_err());
+        assert!(zip.by_name("fonts/Example.woff2").is_err());
         assert!(zip.by_name(PROJECT_MANIFEST_PATH).is_err());
     }
 
@@ -1508,10 +1341,6 @@ mod tests {
                 tinymist_version: "0.13.10".to_string(),
                 compatibility: ToolchainCompatibility::Exact,
             },
-            render_environment: RenderEnvironment {
-                fonts_packaged: false,
-            },
-            fonts: vec![],
             integrity: ProjectIntegrity {
                 algorithm: "sha256".to_string(),
                 files,

@@ -38,7 +38,7 @@ Proposed schema:
 ```json
 {
   "format": "com.typsastra.project",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "createdBy": {
     "application": "Typsastra",
     "version": "0.3.0"
@@ -52,22 +52,6 @@ Proposed schema:
     "tinymistVersion": "0.x.y",
     "compatibility": "exact"
   },
-  "fonts": [
-    {
-      "id": "misans-khmer-regular",
-      "family": "MiSans Khmer",
-      "postscriptName": "MiSansKhmer-Regular",
-      "style": "normal",
-      "weight": 400,
-      "stretch": 100,
-      "path": ".typsastra/fonts/package/MiSansKhmer-Regular.ttf",
-      "sha256": "...",
-      "license": {
-        "name": "...",
-        "redistributable": true
-      }
-    }
-  ],
   "integrity": {
     "algorithm": "sha256",
     "files": {
@@ -81,9 +65,9 @@ Rules:
 
 - `format`, `schemaVersion`, exact Typst version, exact Tinymist version, main-file path, and file hashes are mandatory.
 - Generated caches, render mirrors, `.git`, `target`, and `node_modules` remain excluded.
-- `.typsastra/project.json` and the verified font payload under `.typsastra/fonts/package/` are the only generated `.typsastra` content exported.
-- Every font face resolved for document rendering is declared and included, including the actual generated/scaled face when complex-script scaling is active. Disposable generated-font cache paths are not copied directly; export creates a verified package payload.
-- Package dependencies are declared when known. Third-party fonts are included only when their redistribution and modification terms permit it; otherwise version-bound export is blocked until the user replaces or legally resolves the font.
+- `.typsastra/project.json` is the only generated `.typsastra` content exported.
+- Font binaries are never included, regardless of location or license. Recipients install required fonts separately.
+- Local generated/scaled fonts remain workspace cache data and are excluded from every archive.
 - A legacy plain ZIP may still be exported through an explicitly named **Export Source ZIP** action, but it carries no compatibility promise.
 - The archive format must be documented and forward-compatible: unknown optional fields are ignored; unsupported schema versions are rejected with a useful message.
 
@@ -113,44 +97,9 @@ The compatibility dialog must offer:
 
 Changing the toolchain later is allowed from project/toolchain settings. The UI must show that the project is no longer using its exported version and offer **Restore recommended version**.
 
-### Self-contained render fonts
+### Font-free project interchange
 
-A `.typsastra` archive must contain every exact font face declared for project rendering plus every additional fallback face resolved by the exported render. This union prevents an unused-but-configured complex-script fallback from disappearing merely because the current revision does not contain that script. Import must not depend on a similarly named system font, because family names alone do not guarantee identical outlines, shaping tables, metrics, or version.
-
-```text
-Export preflight
-  -> resolve every face declared by project typography configuration
-  -> compile the selected project revision with the bound toolchain
-  -> capture every additional resolved font/fallback face
-  -> resolve the exact source font bytes
-  -> verify font identity, format, license, and embedding/redistribution rights
-  -> copy the exact bytes into .typsastra/fonts/package/
-  -> record face metadata, provenance, and SHA-256
-  -> compile once against only the packaged font path
-  -> require equivalent successful output before writing the archive
-```
-
-Required behavior:
-
-- Include the faces required by every declared project render family and each resolved regular, bold, italic, bold-italic, variable-font instance/source, fallback, symbol, math, emoji, CJK, and complex-script face used by the document.
-- Treat dynamically constructed or unresolved font-family expressions as an export blocker unless the user resolves them through an explicit project font declaration. Static source scanning alone is never proof of completeness.
-- Include render-only uniformly scaled fonts as the actual generated font used for rendering, together with source-font hash, scale, generator version, and applicable license metadata.
-- Preserve full OpenType font files by default. Do not subset complex-script fonts until shaping, variation, licensing, and glyph-closure tests prove subsetting safe.
-- Store fonts project-locally and give the packaged directory priority when starting Tinymist/Typst for that workspace. Never install imported fonts into the operating system.
-- Verify imported font hashes before loading them. Reject undeclared fonts, unsupported formats, malformed collections, excessive sizes/face counts, path collisions, and a manifest identity that disagrees with parsed font metadata.
-- Prevent family-name collisions from selecting a system font ahead of the packaged face. Rendering is keyed by the packaged identity and hash, not merely the family string.
-- Display a font preflight table with **Included**, **Missing**, **Ambiguous**, **License required**, or **Not redistributable** status. Do not silently substitute fonts.
-- If a font cannot be redistributed, block **Export Typsastra Project** and offer to select a redistributable replacement. **Export Source ZIP** may remain available but must state that it is not render-reproducible and must not copy a restricted system font.
-- Record license name, license/source URL when known, copyright/vendor, modification permission, redistribution permission, and OS/2 embedding restrictions. A user assertion may supply missing provenance for their own font, but it must not override an explicit restrictive license.
-- Imported projects use their packaged fonts for preview and PDF export even when other font versions are installed. Users may deliberately replace a font later, which marks the rendering environment as modified.
-
-For standard Typst CLI portability, the imported project documentation should expose the equivalent command:
-
-```text
-typst compile --font-path .typsastra/fonts/package main.typ
-```
-
-The `.typ` source remains ordinary Typst source; the font-path argument supplies the archived rendering environment.
+Typsastra treats fonts as external runtime dependencies. Project and source ZIP exports filter all recognized font binaries without inspecting their licenses. Schema v2 contains no font-package option or rendering-environment claim. Import rejects archives containing font binaries, while the dialog explains that recipients must install required fonts separately. This keeps interchange small and avoids silently assuming redistribution rights.
 
 ### File association and double-click behavior
 
@@ -211,13 +160,13 @@ Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop i
 - [x] **V1-I.15 Register the file association.** Add `.typsastra`, `application/vnd.typsastra.project`, the exported macOS type, the Typsastra icon, and installer metadata without claiming ownership of `.typ` or `.typst` source files.
 - [x] **V1-I.16 Route OS-open events safely.** Handle cold launch and single-instance handoff, queue requests until initialization completes, canonicalize and deduplicate paths, focus the existing window, and invoke the same import controller used by the File menu.
 - [x] **V1-I.17 Test packaged double-click import.** Verify association, icon, cold/warm launch, spaces and Unicode paths, corrupt archives, repeated events, cancellation, and uninstall cleanup on every supported installer format.
-- [x] **V1-I.18 Capture effective render fonts.** Union exact faces declared by project typography configuration with faces resolved by the bound compilation; do not rely on regex/source scanning or family names alone.
-- [x] **V1-I.19 Add font provenance and license validation.** Parse supported font formats, embedding restrictions, source metadata, redistribution/modification permission, and generated-font provenance; produce actionable blockers.
-- [x] **V1-I.20 Build the packaged font payload.** Copy exact verified faces into `.typsastra/fonts/package/`, use deterministic names, hash every file, and record all face/style/variation metadata in the manifest.
-- [x] **V1-I.21 Verify hermetic rendering.** Before finalizing export, compile against the packaged font directory with ordinary system resolution excluded or audited; fail if a different or missing face is selected.
-- [x] **V1-I.22 Load imported fonts project-locally.** Verify hashes and font structure, prioritize packaged faces for the workspace's Tinymist/Typst processes, and never register them with the OS.
-- [x] **V1-I.23 Add font-package security limits.** Bound file size, total font bytes, collection face count, parsing time, supported formats, normalized paths, and duplicate family/PostScript identities.
-- [x] **V1-I.24 Test font reproducibility.** Cover clean machines, conflicting system versions, variable fonts, math/symbol fonts, CJK and complex scripts, Khmer shaping, scaled generated fonts, restricted licenses, corrupt fonts, and cross-platform PDF comparison.
+- [x] **V1-I.18 Adopt font-free archives.** Remove font-package and render-environment fields in schema v2.
+- [x] **V1-I.19 Exclude font binaries.** Filter recognized desktop and web-font formats from project and source ZIP exports.
+- [x] **V1-I.20 Reject font-bearing archives.** Fail preflight before extraction when a font binary is present.
+- [x] **V1-I.21 Preserve local font workflows.** Continue using workspace-generated fonts locally without archiving them.
+- [x] **V1-I.22 Explain external font requirements.** Tell importers that required fonts must be installed separately.
+- [x] **V1-I.23 Keep export lightweight.** Remove PDF font auditing, licensing checks, duplicate compilation, and font payload limits.
+- [x] **V1-I.24 Test font-free interchange.** Cover every filtered extension, crafted archives, source ZIPs, local generated fonts, and cross-platform round trips.
 
 ### Acceptance criteria
 
@@ -226,9 +175,8 @@ Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop i
 - [ ] A compatible managed toolchain can be installed from the import dialog and is selected for that workspace.
 - [ ] Choosing another version displays a persistent compatibility warning but does not prevent deliberate use.
 - [ ] Double-clicking a `.typsastra` file opens one validated import flow in either a new or already-running Typsastra instance.
-- [ ] A `.typsastra` export contains every exact font face used by its validated render or fails with an actionable font/license report.
-- [ ] Import preview and PDF export use only the verified packaged font identities regardless of conflicting system fonts.
-- [ ] No imported font is installed globally, and malformed/untrusted font payloads are rejected before renderer initialization.
+- [ ] `.typsastra` and source ZIP exports contain no font binaries or generated font cache.
+- [ ] Font-bearing archives are rejected before extraction, and recipients are told to install required fonts separately.
 - [ ] Ordinary `.typ` sources still compile outside Typsastra.
 - [ ] Malicious or malformed archives cannot write outside the chosen destination or leave a partial project presented as successful.
 

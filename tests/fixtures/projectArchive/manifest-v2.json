@@ -1,6 +1,6 @@
 {
   "format": "com.typsastra.project",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "createdBy": {
     "application": "Typsastra",
     "version": "1.0.0"
@@ -14,10 +14,6 @@
     "tinymistVersion": "0.13.10",
     "compatibility": "exact"
   },
-  "renderEnvironment": {
-    "fontsPackaged": false
-  },
-  "fonts": [],
   "integrity": {
     "algorithm": "sha256",
     "files": {

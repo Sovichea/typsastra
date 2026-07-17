@@ -30,7 +30,6 @@ base64 = "0.22"
 fontdb = "0.23"
 dunce = "1.0"
 ttf-parser = "0.25"
-lopdf = "0.38"
 khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-features = false }
 spellbook = "0.4.2"
 icu_segmenter = { version = "2.2", default-features = false, features = ["compiled_data"] }

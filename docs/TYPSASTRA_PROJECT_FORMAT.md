@@ -2,7 +2,7 @@
 
 ## Status
 
-Schema version 1 is implemented through `V1-I.24`. It binds source to exact Typst/Tinymist versions, provides deterministic source integrity, secure transactional import, and verified project-local render fonts. An archive with `fontsPackaged: false` must not be described as hermetically render-reproducible.
+Schema version 2 provides deterministic source integrity, exact Typst/Tinymist toolchain binding, and secure transactional import. It deliberately does not redistribute fonts.
 
 ## Container
 
@@ -12,35 +12,29 @@ Schema version 1 is implemented through `V1-I.24`. It binds source to exact Typs
 - Manifest: `.typsastra/project.json`
 - Source paths: UTF-8, relative, `/`-separated
 
-Generated caches, `.git`, `.typsastra`, `node_modules`, and `target` directories are excluded. The exporter adds only audited font payloads under `.typsastra/fonts/package/`; other managed cache content remains excluded.
+Generated caches, generated PDFs, `.git`, `.typsastra`, `node_modules`, `target`, and font binaries are excluded. This includes fonts placed elsewhere in the workspace. New exports always use the Typsastra identifiers above.
 
-For migration compatibility, Typsastra can import archives created under the former Typstella name (`.typstella`, `com.typstella.project`, and `.typstella/project.json`). New exports always use the Typsastra identifiers above.
+## Manifest v2
 
-## Manifest v1
-
-The locked frontend fixture is [`tests/fixtures/projectArchive/manifest-v1.json`](../tests/fixtures/projectArchive/manifest-v1.json).
+The locked frontend fixture is [`tests/fixtures/projectArchive/manifest-v2.json`](../tests/fixtures/projectArchive/manifest-v2.json).
 
 ```json
 {
   "format": "com.typsastra.project",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "createdBy": {
     "application": "Typsastra",
-    "version": "0.3.0"
+    "version": "0.4.1"
   },
   "project": {
     "name": "example-project",
     "main": "main.typ"
   },
   "toolchain": {
-    "typstVersion": "0.13.1",
-    "tinymistVersion": "0.13.10",
+    "typstVersion": "0.15.0",
+    "tinymistVersion": "0.15.0",
     "compatibility": "exact"
   },
-  "renderEnvironment": {
-    "fontsPackaged": false
-  },
-  "fonts": [],
   "integrity": {
     "algorithm": "sha256",
     "files": {
@@ -50,93 +44,36 @@ The locked frontend fixture is [`tests/fixtures/projectArchive/manifest-v1.json`
 }
 ```
 
-## Required fields
+Required fields are the format and schema identifiers, creator, Unicode project name, safe relative main `.typ` path, exact toolchain versions, and a SHA-256 digest for every exported file. The main file must be present in the integrity map.
 
-- `format` must equal `com.typsastra.project`.
-- `schemaVersion` must equal `1` for the current implementation.
-- `createdBy.application` must equal `Typsastra`; its version is recorded without a timestamp so identical input remains deterministic.
-- `project.name` is the Unicode workspace folder name.
-- `project.main` is a safe relative `.typ` path and must appear in `integrity.files`.
-- `toolchain.typstVersion` and `toolchain.tinymistVersion` are obtained from the active validated managed executable.
-- `toolchain.compatibility` is `exact`.
-- `renderEnvironment.fontsPackaged` states whether every declared/resolved render font is present and verified.
-- `fonts` contains the packaged-font declarations. It is empty in the initial exporter.
-- `integrity.algorithm` is `sha256`; every exported source file has one lowercase 64-character digest.
+Schema v1 archives are intentionally unsupported. This prerelease breaking change removes the former font-package and render-environment fields instead of retaining obsolete compatibility options.
 
-## Compatibility rules
+## Font redistribution policy
 
-1. A different `format` is not a Typsastra project.
-2. An unsupported `schemaVersion` is rejected. Future readers may ignore unknown optional fields only after the schema defines them as optional.
-3. Exact toolchain compatibility means the recorded Tinymist build and its embedded Typst version are the preferred environment. Import override behavior is implemented in later tasks.
-4. `fontsPackaged: false` means source/toolchain integrity is available but font equivalence is not guaranteed.
-5. A path is invalid when it is absolute, contains `..`, uses backslashes, contains an empty component, or is not valid Unicode.
-6. Every file must match its recorded digest before an import can be promoted successfully.
+Typsastra project export never includes font binaries, regardless of their location, format, license, or Creative Commons/Open Font License status. The same rule applies to **Export Source ZIP**. Supported font extensions are filtered during export, and an imported project archive containing a font binary is rejected.
 
-## Import preflight limits
+Recipients must install the fonts required by a document separately. Exact toolchain binding makes compiler behavior reproducible, but it cannot guarantee identical rendering when the same font faces are unavailable. Local generated fonts under `.typsastra/fonts/generated` remain available to the workspace that created them, but they are cache-like local artifacts and are never archived.
 
-Preflight reads the ZIP central directory and manifest only. Nothing is extracted at this stage.
+## Compatibility and import safety
 
-- Maximum archive file size: 512 MiB.
-- Maximum entries: 20,000.
-- Maximum entry size: 256 MiB.
-- Maximum total uncompressed size: 1 GiB.
-- Maximum manifest size: 1 MiB.
-- Maximum UTF-8 archive path: 512 bytes.
-- Maximum compression ratio for entries larger than 1 MiB: 200:1.
-- Encrypted entries, symbolic links, special files, non-UTF-8 names, unsafe relative paths, Windows reserved names, trailing dots/spaces, control characters, normalized Unicode collisions, and case-folded collisions are rejected.
-- The non-directory archive entries must match `integrity.files` exactly, except for `.typsastra/project.json` itself.
+An unsupported format or schema is rejected. Paths must be relative, Unicode, `/`-separated, and contain no empty, `.` or `..` components. Every extracted file must match its declared digest.
 
-Import repeats preflight immediately before extraction and compares the manifest SHA-256 with the value shown to the user. Files are written into a hidden staging directory beside the destination, hashed while streaming, and promoted by directory rename only after every declared file verifies. Existing destination folders are never overwritten.
+Preflight reads the ZIP central directory and manifest without extracting files. Limits are 512 MiB per archive, 20,000 entries, 256 MiB per entry, 1 GiB total uncompressed data, a 1 MiB manifest, 512-byte paths, and a 200:1 compression ratio for entries larger than 1 MiB. Encrypted entries, links, special files, unsafe names, Unicode/case collisions, and font binaries are rejected.
+
+Import repeats preflight immediately before extraction and compares the manifest SHA-256 shown to the user. Files are streamed into a hidden staging directory, verified, and promoted by directory rename only after the complete archive succeeds. Existing destinations are never overwritten.
 
 ## Toolchain decision
 
-The importer classifies the recorded toolchain as:
-
-- `exact-active`: recorded Tinymist and embedded Typst are active;
-- `exact-installed`: the exact pair is installed and can be selected;
-- `download-required`: the recorded Tinymist must be downloaded and its reported embedded Typst version verified.
-
-The user may deliberately import with the current toolchain after a separate warning, but Typsastra displays that rendering compatibility is not guaranteed. A downloaded executable whose embedded Typst version differs from the manifest is rejected before extraction.
-
-The manifest version is the project's **recommended** toolchain. Typsastra stores the version actually selected for each workspace separately in workspace state. Reopening a workspace restores that selection before its LSP starts; selecting a version for one workspace does not rewrite another workspace's binding.
+The importer classifies the recorded toolchain as `exact-active`, `exact-installed`, or `download-required`. A downloaded Tinymist executable must report the recorded embedded Typst version. Users may deliberately override compatibility after a warning. The selected version is stored in workspace state and restored before the LSP starts.
 
 ## Deterministic export
 
-The exporter:
-
-- recursively collects ordinary files while rejecting symbolic links and unsupported entry types;
-- rejects case-insensitive archive-path collisions for cross-platform safety;
-- sorts paths lexically;
-- hashes stable file reads before constructing the manifest;
-- writes the manifest first, then source files in sorted order;
-- uses a fixed ZIP timestamp, permissions, and compression method;
-- rereads and rehashes every file while writing, rejecting a file changed during export;
-- stages the ZIP beside its destination and publishes it only after the writer finishes.
-
-Empty directories are not stored because Typst projects do not require them to compile. A future schema may declare a required empty directory explicitly if a real workflow needs one.
-
-## Font reproducibility
-
-Export compiles the selected main document with the bound Tinymist/Typst toolchain and reads the exact PostScript face identities embedded in its PDF. This avoids guessing from family names or scanning Typst source. Every resolved identity must map to an exact file-backed face.
-
-Typsastra accepts TTF, OTF, and TTC payloads. It validates face indices, collection counts, OpenType structure and embedding flags, and requires a recognized redistributable license in font metadata. Missing provenance, restricted embedding, unrecognized licenses, corrupt fonts, and unresolved compiler faces block version-bound export. Generated scaled fonts must also permit modification.
-
-Font files receive deterministic names derived from PostScript identity and SHA-256. Export recompiles with `--ignore-system-fonts` and only `.typsastra/fonts/package/`; the resolved PostScript set must exactly match the original compile before the archive is published.
-
-On import, font paths and hashes are validated during archive preflight and extraction. Before starting Tinymist, Typsastra reparses every packaged face, checks its face index and digest, supplies the package directory through `TYPST_FONT_PATHS`, and disables ordinary system-font resolution. Fonts remain project-local and are never installed with the operating system.
-
-Security limits are 64 MiB per font file, 256 MiB total packaged fonts, 64 faces per collection, and 128 declared faces. Duplicate normalized paths or PostScript-name/face-index identities are rejected. Cross-platform release verification is defined in [FONT_REPRODUCIBILITY_TESTS.md](FONT_REPRODUCIBILITY_TESTS.md).
+The exporter collects ordinary files without following links, rejects cross-platform path collisions, excludes generated data and fonts, sorts paths lexically, hashes stable reads, and writes a fixed-timestamp ZIP through a staging file. It rereads and rehashes files while writing so concurrent changes fail the export. Empty directories are not stored.
 
 ## Source ZIP distinction
 
-**Export Source ZIP** uses the same safe, sorted snapshot collector but does not include `.typsastra/project.json`, toolchain compatibility, or integrity metadata. It is a convenience archive and carries no reproducible-rendering guarantee.
+**Export Source ZIP** uses the same safe, font-free snapshot collector but omits the project manifest, toolchain binding, and integrity metadata. It is a lightweight source convenience archive, not a rendering-equivalence guarantee.
 
-## Migration from folders and source ZIPs
+## Desktop association
 
-Existing project folders remain valid Typsastra workspaces. A legacy/source ZIP is not treated as a version-bound project: extract it with the operating system, open the extracted folder, select and test the intended toolchain, set the main file, then choose **File > Export Typsastra Project**. This creates a new `.typsastra` archive with explicit toolchain and integrity metadata. Typsastra does not infer or promise compatibility for an ordinary folder or ZIP.
-
-## Desktop association and OS-open routing
-
-Packaged installers register `.typsastra` as **Typsastra Project** with MIME type `application/vnd.typsastra.project` and the Typsastra application icon. Typsastra intentionally does not claim `.typ` or `.typst` files. Cold-launch arguments and warm single-instance events enter one native queue, which accepts existing `.typsastra` files only, canonicalizes and deduplicates them, focuses the existing window, and invokes the same preflight/import controller as the File menu.
-
-The installer acceptance procedure is documented in [PACKAGED_PROJECT_IMPORT_TESTS.md](PACKAGED_PROJECT_IMPORT_TESTS.md).
+Packaged installers register `.typsastra` as **Typsastra Project** with MIME type `application/vnd.typsastra.project`. Typsastra does not claim `.typ` or `.typst`. Installer acceptance is documented in [PACKAGED_PROJECT_IMPORT_TESTS.md](PACKAGED_PROJECT_IMPORT_TESTS.md).

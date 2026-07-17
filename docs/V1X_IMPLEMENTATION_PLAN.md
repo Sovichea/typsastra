@@ -149,7 +149,7 @@ Canonical source remains unchanged. Preparation occurs only in a revision-bound 
 - [ ] **V1X-K.6 Preserve exact source mapping.** Generated boundaries map exactly to original UTF-16/byte positions for diagnostics, source sync, selection, and correction.
 - [ ] **V1X-K.7 Keep preparation scope-aware.** Respect `// @disable-render-prep` and exclude raw/code, labels, URLs, paths, and unsafe syntax.
 - [ ] **V1X-K.8 Harden snapshot lifecycle.** Mirrors are revision-consistent, disposable, hidden, excluded from source ZIP, and cannot race LSP or overwrite source.
-- [ ] **V1X-K.9 Revisit Khmer typography.** Validate fallback fonts, scaled packaged fonts, raw behavior, templates, PDF embedding, and cross-platform availability without `show regex(...)` rewriting.
+- [ ] **V1X-K.9 Revisit Khmer typography.** Validate fallback fonts, local scaled fonts, raw behavior, templates, PDF embedding, and cross-platform availability without redistributing font binaries or using `show regex(...)` rewriting.
 - [ ] **V1X-K.10 Improve language-tool workflow.** Review completion relevance/cancellation, unknown boundaries, ignored words, dictionary additions, logs, and mixed-script ownership while preserving reproducibility.
 - [ ] **V1X-K.11 Add Khmer-compatible project presets.** Extend generic report, thesis, and book templates rather than create a separate architecture.
 - [ ] **V1X-K.12 Run native-speaker review on real research and technical documents.**
@@ -180,4 +180,4 @@ The technical transformation contract remains in the [Khmer render-preparation p
 
 ## v1.x release gate
 
-Each v1.x release must pass v1.0 project interchange, packaged-font, data recovery, Khmer regression, long-document, installer, and migration tests. A milestone feature cannot waive a failed baseline gate.
+Each v1.x release must pass v1.0 project interchange, font-free export, data recovery, Khmer regression, long-document, installer, and migration tests. A milestone feature cannot waive a failed baseline gate.

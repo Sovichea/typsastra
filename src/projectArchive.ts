@@ -1,5 +1,5 @@
 export const TYPSASTRA_PROJECT_FORMAT = "com.typsastra.project" as const;
-export const TYPSASTRA_PROJECT_SCHEMA_VERSION = 1 as const;
+export const TYPSASTRA_PROJECT_SCHEMA_VERSION = 2 as const;
 export const TYPSASTRA_PROJECT_EXTENSION = "typsastra" as const;
 export const LEGACY_TYPSTELLA_PROJECT_FORMAT = "com.typstella.project" as const;
 export const LEGACY_TYPSTELLA_PROJECT_EXTENSION = "typstella" as const;
@@ -20,33 +20,9 @@ export type TypsastraProjectManifest = {
     tinymistVersion: string;
     compatibility: "exact";
   };
-  renderEnvironment: {
-    fontsPackaged: boolean;
-  };
-  fonts: TypsastraProjectFont[];
   integrity: {
     algorithm: "sha256";
     files: Record<string, string>;
-  };
-};
-
-export type TypsastraProjectFont = {
-  id: string;
-  family: string;
-  postscriptName: string;
-  style: string;
-  weight: number;
-  stretch: number;
-  path: string;
-  sha256: string;
-  faceIndex: number;
-  format: "ttf" | "otf" | "ttc" | "unknown";
-  variable: boolean;
-  source: string;
-  license: {
-    name: string;
-    redistributable: boolean;
-    modifiable: boolean;
   };
 };
 
@@ -112,41 +88,6 @@ function semanticVersion(value: unknown, label: string): string {
   return version;
 }
 
-function parseFont(value: unknown, index: number): TypsastraProjectFont {
-  const font = objectValue(value, `fonts[${index}]`);
-  const license = objectValue(font.license, `fonts[${index}].license`);
-  const weight = font.weight;
-  const stretch = font.stretch;
-  if (!Number.isInteger(weight) || (weight as number) < 1 || (weight as number) > 1000) {
-    throw new Error(`fonts[${index}].weight is invalid.`);
-  }
-  if (!Number.isInteger(stretch) || (stretch as number) < 1 || (stretch as number) > 1000) {
-    throw new Error(`fonts[${index}].stretch is invalid.`);
-  }
-  if (typeof license.redistributable !== "boolean") {
-    throw new Error(`fonts[${index}].license.redistributable must be a boolean.`);
-  }
-  return {
-    id: stringValue(font.id, `fonts[${index}].id`),
-    family: stringValue(font.family, `fonts[${index}].family`),
-    postscriptName: stringValue(font.postscriptName, `fonts[${index}].postscriptName`),
-    style: stringValue(font.style, `fonts[${index}].style`),
-    weight: weight as number,
-    stretch: stretch as number,
-    path: validArchivePath(font.path, `fonts[${index}].path`),
-    sha256: sha256Value(font.sha256, `fonts[${index}].sha256`),
-    faceIndex: Number.isInteger(font.faceIndex) && (font.faceIndex as number) >= 0 ? font.faceIndex as number : 0,
-    format: font.format === "ttf" || font.format === "otf" || font.format === "ttc" ? font.format : "unknown",
-    variable: font.variable === true,
-    source: typeof font.source === "string" ? font.source : "unknown",
-    license: {
-      name: stringValue(license.name, `fonts[${index}].license.name`),
-      redistributable: license.redistributable,
-      modifiable: license.modifiable === true
-    }
-  };
-}
-
 export function parseTypsastraProjectManifest(value: unknown): TypsastraProjectManifest {
   const root = objectValue(value, "project manifest");
   const legacy = root.format === LEGACY_TYPSTELLA_PROJECT_FORMAT;
@@ -159,10 +100,12 @@ export function parseTypsastraProjectManifest(value: unknown): TypsastraProjectM
       `This build supports version ${TYPSASTRA_PROJECT_SCHEMA_VERSION}.`
     );
   }
+  if ("fonts" in root || "renderEnvironment" in root) {
+    throw new Error("Font packaging fields are not supported by Typsastra project schema version 2.");
+  }
   const createdBy = objectValue(root.createdBy, "createdBy");
   const project = objectValue(root.project, "project");
   const toolchain = objectValue(root.toolchain, "toolchain");
-  const renderEnvironment = objectValue(root.renderEnvironment, "renderEnvironment");
   const integrity = objectValue(root.integrity, "integrity");
   const files = objectValue(integrity.files, "integrity.files");
   const main = validArchivePath(project.main, "project.main");
@@ -176,9 +119,6 @@ export function parseTypsastraProjectManifest(value: unknown): TypsastraProjectM
   if (integrity.algorithm !== "sha256") {
     throw new Error(`Unsupported integrity algorithm '${String(integrity.algorithm)}'.`);
   }
-  if (typeof renderEnvironment.fontsPackaged !== "boolean") {
-    throw new Error("renderEnvironment.fontsPackaged must be a boolean.");
-  }
   const parsedFiles = Object.fromEntries(
     Object.entries(files).map(([path, digest]) => [
       validArchivePath(path, "integrity file path"),
@@ -188,7 +128,6 @@ export function parseTypsastraProjectManifest(value: unknown): TypsastraProjectM
   if (!(main in parsedFiles)) {
     throw new Error("project.main is missing from integrity.files.");
   }
-  if (!Array.isArray(root.fonts)) throw new Error("fonts must be an array.");
   return {
     format: TYPSASTRA_PROJECT_FORMAT,
     schemaVersion: TYPSASTRA_PROJECT_SCHEMA_VERSION,
@@ -205,8 +144,6 @@ export function parseTypsastraProjectManifest(value: unknown): TypsastraProjectM
       tinymistVersion: semanticVersion(toolchain.tinymistVersion, "toolchain.tinymistVersion"),
       compatibility: "exact"
     },
-    renderEnvironment: { fontsPackaged: renderEnvironment.fontsPackaged },
-    fonts: root.fonts.map(parseFont),
     integrity: { algorithm: "sha256", files: parsedFiles }
   };
 }

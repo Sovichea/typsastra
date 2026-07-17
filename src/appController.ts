@@ -4977,12 +4977,10 @@ export class TypsastraWorkspaceController {
       if (typeof destinationParent !== "string") return;
       const destinationPath = await join(destinationParent, inspection.suggestedFolderName);
       const sizeMiB = (inspection.totalUncompressedBytes / 1024 / 1024).toFixed(1);
-      const fontNotice = inspection.manifest.renderEnvironment.fontsPackaged
-        ? ""
-        : "\n\nThis archive does not contain a verified render-font package; font equivalence is not guaranteed.";
       const confirmed = await confirm(
         `Import “${inspection.manifest.project.name}” to:\n${destinationPath}\n\n` +
-        `${inspection.entryCount} archive entries, ${sizeMiB} MiB uncompressed.${fontNotice}`,
+        `${inspection.entryCount} archive entries, ${sizeMiB} MiB uncompressed.` +
+        "\n\nFonts are not included. Install the fonts required by this project separately.",
         {
           title: "Import Typsastra Project",
           kind: "info",
@@ -5584,24 +5582,15 @@ export class TypsastraWorkspaceController {
 
         if (selected) {
           this.setLspStatus({ kind: "running", message: "Exporting Typsastra project..." });
-          const mainSource = filePathKey(mainFilePath) === filePathKey(this.activeFilePath ?? "")
-            ? this.editorInstance.state.doc.toString()
-            : await invoke<string>("read_workspace_file", { path: mainFilePath });
-          const typography = parseTypographyBlock(mainSource);
-          const declaredFontFamilies = typography
-            ? [typography.latinFont, ...typography.fallbacks.map(fallback => fallback.family)]
-              .filter((font): font is string => !!font)
-            : [];
-          const manifest = await invoke<{ renderEnvironment: { fontsPackaged: boolean } }>("export_typsastra_project", {
+          await invoke("export_typsastra_project", {
             workspacePath: this.workspaceRootPath,
             archivePath: selected,
-            mainFilePath,
-            declaredFontFamilies
+            mainFilePath
           });
-          const fontStatus = manifest.renderEnvironment.fontsPackaged
-            ? " Exact render fonts were audited and packaged."
-            : " No render fonts were discovered; reproducibility could not be established.";
-          this.setLspStatus({ kind: "preview-ready", message: `Typsastra project exported to ${selected}.${fontStatus}` });
+          this.setLspStatus({
+            kind: "preview-ready",
+            message: `Typsastra project exported to ${selected}. Font files were not included.`
+          });
         }
       } catch (error) {
         this.setLspStatus({ kind: "error", message: `Project export failed: ${error}` });
@@ -5634,7 +5623,10 @@ export class TypsastraWorkspaceController {
             workspacePath: this.workspaceRootPath,
             zipPath: selected
           });
-          this.setLspStatus({ kind: "preview-ready", message: `Source ZIP exported to ${selected}` });
+          this.setLspStatus({
+            kind: "preview-ready",
+            message: `Source ZIP exported to ${selected}. Font files were not included.`
+          });
         }
       } catch (error) {
         this.setLspStatus({ kind: "error", message: `Source ZIP export failed: ${error}` });

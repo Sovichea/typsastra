@@ -19,19 +19,17 @@ function manifest(): unknown {
       tinymistVersion: "0.13.10",
       compatibility: "exact"
     },
-    renderEnvironment: { fontsPackaged: false },
-    fonts: [],
     integrity: { algorithm: "sha256", files: { "main.typ": digest } }
   };
 }
 
 describe("Typsastra project manifest", () => {
-  test("parses the locked schema-v1 fixture", async () => {
+  test("parses the locked schema-v2 fixture", async () => {
     const fixture = await Bun.file(
-      new URL("./fixtures/projectArchive/manifest-v1.json", import.meta.url)
+      new URL("./fixtures/projectArchive/manifest-v2.json", import.meta.url)
     ).json();
     const parsed = parseTypsastraProjectManifest(fixture);
-    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.schemaVersion).toBe(2);
     expect(parsed.project.name).toBe("ការស្រាវជ្រាវ");
   });
 
@@ -54,8 +52,16 @@ describe("Typsastra project manifest", () => {
   test("rejects unknown format and schema versions", () => {
     expect(() => parseTypsastraProjectManifest({ ...(manifest() as object), format: "example" }))
       .toThrow("Unsupported project format");
-    expect(() => parseTypsastraProjectManifest({ ...(manifest() as object), schemaVersion: 2 }))
+    expect(() => parseTypsastraProjectManifest({ ...(manifest() as object), schemaVersion: 1 }))
       .toThrow("Unsupported Typsastra project schema version");
+  });
+
+  test("rejects removed font packaging fields", () => {
+    expect(() => parseTypsastraProjectManifest({
+      ...(manifest() as object),
+      renderEnvironment: { fontsPackaged: false },
+      fonts: []
+    })).toThrow("Font packaging fields are not supported");
   });
 
   test("rejects unsafe paths and missing main integrity", () => {

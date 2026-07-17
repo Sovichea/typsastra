@@ -35,7 +35,7 @@ When the scale differs from `1.0`, Typsastra:
 
 Changing units-per-em scales outlines, advances, vertical metrics, and Khmer OpenType positioning anchors together. Typsastra does not scale outlines independently because that would misalign dependent vowels and subscript consonants.
 
-Generated fonts retain their original internal family names. Typst gives the workspace font directory priority over system fonts during Typsastra rendering. The generated directory contains a `.gitignore` rule and should never be committed, particularly when the source font license restricts redistribution or modification.
+Generated fonts retain their original internal family names. Typst gives the workspace font directory priority over system fonts during Typsastra rendering. The generated directory contains a `.gitignore` rule and should never be committed or exported. Typsastra project and source ZIP exports never include font binaries, so recipients must install required fonts separately.
 
 OpenType collections (`.ttc` and `.otc`) are not transformed in the initial implementation. Select an individual TTF or OTF face instead.
 
