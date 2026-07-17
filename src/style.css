@@ -2566,6 +2566,12 @@ body.typsastra-resizing #input-container-wrapper::after {
   background-color: var(--ui-hover);
 }
 
+button.welcome-item:focus-visible {
+  background-color: transparent;
+  outline: 1px solid var(--ui-accent-color);
+  outline-offset: -1px;
+}
+
 .compiler-preview-message {
   margin: 20px;
   padding: 14px;

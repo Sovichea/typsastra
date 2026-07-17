@@ -33,6 +33,7 @@ import { LogConsoleController, spellcheckConsoleGroupKey, type LogConsoleEntryIn
 import { EditorFontManager } from "./editor/fontManager";
 import { TabStripController } from "./editor/tabStripController";
 import { createAppIcon, updateMaximizeIcon } from "./ui/icons";
+import { installModalFocusTrap } from "./ui/modalFocus";
 import {
   TYPSASTRA_GREEN,
   TYPSASTRA_GREEN_RIPPLE_FILL,
@@ -49,6 +50,7 @@ import {
 import { RecentProjectsController, recentProjectShortcutIndex } from "./workspace/recentProjectsController";
 import { WorkspaceWatcher, type WorkspaceChange } from "./workspace/workspaceWatcher";
 import { workspaceViewportState } from "./workspace/workspaceVisibility";
+import { installWelcomeKeyboardNavigation } from "./workspace/welcomeNavigation";
 import { PerformanceDiagnostics, type PerformanceMetric } from "./performance/diagnostics";
 import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
@@ -997,6 +999,9 @@ export class TypsastraWorkspaceController {
       }),
       parent: this.codeRenderPane
     });
+    // The editor remains mouse- and command-focusable, but ordinary Tab
+    // navigation between application controls must never land in source text.
+    this.editorInstance.contentDOM.tabIndex = -1;
     this.editorInstance.dom.addEventListener("pointerup", event => {
       if (!(event instanceof PointerEvent) || event.button !== 0) return;
       if (this.editorScrollbarPointerActive) {
@@ -5229,6 +5234,7 @@ export class TypsastraWorkspaceController {
   }
 
   private bindGlobalEvents() {
+    installModalFocusTrap();
     const refreshInputLanguage = (force = false) => {
       const generation = this.inputLanguageService.currentGeneration();
       const startedAt = performance.now();
@@ -5733,6 +5739,8 @@ export class TypsastraWorkspaceController {
     document.getElementById("action-toggle-logs")?.addEventListener("click", () => this.logConsoleController.toggle());
 
     // Welcome Screen Actions
+    const welcomeScreen = document.getElementById("welcome-screen");
+    if (welcomeScreen) installWelcomeKeyboardNavigation(welcomeScreen);
     document.getElementById("welcome-open-project")?.addEventListener("click", () => {
       document.getElementById("action-open-folder")?.click();
     });
