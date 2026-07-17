@@ -258,6 +258,74 @@ html {
   font-size: 11px;
 }
 
+.dropdown-submenu {
+  position: relative;
+}
+
+.dropdown-submenu-arrow {
+  margin-left: 24px;
+  color: var(--ui-header-text);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.dropdown-submenu-menu {
+  position: absolute;
+  top: -5px;
+  left: calc(100% - 2px);
+  z-index: 1001;
+  display: none;
+  min-width: 330px;
+  max-width: min(440px, calc(100vw - 260px));
+  padding: 4px 0;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dropdown-submenu:hover > .dropdown-submenu-menu,
+.dropdown-submenu:focus-within > .dropdown-submenu-menu {
+  display: block;
+}
+
+button.dropdown-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.dropdown-item-disabled {
+  color: var(--ui-header-text);
+  cursor: default;
+  opacity: 0.65;
+}
+
+.dropdown-item-disabled:hover { background: transparent; }
+
+.recent-project-menu-item {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.recent-project-menu-name,
+.recent-project-menu-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-project-menu-path {
+  color: var(--ui-header-text);
+  font-size: 11px;
+  text-align: right;
+  opacity: 0.7;
+}
+
 /* Fix dragging and click events */
 .titlebar {
   -webkit-app-region: drag;
@@ -1147,6 +1215,121 @@ body.typsastra-resizing #input-container-wrapper::after {
 }
 
 .about-footer { justify-content: flex-end; }
+
+.recent-projects-dialog {
+  width: min(720px, 100%);
+  height: min(620px, calc(100vh - 48px));
+}
+
+.recent-projects-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.recent-projects-search-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ui-header-text);
+  font-size: 11px;
+}
+
+.recent-projects-search-wrap input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  outline: none;
+  font: 13px var(--font-family-sans);
+}
+
+.recent-projects-search-wrap input:focus {
+  border-color: var(--ui-accent-color);
+  box-shadow: 0 0 0 1px var(--ui-accent-color);
+}
+
+.recent-projects-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+}
+
+.recent-projects-list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--ui-text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent-projects-list-item:last-child { border-bottom: 0; }
+.recent-projects-list-item:hover,
+.recent-projects-list-item.keyboard-selected,
+.recent-projects-list-item:focus-visible {
+  background: var(--ui-hover);
+  outline: none;
+}
+
+.recent-projects-list-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--ui-header-text);
+}
+
+.recent-projects-list-detail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.recent-projects-list-name {
+  overflow: hidden;
+  color: var(--ui-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-projects-list-path {
+  overflow: hidden;
+  color: var(--ui-header-text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+.recent-projects-empty {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  padding: 24px;
+  color: var(--ui-header-text);
+  text-align: center;
+}
+
+.recent-projects-footer {
+  color: var(--ui-header-text);
+  font-size: 11px;
+}
 
 @media (max-width: 480px) {
   .about-content { grid-template-columns: 1fr; text-align: center; }
@@ -2436,6 +2619,13 @@ button.welcome-item:disabled {
   font-size: 12px;
   color: var(--ui-text);
   opacity: 0.5;
+}
+
+.welcome-show-recent {
+  margin-top: 5px !important;
+  border-top: 1px solid var(--ui-border) !important;
+  border-radius: 0 0 6px 6px !important;
+  padding-top: 8px !important;
 }
 
 /* CodeMirror Search Panel Styling */

@@ -37,6 +37,21 @@
                                 >
                                     Import Typsastra Project...
                                 </div>
+                                <div class="dropdown-submenu">
+                                    <div
+                                        class="dropdown-item dropdown-submenu-trigger"
+                                        id="action-open-recent"
+                                        aria-haspopup="true"
+                                    >
+                                        Recent Projects
+                                        <span class="dropdown-submenu-arrow">›</span>
+                                    </div>
+                                    <div
+                                        id="recent-projects-submenu"
+                                        class="dropdown-submenu-menu"
+                                        role="menu"
+                                    ></div>
+                                </div>
                                 <div class="dropdown-separator"></div>
                                 <div
                                     class="dropdown-item"
@@ -352,7 +367,7 @@
                             </button>
                         </div>
 
-                        <div class="welcome-section">
+                        <div class="welcome-section" id="welcome-recent-projects">
                             <div class="welcome-section-title">
                                 RECENT PROJECTS
                             </div>
@@ -2026,6 +2041,62 @@
                 top: 0;
             "
         ></div>
+
+        <div
+            id="recent-projects-overlay"
+            class="settings-overlay hidden"
+            role="presentation"
+        >
+            <section
+                class="settings-dialog recent-projects-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="recent-projects-title"
+            >
+                <header class="settings-header">
+                    <div>
+                        <h2 id="recent-projects-title">Recent Projects</h2>
+                        <p>Search up to 32 recently opened workspaces</p>
+                    </div>
+                    <button
+                        id="recent-projects-close"
+                        class="settings-icon-button"
+                        type="button"
+                        aria-label="Close recent projects"
+                        title="Close"
+                    >×</button>
+                </header>
+                <div class="recent-projects-content">
+                    <label class="recent-projects-search-wrap" for="recent-projects-search">
+                        <span>Search</span>
+                        <input
+                            id="recent-projects-search"
+                            type="search"
+                            role="combobox"
+                            aria-autocomplete="list"
+                            aria-controls="recent-projects-list"
+                            aria-expanded="false"
+                            autocomplete="off"
+                            spellcheck="false"
+                            placeholder="Fuzzy search by project name or path"
+                        />
+                    </label>
+                    <div
+                        id="recent-projects-list"
+                        class="recent-projects-list"
+                        role="listbox"
+                    ></div>
+                </div>
+                <footer class="settings-footer recent-projects-footer">
+                    <span>Most recently opened projects appear first.</span>
+                    <button
+                        id="recent-projects-done"
+                        class="settings-primary"
+                        type="button"
+                    >Done</button>
+                </footer>
+            </section>
+        </div>
 
         <div
             id="settings-overlay"
