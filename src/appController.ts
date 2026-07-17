@@ -1525,25 +1525,28 @@ export class TypsastraWorkspaceController {
 
         this.activateSpellcheckDocument(null);
         this.documentOutlineController.clear();
-        if (isBinaryImagePath(path)) {
-          this.renderInteractiveImageViewer(tab.content);
-        } else if (isPdf) {
-          document.querySelector(".preview-actions")?.classList.add("hidden");
-          void this.previewFrame.loadPdfData(tab.content, path);
-        } else {
-          document.querySelector(".preview-actions")?.classList.add("hidden");
-          this.previewFrame.setMessage(
-            `<div class="preview-disabled-placeholder">` +
-            `<div class="preview-disabled-title">Preview Unavailable</div>` +
-            `<div class="preview-disabled-msg">Open this file with its system application to view it.</div>` +
-            `</div>`
-          );
+        if (!options.skipPreviewActivation) {
+          if (isBinaryImagePath(path)) {
+            this.renderInteractiveImageViewer(tab.content);
+          } else if (isPdf) {
+            document.querySelector(".preview-actions")?.classList.add("hidden");
+            void this.previewFrame.loadPdfData(tab.content, path);
+          } else {
+            document.querySelector(".preview-actions")?.classList.add("hidden");
+            this.previewFrame.setMessage(
+              `<div class="preview-disabled-placeholder">` +
+              `<div class="preview-disabled-title">Preview Unavailable</div>` +
+              `<div class="preview-disabled-msg">Open this file with its system application to view it.</div>` +
+              `</div>`
+            );
+          }
         }
         this.editorToolbarController.setDisabled(true);
         this.activeFilePath = path;
         this.isLoadingFile = false;
         this.updateManualForwardSyncAction();
         this.updateWorkspaceViewportVisibility();
+        this.renderEditorTabs();
         this.saveWorkspaceState();
         return;
       } else {
@@ -4700,16 +4703,37 @@ export class TypsastraWorkspaceController {
 
   private async refreshActivePreviewRoot(forceRender = false): Promise<void> {
     if (!this.activeFilePath) return;
-    const ext = this.activeFilePath.split('.').pop()?.toLowerCase();
+    const path = this.activeFilePath;
+    const ext = fileExtension(path);
+    const unsupportedFile = !isSupportedInAppPath(path);
+    const isPdf = ext === "pdf";
+
+    if (unsupportedFile || isBinaryImagePath(path) || isPdf) {
+      const tab = this.getActiveTab();
+      if (!tab) return;
+      if (isBinaryImagePath(path)) {
+        this.renderInteractiveImageViewer(tab.content);
+      } else if (isPdf) {
+        document.querySelector(".preview-actions")?.classList.add("hidden");
+        void this.previewFrame.loadPdfData(tab.content, path);
+      } else {
+        document.querySelector(".preview-actions")?.classList.add("hidden");
+        this.previewFrame.setMessage(
+          `<div class="preview-disabled-placeholder">` +
+          `<div class="preview-disabled-title">Preview Unavailable</div>` +
+          `<div class="preview-disabled-msg">Open this file with its system application to view it.</div>` +
+          `</div>`
+        );
+      }
+      return;
+    }
+
     if (ext === "svg") {
       this.previewFrame.setMessage(
         `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
         this.editorInstance.state.doc.toString() +
         `</div>`
       );
-      return;
-    }
-    if (isBinaryImagePath(this.activeFilePath) || ext !== "typ") {
       return;
     }
     if (!this.pinnedMainFilePath) {
@@ -4731,7 +4755,7 @@ export class TypsastraWorkspaceController {
     }
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(previewLspMainPath(target));
-    const document = target.rootPath
+    const docIdentity = target.rootPath
       ? researchDocumentIdentity(
           this.workspaceRootPath ?? target.rootPath,
           target.mainPath,
@@ -4742,7 +4766,7 @@ export class TypsastraWorkspaceController {
       ? previewSessionIdentity(
           target.rootPath,
           previewRefreshStyle(this.settingsController.value.preview.renderMode),
-          document ?? undefined
+          docIdentity ?? undefined
         )
       : null;
     const unchanged = identity?.key === this.previewSessionKey;
