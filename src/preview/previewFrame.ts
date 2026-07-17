@@ -35,6 +35,11 @@ type PageDimensions = {
   height: number;
 };
 
+type ScrollAnchor = {
+  pageNo: number;
+  offset: number;
+};
+
 type ActivePageRender = {
   generation: number;
   renderKey: string;
@@ -61,6 +66,7 @@ export class PreviewFrame {
   private resizeObserver: ResizeObserver | null = null;
   private resizeLayoutSuspended = false;
   private resizeLayoutPending = false;
+  private resizeScrollAnchor: ScrollAnchor | null = null;
   private lastInteractionStatusKey = "";
   private pdfJsPromise: Promise<PdfJsModule> | null = null;
   private pdfWorker: { destroyed?: boolean; destroy(): void } | null = null;
@@ -138,6 +144,9 @@ export class PreviewFrame {
   }
 
   public suspendResizeLayout(): void {
+    // Capture before the pane width changes. Capturing after the resize has
+    // started can anchor against an already reflowed page and visibly jump.
+    this.resizeScrollAnchor = this.captureScrollAnchor();
     this.resizeLayoutSuspended = true;
     this.resizeLayoutPending = false;
   }
@@ -147,8 +156,12 @@ export class PreviewFrame {
     this.resizeLayoutSuspended = false;
     const shouldApplyFinalFit = this.resizeLayoutPending;
     this.resizeLayoutPending = false;
-    if (shouldApplyFinalFit && this.isFitToWidth && this.pdfDoc) {
-      this.applyFitToWidth();
+    const anchor = this.resizeScrollAnchor;
+    this.resizeScrollAnchor = null;
+    // ResizeObserver may deliver its final notification after pointerup. Apply
+    // the final fit ourselves and restore the pre-resize viewport anchor.
+    if ((shouldApplyFinalFit || anchor) && this.isFitToWidth && this.pdfDoc) {
+      this.applyFitToWidth(anchor);
     }
   }
 
@@ -198,17 +211,20 @@ export class PreviewFrame {
     return Math.max(10, Math.floor((availableWidth / maxPageWidth) * 100));
   }
 
-  private applyFitToWidth(): void {
+  private applyFitToWidth(anchor?: ScrollAnchor | null): void {
     const percent = this.computeFitToWidthPercent();
-    if (percent === this.previewZoomPercent) return;
-    this.setZoom(percent);
+    if (percent === this.previewZoomPercent) {
+      if (anchor) this.restoreScrollAnchor(anchor, true);
+      return;
+    }
+    this.setZoom(percent, anchor);
   }
 
-  private setZoom(percent: number): number {
+  private setZoom(percent: number, preservedAnchor?: ScrollAnchor | null): number {
     this.updateHorizontalOverflow();
     if (percent === this.previewZoomPercent) return percent;
     this.zoomStartedAt = performance.now();
-    const anchor = this.captureScrollAnchor();
+    const anchor = preservedAnchor ?? this.captureScrollAnchor();
     this.previewZoomPercent = percent;
     this.onZoomChanged?.(percent);
     this.cancelAllPageRenders();
@@ -797,7 +813,7 @@ export class PreviewFrame {
     }, 1000);
   }
 
-  private captureScrollAnchor(): { pageNo: number; offset: number } | null {
+  private captureScrollAnchor(): ScrollAnchor | null {
     const doc = this.iframe?.contentDocument;
     if (!doc) return null;
     const slots = [...doc.querySelectorAll<HTMLElement>(".pdf-page-container")];
@@ -806,14 +822,18 @@ export class PreviewFrame {
     return { pageNo: Number(anchor.dataset.pageNo), offset: anchor.getBoundingClientRect().top };
   }
 
-  private restoreScrollAnchor(anchor: { pageNo: number; offset: number } | null): void {
+  private restoreScrollAnchor(anchor: ScrollAnchor | null, afterLayout = false): void {
     if (!anchor) return;
-    requestAnimationFrame(() => {
+    const restore = () => {
       const slot = this.iframe?.contentDocument
         ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${anchor.pageNo}"]`);
       const view = this.iframe?.contentWindow;
       if (!slot || !view) return;
       view.scrollBy(0, slot.getBoundingClientRect().top - anchor.offset);
+    };
+    requestAnimationFrame(() => {
+      if (afterLayout) requestAnimationFrame(restore);
+      else restore();
     });
   }
 

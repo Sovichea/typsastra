@@ -169,8 +169,10 @@ export class LayoutController {
         const distance = Math.hypot(event.clientX - pending.x, event.clientY - pending.y);
         if (distance < LayoutController.dragThresholdPx) return;
         dragging = true;
-        this.beginResize(resizer, cursor);
+        // Capture editor/preview state while the panes are still measurable.
+        // The resizing class hides their children behind placeholders.
         onStart();
+        this.beginResize(resizer, cursor);
       }
       latestPosition = { clientX: event.clientX, clientY: event.clientY };
       if (dragFrame === null) dragFrame = requestAnimationFrame(flushDrag);
