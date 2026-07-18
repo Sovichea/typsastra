@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isHiddenWorkspaceEntry, sortFileNodes, workspaceParentDirectories, workspacePathSetContains, type FileNode } from "../src/components/explorer";
-import { explorerKeyboardAction } from "../src/components/contextMenuController";
+import { explorerKeyboardAction, isMainFileCandidate } from "../src/components/contextMenuController";
 
 describe("workspace explorer", () => {
   test("sorts folders before files without mutating the source list", () => {
@@ -58,5 +58,16 @@ describe("workspace explorer", () => {
     expect(isHiddenWorkspaceEntry(".typstella")).toBe(true);
     expect(isHiddenWorkspaceEntry(".typst")).toBe(false);
     expect(isHiddenWorkspaceEntry("typsastra")).toBe(false);
+  });
+
+  test("offers main-file actions only for Typst files", async () => {
+    expect(isMainFileCandidate("C:\\Research\\MAIN.TYP")).toBe(true);
+    expect(isMainFileCandidate("/research/notes.typ")).toBe(true);
+    expect(isMainFileCandidate("/research/output.pdf")).toBe(false);
+    expect(isMainFileCandidate("/research/notes.typ", true)).toBe(false);
+
+    const source = await Bun.file(new URL("../src/components/contextMenuController.ts", import.meta.url)).text();
+    expect(source).toContain("const mainAction = this.mainFileItem()");
+    expect(source).toContain("`${this.mainFileItem()}<div");
   });
 });

@@ -48,6 +48,10 @@ export function explorerKeyboardAction(event: Pick<KeyboardEvent, "key" | "ctrlK
   return null;
 }
 
+export function isMainFileCandidate(path: string, isDirectory = false): boolean {
+  return !isDirectory && path.toLowerCase().endsWith(".typ");
+}
+
 export class ContextMenuController {
   private targetPath = "";
   private targetIsDirectory = false;
@@ -118,7 +122,7 @@ export class ContextMenuController {
       case "ctx-fs-paste": return this.pasteFile();
       case "ctx-open-project": document.getElementById("action-open-folder")?.click(); return;
       case "ctx-set-main-file":
-        if (this.targetPath) {
+        if (isMainFileCandidate(this.targetPath, this.targetIsDirectory)) {
           const isCurrentMain = this.dependencies.isPinnedMainFile(this.targetPath);
           await this.dependencies.setPinnedMainFile(isCurrentMain ? null : this.targetPath);
         }
@@ -453,10 +457,7 @@ export class ContextMenuController {
   }
 
   private explorerItems(): string {
-    const isTyp = !this.targetIsDirectory && this.targetPath.toLowerCase().endsWith(".typ");
-    const mainAction = isTyp
-      ? `<div class="dropdown-item" id="ctx-set-main-file">${this.dependencies.isPinnedMainFile(this.targetPath) ? "Unset as Main File" : "Set as Main File"}</div><div class="dropdown-separator"></div>`
-      : "";
+    const mainAction = this.mainFileItem();
     return `${mainAction}<div class="dropdown-item" id="ctx-new-file">New File <span class="hotkey">Ctrl+N</span></div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-rename">Rename <span class="hotkey">F2</span></div><div class="dropdown-item" id="ctx-fs-delete">Delete <span class="hotkey">Delete</span></div>${this.targetIsDirectory ? "" : '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy">Copy File <span class="hotkey">Ctrl+C</span></div>'}${this.copiedFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File <span class="hotkey">Ctrl+V</span></div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+O</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
   }
 
@@ -465,7 +466,15 @@ export class ContextMenuController {
   }
 
   private tabItems(): string {
-    return `<div class="dropdown-item" id="ctx-tab-close">Close</div><div class="dropdown-item" id="ctx-tab-close-others">Close Others</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div>`;
+    return `${this.mainFileItem()}<div class="dropdown-item" id="ctx-tab-close">Close</div><div class="dropdown-item" id="ctx-tab-close-others">Close Others</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div>`;
+  }
+
+  private mainFileItem(): string {
+    if (!isMainFileCandidate(this.targetPath, this.targetIsDirectory)) return "";
+    const label = this.dependencies.isPinnedMainFile(this.targetPath)
+      ? "Unset as Main File"
+      : "Set as Main File";
+    return `<div class="dropdown-item" id="ctx-set-main-file">${label}</div><div class="dropdown-separator"></div>`;
   }
 
   private editorItems(): string {
