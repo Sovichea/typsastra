@@ -6,6 +6,8 @@ Ship Typsastra v1.0 as a dependable, complex-script-first research writing envir
 
 This plan complements the [complex-script-first implementation plan](./COMPLEX_SCRIPT_FIRST_IMPLEMENTATION_PLAN.md). That plan owns editor, language-provider, preview, and research-workflow architecture. This document owns only the remaining product work and release gates required for v1.0.
 
+The [PDF preview interaction implementation plan](./PDF_PREVIEW_INTERACTION_IMPLEMENTATION_PLAN.md) owns the remaining v1.0 gesture-scroll and scrollbar-release work. Its bounded render concurrency, final-canvas residency, memory, and qualification gates are part of the v1.0 release gate.
+
 ## Release principles
 
 1. Stability and data safety take priority over new features.
@@ -356,6 +358,7 @@ These gates take priority over every other v1.0 feature.
 - [ ] **V1-S.8 Add resource ceilings.** Define startup, idle memory, long-PDF memory, typing latency, import/export, and template compile budgets on Windows and Linux.
 - [ ] **V1-S.9 Add destructive-operation review.** Import, overwrite, delete, toolchain removal, and external-file reconciliation require explicit and tested safeguards.
 - [ ] **V1-S.10 Run a release-candidate period.** Freeze features, publish migration notes, collect beta reports, and resolve all data-loss, security, crash, and blocker-severity issues before v1.0.
+- [ ] **V1-S.11 Complete PDF preview interaction qualification.** Finish phases PV0 through PV5 in the [PDF preview interaction plan](./PDF_PREVIEW_INTERACTION_IMPLEMENTATION_PLAN.md), publish Windows and Linux results, and resolve blocker-severity gesture-scroll, scrollbar-release, blank-page, stale-generation, and unbounded-memory failures.
 
 ### v1.0 release gate
 
@@ -365,6 +368,7 @@ Typsastra is eligible for v1.0 only when:
 - no known data-loss, unsafe extraction, project corruption, or toolchain-selection blocker remains;
 - Khmer editing and language-tool regression suites pass;
 - long multi-file documents preview and export within documented limits;
+- the PDF preview interaction gates pass for gesture scrolling and scrollbar release;
 - Windows and Linux release builds pass the full installer-to-export workflow;
 - macOS is either verified to the same standard or clearly labeled with narrower support;
 - documentation describes project format compatibility, recovery, privacy, supported platforms, and known limitations.
