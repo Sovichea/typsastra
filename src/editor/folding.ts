@@ -20,8 +20,22 @@ const nonFunctionWords = new Set([
   "return"
 ]);
 
+// CodeMirror Text values are immutable. Reuse one string projection for every
+// fold query against the same document instead of copying the full document
+// once per line during fold-all.
+const documentTextCache = new WeakMap<object, string>();
+
+function documentText(state: EditorState): string {
+  const document = state.doc as object;
+  const cached = documentTextCache.get(document);
+  if (cached !== undefined) return cached;
+  const text = state.doc.toString();
+  documentTextCache.set(document, text);
+  return text;
+}
+
 export function typstFunctionFoldService(state: EditorState, lineStart: number, lineEnd: number): EditorFoldRange | null {
-  return findTypstFoldRange(state.doc.toString(), lineStart, lineEnd);
+  return findTypstFoldRange(documentText(state), lineStart, lineEnd);
 }
 
 function findTypstFoldRange(text: string, lineStart: number, lineEnd: number): EditorFoldRange | null {

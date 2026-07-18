@@ -8,7 +8,7 @@ import { dirname, join } from "@tauri-apps/api/path";
 import { EditorState, Transaction } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { undo, redo, undoDepth } from "@codemirror/commands";
-import { foldAll, foldEffect, foldedRanges, indentUnit, unfoldAll, unfoldEffect } from "@codemirror/language";
+import { foldAll, foldable, foldEffect, foldedRanges, indentUnit, unfoldAll, unfoldEffect } from "@codemirror/language";
 import { closeBrackets, closeCompletion, completionStatus } from "@codemirror/autocomplete";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, showZwsCompartment, showZeroWidthSpaces } from "./editor/extensions";
@@ -137,6 +137,7 @@ type EditorTab = {
   scrollTop?: number;
   scrollLeft?: number;
   foldRanges: EditorFoldRange[] | null;
+  defaultFoldPending?: boolean;
   temporary?: boolean;
 };
 
@@ -227,6 +228,7 @@ export class TypsastraWorkspaceController {
   private diagnosticWaitStartedAt: number | null = null;
   private openTabs: EditorTab[] = [];
   private suppressFoldStatePersistence = false;
+  private defaultFoldGeneration = 0;
   private readonly openedDocumentUris = new Set<string>();
   private readonly preparedPreviewDocumentVersions = new Map<string, number>();
   private lastKhmerRenderPrepState: boolean | undefined = undefined;
@@ -959,7 +961,7 @@ export class TypsastraWorkspaceController {
             const wasComposing = this.isComposing;
             this.isComposing = update.view.composing;
 
-            if (update.docChanged) {
+            if (update.docChanged && !this.isLoadingFile) {
               const currentText = update.state.doc.toString();
               this.previewSyncController.clearForward();
               this.editorFontManager.updateDocument(currentText);
@@ -967,7 +969,7 @@ export class TypsastraWorkspaceController {
                 this.handleContentMutation(currentText);
                 this.spellcheckController.documentChanged(update);
               }
-            } else if (wasComposing && !update.view.composing) {
+            } else if (!this.isLoadingFile && wasComposing && !update.view.composing) {
               const currentText = update.state.doc.toString();
               this.handleContentMutation(currentText);
               this.spellcheckController.documentChanged(update);
@@ -991,8 +993,17 @@ export class TypsastraWorkspaceController {
             )) {
               const tab = this.getActiveTab();
               if (tab) {
+                tab.defaultFoldPending = false;
+                this.defaultFoldGeneration += 1;
                 tab.foldRanges = this.collectCurrentFoldRanges();
                 void this.saveWorkspaceState();
+              }
+            }
+            if (update.docChanged && !this.isLoadingFile) {
+              const tab = this.getActiveTab();
+              if (tab?.defaultFoldPending) {
+                tab.defaultFoldPending = false;
+                this.defaultFoldGeneration += 1;
               }
             }
             if (!update.docChanged && this.shouldForwardSyncSelectionUpdate(update)) {
@@ -1181,7 +1192,7 @@ export class TypsastraWorkspaceController {
     tab.selectionHead = selection.head;
     tab.scrollTop = this.editorInstance.scrollDOM.scrollTop;
     tab.scrollLeft = this.editorInstance.scrollDOM.scrollLeft;
-    tab.foldRanges = this.collectCurrentFoldRanges();
+    if (!tab.defaultFoldPending) tab.foldRanges = this.collectCurrentFoldRanges();
   }
 
   private collectCurrentFoldRanges(): EditorFoldRange[] {
@@ -1199,13 +1210,21 @@ export class TypsastraWorkspaceController {
   }
 
   private restoreTabFoldState(tab: EditorTab) {
+    const generation = ++this.defaultFoldGeneration;
     this.suppressFoldStatePersistence = true;
     try {
       if (tab.foldRanges === null) {
         this.applyFoldRanges([]);
-        foldAll(this.editorInstance);
-        tab.foldRanges = this.collectCurrentFoldRanges();
+        if (this.editorInstance.state.doc.lines <= 4_000) {
+          foldAll(this.editorInstance);
+          tab.foldRanges = this.collectCurrentFoldRanges();
+          tab.defaultFoldPending = false;
+        } else {
+          tab.defaultFoldPending = true;
+          this.scheduleLargeDocumentDefaultFolding(tab, generation, 1);
+        }
       } else {
+        tab.defaultFoldPending = false;
         const ranges = this.normalizeFoldRanges(tab.foldRanges, this.editorInstance.state.doc.length);
         tab.foldRanges = ranges;
         this.applyFoldRanges(ranges);
@@ -1215,6 +1234,62 @@ export class TypsastraWorkspaceController {
     }
   }
 
+  private scheduleLargeDocumentDefaultFolding(tab: EditorTab, generation: number, startLine: number): void {
+    const schedule = (callback: (deadline?: IdleDeadline) => void) => {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(callback, { timeout: 100 });
+      } else {
+        window.setTimeout(() => callback(), 0);
+      }
+    };
+
+    schedule(deadline => {
+      if (
+        generation !== this.defaultFoldGeneration
+        || !tab.defaultFoldPending
+        || filePathKey(tab.path) !== filePathKey(this.activeFilePath ?? "")
+      ) return;
+
+      const state = this.editorInstance.state;
+      const effects = [];
+      let lineNumber = startLine;
+      let visited = 0;
+      const startedAt = performance.now();
+      while (lineNumber <= state.doc.lines && visited < 400) {
+        const budgetSpent = deadline && !deadline.didTimeout
+          ? deadline.timeRemaining() < 2
+          : performance.now() - startedAt >= 8;
+        if (visited > 0 && budgetSpent) break;
+        const line = state.doc.line(lineNumber);
+        const range = foldable(state, line.from, line.to);
+        visited += 1;
+        if (range) {
+          effects.push(foldEffect.of(range));
+          lineNumber = state.doc.lineAt(Math.min(range.to, state.doc.length)).number + 1;
+        } else {
+          lineNumber += 1;
+        }
+      }
+
+      if (effects.length > 0) {
+        this.suppressFoldStatePersistence = true;
+        try {
+          this.editorInstance.dispatch({ effects });
+        } finally {
+          this.suppressFoldStatePersistence = false;
+        }
+      }
+
+      if (lineNumber <= state.doc.lines) {
+        this.scheduleLargeDocumentDefaultFolding(tab, generation, lineNumber);
+        return;
+      }
+      tab.defaultFoldPending = false;
+      tab.foldRanges = this.collectCurrentFoldRanges();
+      void this.saveWorkspaceState();
+    });
+  }
+
   private activateSpellcheckDocument(path: string | null): void {
     const inherited = Boolean(path && this.pinnedMainFilePath
       && filePathKey(path) !== filePathKey(this.pinnedMainFilePath));
@@ -1222,14 +1297,45 @@ export class TypsastraWorkspaceController {
     this.spellcheckController.activateDocument(path ? filePathKey(path) : "");
   }
 
+  private scheduleDocumentOutlineUpdate(path: string, source: string): void {
+    // Let CodeMirror commit and paint the newly activated document before the
+    // outline performs its full-source scan.
+    window.requestAnimationFrame(() => window.setTimeout(() => {
+      const activeTab = this.getActiveTab();
+      if (
+        !activeTab
+        || filePathKey(activeTab.path) !== filePathKey(path)
+        || activeTab.content !== source
+      ) return;
+      void this.documentOutlineController.update(
+        path,
+        source,
+        this.workspaceRootPath || "",
+        async candidatePath => {
+          try {
+            return await invoke<string>("read_workspace_file", { path: candidatePath });
+          } catch {
+            return null;
+          }
+        }
+      );
+    }, 0));
+  }
+
   private foldCurrentFile(): void {
     if (!this.getActiveTab() || !isSupportedInAppPath(this.activeFilePath ?? "") || isBinaryImagePath(this.activeFilePath ?? "") || fileExtension(this.activeFilePath ?? "") === "pdf") return;
+    this.defaultFoldGeneration += 1;
+    const tab = this.getActiveTab();
+    if (tab) tab.defaultFoldPending = false;
     foldAll(this.editorInstance);
     this.editorInstance.focus();
   }
 
   private unfoldCurrentFile(): void {
     if (!this.getActiveTab() || !isSupportedInAppPath(this.activeFilePath ?? "") || isBinaryImagePath(this.activeFilePath ?? "") || fileExtension(this.activeFilePath ?? "") === "pdf") return;
+    this.defaultFoldGeneration += 1;
+    const tab = this.getActiveTab();
+    if (tab) tab.defaultFoldPending = false;
     unfoldAll(this.editorInstance);
     this.editorInstance.focus();
   }
@@ -1527,8 +1633,6 @@ export class TypsastraWorkspaceController {
       filePathKey(path),
       parseTypographyBlock(tab.content)?.fallbacks.map(fallback => ({ ...fallback })) ?? []
     );
-    this.activateSpellcheckDocument(path);
-
     this.currentVersion = tab.version;
     this.latestDocumentVersion = tab.latestVersion;
     this.previewSyncController.reset();
@@ -1643,6 +1747,7 @@ export class TypsastraWorkspaceController {
     }
 
     this.activeFilePath = path;
+    this.activateSpellcheckDocument(path);
     if (path.toLowerCase().endsWith(".typ")) this.diagnosticWaitStartedAt = performance.now();
     let previewPresentationReused = false;
     let previewTarget: PreviewTarget | null = null;
@@ -1684,18 +1789,7 @@ export class TypsastraWorkspaceController {
     this.editorFontManager.updateDocument(tab.content);
     this.spellcheckController.schedule();
     if (path.toLowerCase().endsWith(".typ")) {
-      void this.documentOutlineController.update(
-        path, 
-        tab.content, 
-        this.workspaceRootPath || "", 
-        async (p) => {
-          try {
-            return await invoke<string>("read_workspace_file", { path: p });
-          } catch {
-            return null;
-          }
-        }
-      );
+      this.scheduleDocumentOutlineUpdate(path, tab.content);
       this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head, this.activeFilePath);
     } else {
       this.documentOutlineController.clear();

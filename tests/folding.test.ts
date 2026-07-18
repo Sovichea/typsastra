@@ -35,4 +35,20 @@ Content
       to: closingParenthesis + 1,
     });
   });
+
+  test("scans a large document without copying it once per line", () => {
+    const source = Array.from(
+      { length: 20_000 },
+      (_, index) => `Line ${index} lorem ipsum dolor sit amet.`,
+    ).join("\n");
+    const state = EditorState.create({ doc: source });
+    const startedAt = performance.now();
+
+    for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber++) {
+      const line = state.doc.line(lineNumber);
+      typstFunctionFoldService(state, line.from, line.to);
+    }
+
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+  });
 });
