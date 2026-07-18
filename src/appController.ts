@@ -234,6 +234,11 @@ export class TypsastraWorkspaceController {
   private projectImportQueue: Promise<void> = Promise.resolve();
   private saveInProgress: Promise<void> | null = null;
   private pdfPreviewGeneration = 0;
+  private imageZoomIn: (() => void) | null = null;
+  private imageZoomOut: (() => void) | null = null;
+  private imageZoomToFit: (() => void) | null = null;
+  private imageZoomPercent: (() => number) | null = null;
+  private imageIsFit: (() => boolean) | null = null;
   private pdfSyncPreviewTaskKey: string | null = null;
   private pdfSyncRegisteredTaskId: string | null = null;
   private pdfSourceMapStartupKey: string | null = null;
@@ -546,16 +551,13 @@ export class TypsastraWorkspaceController {
     document.body.classList.add("preview-only-mode");
     
     document.getElementById("preview-zoom-in-btn")?.addEventListener("click", () => {
-      this.previewFrame?.zoomIn();
-      this.updatePreviewZoomLabel();
+      this.zoomIn();
     });
     document.getElementById("preview-zoom-out-btn")?.addEventListener("click", () => {
-      this.previewFrame?.zoomOut();
-      this.updatePreviewZoomLabel();
+      this.zoomOut();
     });
     document.getElementById("preview-zoom-fit-btn")?.addEventListener("click", () => {
-      this.previewFrame?.zoomToFit();
-      this.updatePreviewZoomLabel();
+      this.zoomToFit();
     });
 
     const undockBtn = document.getElementById("undock-preview-btn");
@@ -1523,16 +1525,21 @@ export class TypsastraWorkspaceController {
         this.renderNonTextEditorPlaceholder(path, unsupportedFile);
         document.getElementById("wysiwym-editor-pane")?.classList.add("hidden");
 
+        this.imageZoomIn = null;
+        this.imageZoomOut = null;
+        this.imageZoomToFit = null;
+        this.imageZoomPercent = null;
+        this.imageIsFit = null;
+
         this.activateSpellcheckDocument(null);
         this.documentOutlineController.clear();
         if (!options.skipPreviewActivation) {
+          this.updatePreviewActionsToolbar(path);
           if (isBinaryImagePath(path)) {
             this.renderInteractiveImageViewer(tab.content);
           } else if (isPdf) {
-            document.querySelector(".preview-actions")?.classList.add("hidden");
             void this.previewFrame.loadPdfData(tab.content, path);
           } else {
-            document.querySelector(".preview-actions")?.classList.add("hidden");
             this.previewFrame.setMessage(
               `<div class="preview-disabled-placeholder">` +
               `<div class="preview-disabled-title">Preview Unavailable</div>` +
@@ -1550,7 +1557,13 @@ export class TypsastraWorkspaceController {
         this.saveWorkspaceState();
         return;
       } else {
-        document.querySelector(".preview-actions")?.classList.remove("hidden");
+        this.imageZoomIn = null;
+        this.imageZoomOut = null;
+        this.imageZoomToFit = null;
+        this.imageZoomPercent = null;
+        this.imageIsFit = null;
+
+        this.updatePreviewActionsToolbar(path);
         codeRenderPane?.classList.remove("hidden");
         imageViewerPane?.classList.add("hidden");
         if (imageViewerImg) imageViewerImg.style.display = "block"; // Reset styling
@@ -3582,10 +3595,86 @@ export class TypsastraWorkspaceController {
       emit("pdf-forward-sync", position);
     }).catch(err => console.error("Error emitting pdf-forward-sync", err));
   }
-
-  private updatePreviewZoomLabel(zoomPercent = this.previewFrame.currentZoomPercent) {
+  private updatePreviewZoomLabel(zoomPercent?: number) {
     const label = document.getElementById("preview-zoom-label");
-    if (label) label.textContent = this.previewFrame.isFitMode ? "Fit" : `${zoomPercent}%`;
+    if (!label) return;
+
+    if (this.imageZoomPercent && this.imageIsFit) {
+      const isFit = this.imageIsFit();
+      const pct = Math.round((zoomPercent ?? this.imageZoomPercent()) * 100);
+      label.textContent = isFit ? "Fit" : `${pct}%`;
+    } else {
+      const pct = zoomPercent ?? this.previewFrame.currentZoomPercent;
+      label.textContent = this.previewFrame.isFitMode ? "Fit" : `${pct}%`;
+    }
+  }
+
+  private updatePreviewActionsToolbar(path: string | null): void {
+    const previewActions = document.querySelector(".preview-actions");
+    if (!previewActions) return;
+
+    if (!path) {
+      previewActions.classList.add("hidden");
+      return;
+    }
+
+    const ext = fileExtension(path);
+    const isImage = isBinaryImagePath(path);
+    const isPdf = ext === "pdf";
+    const isUnsupported = !isSupportedInAppPath(path);
+
+    if (isUnsupported && !isImage && !isPdf) {
+      previewActions.classList.add("hidden");
+      return;
+    }
+
+    previewActions.classList.remove("hidden");
+
+    const showTypstOnly = !isImage && !isPdf;
+
+    const syncBtn = document.getElementById("preview-forward-sync-btn");
+    const recompileBtn = document.getElementById("preview-recompile-btn");
+    const menuBtn = document.getElementById("preview-menu-btn");
+
+    if (syncBtn) {
+      if (showTypstOnly) syncBtn.classList.remove("hidden");
+      else syncBtn.classList.add("hidden");
+    }
+    if (recompileBtn) {
+      if (showTypstOnly) recompileBtn.classList.remove("hidden");
+      else recompileBtn.classList.add("hidden");
+    }
+    if (menuBtn) {
+      if (showTypstOnly) menuBtn.classList.remove("hidden");
+      else menuBtn.classList.add("hidden");
+    }
+  }
+
+  private zoomIn(): void {
+    if (this.imageZoomIn) {
+      this.imageZoomIn();
+    } else {
+      this.previewFrame.zoomIn();
+      this.updatePreviewZoomLabel();
+    }
+  }
+
+  private zoomOut(): void {
+    if (this.imageZoomOut) {
+      this.imageZoomOut();
+    } else {
+      this.previewFrame.zoomOut();
+      this.updatePreviewZoomLabel();
+    }
+  }
+
+  private zoomToFit(): void {
+    if (this.imageZoomToFit) {
+      this.imageZoomToFit();
+    } else {
+      this.previewFrame.zoomToFit();
+      this.updatePreviewZoomLabel();
+    }
   }
 
   private recordStartupTiming(source: string, label: string, start: number): void {
@@ -4602,19 +4691,16 @@ export class TypsastraWorkspaceController {
   }
 
   private renderInteractiveImageViewer(src: string) {
-    const previewActions = document.querySelector(".preview-actions");
-    previewActions?.classList.add("hidden");
+    this.updatePreviewActionsToolbar(this.activeFilePath);
 
     this.previewFrame.setMessage(
       `<div id="interactive-image-container" style="position:relative;width:100%;height:100%;background:var(--ui-bg);overflow:hidden;display:flex;align-items:center;justify-content:center;user-select:none;box-sizing:border-box;">` +
       `<img id="interactive-image-el" alt="Image preview" draggable="false" style="max-width:none;max-height:none;position:absolute;cursor:grab;user-select:none;will-change:transform;visibility:hidden;" />` +
-      `<button id="interactive-image-fit-btn" style="position:absolute;bottom:16px;right:16px;z-index:10;background:var(--ui-accent-color);color:var(--ui-accent-contrast, #fff);border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-family:var(--font-family-sans);font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);font-weight:bold;">Fit to Window</button>` +
       `</div>`
     );
 
     const container = document.getElementById("interactive-image-container");
     const img = document.getElementById("interactive-image-el") as HTMLImageElement | null;
-    const fitBtn = document.getElementById("interactive-image-fit-btn");
 
     if (!container || !img) return;
 
@@ -4624,6 +4710,7 @@ export class TypsastraWorkspaceController {
     let isDragging = false;
     let startX = 0;
     let startY = 0;
+    let isFit = true;
 
     const updateTransform = () => {
       img.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
@@ -4645,8 +4732,40 @@ export class TypsastraWorkspaceController {
       img.style.visibility = "visible";
     };
 
+    const zoomInImg = () => {
+      const zoomFactor = 1.2;
+      scale = Math.min(scale * zoomFactor, 20);
+      isFit = false;
+      updateTransform();
+      this.updatePreviewZoomLabel(scale);
+    };
+
+    const zoomOutImg = () => {
+      const zoomFactor = 1.2;
+      scale = Math.max(scale / zoomFactor, 0.05);
+      isFit = false;
+      updateTransform();
+      this.updatePreviewZoomLabel(scale);
+    };
+
+    const zoomToFitImg = () => {
+      resetToFit();
+      isFit = true;
+      this.updatePreviewZoomLabel(scale);
+    };
+
+    this.imageZoomIn = zoomInImg;
+    this.imageZoomOut = zoomOutImg;
+    this.imageZoomToFit = zoomToFitImg;
+    this.imageZoomPercent = () => scale;
+    this.imageIsFit = () => isFit;
+
     img.onload = () => {
-      requestAnimationFrame(resetToFit);
+      requestAnimationFrame(() => {
+        resetToFit();
+        isFit = true;
+        this.updatePreviewZoomLabel(scale);
+      });
     };
     img.onerror = () => this.previewFrame.setError(
       "Image preview unavailable",
@@ -4670,7 +4789,9 @@ export class TypsastraWorkspaceController {
 
       x = mouseX - (mouseX - x) * (scale / prevScale);
       y = mouseY - (mouseY - y) * (scale / prevScale);
+      isFit = false;
       updateTransform();
+      this.updatePreviewZoomLabel(scale);
     }, { passive: false });
 
     container.addEventListener("mousedown", (e) => {
@@ -4695,10 +4816,6 @@ export class TypsastraWorkspaceController {
         img.style.cursor = "grab";
       }
     });
-
-    fitBtn?.addEventListener("click", () => {
-      resetToFit();
-    });
   }
 
   private async refreshActivePreviewRoot(forceRender = false): Promise<void> {
@@ -4708,16 +4825,22 @@ export class TypsastraWorkspaceController {
     const unsupportedFile = !isSupportedInAppPath(path);
     const isPdf = ext === "pdf";
 
+    this.imageZoomIn = null;
+    this.imageZoomOut = null;
+    this.imageZoomToFit = null;
+    this.imageZoomPercent = null;
+    this.imageIsFit = null;
+
+    this.updatePreviewActionsToolbar(path);
+
     if (unsupportedFile || isBinaryImagePath(path) || isPdf) {
       const tab = this.getActiveTab();
       if (!tab) return;
       if (isBinaryImagePath(path)) {
         this.renderInteractiveImageViewer(tab.content);
       } else if (isPdf) {
-        document.querySelector(".preview-actions")?.classList.add("hidden");
         void this.previewFrame.loadPdfData(tab.content, path);
       } else {
-        document.querySelector(".preview-actions")?.classList.add("hidden");
         this.previewFrame.setMessage(
           `<div class="preview-disabled-placeholder">` +
           `<div class="preview-disabled-title">Preview Unavailable</div>` +
@@ -5282,6 +5405,13 @@ export class TypsastraWorkspaceController {
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
     this.lastPdfBase64 = "";
+    this.imageZoomIn = null;
+    this.imageZoomOut = null;
+    this.imageZoomToFit = null;
+    this.imageZoomPercent = null;
+    this.imageIsFit = null;
+    this.updatePreviewActionsToolbar(null);
+
     this.openedDocumentUris.clear();
     this.preparedPreviewDocumentVersions.clear();
     this.externalConflictPaths.clear();
@@ -5485,18 +5615,15 @@ export class TypsastraWorkspaceController {
     });
 
     document.getElementById("preview-zoom-out-btn")?.addEventListener("click", () => {
-      this.previewFrame.zoomOut();
-      this.updatePreviewZoomLabel();
+      this.zoomOut();
     });
 
     document.getElementById("preview-zoom-in-btn")?.addEventListener("click", () => {
-      this.previewFrame.zoomIn();
-      this.updatePreviewZoomLabel();
+      this.zoomIn();
     });
 
     document.getElementById("preview-zoom-fit-btn")?.addEventListener("click", () => {
-      this.previewFrame.zoomToFit();
-      this.updatePreviewZoomLabel();
+      this.zoomToFit();
     });
 
     document.getElementById("preview-recompile-btn")?.addEventListener("click", () => {
