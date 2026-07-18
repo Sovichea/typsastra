@@ -31,8 +31,9 @@ request preview scrolling.
 
 1. Typsastra maps the editor cursor to the source file that Tinymist sees. If Khmer render preparation is active, this may be a generated cache file.
 2. Typsastra sends a `panelScrollTo` request to a Tinymist source-map preview task.
-   If the exact cursor boundary is not mappable, it tries a bounded set of
-   nearby Unicode code-point columns.
+   It chooses one likely rendered Unicode code-point column, including at line
+   and prose-run starts. It never speculatively queues nearby candidates because
+   Tinymist resolves each request by scanning the compiled document.
 3. Tinymist returns a PDF document position as a binary
    `jump,<page> <x> <y>` data-plane frame.
 4. Typsastra scrolls the PDF viewer to the page and line position reported by Tinymist.
@@ -46,6 +47,12 @@ exact x/y position within that line. The viewer intentionally does not refine
 the result by matching extracted PDF text because that approach is unreliable
 for repeated text, generated content, mixed scripts, and complex scripts such
 as Khmer.
+
+Tinymist 0.15.2 scans every compiled page while resolving a source position.
+Lookup latency therefore still grows with document length. Typsastra sends only
+one request per reveal so a slow lookup cannot create a queue of repeated
+whole-document scans. The developer log separates local mapping, source-map
+session readiness, and compiler lookup timings for further qualification.
 
 If the source-map socket is unavailable, Typsastra logs the failure and does not pretend that the sync succeeded.
 
@@ -87,8 +94,8 @@ With developer mode enabled, healthy source-map sync should show logs like:
 ```text
 Starting hidden Tinymist source-map session: root=...; task=...
 Tinymist data-plane connected: ws://127.0.0.1:<port>/.
-Requested compiler preview position: <file>:<line>:<column>.
-Compiler document position: candidates=1, page=<n>, x=<x>, y=<y>.
+Requested one compiler preview position: <file>:<line>:<column>; localMappingMs=<ms>; sessionReadyMs=<ms>.
+Compiler document position: candidates=1, page=<n>, x=<x>, y=<y>, lookupMs=<ms>.
 Sending compiler inverse position: page=<n>, x=<x>, y=<y>.
 Compiler source response: uri=..., line=<line>, character=<character>.
 Editor inverse position applied: offset=<offset>.

@@ -52,6 +52,42 @@ export function tinymistPreviewSourceColumn(lineText: string, utf16Offset: numbe
   return [...lineText.slice(0, offset)].length;
 }
 
+function likelyRenderedSourceCharacter(character: string): boolean {
+  return !"#[]{}()=*_+-/`".includes(character)
+    && /[\p{L}\p{M}\p{N}\p{S}]/u.test(character);
+}
+
+export function tinymistPreviewPreferredSourceColumn(
+  lineText: string,
+  utf16Offset: number
+): number {
+  const target = Math.max(0, Math.min(utf16Offset, lineText.length));
+  const characters: Array<{ character: string; start: number; end: number }> = [];
+  let offset = 0;
+  for (const character of lineText) {
+    const start = offset;
+    offset += character.length;
+    characters.push({ character, start, end: offset });
+  }
+
+  const previous = [...characters].reverse().find(entry => entry.end <= target);
+  if (previous && likelyRenderedSourceCharacter(previous.character)) {
+    return tinymistPreviewSourceColumn(lineText, target);
+  }
+
+  const next = characters.find(entry => entry.start >= target && likelyRenderedSourceCharacter(entry.character));
+  if (next) return tinymistPreviewSourceColumn(lineText, next.end);
+
+  const nearest = characters
+    .filter(entry => likelyRenderedSourceCharacter(entry.character))
+    .sort((left, right) => {
+      const leftDistance = Math.min(Math.abs(left.start - target), Math.abs(left.end - target));
+      const rightDistance = Math.min(Math.abs(right.start - target), Math.abs(right.end - target));
+      return leftDistance - rightDistance || left.start - right.start;
+    })[0];
+  return tinymistPreviewSourceColumn(lineText, nearest?.end ?? target);
+}
+
 export function tinymistPreviewNearbySourceColumns(
   lineText: string,
   utf16Offset: number,

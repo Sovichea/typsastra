@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, tinymistPreviewNearbyByteColumns, tinymistPreviewNearbySourceColumns, tinymistPreviewSourceColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
+import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, tinymistPreviewNearbyByteColumns, tinymistPreviewNearbySourceColumns, tinymistPreviewPreferredSourceColumn, tinymistPreviewSourceColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
 
 describe("preview policy", () => {
   test("keeps standalone preview disabled for v1.0", () => {
@@ -49,6 +49,15 @@ describe("preview policy", () => {
     const line = `a\u{1F600}\u1781b`;
     expect(tinymistPreviewSourceColumn(line, 3)).toBe(2);
     expect(tinymistPreviewNearbySourceColumns(line, 3, 5)).toEqual([2, 3, 4, 1, 0]);
+  });
+
+  test("chooses one likely rendered position for forward sync", () => {
+    expect(tinymistPreviewPreferredSourceColumn("Hello", 0)).toBe(1);
+    expect(tinymistPreviewPreferredSourceColumn("Hello", 3)).toBe(3);
+    expect(tinymistPreviewPreferredSourceColumn("= Heading", 0)).toBe(3);
+    expect(tinymistPreviewPreferredSourceColumn("  Khmer", 1)).toBe(3);
+    expect(tinymistPreviewPreferredSourceColumn("😀 text", 0)).toBe(1);
+    expect(tinymistPreviewPreferredSourceColumn("   ", 1)).toBe(1);
   });
 
   test("keeps original source paths for template-aware standalone wrappers", () => {

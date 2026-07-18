@@ -28,7 +28,7 @@ import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus, type PreviewPageStatus } from "./preview/previewFrame";
 import { PreviewSyncController } from "./preview/previewSyncController";
 import { tinymistDataPlanePositionText } from "./preview/tinymistDataPlane";
-import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewNearbySourceColumns, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
+import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewPreferredSourceColumn, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, spellcheckConsoleGroupKey, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
 import { TabStripController } from "./editor/tabStripController";
@@ -155,6 +155,14 @@ type ActivateEditorTabOptions = {
   focusEditor?: boolean;
   largeFileConfirmed?: boolean;
 };
+
+type ForwardSyncTarget = {
+  filepath: string;
+  line: number;
+  character: number;
+};
+
+const PDF_FORWARD_SYNC_TIMEOUT_MS = 15_000;
 
 type LoadFileOptions = {
   temporary?: boolean;
@@ -3369,6 +3377,7 @@ export class TypsastraWorkspaceController {
   }
 
   private async handlePdfForwardSync(path: string, cursor: number, requestedGeneration?: number): Promise<boolean> {
+    const startedAt = performance.now();
     const generation = requestedGeneration ?? ++this.pdfForwardSyncGeneration;
     const client = this.lspClient;
     const rootPath = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath;
@@ -3382,9 +3391,10 @@ export class TypsastraWorkspaceController {
       return false;
     }
 
-    const targets = await this.forwardSyncTargets(path, cursor);
+    const target = await this.forwardSyncTarget(path, cursor);
+    const localMappingMs = performance.now() - startedAt;
     if (generation !== this.pdfForwardSyncGeneration) return false;
-    if (targets.length === 0) {
+    if (!target) {
       this.appendDeveloperLog({
         kind: "warning",
         source: "forward sync",
@@ -3393,7 +3403,9 @@ export class TypsastraWorkspaceController {
       return false;
     }
 
+    const sessionStartedAt = performance.now();
     const sourceMapSession = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "forward sync");
+    const sessionReadyMs = performance.now() - sessionStartedAt;
     if (generation !== this.pdfForwardSyncGeneration) return false;
     if (!sourceMapSession) {
       this.appendDeveloperLog({
@@ -3415,35 +3427,20 @@ export class TypsastraWorkspaceController {
         });
         this.finishManualForwardSync(generation, "Reveal in preview timed out");
       }
-    }, 5000);
+    }, PDF_FORWARD_SYNC_TIMEOUT_MS);
 
-    void this.sendForwardSyncTargets(client, sourceMapSession.taskId, targets, generation);
-    const target = targets[0];
+    void client.scrollPreview(sourceMapSession.taskId, {
+      event: "panelScrollTo",
+      filepath: nativeFilePath(target.filepath),
+      line: target.line,
+      character: target.character
+    });
     this.appendDeveloperLog({
       kind: "info",
       source: "forward sync",
-      message: `Requested compiler preview position: ${target.filepath}:${target.line + 1}:${target.character}; nearbyCandidates=${targets.length}.`
+      message: `Requested one compiler preview position: ${target.filepath}:${target.line + 1}:${target.character}; localMappingMs=${localMappingMs.toFixed(1)}; sessionReadyMs=${sessionReadyMs.toFixed(1)}.`
     });
     return true;
-  }
-
-  private async sendForwardSyncTargets(
-    client: TinymistLspClient,
-    taskId: string,
-    targets: Array<{ filepath: string; line: number; character: number }>,
-    generation: number
-  ): Promise<void> {
-    for (let index = 0; index < targets.length; index += 1) {
-      if (this.pendingPdfForwardSync?.generation !== generation) return;
-      const target = targets[index];
-      await client.scrollPreview(taskId, {
-        event: "panelScrollTo",
-        filepath: nativeFilePath(target.filepath),
-        line: target.line,
-        character: target.character
-      });
-      if (index + 1 < targets.length) await new Promise(resolve => window.setTimeout(resolve, 180));
-    }
   }
 
   private revealCursorInPreviewManually(): void {
@@ -3537,7 +3534,7 @@ export class TypsastraWorkspaceController {
     );
   }
 
-  private async forwardSyncTargets(path: string, cursor: number): Promise<Array<{ filepath: string; line: number; character: number }>> {
+  private async forwardSyncTarget(path: string, cursor: number): Promise<ForwardSyncTarget | null> {
     const editor = this.editorInstance;
     const position = Math.max(0, Math.min(cursor, editor.state.doc.length));
     // Template-aware standalone wrappers use workspace-root (`/...`) imports.
@@ -3548,15 +3545,15 @@ export class TypsastraWorkspaceController {
       : this.pdfPreviewGeneratedFiles.get(filePathKey(path));
     if (!generated) {
       const line = editor.state.doc.lineAt(position);
-      return tinymistPreviewNearbySourceColumns(line.text, position - line.from).map(character => ({
+      return {
         filepath: path,
         line: line.number - 1,
-        character
-      }));
+        character: tinymistPreviewPreferredSourceColumn(line.text, position - line.from)
+      };
     }
 
     const cacheRoot = this.getCacheRootPath();
-    if (!cacheRoot || !this.workspaceRootPath) return [];
+    if (!cacheRoot || !this.workspaceRootPath) return null;
 
     const originalContent = editor.state.doc.toString();
     const sourceByteOffset = new TextEncoder().encode(originalContent.slice(0, position)).length;
@@ -3568,16 +3565,16 @@ export class TypsastraWorkspaceController {
       relativePath,
       sourceOffset: sourceByteOffset
     }).catch(() => null);
-    if (generatedByteOffset === null || generatedByteOffset === undefined) return [];
+    if (generatedByteOffset === null || generatedByteOffset === undefined) return null;
 
     const generatedOffset = this.utf8ByteOffsetToStringOffset(generated.preparedText, generatedByteOffset);
     const generatedDoc = EditorState.create({ doc: generated.preparedText }).doc;
     const line = generatedDoc.lineAt(Math.max(0, Math.min(generatedOffset, generatedDoc.length)));
-    return tinymistPreviewNearbySourceColumns(line.text, generatedOffset - line.from).map(character => ({
+    return {
       filepath: generated.generatedPath,
       line: line.number - 1,
-      character
-    }));
+      character: tinymistPreviewPreferredSourceColumn(line.text, generatedOffset - line.from)
+    };
   }
 
   private async ensurePdfSourceMapSocket(
@@ -3784,14 +3781,15 @@ export class TypsastraWorkspaceController {
     }
 
     const pending = this.pendingPdfForwardSync;
-    if (!pending || Date.now() - pending.requestedAt > 5000) return;
+    if (!pending || Date.now() - pending.requestedAt > PDF_FORWARD_SYNC_TIMEOUT_MS) return;
+    const compilerLookupMs = Date.now() - pending.requestedAt;
     this.pendingPdfForwardSync = null;
 
     const position = positions[0];
     this.appendDeveloperLog({
       kind: "info",
       source: "forward sync",
-      message: `Compiler document position: candidates=${positions.length}, page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}.`
+      message: `Compiler document position: candidates=${positions.length}, page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}, lookupMs=${compilerLookupMs}.`
     });
     void this.previewFrame.revealDocumentPosition(position, { ripple: true });
     this.finishManualForwardSync(pending.generation, "Cursor revealed in preview");

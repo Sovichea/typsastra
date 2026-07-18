@@ -113,6 +113,10 @@ This file serves as a consolidated reference for the architectural decisions, pa
   same main-document project may reuse the process and execute `tinymist.pinMain`
   followed by a versioned `didChange`.
 - Forward sync sends the source location directly to the matching preview task. Inverse sync honors the URI reported by Tinymist and switches source files before placing a collapsed cursor.
+- Manual forward sync sends exactly one likely rendered source column. Do not
+  restore timed nearby-column retries: Tinymist 0.15.2 scans the complete paged
+  document for each `panelScrollTo`, so speculative retries multiply latency
+  and CPU use on long documents.
 
 ### E. WYSIWYM Mode
 - WYSIWYM is a secondary DOM editing view, not the source of truth. `WysiwymAdapter.render()` maps Typst to blocks and `.serialize()` maps blocks back to Typst.
