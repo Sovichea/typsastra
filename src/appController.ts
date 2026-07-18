@@ -121,6 +121,7 @@ type EditorTab = {
   path: string;
   content: string;
   savedContent: string;
+  contentLoaded: boolean;
   isDirty: boolean;
   previewRootPath: string | null;
   previewMainPath: string | null;
@@ -1133,7 +1134,13 @@ export class TypsastraWorkspaceController {
       }
 
       tabButton.addEventListener("click", () => {
-        void this.activateEditorTab(tab.path);
+        void this.activateEditorTab(tab.path).catch(error => {
+          console.error("Failed to load restored tab:", tab.path, error);
+          void message(`Could not open ${fileNameFromPath(tab.path)}: ${String(error)}`, {
+            title: "Unable to Open File",
+            kind: "error"
+          });
+        });
       });
 
       tabButton.addEventListener("dblclick", () => {
@@ -1159,7 +1166,7 @@ export class TypsastraWorkspaceController {
 
   private persistActiveTabState() {
     const tab = this.getActiveTab();
-    if (!tab || !this.editorInstance) return;
+    if (!tab || !tab.contentLoaded || !this.editorInstance) return;
     if (!isSupportedInAppPath(tab.path) || isBinaryImagePath(tab.path) || fileExtension(tab.path) === "pdf") return;
 
     const content = this.activeMode === "WYSIWYM"
@@ -1455,12 +1462,29 @@ export class TypsastraWorkspaceController {
     this.saveWorkspaceState();
   }
 
+  private async loadEditorTabContent(tab: EditorTab): Promise<void> {
+    if (tab.contentLoaded) return;
+
+    const contents = (isBinaryImagePath(tab.path) || fileExtension(tab.path) === "pdf")
+      ? await invoke<string>("read_workspace_file_as_base64", { path: tab.path })
+      : normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
+    tab.content = contents;
+    tab.savedContent = contents;
+    tab.contentLoaded = true;
+    tab.foldRanges = tab.foldRanges === null
+      ? null
+      : this.normalizeFoldRanges(tab.foldRanges, contents.length);
+  }
+
   private async activateEditorTab(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}) {
     this.explorer.setActiveFile(path);
     if (this.workspaceRootPath) {
       await this.explorer.revealPath(path);
     }
     const tab = this.openTabs.find((candidate) => filePathKey(candidate.path) === filePathKey(path));
+    if (tab && !tab.contentLoaded) {
+      await this.loadEditorTabContent(tab);
+    }
     const sameActivePath = this.activeFilePath !== null && filePathKey(this.activeFilePath) === filePathKey(path);
     const activeEditorMatchesTab = tab !== undefined && (
       !isSupportedInAppPath(tab.path) ||
@@ -1840,6 +1864,7 @@ export class TypsastraWorkspaceController {
         path,
         content: contents,
         savedContent: contents,
+        contentLoaded: true,
         isDirty: false,
         previewRootPath: null,
         previewMainPath: null,
@@ -2050,7 +2075,7 @@ export class TypsastraWorkspaceController {
 
   private workspaceText(path: string): Promise<string> {
     const tab = this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path));
-    return tab ? Promise.resolve(tab.content) : invoke<string>("read_workspace_file", { path });
+    return tab?.contentLoaded ? Promise.resolve(tab.content) : invoke<string>("read_workspace_file", { path });
   }
 
   private async writeWorkspaceText(path: string, content: string): Promise<void> {
@@ -2059,6 +2084,7 @@ export class TypsastraWorkspaceController {
     if (tab) {
       tab.content = content;
       tab.savedContent = content;
+      tab.contentLoaded = true;
       tab.isDirty = false;
       tab.version++;
       tab.latestVersion = tab.version;
@@ -2679,6 +2705,7 @@ export class TypsastraWorkspaceController {
     const result = await invoke<{ generatedEntryFile: string }>("prepare_render_project", { options });
     this.ensurePreviewPreparationCurrent(preparationRevision);
     const tabsToOverlay = this.openTabs
+      .filter(tab => tab.contentLoaded)
       .filter(tab => tab.path.toLowerCase().endsWith(".typ"))
       .filter(tab => this.workspaceRootPath && relativeFilePath(this.workspaceRootPath, this.mapToOriginalPath(tab.path)) !== null);
     const overlaid = new Set<string>();
@@ -4276,33 +4303,28 @@ export class TypsastraWorkspaceController {
       })));
       for (const { tabInfo, path } of restoredTabs) {
         if (!path) continue;
-        try {
-          const contents = (isBinaryImagePath(path) || fileExtension(path) === "pdf")
-            ? await invoke<string>("read_workspace_file_as_base64", { path })
-            : normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
-          this.openTabs.push({
-            path,
-            content: contents,
-            savedContent: contents,
-            isDirty: false,
-            previewRootPath: null,
-            previewMainPath: null,
-            previewTaskId: null,
-            previewSessionKey: null,
-            previewImported: false,
-            previewStandalone: true,
-            previewDisabled: false,
-            version: 1,
-            latestVersion: 1,
-            selectionAnchor: tabInfo.selectionAnchor || 0,
-            selectionHead: tabInfo.selectionHead || 0,
-            scrollTop: tabInfo.scrollTop,
-            scrollLeft: tabInfo.scrollLeft,
-            foldRanges: Array.isArray(tabInfo.foldRanges) ? this.normalizeFoldRanges(tabInfo.foldRanges, contents.length) : null
-          });
-        } catch (e) {
-          console.warn("Failed to restore tab:", path, e);
-        }
+        this.openTabs.push({
+          path,
+          content: "",
+          savedContent: "",
+          contentLoaded: !isSupportedInAppPath(path),
+          isDirty: false,
+          previewRootPath: null,
+          previewMainPath: null,
+          previewTaskId: null,
+          previewSessionKey: null,
+          previewImported: false,
+          previewStandalone: true,
+          previewDisabled: false,
+          version: 1,
+          latestVersion: 1,
+          selectionAnchor: tabInfo.selectionAnchor || 0,
+          selectionHead: tabInfo.selectionHead || 0,
+          scrollTop: tabInfo.scrollTop,
+          scrollLeft: tabInfo.scrollLeft,
+          // Bounds are validated after this tab is hydrated.
+          foldRanges: Array.isArray(tabInfo.foldRanges) ? tabInfo.foldRanges as EditorFoldRange[] : null
+        });
       }
       this.renderEditorTabs();
 
@@ -4317,12 +4339,30 @@ export class TypsastraWorkspaceController {
       }
 
       const activeFilePath = await this.absoluteWorkspacePath(workspacePath, state.activeFile);
-      if (activeFilePath) {
-        const activeTab = this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(activeFilePath));
-        if (activeTab) await this.activateEditorTab(activeTab.path, false, { skipPreviewActivation: true });
-        else if (this.openTabs.length > 0) await this.activateEditorTab(this.openTabs[0].path, false, { skipPreviewActivation: true });
-      } else if (this.openTabs.length > 0) {
-        await this.activateEditorTab(this.openTabs[0].path, false, { skipPreviewActivation: true });
+      const preferredTab = activeFilePath
+        ? this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(activeFilePath))
+        : null;
+      const activationCandidates = preferredTab
+        ? [preferredTab, ...this.openTabs.filter(tab => tab !== preferredTab)]
+        : [...this.openTabs];
+      for (const tab of activationCandidates) {
+        try {
+          await this.activateEditorTab(tab.path, false, { skipPreviewActivation: true });
+          break;
+        } catch (error) {
+          console.warn("Failed to restore tab:", tab.path, error);
+          this.openTabs = this.openTabs.filter(candidate => candidate !== tab);
+          this.renderEditorTabs();
+        }
+      }
+      if (!this.activeFilePath) {
+        for (const candidate of workspaceRestoreCandidates(metadata)) {
+          const path = await this.absoluteWorkspacePath(workspacePath, candidate);
+          if (!path || this.openTabs.some(tab => filePathKey(tab.path) === filePathKey(path))) continue;
+          if (!await invoke<boolean>("workspace_path_exists", { path })) continue;
+          await this.loadFile(path, { skipPreviewActivation: true });
+          if (this.activeFilePath) break;
+        }
       }
     } catch (e) {
       console.warn("Failed to restore workspace state:", e);
@@ -4502,6 +4542,9 @@ export class TypsastraWorkspaceController {
       // Unsupported files are represented by a lightweight editor placeholder
       // and are never decoded or synchronized as text.
       if (!isSupportedInAppPath(tab.path)) continue;
+      // Restored inactive tabs are descriptors only. Reading them here would
+      // defeat lazy restoration and can eagerly decode very large PDFs.
+      if (!tab.contentLoaded) continue;
 
       let contents: string;
       try {
@@ -4542,6 +4585,7 @@ export class TypsastraWorkspaceController {
     const isActive = this.activeFilePath !== null && filePathKey(tab.path) === filePathKey(this.activeFilePath);
     tab.content = contents;
     tab.savedContent = contents;
+    tab.contentLoaded = true;
     tab.isDirty = false;
 
     if (!isActive) {
@@ -5731,6 +5775,7 @@ export class TypsastraWorkspaceController {
             const result = await invoke<{ generatedEntryFile: string }>("prepare_render_project", { options });
             
             const tabsToOverlay = this.openTabs
+              .filter(tab => tab.contentLoaded)
               .filter(tab => tab.path.toLowerCase().endsWith(".typ"))
               .filter(tab => this.workspaceRootPath && relativeFilePath(this.workspaceRootPath, this.mapToOriginalPath(tab.path)) !== null);
             
