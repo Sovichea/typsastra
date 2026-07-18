@@ -79,6 +79,18 @@ Imported files preview through their configured main document. Independent stand
 
 PDF forward and inverse sync use one hidden Tinymist web-preview task solely for its source-map data plane. The task ID ends in `-source-map`; Typsastra serializes concurrent startup requests and calls `tinymist.doKillPreview` before replacing a stale task. Do not start a normal-task fallback: Tinymist can reject a second registration against the same compiler instance with `cannot register preview to the compiler instance`.
 
+Typsastra starts this hidden task immediately after publishing a compiled PDF,
+instead of waiting for the first synchronization gesture. WebSocket connection
+and compiler readiness are separate states: the socket is connected when it
+opens, but source requests remain gated until Tinymist naturally publishes the
+task's first `new` or `diff-v1` document frame. Typsastra uses that frame only as
+a readiness signal and does not retain its vector payload.
+
+Typsastra deliberately does not send Tinymist's `current` command because that
+would request an additional complete vector-document snapshot. Once the natural
+initial document frame establishes readiness, only source-map position frames
+are parsed.
+
 ## Security boundaries
 
 Preview helper commands remain narrow:
@@ -93,8 +105,9 @@ With developer mode enabled, healthy source-map sync should show logs like:
 
 ```text
 Starting hidden Tinymist source-map session: root=...; task=...
-Tinymist data-plane connected: ws://127.0.0.1:<port>/.
-Requested one compiler preview position: <file>:<line>:<column>; localMappingMs=<ms>; sessionReadyMs=<ms>.
+Tinymist source-map data plane connected without requesting a vector document snapshot: ws://127.0.0.1:<port>/.
+Source-map session warmed after PDF presentation in <ms>ms.
+Requested one compiler preview position: <file>:<line>:<column>; localMappingMs=<ms>; sessionReadyMs=<ms>; documentReadyMs=<ms>.
 Compiler document position: candidates=1, page=<n>, x=<x>, y=<y>, lookupMs=<ms>.
 Sending compiler inverse position: page=<n>, x=<x>, y=<y>.
 Compiler source response: uri=..., line=<line>, character=<character>.

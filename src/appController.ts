@@ -27,7 +27,7 @@ import { isBinaryImagePath, isSupportedInAppPath, fileExtension } from "./platfo
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus, type PreviewPageStatus } from "./preview/previewFrame";
 import { PreviewSyncController } from "./preview/previewSyncController";
-import { tinymistDataPlanePositionText } from "./preview/tinymistDataPlane";
+import { tinymistDataPlaneFrameKind, tinymistDataPlanePositionText } from "./preview/tinymistDataPlane";
 import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewPreferredSourceColumn, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, spellcheckConsoleGroupKey, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
@@ -163,6 +163,7 @@ type ForwardSyncTarget = {
 };
 
 const PDF_FORWARD_SYNC_TIMEOUT_MS = 15_000;
+const PDF_SOURCE_MAP_READY_TIMEOUT_MS = 60_000;
 
 type LoadFileOptions = {
   temporary?: boolean;
@@ -265,6 +266,9 @@ export class TypsastraWorkspaceController {
   private pdfSourceMapStartup: Promise<{ socket: WebSocket; taskId: string } | null> | null = null;
   private pdfSyncSocket: WebSocket | null = null;
   private pdfSyncSocketUrl = "";
+  private pdfSyncDocumentReadySocket: WebSocket | null = null;
+  private pdfSyncDocumentReadyPromise: Promise<boolean> | null = null;
+  private resolvePdfSyncDocumentReady: ((ready: boolean) => void) | null = null;
   private pdfForwardSyncGeneration = 0;
   private pendingPdfForwardSync: { generation: number; requestedAt: number } | null = null;
   private manualForwardSyncGeneration: number | null = null;
@@ -1929,6 +1933,7 @@ export class TypsastraWorkspaceController {
       this.pdfSyncRegisteredTaskId = null;
       this.pdfSourceMapStartup = null;
       this.pdfSourceMapStartupKey = null;
+      this.clearPdfSourceMapDocumentReadiness();
       this.pdfSyncSocket?.close();
       this.pdfSyncSocket = null;
       this.pdfSyncSocketUrl = "";
@@ -1955,6 +1960,7 @@ export class TypsastraWorkspaceController {
     this.pdfSyncRegisteredTaskId = null;
     this.pdfSourceMapStartup = null;
     this.pdfSourceMapStartupKey = null;
+    this.clearPdfSourceMapDocumentReadiness();
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
@@ -1993,6 +1999,7 @@ export class TypsastraWorkspaceController {
     if (affectsSourceMapSession) {
       this.pdfSyncPreviewTaskKey = null;
       this.pdfSyncRegisteredTaskId = null;
+      this.clearPdfSourceMapDocumentReadiness();
       this.pdfSyncSocket?.close();
       this.pdfSyncSocket = null;
       this.pdfSyncSocketUrl = "";
@@ -2020,6 +2027,7 @@ export class TypsastraWorkspaceController {
     this.pdfSyncRegisteredTaskId = null;
     this.pdfSourceMapStartup = null;
     this.pdfSourceMapStartupKey = null;
+    this.clearPdfSourceMapDocumentReadiness();
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
@@ -2472,6 +2480,7 @@ export class TypsastraWorkspaceController {
     this.pdfSyncRegisteredTaskId = null;
     this.pdfSourceMapStartup = null;
     this.pdfSourceMapStartupKey = null;
+    this.clearPdfSourceMapDocumentReadiness();
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
@@ -2775,6 +2784,7 @@ export class TypsastraWorkspaceController {
       this.lastPdfBase64 = pdf.data!;
       await this.previewFrame.loadPdfData(pdf.data!, previewPath);
       this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message: `Render generation ${generation}: PDF presentation complete.` });
+      void this.warmPdfSourceMapSession(generation);
       await this.logMemoryDiagnostics(`render ${generation}: after PDF cleanup/presentation`);
       window.setTimeout(() => {
         void this.logMemoryDiagnostics(`render ${generation}: settled after page rendering`);
@@ -3416,6 +3426,19 @@ export class TypsastraWorkspaceController {
       return false;
     }
 
+    const documentReadyStartedAt = performance.now();
+    const documentReady = await this.waitForPdfSourceMapDocument(sourceMapSession.socket);
+    const documentReadyMs = performance.now() - documentReadyStartedAt;
+    if (generation !== this.pdfForwardSyncGeneration) return false;
+    if (!documentReady) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "forward sync",
+        message: "Skipped PDF forward sync: source-map document did not become ready."
+      });
+      return false;
+    }
+
     this.pendingPdfForwardSync = { generation, requestedAt: Date.now() };
     window.setTimeout(() => {
       if (this.pendingPdfForwardSync?.generation === generation) {
@@ -3438,7 +3461,7 @@ export class TypsastraWorkspaceController {
     this.appendDeveloperLog({
       kind: "info",
       source: "forward sync",
-      message: `Requested one compiler preview position: ${target.filepath}:${target.line + 1}:${target.character}; localMappingMs=${localMappingMs.toFixed(1)}; sessionReadyMs=${sessionReadyMs.toFixed(1)}.`
+      message: `Requested one compiler preview position: ${target.filepath}:${target.line + 1}:${target.character}; localMappingMs=${localMappingMs.toFixed(1)}; sessionReadyMs=${sessionReadyMs.toFixed(1)}; documentReadyMs=${documentReadyMs.toFixed(1)}.`
     });
     return true;
   }
@@ -3615,6 +3638,7 @@ export class TypsastraWorkspaceController {
       if (existingSocket) return { socket: existingSocket, taskId: sourceMapTaskId };
     }
 
+    this.clearPdfSourceMapDocumentReadiness();
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
@@ -3696,6 +3720,14 @@ export class TypsastraWorkspaceController {
       });
       return;
     }
+    if (!await this.waitForPdfSourceMapDocument(sourceMapSession.socket)) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "inverse sync",
+        message: "Skipped PDF inverse sync: source-map document did not become ready."
+      });
+      return;
+    }
     this.previewSyncController.recordPreviewClick(point);
     this.appendDeveloperLog({
       kind: "info",
@@ -3710,9 +3742,13 @@ export class TypsastraWorkspaceController {
     if (this.pdfSyncSocketUrl === url && this.pdfSyncSocket?.readyState === WebSocket.OPEN) {
       return this.pdfSyncSocket;
     }
+    this.clearPdfSourceMapDocumentReadiness();
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = url;
+    this.pdfSyncDocumentReadyPromise = new Promise(resolve => {
+      this.resolvePdfSyncDocumentReady = resolve;
+    });
     const proxyUrl = await invoke<string>("start_preview_ws_proxy", { targetUrl: url }).catch(error => {
       this.appendDeveloperLog({
         kind: "warning",
@@ -3737,35 +3773,50 @@ export class TypsastraWorkspaceController {
       };
       const timeout = window.setTimeout(() => {
         socket.close();
-        if (this.pdfSyncSocket === socket) this.pdfSyncSocket = null;
+        if (this.pdfSyncSocket === socket || this.pdfSyncSocketUrl === url) {
+          this.clearPdfSourceMapDocumentReadiness();
+          if (this.pdfSyncSocket === socket) this.pdfSyncSocket = null;
+        }
         finish(null);
       }, 10000);
       socket.addEventListener("open", () => {
         this.pdfSyncSocket = socket;
-        socket.send("current");
         this.appendDeveloperLog({
           kind: "info",
           source,
-          message: `Tinymist data-plane connected: ${url}.`
+          message: `Tinymist source-map data plane connected without requesting a vector document snapshot: ${url}.`
         });
+        // Typsastra renders the compiled PDF itself and consumes only Tinymist's
+        // jump/viewport source-map frames. Requesting `current` here forces the
+        // hidden preview task to serialize the entire vector document, which can
+        // block the first source lookup for very long documents.
+        finish(socket);
       }, { once: true });
       socket.addEventListener("message", event => {
-        // The first payload is the response to `current` (normally a binary
-        // diff-v1 snapshot). Wait for it before issuing source-map commands.
-        finish(socket);
-        void this.handlePdfSyncSocketMessage(event.data);
+        void this.handlePdfSyncSocketMessage(event.data, socket);
       });
       socket.addEventListener("close", () => {
-        if (this.pdfSyncSocket === socket) this.pdfSyncSocket = null;
+        if (this.pdfSyncSocket === socket) {
+          this.clearPdfSourceMapDocumentReadiness();
+          this.pdfSyncSocket = null;
+        }
       });
       socket.addEventListener("error", () => {
-        if (this.pdfSyncSocket === socket) this.pdfSyncSocket = null;
+        if (this.pdfSyncSocket === socket || this.pdfSyncSocketUrl === url) {
+          this.clearPdfSourceMapDocumentReadiness();
+          if (this.pdfSyncSocket === socket) this.pdfSyncSocket = null;
+        }
         finish(null);
       }, { once: true });
     });
   }
 
-  private async handlePdfSyncSocketMessage(data: unknown): Promise<void> {
+  private async handlePdfSyncSocketMessage(data: unknown, socket = this.pdfSyncSocket): Promise<void> {
+    const frameKind = await tinymistDataPlaneFrameKind(data);
+    if (frameKind === "document") {
+      if (socket) this.markPdfSourceMapDocumentReady(socket);
+      return;
+    }
     const text = await tinymistDataPlanePositionText(data);
     if (!text) return;
     const positions = parseTinymistPreviewPositions(text);
@@ -3809,6 +3860,56 @@ export class TypsastraWorkspaceController {
       const pct = zoomPercent ?? this.previewFrame.currentZoomPercent;
       label.textContent = this.previewFrame.isFitMode ? "Fit" : `${pct}%`;
     }
+  }
+
+  private async warmPdfSourceMapSession(generation: number): Promise<void> {
+    const client = this.lspClient;
+    const rootPath = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath;
+    const taskId = this.pdfPreviewSourceMapTaskId ?? this.previewTaskId;
+    if (!client || !rootPath || !taskId || !this.lspReady || generation !== this.pdfPreviewGeneration) return;
+    const startedAt = performance.now();
+    const session = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "forward sync");
+    if (!session || generation !== this.pdfPreviewGeneration) return;
+    const ready = await this.waitForPdfSourceMapDocument(session.socket);
+    if (generation !== this.pdfPreviewGeneration) return;
+    this.appendDeveloperLog({
+      kind: ready ? "info" : "warning",
+      source: "forward sync",
+      message: ready
+        ? `Source-map session warmed after PDF presentation in ${(performance.now() - startedAt).toFixed(1)}ms.`
+        : `Source-map session did not become ready within ${PDF_SOURCE_MAP_READY_TIMEOUT_MS}ms.`
+    });
+  }
+
+  private waitForPdfSourceMapDocument(socket: WebSocket): Promise<boolean> {
+    if (this.pdfSyncDocumentReadySocket === socket) return Promise.resolve(true);
+    if (this.pdfSyncSocket !== socket || !this.pdfSyncDocumentReadyPromise) return Promise.resolve(false);
+    const readiness = this.pdfSyncDocumentReadyPromise;
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = (ready: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(ready);
+      };
+      const timeout = window.setTimeout(() => finish(false), PDF_SOURCE_MAP_READY_TIMEOUT_MS);
+      void readiness.then(finish);
+    });
+  }
+
+  private markPdfSourceMapDocumentReady(socket: WebSocket): void {
+    if (this.pdfSyncSocket !== socket || this.pdfSyncDocumentReadySocket === socket) return;
+    this.pdfSyncDocumentReadySocket = socket;
+    this.resolvePdfSyncDocumentReady?.(true);
+    this.resolvePdfSyncDocumentReady = null;
+  }
+
+  private clearPdfSourceMapDocumentReadiness(): void {
+    this.resolvePdfSyncDocumentReady?.(false);
+    this.resolvePdfSyncDocumentReady = null;
+    this.pdfSyncDocumentReadyPromise = null;
+    this.pdfSyncDocumentReadySocket = null;
   }
 
   private initializePreviewPageControls(): void {
@@ -5807,6 +5908,7 @@ export class TypsastraWorkspaceController {
     this.pdfSyncRegisteredTaskId = null;
     this.pdfSourceMapStartup = null;
     this.pdfSourceMapStartupKey = null;
+    this.clearPdfSourceMapDocumentReadiness();
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";

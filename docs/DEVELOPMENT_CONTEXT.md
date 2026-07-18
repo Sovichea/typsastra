@@ -117,6 +117,12 @@ This file serves as a consolidated reference for the architectural decisions, pa
   restore timed nearby-column retries: Tinymist 0.15.2 scans the complete paged
   document for each `panelScrollTo`, so speculative retries multiply latency
   and CPU use on long documents.
+- The hidden source-map WebSocket must not send Tinymist's `current` command.
+  Typsastra does not consume the vector document, and forcing a full snapshot
+  can block the first source lookup on thousand-page documents.
+- Start the hidden source-map task after PDF presentation and treat socket-open
+  only as transport readiness. Forward and inverse requests must wait for the
+  task's first natural `new` or `diff-v1` document frame before they are sent.
 
 ### E. WYSIWYM Mode
 - WYSIWYM is a secondary DOM editing view, not the source of truth. `WysiwymAdapter.render()` maps Typst to blocks and `.serialize()` maps blocks back to Typst.
