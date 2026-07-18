@@ -379,6 +379,38 @@ fn read_workspace_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn workspace_file_size(path: String) -> Result<u64, String> {
+    let metadata =
+        std::fs::metadata(&path).map_err(|error| format!("Failed to inspect file: {error}"))?;
+    if !metadata.is_file() {
+        return Err("The selected path is not a file.".to_string());
+    }
+    Ok(metadata.len())
+}
+
+#[tauri::command]
+fn workspace_text_line_count(path: String) -> Result<u64, String> {
+    use std::io::BufRead;
+
+    let file = std::fs::File::open(&path)
+        .map_err(|error| format!("Failed to inspect text file: {error}"))?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut buffer = Vec::with_capacity(8 * 1024);
+    let mut line_count = 0_u64;
+    loop {
+        buffer.clear();
+        let bytes = reader
+            .read_until(b'\n', &mut buffer)
+            .map_err(|error| format!("Failed to inspect text file: {error}"))?;
+        if bytes == 0 {
+            break;
+        }
+        line_count += 1;
+    }
+    Ok(line_count)
+}
+
+#[tauri::command]
 fn open_file_externally(path: String) -> Result<(), String> {
     let file_path = std::path::Path::new(&path);
     if !file_path.is_file() {
@@ -2583,6 +2615,8 @@ pub fn run() {
             compile_typst_document,
             check_typst_document,
             read_workspace_file,
+            workspace_file_size,
+            workspace_text_line_count,
             open_file_externally,
             read_workspace_file_as_base64,
             workspace_path_exists,

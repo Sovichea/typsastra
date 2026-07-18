@@ -50,6 +50,7 @@ import {
 import { RecentProjectsController, recentProjectShortcutIndex } from "./workspace/recentProjectsController";
 import { WorkspaceWatcher, type WorkspaceChange } from "./workspace/workspaceWatcher";
 import { workspaceViewportState } from "./workspace/workspaceVisibility";
+import { formatFileSize, largeFileOpeningNotice, type LargeFileOpeningNotice } from "./workspace/largeFileOpening";
 import { installWelcomeKeyboardNavigation } from "./workspace/welcomeNavigation";
 import { PerformanceDiagnostics, type PerformanceMetric } from "./performance/diagnostics";
 import { EditorToolbarController } from "./editor/toolbarController";
@@ -138,6 +139,8 @@ type EditorTab = {
   scrollLeft?: number;
   foldRanges: EditorFoldRange[] | null;
   defaultFoldPending?: boolean;
+  sizeBytes?: number;
+  lineCount?: number;
   temporary?: boolean;
 };
 
@@ -150,6 +153,7 @@ type ActivateEditorTabOptions = {
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
   focusEditor?: boolean;
+  largeFileConfirmed?: boolean;
 };
 
 type LoadFileOptions = {
@@ -211,6 +215,7 @@ export class TypsastraWorkspaceController {
   private workspaceRootPath: string | null = null;
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
+  private workspaceServicesDeferredForLargeFile = false;
   private wordWrapDeferredForResize = false;
   private recommendedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
   private selectedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
@@ -1568,6 +1573,28 @@ export class TypsastraWorkspaceController {
     this.saveWorkspaceState();
   }
 
+  private async largeFileNoticeForTab(tab: EditorTab) {
+    if (tab.sizeBytes === undefined) {
+      try {
+        tab.sizeBytes = await invoke<number>("workspace_file_size", { path: tab.path });
+      } catch {
+        return null;
+      }
+    }
+    const sizeNotice = largeFileOpeningNotice(tab.path, tab.sizeBytes);
+    if (sizeNotice || fileExtension(tab.path) === "pdf" || isBinaryImagePath(tab.path) || !isSupportedInAppPath(tab.path)) {
+      return sizeNotice;
+    }
+    if (tab.lineCount === undefined) {
+      try {
+        tab.lineCount = await invoke<number>("workspace_text_line_count", { path: tab.path });
+      } catch {
+        return null;
+      }
+    }
+    return largeFileOpeningNotice(tab.path, tab.sizeBytes, tab.lineCount);
+  }
+
   private async loadEditorTabContent(tab: EditorTab): Promise<void> {
     if (tab.contentLoaded) return;
 
@@ -1588,17 +1615,23 @@ export class TypsastraWorkspaceController {
       await this.explorer.revealPath(path);
     }
     const tab = this.openTabs.find((candidate) => filePathKey(candidate.path) === filePathKey(path));
+    const sameActivePath = this.activeFilePath !== null && filePathKey(this.activeFilePath) === filePathKey(path);
     if (tab && !tab.contentLoaded) {
+      const notice = await this.largeFileNoticeForTab(tab);
+      if (notice && !options.largeFileConfirmed) {
+        if (persistCurrent && !sameActivePath) this.persistActiveTabState();
+        this.showLargeFileConfirmation(tab, notice);
+        return;
+      }
       await this.loadEditorTabContent(tab);
     }
-    const sameActivePath = this.activeFilePath !== null && filePathKey(this.activeFilePath) === filePathKey(path);
     const activeEditorMatchesTab = tab !== undefined && (
       !isSupportedInAppPath(tab.path) ||
       isBinaryImagePath(tab.path) ||
       fileExtension(tab.path) === "pdf" ||
       this.editorInstance.state.doc.toString() === tab.content
     );
-    if (sameActivePath && tab && activeEditorMatchesTab) {
+    if (sameActivePath && tab && activeEditorMatchesTab && !options.largeFileConfirmed) {
       if (persistCurrent) {
         this.persistActiveTabState();
         this.renderEditorTabs();
@@ -1684,6 +1717,7 @@ export class TypsastraWorkspaceController {
         this.updateWorkspaceViewportVisibility();
         this.renderEditorTabs();
         this.saveWorkspaceState();
+        this.resumeDeferredWorkspaceServices();
         return;
       } else {
         this.imageZoomIn = null;
@@ -1836,6 +1870,14 @@ export class TypsastraWorkspaceController {
     this.updateManualForwardSyncAction();
     if (options.focusEditor !== false) this.editorInstance.focus();
     this.saveWorkspaceState();
+    this.resumeDeferredWorkspaceServices();
+  }
+
+  private resumeDeferredWorkspaceServices(): void {
+    if (!this.workspaceServicesDeferredForLargeFile || !this.workspaceRootPath) return;
+    const workspacePath = this.workspaceRootPath;
+    this.workspaceServicesDeferredForLargeFile = false;
+    void this.startWorkspaceServices(workspacePath);
   }
 
   private async initLsp(shouldConnect = true) {
@@ -1949,16 +1991,16 @@ export class TypsastraWorkspaceController {
     }
 
     try {
-      const contents = !isSupportedInAppPath(path)
-        ? ""
-        : (isBinaryImagePath(path) || fileExtension(path) === "pdf")
-          ? await invoke<string>("read_workspace_file_as_base64", { path })
-          : normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
+      const deferredContent = isSupportedInAppPath(path)
+        && !isBinaryImagePath(path);
+      const contents = isBinaryImagePath(path)
+        ? await invoke<string>("read_workspace_file_as_base64", { path })
+        : "";
       const newTab: EditorTab = {
         path,
         content: contents,
         savedContent: contents,
-        contentLoaded: true,
+        contentLoaded: !deferredContent,
         isDirty: false,
         previewRootPath: null,
         previewMainPath: null,
@@ -3193,6 +3235,7 @@ export class TypsastraWorkspaceController {
       await this.loadFile(resolvedTargetPath, {
         preservePreviewSession: isStandalone ? undefined : this.capturePreviewSession()
       });
+      if (!this.getActiveTab()?.contentLoaded) return { handled: true };
     }
 
     if (this.activeMode === "WYSIWYM") {
@@ -4196,6 +4239,7 @@ export class TypsastraWorkspaceController {
     if (entry.filePath && filePathKey(entry.filePath) !== filePathKey(this.activeFilePath ?? "")) {
       await this.loadFile(entry.filePath);
     }
+    if (!this.getActiveTab()?.contentLoaded) return;
     const cursor = entry.offset === undefined
       ? this.editorPositionFromSourceLocation(entry.line ?? 1, entry.column ?? 1)
       : Math.max(0, Math.min(entry.offset, this.editorInstance.state.doc.length));
@@ -4215,6 +4259,7 @@ export class TypsastraWorkspaceController {
     if (filePath !== this.activeFilePath) {
       await this.loadFile(filePath);
     }
+    if (!this.getActiveTab()?.contentLoaded) return;
     
     let cursor = 0;
     if (this.isRenderCachePath(rawPath) && this.lspClient) {
@@ -4247,6 +4292,7 @@ export class TypsastraWorkspaceController {
     if (heading.filePath !== this.activeFilePath) {
       await this.loadFile(heading.filePath, { focusEditor: false });
     }
+    if (!this.getActiveTab()?.contentLoaded) return;
     if (this.activeMode === "WYSIWYM") this.switchViewLayoutMode();
     const currentHeading = this.documentOutlineController.findHeading(heading.id) ?? heading;
     const cursor = Math.max(0, Math.min(currentHeading.textFrom, this.editorInstance.state.doc.length));
@@ -4638,7 +4684,11 @@ export class TypsastraWorkspaceController {
       if (!isSupportedInAppPath(tab.path)) continue;
       // Restored inactive tabs are descriptors only. Reading them here would
       // defeat lazy restoration and can eagerly decode very large PDFs.
-      if (!tab.contentLoaded) continue;
+      if (!tab.contentLoaded) {
+        tab.sizeBytes = undefined;
+        tab.lineCount = undefined;
+        continue;
+      }
 
       let contents: string;
       try {
@@ -4826,6 +4876,93 @@ export class TypsastraWorkspaceController {
       placeholder.appendChild(openButton);
     }
     info.replaceChildren(placeholder);
+  }
+
+  private showLargeFileConfirmation(tab: EditorTab, notice: LargeFileOpeningNotice): void {
+    const path = tab.path;
+    const codeRenderPane = document.getElementById("code-render-pane");
+    const imageViewerPane = document.getElementById("image-viewer-pane");
+    const imageViewerImg = document.getElementById("image-viewer-img") as HTMLImageElement | null;
+    const info = document.getElementById("image-viewer-info");
+
+    codeRenderPane?.classList.add("hidden");
+    imageViewerPane?.classList.remove("hidden");
+    if (imageViewerImg) imageViewerImg.style.display = "none";
+    document.getElementById("wysiwym-editor-pane")?.classList.add("hidden");
+
+    if (info) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "preview-disabled-placeholder editor-file-placeholder";
+
+      const icon = document.createElement("div");
+      icon.className = "preview-disabled-icon";
+      icon.textContent = "📄";
+
+      const title = document.createElement("div");
+      title.className = "preview-disabled-title";
+      title.textContent = notice.kind === "pdf" ? "Large PDF Document" : "Large Text File";
+
+      const fileName = document.createElement("div");
+      fileName.className = "editor-file-placeholder-name";
+      fileName.textContent = fileNameFromPath(path);
+
+      const description = document.createElement("div");
+      description.className = "preview-disabled-msg";
+      const work = notice.kind === "pdf"
+        ? "Opening it will decode the PDF and begin rendering visible pages."
+        : "Opening it will initialize the editor, folding, outline, and language tools.";
+      const scale = notice.lineCount !== undefined
+        ? `${notice.lineCount.toLocaleString()} lines, ${formatFileSize(notice.sizeBytes)}`
+        : formatFileSize(notice.sizeBytes);
+      description.textContent = `This file is ${scale}. ${work}`;
+
+      const confirmButton = document.createElement("button");
+      confirmButton.type = "button";
+      confirmButton.className = "editor-file-placeholder-action";
+      confirmButton.textContent = "Open Large File";
+      confirmButton.addEventListener("click", () => {
+        confirmButton.disabled = true;
+        confirmButton.textContent = "Opening…";
+        void this.activateEditorTab(path, false, { largeFileConfirmed: true }).catch(error => {
+          console.error("Failed to open large file:", error);
+          confirmButton.disabled = false;
+          confirmButton.textContent = "Open Large File";
+          void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
+            title: "Unable to Open File",
+            kind: "error"
+          });
+        });
+      });
+
+      placeholder.append(icon, title, fileName, description, confirmButton);
+      info.replaceChildren(placeholder);
+    }
+
+    this.activeFilePath = path;
+    this.previewRootPath = null;
+    this.previewMainPath = null;
+    this.previewTaskId = null;
+    this.previewSessionKey = null;
+    this.previewImported = false;
+    this.previewStandalone = true;
+    this.previewDisabled = false;
+    this.activateSpellcheckDocument(null);
+    this.documentOutlineController.clear();
+    this.clearDiagnostics();
+    this.clearPendingLspSync();
+    this.previewSyncController.clearForward();
+    this.editorToolbarController.setDisabled(true);
+    this.updatePreviewActionsToolbar(path);
+    this.previewFrame.setMessage(
+      `<div class="preview-disabled-placeholder">`
+      + `<div class="preview-disabled-title">Large file not loaded</div>`
+      + `<div class="preview-disabled-msg">Confirm opening this file in the editor pane to start processing it.</div>`
+      + `</div>`
+    );
+    this.updateManualForwardSyncAction();
+    this.updateWorkspaceViewportVisibility();
+    this.renderEditorTabs();
+    void this.saveWorkspaceState();
   }
 
   private async openFileExternally(path: string, button?: HTMLButtonElement): Promise<void> {
@@ -5141,6 +5278,11 @@ export class TypsastraWorkspaceController {
   private async startWorkspaceServices(selected: string): Promise<void> {
     try {
       if (this.workspaceRootPath !== selected) return;
+      if (this.activeFilePath && !this.getActiveTab()?.contentLoaded) {
+        this.workspaceServicesDeferredForLargeFile = true;
+        return;
+      }
+      this.workspaceServicesDeferredForLargeFile = false;
       await this.prepareRenderProjectIfNeeded();
       if (this.workspaceRootPath !== selected) return;
       if (this.lspClient) {
@@ -5488,6 +5630,8 @@ export class TypsastraWorkspaceController {
     if (this.workspaceRootPath) {
       await this.explorer.loadWorkspace(this.workspaceRootPath);
     }
+
+    if (path && !this.getActiveTab()?.contentLoaded) return;
     
     await this.refreshActivePreviewRoot(mainWasAlreadyActive);
   }
