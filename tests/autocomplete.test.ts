@@ -3,6 +3,7 @@ import { Text } from "@codemirror/state";
 import {
   applyTextForHashPrefix,
   allowsLanguageWordCompletionOnLine,
+  chooseLanguageCompletionProvider,
   completionEditOffsets,
   displayLabelForHashPrefix,
   fontCompletionValueStart,
@@ -130,6 +131,23 @@ describe("LSP autocomplete edits", () => {
 });
 
 describe("segmented language completion", () => {
+  const english = { id: "english", scripts: ["Latn"] };
+  const french = { id: "french", scripts: ["Latn"] };
+  const khmer = { id: "khmer-segmenter", scripts: ["Khmr"] };
+
+  test("uses a unique typed-script provider when the OS language is wrong or unavailable", () => {
+    expect(chooseLanguageCompletionProvider([khmer], english)?.id).toBe("khmer-segmenter");
+    expect(chooseLanguageCompletionProvider([khmer], null)?.id).toBe("khmer-segmenter");
+  });
+
+  test("keeps the OS or scope preference for same-script languages", () => {
+    expect(chooseLanguageCompletionProvider([english, french], french)?.id).toBe("french");
+  });
+
+  test("does not guess when multiple providers match an unowned script", () => {
+    expect(chooseLanguageCompletionProvider([english, french], null)).toBeNull();
+  });
+
   test("refreshes bounded native results after every typed character", () => {
     expect(languageCompletionValidFor()).toBe(false);
   });

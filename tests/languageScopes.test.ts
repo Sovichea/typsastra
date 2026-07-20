@@ -240,4 +240,19 @@ describe("language provider routing", () => {
       provider("en-gb", "en-GB", ["Latn"]),
     ], "en")).toBeNull();
   });
+
+  test("Linux and macOS input fallbacks preserve the scoped provider", async () => {
+    const scopes = resolveLanguageScopes(extraction([
+      mutation({ language: { confidence: "static", value: "fr" } }),
+    ]));
+    for (const status of [
+      { languageTag: "en-US", reliability: "unmapped" as const, source: "linux-locale-fallback" },
+      { languageTag: null, reliability: "unsupported" as const, source: "macos-fallback" },
+    ]) {
+      const service = new InputLanguageService(() => installed, () => scopes, async () => status);
+      const completion = await service.completionProvider(10);
+      expect(completion?.provider.id).toBe("fr");
+      expect(completion?.source).toBe("scope");
+    }
+  });
 });
