@@ -1,22 +1,26 @@
-#set document(title: "Keyboard-language Completion")
+#set document(title: "Document-script Word Completion")
 #set page(margin: 24mm)
-#set text(lang: "en", size: 11pt)
+// typsastra:typography:start
+// typsastra:document-scripts [{"family":"MiSans Latin","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"}]
+#set text(
+  font: (
+    (name: "MiSans Latin", covers: regex("\p{scx=Latin}")),
+    (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
+  ),
+  size: 11pt,
+)
+// typsastra:typography:end
 
-= Keyboard-language completion
+= Document-script word completion
 
-This paragraph is explicitly English. Misspelled words are checked with the
-English provider even when the operating-system keyboard changes.
+Place the cursor after an English or Khmer prefix and request completion.
+Typsastra selects the provider assigned to the prefix's script. It does not
+inspect the operating-system keyboard layout.
 
-== Try it
+English prefix: doc
 
-1. Open Settings and set the suggestion language source to Keyboard language.
-2. Place the cursor after the prefix below.
-3. Switch to a mapped keyboard language and continue typing.
+Khmer prefix: ខ្មែ
 
-Type here: doc
-
-#text(lang: "fr")[Cette phrase reste un scope français, indépendamment du clavier.]
-
-Keyboard language selects at most one completion provider. It never overrides
-the `lang` scope used by spellcheck. Completion is suppressed during IME
-composition, outside Typst prose, and for incompatible multiple selections.
+Turn the language off for either script in the Typography toolbar to disable
+Typsastra completion for that script. IME candidate composition remains
+independent.

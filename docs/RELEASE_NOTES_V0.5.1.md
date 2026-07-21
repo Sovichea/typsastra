@@ -14,7 +14,7 @@ after release.
   `Typsastra Examples v0.5.1`, preventing a new release from overwriting or
   silently reusing an older example workspace.
 - Added focused examples for script-specific font assignments,
-  language-scoped spellcheck, keyboard-language completion, optional-provider
+  document-script spellcheck, provider-selected completion, optional-provider
   recovery, main-file ownership, portable workspace state, and font-free export.
 - Promoted the multilingual article into the research-project sequence as the
   complete v0.5.x language-tools demonstration.
@@ -30,14 +30,14 @@ after release.
 
 ## Document typography
 
-- Replaced primary and embedded typography roles with equal script-font
+- Replaced primary and embedded typography roles with equal document-script
   assignments. Every configured script can choose its own font and uniform
   scale relative to the shared document size.
 - Added native Typst `covers` descriptors using Unicode Script Extensions
   (`scx`). A Khmer font that contains Latin glyphs can now appear before the
   Latin font without consuming Latin text.
 - Preserved existing primary/embedded configurations through automatic metadata
-  migration while writing the simpler `typsastra:script-fonts` format for new
+  migration while writing the unified `typsastra:document-scripts` format for new
   changes.
 - Rejected conflicting scales when multiple scripts select the same internal
   font family, avoiding ambiguous generated-font resolution.
@@ -49,6 +49,7 @@ after release.
   private global application-data cache. Matching font-and-scale variants are
   reused across projects, while font bytes and cache paths never enter project
   settings, workspace copies, source ZIPs, or project archives.
+
 - Added a soft limit of 10 cached scale variants per font face. Creating another
   variant requires confirmation; Typsastra preserves existing variants until
   the planned v0.5.2 cache manager lets users inspect, delete, or renew them.
@@ -63,19 +64,29 @@ after release.
   advances, and Typsastra intentionally does not hide that upstream result with
   a preview-only or PDF-rewriting workaround.
 
+## Document-script language tools
+
+- Unified font, scale, and optional language-provider selection under the
+  `typsastra:document-scripts` directive.
+- Made the configured main file authoritative for included files. Standalone
+  documents use their own directive.
+- Removed keyboard-layout and Typst-language-scope routing. Spellcheck and word
+  completion now use the same deterministic per-script assignment.
+- Left scripts without a language selection untouched, with no implicit
+  spellcheck, completion, or same-script fallback.
+
 ## Language-tool fixes
 
 - Fixed completion for typed-script languages on Linux and other supported
   platforms.
 - Restored Khmer word completion when its provider is selected from the active
   typing context.
-- Kept an explicit static language authoritative when an included file inherits
-  a dynamic region, preventing English spellcheck from leaking into French and
-  Spanish scopes.
-- Restored missing-provider hints and gutter warnings for unavailable explicit
-  language scopes.
+- Made the main document's script assignments authoritative while editing
+  included files, preventing unrelated same-script dictionaries from leaking.
+- Exposed unavailable provider state in the Typography toolbar without adding
+  warnings to intentionally unconfigured source text.
 - Rejected stale or mismatched provider results before they reach the editor.
-- Added an optional developer log category for spellcheck and language-scope
+- Added an optional developer log category for spellcheck and document-script
   routing, and aligned wrapped-line warnings with the first visual line.
 
 ## Validation

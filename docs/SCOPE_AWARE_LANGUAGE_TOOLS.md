@@ -1,52 +1,56 @@
-# Scope-aware Language Tools
+# Document-script language tools
 
-Typsastra routes spellcheck through statically knowable Typst text styles. The document remains ordinary portable Typst source; no Typsastra-only language markup is required.
+Typsastra uses one explicit document setting for both typography and language
+tools:
 
-The behavior follows Typst's documented [`text` language, region, script, and direction parameters](https://typst.app/docs/reference/text/text/), [set rules](https://typst.app/docs/reference/styling/#set-rules), and [content blocks](https://typst.app/docs/reference/foundations/content/).
+```typst
+// typsastra:document-scripts [{"family":"MiSans Latin","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+```
 
-## Supported scopes
+Each entry assigns a font and optional scale to a Unicode script. Its optional
+`language` selects the spellcheck and word-completion provider for that script.
+The Typography toolbar writes this directive.
 
-The main document starts with Typst's `lang: "en"`, `region: none`, and `script: auto` defaults. Included files opened without their main-document context are treated as inherited and unresolved.
+## Routing contract
 
-Typsastra supports:
+- A script with a configured language uses exactly one matching installed
+  provider.
+- A script without `language` receives no Typsastra spellcheck or word
+  completion.
+- A configured language whose provider is not installed also receives no
+  analysis. The Typography toolbar identifies the unavailable provider.
+- Typsastra never substitutes another same-script dictionary. French does not
+  fall through to English merely because both use Latin.
+- Typst `lang` scopes and the operating-system keyboard layout do not select
+  Typsastra language providers.
+- IME candidates remain owned by the operating system and are independent of
+  Typsastra word completion.
 
-- ordinary `#set text(lang: "…", region: "…", script: "…")` rules;
-- literal `if true` and `if false` set conditions;
-- named content such as `#block[...]`, anonymous `#[...]`, generic function content, and code/content lexical restoration;
-- nested direct `#text(lang: "…")[...]` calls;
-- direct string bodies when source offsets do not cross an escape;
-- independent inheritance of language, region, and shaping script.
+The configured main file owns this setting for its included files. When a
+workspace has no main file, the active standalone document owns it. A directive
+in a non-main file does not override the main document's language routing.
 
-The official pinned `typst-syntax` parser runs outside the UI thread. Native byte offsets are converted to UTF-16 before reaching CodeMirror. Malformed edits make the affected lexical remainder unresolved instead of retaining stale language state.
+## Why this model is deliberately simple
 
-Variables, dynamic conditions, spread arguments, shadowed or aliased `text`, and show-set transformations are not evaluated. Comments, raw text, math, URLs, labels, references, code, and unrelated strings are excluded from spellcheck and language completion.
+Script detection is deterministic, whereas keyboard-layout detection varies by
+platform and static analysis of Typst style scopes cannot evaluate every
+dynamic program. The document directive therefore gives authors one visible,
+portable source of truth and fails closed when it is incomplete.
 
-## Provider routing
+One script can select one language at a time. A document that mixes English,
+French, and Spanish cannot spellcheck all three simultaneously under this
+model because all three use Latin. Choose the document's principal Latin
+language, then change it from the Typography toolbar when reviewing another
+language. Typst `#set text(lang: ...)` remains useful for Typst's own shaping,
+hyphenation, and localization behavior; it simply does not reroute Typsastra's
+dictionary.
 
-An explicit static language selects one installed provider by exact language/region, then an unambiguous language fallback. An unknown, disabled, downloadable, unsupported, invalid, or ambiguous provider fails closed—Typsastra never silently substitutes another same-script dictionary.
+## Provider installation and terminology
 
-Embedded spellcheck languages are ordered in Settings. They may check only disjoint scripts not owned by the primary provider or an earlier embedded provider. This supports English, Khmer, and Arabic in one scope while requiring explicit scopes for English, French, and Spanish.
+Provider binaries and dictionaries are installed globally under Settings.
+Installation makes a provider available; it does not activate it for every
+project. The `document-scripts` directive activates it for one document.
 
-A missing static `lang` declaration receives a theme-aware dotted hint and accessible gutter marker. Disabled providers are informational. Invalid Typst values remain owned by Tinymist diagnostics and do not receive a duplicate Typsastra warning. Activating a marker opens the existing Language Tools workflow; installing or enabling a provider refreshes the document without reopening it.
-
-## Accepted terminology
-
-- Global terminology is available in every scope.
-- Project terminology is bounded and stored in `.typsastra/config.json`, so it travels with project export.
-- Language-family terminology applies only to the provider's canonical language family.
-- Existing `userDictionary` and `ignoredWords` entries retain their legacy global behavior after settings migration.
-- New ignores require an explicit global or language-family scope.
-
-Terms are limited to 128 characters, imported project terminology is capped at 2,000 entries, newline/NUL content is rejected, and UI rendering uses text nodes rather than HTML. Changing terminology rechecks only source occurrences of changed terms.
-
-## Typing suggestions
-
-Spellcheck scope and completion input language are independent. Suggestions can follow:
-
-1. the current operating-system keyboard language;
-2. the current static Typst scope;
-3. a manual language setting.
-
-Windows maps the foreground keyboard layout and reports whether the result is reliable. Custom or unmapped layouts fall back to scope. macOS currently reports an unsupported adapter and falls back; Linux uses the process locale as an explicitly unreliable fallback. In development, `TYPSASTRA_DEV_INPUT_LANGUAGE=km-KH` (or another tag) provides a test override.
-
-Exactly one completion provider is queried. Results are discarded after document, cursor, provider, input generation, or replacement-range changes. Language completion is suppressed during IME composition, outside parser-proven prose, and for multiple selections. Tinymist completion remains available independently.
+Global and project terminology continue to recognize accepted names. Language-
+family terminology is applied only when its matching configured provider owns
+the script being checked.

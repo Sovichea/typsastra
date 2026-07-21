@@ -8,20 +8,8 @@ import {
 } from "../languageSupport";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
 import type { PerformanceMetric } from "../performance/diagnostics";
-import {
-  LanguageProviderIndex,
-  spellcheckProviderIdsForScope,
-  LanguageScopeClient,
-  invalidatedLanguageRanges,
-  languageScopeHintsExtension,
-  languageScopeStateExtension,
-  setLanguageScopeHints,
-  setResolvedLanguageScopes,
-  type LanguageCatalogEntry,
-  type LanguageScopeHint,
-  type ResolvedLanguageScopes,
-  type RootLanguageContext,
-} from "./languageScopes";
+import { type DocumentScriptFont } from "./documentTypography";
+import { selectDocumentLanguageProvider } from "./languageScopes/documentLanguage";
 import type { LanguageTerminologyEntry, ScopedIgnoredWord, TerminologyEntry } from "../settings";
 
 export type EditorToken = {
@@ -132,15 +120,6 @@ export function expandSpellcheckRange(doc: Text, from: number, to: number, patte
   };
 }
 
-function intersect(
-  left: { from: number; to: number },
-  right: { from: number; to: number },
-): { from: number; to: number } | null {
-  const from = Math.max(left.from, right.from);
-  const to = Math.min(left.to, right.to);
-  return from < to ? { from, to } : null;
-}
-
 function matchesTerminology(word: string, entries: readonly TerminologyEntry[]): boolean {
   return entries.some((entry) => entry.exactCase
     ? entry.term === word
@@ -182,35 +161,6 @@ function findTermRanges(source: string, terms: readonly string[]): Array<{ from:
     }
   }
   return ranges;
-}
-
-function scopeStyleSignature(scopes: ResolvedLanguageScopes | null): string {
-  return scopes ? JSON.stringify(scopes.ranges.map((range) => [
-    range.style.language,
-    range.style.region,
-    range.style.script,
-    range.sourceKind,
-  ])) : "none";
-}
-
-function parseLanguageCatalog(value: unknown): LanguageCatalogEntry[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-    const record = item as Record<string, unknown>;
-    if (typeof record.id !== "string" || typeof record.locale !== "string"
-      || typeof record.displayName !== "string" || typeof record.languageTag !== "string"
-      || !Array.isArray(record.scripts)) return [];
-    return [{
-      id: record.id,
-      locale: record.locale,
-      displayName: record.displayName,
-      languageTag: record.languageTag,
-      scripts: record.scripts.filter((script): script is string => typeof script === "string"),
-      installed: record.installed === true,
-      bundled: record.bundled === true,
-    }];
-  });
 }
 
 export function coalesceSpellcheckRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
@@ -263,17 +213,8 @@ export class SpellcheckController {
   public issues: SpellingIssue[] = [];
   private suggestionCache = new Map<string, string[]>();
   private providers: ProviderCapabilities[] = [];
-  private enabledProviderIds: Set<string> | null = null;
-  private embeddedProviderIds: string[] = [];
-  private catalog: LanguageCatalogEntry[] = [];
+  private documentScriptFonts: DocumentScriptFont[] = [];
   private providerCatalogReady = false;
-  private providerCatalogFailed = false;
-  private providerCatalogGeneration = 0;
-  private resolvedScopes: ResolvedLanguageScopes | null = null;
-  private previousScopesForInvalidation: ResolvedLanguageScopes | null = null;
-  private scopePending = false;
-  private rootLanguageContext: RootLanguageContext = "main";
-  private readonly languageScopeClient = new LanguageScopeClient();
   
   private pendingRanges: { from: number; to: number }[] = [];
   private activeRequest: { documentKey: string; revision: number; docIdentity: Text } | null = null;
@@ -288,29 +229,15 @@ export class SpellcheckController {
 
   public async initialize(): Promise<void> {
     const startedAt = performance.now();
-    const [providers, catalog] = await Promise.allSettled([
-      invoke<unknown>("get_provider_capabilities"),
-      invoke<unknown>("list_hunspell_catalog"),
-    ]);
-    if (providers.status === "fulfilled") {
+    const providers = await Promise.allSettled([invoke<unknown>("get_provider_capabilities")]);
+    if (providers[0].status === "fulfilled") {
       try {
-        this.providers = parseLanguageProviderCapabilitiesList(providers.value);
+        this.providers = parseLanguageProviderCapabilitiesList(providers[0].value);
       } catch (error) {
         console.error("Failed to parse provider capabilities:", error);
       }
     } else {
-      console.error("Failed to fetch provider capabilities:", providers.reason);
-    }
-    if (catalog.status === "fulfilled") {
-      try {
-        this.catalog = parseLanguageCatalog(catalog.value);
-      } catch (error) {
-        this.providerCatalogFailed = true;
-        console.error("Failed to parse language provider catalog:", error);
-      }
-    } else {
-      this.providerCatalogFailed = true;
-      console.error("Failed to fetch language provider catalog:", catalog.reason);
+      console.error("Failed to fetch provider capabilities:", providers[0].reason);
     }
     this.providerCatalogReady = true;
     this.onPerformance?.({
@@ -321,8 +248,7 @@ export class SpellcheckController {
   }
 
   public getProviders(): ProviderCapabilities[] {
-    if (this.enabledProviderIds === null) return this.providers;
-    return this.providers.filter(provider => this.enabledProviderIds?.has(provider.id));
+    return this.providers;
   }
 
   public getAllProviders(): ProviderCapabilities[] {
@@ -330,74 +256,52 @@ export class SpellcheckController {
   }
 
   public setProviders(providers: unknown): void {
-    const catalogGeneration = ++this.providerCatalogGeneration;
-    this.providerCatalogReady = false;
-    this.providerCatalogFailed = false;
     this.providers = parseLanguageProviderCapabilitiesList(providers);
-    this.trace("providers-loading-catalog", {
+    this.providerCatalogReady = true;
+    this.trace("providers-updated", {
       installedProviders: this.providers.map((provider) => provider.id),
-      enabledProviders: this.enabledProviderIds === null ? "all" : [...this.enabledProviderIds],
-    });
-    this.setEmbeddedProviders(this.embeddedProviderIds);
-    this.publishScopeState();
-    void invoke<unknown>("list_hunspell_catalog").then((catalog) => {
-      if (catalogGeneration !== this.providerCatalogGeneration) return;
-      this.catalog = parseLanguageCatalog(catalog);
-      this.providerCatalogReady = true;
-      this.providerCatalogFailed = false;
-      this.trace("providers-catalog-ready", {
-        catalogEntries: this.catalog.length,
-        requestedLanguages: this.catalog
-          .filter((entry) => ["ar", "fr", "es"].includes(entry.languageTag.split("-")[0] ?? ""))
-          .map((entry) => ({
-            id: entry.id,
-            languageTag: entry.languageTag,
-            scripts: entry.scripts,
-            installed: entry.installed,
-          })),
-      });
-      this.publishScopeState();
-      this.invalidateAndAnalyzeAll();
-    }).catch((error) => {
-      if (catalogGeneration !== this.providerCatalogGeneration) return;
-      // A catalog failure must settle readiness so explicit scopes can publish
-      // a controlled warning and remain fail-closed instead of hanging forever.
-      this.providerCatalogReady = true;
-      this.providerCatalogFailed = true;
-      this.trace("providers-catalog-failed", { error: String(error) });
-      this.warnOnce("list_hunspell_catalog", error);
-      this.publishScopeState();
-      this.invalidateAndAnalyzeAll();
+      configuredScripts: this.documentScriptFonts.map((entry) => `${entry.script}:${entry.language ?? "off"}`),
     });
     this.invalidate(true);
     const doc = this.getEditor()?.state.doc;
     if (doc) {
       this.pendingRanges = [{ from: 0, to: doc.length }];
-      this.scheduleScopeExtraction();
       this.schedule();
     }
   }
 
   private getPatterns(): RegExp[] {
-    return this.getProviders()
+    return this.configuredProviders()
       .filter(provider => provider.supportsSpellcheck !== false)
       .map(provider => new RegExp(provider.pattern, "u"));
   }
 
   public extension(): Extension {
-    return [spellingField, languageScopeStateExtension(), languageScopeHintsExtension()];
+    return spellingField;
+  }
+
+  public setDocumentScripts(entries: readonly DocumentScriptFont[]): void {
+    const next = entries.map((entry) => ({ ...entry }));
+    if (JSON.stringify(next) === JSON.stringify(this.documentScriptFonts)) return;
+    this.documentScriptFonts = next;
+    this.invalidateAndAnalyzeAll();
+  }
+
+  private configuredProviders(): ProviderCapabilities[] {
+    return this.documentScriptFonts.flatMap((entry) => {
+      const provider = selectDocumentLanguageProvider(this.providers, entry);
+      return provider ? [provider] : [];
+    }).filter((provider, index, all) => all.findIndex((candidate) => candidate.id === provider.id) === index);
   }
 
   public setEnabled(enabled: boolean): void {
     if (this.enabled === enabled) return;
     this.enabled = enabled;
-    if (!enabled) this.publishScopeHints([]);
     this.invalidate(true);
     if (enabled) {
       const doc = this.getEditor()?.state.doc;
       if (doc) {
         this.pendingRanges = [{ from: 0, to: doc.length }];
-        this.scheduleScopeExtraction();
         this.schedule();
       }
     }
@@ -412,7 +316,6 @@ export class SpellcheckController {
     const doc = this.getEditor()?.state.doc;
     if (doc) {
       this.pendingRanges = [{ from: 0, to: doc.length }];
-      this.scheduleScopeExtraction();
       this.schedule();
     }
   }
@@ -450,31 +353,7 @@ export class SpellcheckController {
     const affected = findTermRanges(editor.state.doc.toString(), changedTerms);
     this.pendingRanges = coalesceSpellcheckRanges([...this.pendingRanges, ...affected]);
     this.applyVisibleIssues();
-    this.scheduleScopeExtraction();
     this.schedule();
-  }
-
-  public setEmbeddedProviders(providerIds: readonly string[]): void {
-    const unique = [...new Set(providerIds)];
-    const next = this.providers.length
-      ? this.providerIndex().embeddedProviders([], unique).map((provider) => provider.id)
-      : unique;
-    if (next.length === this.embeddedProviderIds.length
-      && next.every((id, index) => id === this.embeddedProviderIds[index])) return;
-    this.embeddedProviderIds = next;
-    this.publishScopeState();
-    this.invalidateAndAnalyzeAll();
-  }
-
-  public setRootLanguageContext(context: RootLanguageContext): void {
-    if (context === this.rootLanguageContext) return;
-    this.rootLanguageContext = context;
-    this.scheduleScopeExtraction();
-  }
-
-  public getResolvedScopes(): ResolvedLanguageScopes | null {
-    const scopes = this.resolvedScopes ?? this.previousScopesForInvalidation;
-    return scopes?.documentKey === this.documentKey ? scopes : null;
   }
 
   public setIgnoredWords(words: readonly string[]): void {
@@ -486,40 +365,15 @@ export class SpellcheckController {
     this.queueVisibilityRefresh();
   }
 
-  public setEnabledProviders(providerIds: readonly string[] | null): void {
-    const next = providerIds === null ? null : new Set(providerIds);
-    const unchanged = next === null
-      ? this.enabledProviderIds === null
-      : this.enabledProviderIds !== null
-        && next.size === this.enabledProviderIds.size
-        && [...next].every(id => this.enabledProviderIds?.has(id));
-    if (unchanged) return;
-    this.enabledProviderIds = next;
-    this.publishScopeState();
-    this.invalidate(true);
-    const doc = this.getEditor()?.state.doc;
-    if (doc) {
-      this.pendingRanges = [{ from: 0, to: doc.length }];
-      this.scheduleScopeExtraction();
-      this.schedule();
-    }
-  }
-
   /** Must be called before replacing the editor state for another document. */
   public activateDocument(documentKey: string): void {
     this.documentKey = documentKey;
     this.invalidate(true);
-    this.resolvedScopes = null;
-    this.previousScopesForInvalidation = null;
-    this.scopePending = Boolean(documentKey);
     this.trace("document-activated", { documentUtf16: this.getEditor?.()?.state.doc.length ?? 0 });
-    this.publishScopeHints([]);
     const editor = this.getEditor?.();
-    if (editor) editor.dispatch({ effects: setResolvedLanguageScopes.of(null) });
     const doc = editor?.state.doc;
     if (doc) {
       this.pendingRanges = [{ from: 0, to: doc.length }];
-      this.scheduleScopeExtraction();
       this.schedule();
     }
   }
@@ -528,10 +382,6 @@ export class SpellcheckController {
   public documentChanged(update: ViewUpdate): void {
     if (!this.enabled || !this.documentKey) return;
     this.revision++;
-    this.previousScopesForInvalidation = this.resolvedScopes ?? this.previousScopesForInvalidation;
-    this.resolvedScopes = null;
-    this.scopePending = true;
-    this.scheduleScopeExtraction();
     this.suggestionRequestGeneration++;
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
@@ -614,153 +464,11 @@ export class SpellcheckController {
     }, 160);
   }
 
-  private scheduleScopeExtraction(): void {
-    const editor = this.getEditor?.();
-    if (!editor || !this.documentKey) return;
-    const documentKey = this.documentKey;
-    const revision = this.revision;
-    const startedAt = performance.now();
-    this.scopePending = true;
-    // Materialize the complete document only after the language-scope debounce.
-    // Large documents otherwise incur a second full-text copy for every keypress,
-    // including requests that are superseded before native analysis begins.
-    void this.languageScopeClient.analyze(
-      documentKey,
-      revision,
-      () => editor.state.doc.toString(),
-      this.rootLanguageContext
-    )
-      .then((scopes) => {
-        if (!scopes || this.documentKey !== documentKey || this.revision !== revision) return;
-        const previous = this.previousScopesForInvalidation;
-        this.previousScopesForInvalidation = null;
-        this.resolvedScopes = scopes;
-        this.scopePending = false;
-        const providerIndex = this.providerIndex();
-        this.trace("scopes-resolved", {
-          parserVersion: scopes.parserVersion,
-          documentUtf16: scopes.documentUtf16,
-          proseRanges: scopes.proseRanges.length,
-          syntaxErrors: scopes.syntaxErrors.length,
-          explicitScopes: scopes.ranges
-            .filter((range) => range.languageDeclaration)
-            .slice(0, 64)
-            .map((range) => {
-              const resolution = providerIndex.resolve(range.style);
-              return {
-                from: range.fromUtf16,
-                to: range.toUtf16,
-                declaration: range.languageDeclaration,
-                language: range.style.language.value,
-                region: range.style.region.value,
-                sourceKind: range.sourceKind,
-                availability: resolution.availability,
-                providerId: resolution.providerId,
-                routedProviders: spellcheckProviderIdsForScope(
-                  providerIndex,
-                  range.style,
-                  this.embeddedProviderIds,
-                ).map((providerId) => providerId ?? "compatibility"),
-              };
-            }),
-        });
-        editor.dispatch({ effects: setResolvedLanguageScopes.of(scopes) });
-        this.publishScopeState();
-        if (scopeStyleSignature(previous) !== scopeStyleSignature(scopes)) {
-          this.pendingRanges = coalesceSpellcheckRanges([
-            ...this.pendingRanges,
-            ...invalidatedLanguageRanges(previous, scopes).map((range) => ({
-              from: range.fromUtf16,
-              to: range.toUtf16,
-            })),
-          ]);
-        }
-        this.onPerformance?.({
-          name: "language.scopeParse",
-          milliseconds: performance.now() - startedAt,
-          detail: {
-            nativeMilliseconds: scopes.elapsedMicros / 1_000,
-            rangeCount: scopes.ranges.length,
-            documentUtf16: scopes.documentUtf16,
-          },
-        });
-        void this.runAnalysis();
-      })
-      .catch((error) => {
-        if (this.documentKey !== documentKey || this.revision !== revision) return;
-        this.scopePending = false;
-        this.trace("scopes-failed", { error: String(error) });
-        this.warnOnce("extract_typst_language_scopes", error);
-        void this.runAnalysis();
-      });
-  }
-
-  private publishScopeState(): void {
-    if (!this.enabled || !this.providerCatalogReady || !this.resolvedScopes) {
-      this.publishScopeHints([]);
-      return;
-    }
-    const index = this.providerIndex();
-    const hints: LanguageScopeHint[] = [];
-    for (const range of this.resolvedScopes.ranges) {
-      if (range.sourceKind === "default" || range.sourceKind === "inherited" || !range.languageDeclaration) continue;
-      const resolution = index.resolve(range.style);
-      if (resolution.availability === "installed" || resolution.availability === "dynamic"
-        || resolution.availability === "invalid") continue;
-      const language = resolution.canonicalLocale ?? range.style.language.value ?? "unknown";
-      const message = this.providerCatalogFailed && resolution.availability === "unsupported"
-        ? `${language} spellcheck could not be resolved because the Language Tools catalog is unavailable.`
-        : resolution.availability === "disabled"
-        ? `${language} spellcheck is intentionally disabled. Enable its provider in Language Tools.`
-        : resolution.availability === "downloadable"
-          ? `${language} spellcheck is not installed. Open Language Tools to install it.`
-          : resolution.availability === "ambiguous"
-            ? `${language} matches multiple providers. Select a region or provider in Language Tools.`
-          : `${language} spellcheck is not available in Typsastra's provider catalog.`;
-      hints.push({
-        key: `${range.languageDeclaration.fromUtf16}:${range.languageDeclaration.toUtf16}:${language}:${resolution.availability}`,
-        range: range.languageDeclaration,
-        language,
-        availability: resolution.availability,
-        message,
-        providerId: resolution.providerId,
-      });
-    }
-    this.publishScopeHints(hints);
-    this.trace("scope-hints-published", {
-      hints: hints.map((hint) => ({
-        language: hint.language,
-        availability: hint.availability,
-        providerId: hint.providerId,
-        range: hint.range,
-      })),
-    });
-    const routedIssues = this.issues.filter((issue) => this.issueMatchesResolvedScope(issue));
-    if (routedIssues.length !== this.issues.length) {
-      this.issues = routedIssues;
-      this.applyVisibleIssues();
-    }
-  }
-
-  private publishScopeHints(hints: LanguageScopeHint[]): void {
-    const editor = this.getEditor?.();
-    if (editor) editor.dispatch({ effects: setLanguageScopeHints.of(hints) });
-  }
-
-  private providerIndex(): LanguageProviderIndex {
-    return new LanguageProviderIndex(
-      this.providers,
-      this.catalog,
-      this.enabledProviderIds === null ? null : [...this.enabledProviderIds],
-    );
-  }
-
   private invalidateAndAnalyzeAll(): void {
     this.invalidate(true);
     const doc = this.getEditor?.()?.state.doc;
     if (!doc) return;
     this.pendingRanges = [{ from: 0, to: doc.length }];
-    this.scheduleScopeExtraction();
     this.schedule();
   }
 
@@ -832,7 +540,7 @@ export class SpellcheckController {
   }
 
   private async runAnalysis(): Promise<void> {
-    if (this.scopePending || !this.providerCatalogReady) return;
+    if (!this.providerCatalogReady) return;
     if (this.activeRequest !== null) {
       if (!this.queuedRequest) {
         this.queuedRequest = { ranges: [...this.pendingRanges] };
@@ -887,13 +595,6 @@ export class SpellcheckController {
         request: { chunks }
       });
       response = { tokens: response.tokens, failures: response.failures ?? [] };
-      const enabledProviderIds = this.enabledProviderIds;
-      if (response && enabledProviderIds !== null) {
-        response = {
-          tokens: response.tokens.filter(token => enabledProviderIds.has(token.provider)),
-          failures: response.failures.filter(failure => enabledProviderIds.has(failure.provider))
-        };
-      }
       for (const failure of response.failures) {
         this.warnOnce(`${failure.operation}:${failure.provider}`, failure.message);
       }
@@ -924,40 +625,18 @@ export class SpellcheckController {
   }
 
   private buildAnalysisChunks(ranges: readonly { from: number; to: number }[], doc: Text): RoutedAnalyzeChunk[] {
-    if (!this.resolvedScopes) {
-      // Scope extraction is the authority for provider routing. Falling back to
-      // every enabled pattern lets English leak into explicit same-script
-      // scopes when parsing or catalog resolution is unavailable.
-      return [];
-    }
-    const index = this.providerIndex();
     const chunks = new Map<string, RoutedAnalyzeChunk>();
     for (const pending of ranges) {
-      for (const prose of this.resolvedScopes.proseRanges) {
-        const proseRange = intersect(pending, { from: prose.fromUtf16, to: prose.toUtf16 });
-        if (!proseRange) continue;
-        for (const scope of this.resolvedScopes.ranges) {
-          const range = intersect(proseRange, { from: scope.fromUtf16, to: scope.toUtf16 });
-          if (!range) continue;
-          const providerIds = spellcheckProviderIdsForScope(
-            index,
-            scope.style,
-            this.embeddedProviderIds,
-          );
-          const text = doc.sliceString(range.from, range.to);
-          for (const providerId of providerIds) {
-            const provider = providerId ? index.provider(providerId) : null;
-            if (provider && !new RegExp(provider.pattern, "u").test(text)) continue;
-            if (!providerId && !this.getPatterns().some((pattern) => pattern.test(text))) continue;
-            const key = `${providerId ?? "compat"}:${range.from}:${range.to}`;
-            chunks.set(key, {
-              text,
-              startUtf16: range.from,
-              provider: providerId,
-              contentMode: "plainText",
-            });
-          }
-        }
+      const text = doc.sliceString(pending.from, pending.to);
+      for (const provider of this.configuredProviders()) {
+        if (provider.supportsSpellcheck === false || !new RegExp(provider.pattern, "u").test(text)) continue;
+        const key = `${provider.id}:${pending.from}:${pending.to}`;
+        chunks.set(key, {
+          text,
+          startUtf16: pending.from,
+          provider: provider.id,
+          contentMode: "typstSource",
+        });
       }
     }
     return [...chunks.values()];
@@ -995,7 +674,7 @@ export class SpellcheckController {
 
     // Map new tokens to SpellingIssues
     const cursor = editor.state.selection.main.head;
-    const rejectedByScope = response.tokens.filter((token) => !this.providerMatchesResolvedScope(
+    const rejectedByScope = response.tokens.filter((token) => !this.providerMatchesDocumentScripts(
       token.provider,
       token.sourceFromUtf16,
       token.sourceToUtf16,
@@ -1014,7 +693,7 @@ export class SpellcheckController {
       .filter(token => !token.known
         && !this.userDictionary.has(token.normalizedText)
         && !this.acceptsTerminology(token)
-        && this.providerMatchesResolvedScope(
+        && this.providerMatchesDocumentScripts(
           token.provider,
           token.sourceFromUtf16,
           token.sourceToUtf16,
@@ -1049,9 +728,6 @@ export class SpellcheckController {
   }
 
   private isProvenProse(state: EditorState, from: number, to: number): boolean {
-    if (this.resolvedScopes) {
-      return this.resolvedScopes.proseRanges.some((range) => range.fromUtf16 <= from && range.toUtf16 >= to);
-    }
     return isTypstProseRange(state, from, to);
   }
 
@@ -1104,34 +780,18 @@ export class SpellcheckController {
   private visibleIssues(editor: EditorView, cursor: number): SpellingIssue[] {
     const visible = this.issues.filter(issue => issue.revision === this.revision
       && issue.docIdentity === editor.state.doc
-      && this.issueMatchesResolvedScope(issue)
+      && this.providerMatchesDocumentScripts(issue.provider, issue.from, issue.to)
       && !this.shouldHideKnownPrefix(issue, cursor));
     const incomplete = this.incompleteCompositionIssue(editor);
     if (incomplete && !this.shouldHideKnownPrefix(incomplete, cursor)) visible.push(incomplete);
     return visible;
   }
 
-  private issueMatchesResolvedScope(issue: SpellingIssue): boolean {
-    return this.providerMatchesResolvedScope(issue.provider, issue.from, issue.to);
-  }
-
-  private providerMatchesResolvedScope(providerId: string, from: number, to: number): boolean {
-    const scopes = this.resolvedScopes;
-    // Existing issues may remain visible during the short reparse after an
-    // edit. No response from the prior revision can become current, while a
-    // newly activated document has already cleared its issues explicitly.
-    if (!scopes) return this.scopePending;
-    if (scopes.documentKey !== this.documentKey) return false;
-    const scope = scopes.ranges.find((candidate) =>
-      candidate.fromUtf16 <= from && candidate.toUtf16 >= to
-    );
-    if (!scope) return false;
-    const routed = spellcheckProviderIdsForScope(
-      this.providerIndex(),
-      scope.style,
-      this.embeddedProviderIds,
-    );
-    return routed.includes(undefined) || routed.includes(providerId);
+  private providerMatchesDocumentScripts(providerId: string, from: number, to: number): boolean {
+    const provider = this.configuredProviders().find((candidate) => candidate.id === providerId);
+    if (!provider) return false;
+    const source = this.getEditor().state.doc.sliceString(from, to);
+    return new RegExp(provider.pattern, "u").test(source);
   }
 
   private trace(stage: string, detail: Record<string, unknown>): void {

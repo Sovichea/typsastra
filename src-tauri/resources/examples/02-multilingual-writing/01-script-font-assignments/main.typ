@@ -1,7 +1,7 @@
 #set document(title: "Script-Specific Font Assignments")
 #set page(margin: 24mm)
 // typsastra:typography:start
-// typsastra:script-fonts [{"family":"MiSans Khmer","script":"khmer","scale":1},{"family":"MiSans Latin","script":"latin","scale":1},{"family":"MiSans Arabic","script":"arabic","scale":1}]
+// typsastra:document-scripts [{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"},{"family":"MiSans Latin","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
 #set text(
   font: (
     (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),

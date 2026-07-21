@@ -1,31 +1,13 @@
-# Keyboard-language completion
+# Document-script word completion
 
-Spellcheck answers “which dictionary owns this document range?” Completion
-answers “which language is the user typing now?” Typsastra allows those answers
-to differ without changing the Typst source.
+Typsastra word completion no longer follows the operating-system keyboard
+layout. Keyboard detection was unreliable across platforms and could conflict
+with users who type several languages through one layout.
 
-## Configure suggestions
+Completion now follows the language assigned to the matching script in the
+`typsastra:document-scripts` directive. Open the `Aa` Typography toolbar,
+select a language for the script, and enable **Typing word suggestions** in
+Settings. No assignment means no Typsastra completion for that script.
 
-Open Settings → Editor and enable typing suggestions. Choose a source:
-
-- **Typst scope** follows the static `lang` scope at the cursor;
-- **Keyboard language** uses a reliably mapped operating-system keyboard;
-- **Manual language** always requests the selected provider.
-
-Keyboard mode selects exactly one compatible completion provider. It never
-changes spellcheck scope. An English document can therefore remain English for
-spellcheck while a Khmer keyboard requests Khmer word suggestions.
-
-## Fallbacks and IME
-
-Windows exposes mapped keyboard layouts most reliably. Platform status and any
-fallback are shown in Settings. If a keyboard cannot be mapped or its provider
-is unavailable, Typsastra falls back according to the displayed policy rather
-than querying several providers and merging ambiguous results.
-
-Completion is suppressed during IME composition, outside parser-confirmed
-prose, and for incompatible multiple selections. The IME itself may also show
-operating-system candidates; Typsastra's completion is a separate provider-
-based feature and must not interrupt composition.
-
-Try `02-multilingual-writing/03-keyboard-language-completion`.
+IME candidate windows remain independent and always take priority while text
+composition is active.

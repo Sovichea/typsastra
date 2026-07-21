@@ -18,7 +18,7 @@ format changes rather than another stabilization patch.
 Released on July 18, 2026, this milestone completed the foundations needed for
 broader multilingual work:
 
-- Typst language-scope-aware spellcheck with fail-closed provider warnings.
+- Document-script language routing for deterministic spellcheck and word completion.
 - Keyboard-language-aware word completion and scoped terminology.
 - Hardware-accelerated, motion-aware PDF rendering with immediate page jumps.
 - Portable workspace state, lazy restored tabs, and guarded large-file loading.
@@ -33,15 +33,15 @@ Make the v0.5.0 multilingual foundations easier to learn and verify while
 continuing the v0.5.x maintenance line:
 
 - Restructure the bundled examples into a guided path from Typst basics through
-  multilingual language scopes, language providers, research projects, and
+  multilingual document scripts, language providers, research projects, and
   project portability.
-- Add focused examples for script-specific font assignments, scope-aware
-  spellcheck, keyboard-language completion, optional-provider warnings, and
+- Add focused examples for script-specific font assignments, document-script
+  spellcheck, provider-selected completion, optional providers, and
   document typography.
 - Add a user-facing documentation landing page and task-oriented tutorials for
   projects, multilingual tools, long documents, preview synchronization, and
   import/export.
-- Add example compilation, language-scope, migration, packaging, and
+- Add example compilation, language-routing, migration, packaging, and
   documentation-link validation.
 - Include post-v0.5.0 bug fixes, performance improvements, and platform
   refinements without introducing a new major subsystem.
@@ -105,7 +105,7 @@ covering Arabic-family scripts, Hebrew, and mixed-direction research documents.
 - Writable Unicode-focused example workspace.
 - GitHub Actions workflow for automated builds.
 - Linux build verification.
-- Scope-aware multilingual spellcheck and keyboard-language completion.
+- Deterministic document-script spellcheck and word completion.
 - Searchable recent-project history with bounded workspace restoration.
 - Direct PDF viewing and hardware-accelerated, motion-aware PDF preview.
 - Signed update detection, About information, and macOS traffic-light controls.

@@ -1,14 +1,10 @@
-# Keyboard-language completion
+# Document-script word completion
 
-Purpose: demonstrate that typing suggestions and spellcheck have different
-language sources.
+The directory name is retained so older extracted example workspaces remain
+recognizable. The example now demonstrates the document-script routing model;
+keyboard-layout detection is no longer used.
 
-Prerequisites: enable typing suggestions and select **Keyboard language** as the
-suggestion source. Install the provider for the keyboard language you test.
-
-Expected behavior: switching a reliably mapped OS keyboard changes completion
-suggestions only. The English and French spellcheck scopes remain authoritative.
-Unsupported keyboard mappings fall back according to the platform status shown
-in Settings.
+Enable typing suggestions, then assign a language to each script from the `Aa`
+Typography toolbar. No language assignment means no Typsastra completion.
 
 Tutorial: <https://github.com/Sovichea/typsastra/blob/main/docs/tutorials/KEYBOARD_LANGUAGE_COMPLETION.md>

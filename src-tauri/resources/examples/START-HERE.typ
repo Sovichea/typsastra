@@ -1,7 +1,7 @@
 #set document(title: "Typsastra Examples")
 #set page(margin: 24mm)
 // typsastra:typography:start
-// typsastra:script-fonts [{"family":"MiSans Latin","script":"latin","scale":1}]
+// typsastra:document-scripts [{"family":"MiSans Latin","script":"latin","scale":1,"language":"en-US"}]
 #set text(
   font: ((name: "MiSans Latin", covers: regex("\p{scx=Latin}")),),
   size: 11pt,
@@ -24,10 +24,10 @@ example that matches the feature you want to learn.
 
 - `01-script-font-assignments`: script-specific fonts, Unicode coverage, and
   independent visual scaling.
-- `02-language-scoped-spellcheck`: Typst language scopes, same-script isolation,
-  terminology, and missing-provider warnings.
-- `03-keyboard-language-completion`: typing suggestions selected independently
-  from the document's spellcheck scope.
+- `02-language-scoped-spellcheck`: explicit per-script language providers,
+  fail-closed routing, and terminology.
+- `03-keyboard-language-completion`: document-script word completion (the
+  folder name is retained for compatibility with older example workspaces).
 - `04-complex-script-typography`: shaping samples for several complex scripts.
 - `05-script-and-direction-samples`: mixed scripts, CJK, and bidirectional
   rendering samples. First-class RTL editing is planned for v0.9.0.

@@ -1824,6 +1824,7 @@ body.typsastra-resizing #input-container-wrapper::after {
 .toolbar-font-fallback-row [data-fallback-script] { grid-column: 1 / 3; }
 .toolbar-font-fallback-row [data-fallback-font] { grid-column: 1; }
 .toolbar-font-fallback-row [data-fallback-scale] { grid-column: 2; width: 58px; }
+.toolbar-font-fallback-row [data-fallback-language] { grid-column: 1 / 3; }
 .toolbar-font-fallback-row .toolbar-remove-fallback { grid-column: 3; grid-row: 1; }
 .toolbar-font-fallback-row .toolbar-typography-hint { grid-column: 1 / 4; margin: 0; }
 

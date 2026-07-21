@@ -24,7 +24,6 @@ export type DeveloperLogCategory =
   | "general";
 
 export type DeveloperLogSettings = Record<DeveloperLogCategory, boolean>;
-export type CompletionLanguageSource = "keyboard" | "scope" | "manual";
 export type TerminologyEntry = { term: string; exactCase: boolean };
 export type LanguageTerminologyEntry = TerminologyEntry & { languageFamily: string };
 export type ScopedIgnoredWord = { term: string; scope: "global" | "project" | "languageFamily"; languageFamily?: string };
@@ -50,10 +49,6 @@ export type AppSettings = {
     indentationGuides: boolean;
     spellcheck: boolean;
     wordCompletion: boolean;
-    languageProviders: string[] | null;
-    embeddedSpellcheckLanguages: string[];
-    completionLanguageSource: CompletionLanguageSource;
-    manualCompletionLanguage: string | null;
     showZws: boolean;
     userDictionary: string[];
     ignoredWords: string[];
@@ -107,10 +102,6 @@ export const defaultAppSettings: AppSettings = {
     indentationGuides: true,
     spellcheck: true,
     wordCompletion: true,
-    languageProviders: null,
-    embeddedSpellcheckLanguages: [],
-    completionLanguageSource: "keyboard",
-    manualCompletionLanguage: null,
     showZws: true,
     userDictionary: [],
     ignoredWords: [],
@@ -152,32 +143,10 @@ function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function stringListOrNull(value: unknown): string[] | null {
-  if (value === null || value === undefined) return null;
-  if (!Array.isArray(value)) return null;
-  return [...new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map(item => item.trim()))].sort();
-}
-
 function previewRenderMode(value: unknown): PreviewRenderMode {
   return value === "on-save" || value === "on-type"
     ? value
     : defaultAppSettings.preview.renderMode;
-}
-
-function orderedStringList(value: unknown, limit = 64): string[] {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim()).filter((item) => item.length > 0 && item.length <= 128))].slice(0, limit);
-}
-
-function manualLanguageTag(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const [language, region, ...extra] = value.trim().replace(/_/g, "-").split("-");
-  if (extra.length || !language || !/^[a-z]{2,3}$/i.test(language)) return null;
-  if (region && !/^(?:[a-z]{2}|\d{3})$/i.test(region)) return null;
-  return region
-    ? `${language.toLowerCase()}-${/^\d{3}$/.test(region) ? region : region.toUpperCase()}`
-    : language.toLowerCase();
 }
 
 function terminologyEntries(value: unknown, limit = 2_000): TerminologyEntry[] {
@@ -275,12 +244,6 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides),
       spellcheck: booleanValue(editor.spellcheck, defaultAppSettings.editor.spellcheck),
       wordCompletion: booleanValue(editor.wordCompletion, defaultAppSettings.editor.wordCompletion),
-      languageProviders: stringListOrNull(editor.languageProviders),
-      embeddedSpellcheckLanguages: orderedStringList(editor.embeddedSpellcheckLanguages),
-      completionLanguageSource: editor.completionLanguageSource === "scope" || editor.completionLanguageSource === "manual"
-        ? editor.completionLanguageSource
-        : "keyboard",
-      manualCompletionLanguage: manualLanguageTag(editor.manualCompletionLanguage),
       showZws: booleanValue(editor.showZws, defaultAppSettings.editor.showZws),
       userDictionary: Array.isArray(editor.userDictionary)
         ? [...new Set(editor.userDictionary.filter((word): word is string => typeof word === "string" && word.trim().length > 0).map(word => word.trim()))].sort()

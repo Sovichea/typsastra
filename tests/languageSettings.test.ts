@@ -2,14 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { normalizeAppSettings } from "../src/settings";
 import { normalizeWorkspaceMetadata } from "../src/workspace/workspaceStateStore";
 
-describe("scope-aware language settings", () => {
+describe("language terminology settings", () => {
   test("migrates and bounds application terminology", () => {
     const settings = normalizeAppSettings({
       version: 1,
       editor: {
-        embeddedSpellcheckLanguages: ["khmer-segmenter", "khmer-segmenter", "english-hunspell"],
-        completionLanguageSource: "manual",
-        manualCompletionLanguage: "fr_fr",
         globalTerminology: [
           { term: " Typsastra ", exactCase: true },
           { term: "x".repeat(129), exactCase: true },
@@ -27,9 +24,6 @@ describe("scope-aware language settings", () => {
     });
 
     expect(settings.version).toBe(2);
-    expect(settings.editor.embeddedSpellcheckLanguages).toEqual(["khmer-segmenter", "english-hunspell"]);
-    expect(settings.editor.completionLanguageSource).toBe("manual");
-    expect(settings.editor.manualCompletionLanguage).toBe("fr-FR");
     expect(settings.editor.globalTerminology).toEqual([{ term: "Typsastra", exactCase: true }]);
     expect(settings.editor.languageTerminology).toEqual([
       { term: "bonjour", exactCase: false, languageFamily: "fr" },

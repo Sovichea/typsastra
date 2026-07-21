@@ -25,7 +25,7 @@ Typsastra writes native Typst font descriptors with a `covers` restriction:
 
 ```typst
 // typsastra:typography:start
-// typsastra:script-fonts [{"family":"MiSans Khmer","script":"khmer","scale":0.95},{"family":"MiSans Latin","script":"latin","scale":1.1},{"family":"MiSans Arabic","script":"arabic","scale":1}]
+// typsastra:document-scripts [{"family":"MiSans Khmer","script":"khmer","scale":0.95,"language":"km"},{"family":"MiSans Latin","script":"latin","scale":1.1,"language":"en-US"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
 #set text(
   font: (
     (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
@@ -55,8 +55,9 @@ surrounding run or fallback context; script-specific letters and marks remain
 restricted by the descriptors above.
 
 The metadata comment is ignored by Typst. Typsastra uses it to restore the
-toolbar configuration and prepare private cached font variants. Older primary/embedded
-metadata is migrated when Typsastra reads and reapplies the configuration.
+toolbar configuration, prepare private cached font variants, and select one
+optional language-tools provider per script. Older typography metadata is
+migrated when Typsastra reads and reapplies the configuration.
 
 ## Uniform script scaling
 
@@ -147,10 +148,11 @@ individual TTF or OTF face for scaling.
 template** updates a detected local template or creates
 `typsastra-template.typ`, allowing included chapters to inherit the same rule.
 
-Document Typography does not change CodeMirror's source-editor font, Typst
-`lang` or `dir`, spellcheck, completion, segmentation, or IME behavior. The
-Language Tools **Embedded spellcheck** setting is unrelated to script-font
-assignments.
+Document Typography does not change CodeMirror's source-editor font or Typst
+`lang` and `dir`. Its optional language selection does control Typsastra
+spellcheck and word completion for the assigned script. A script with no
+language is intentionally left unchecked and receives no Typsastra completion.
+Typst language scopes and keyboard layouts do not override this selection.
 
 Typsastra does not override `raw`; inline and block raw content keeps Typst's
 normal raw-font behavior.

@@ -7,7 +7,6 @@ import {
   unicodeFontPreferenceOptions,
 } from "./editor/fontCatalog";
 import {
-  boundaryModeLabel,
   parseLanguageCatalog,
   parseLanguageProviderCapabilitiesList,
   providerFeatureLabels,
@@ -53,7 +52,6 @@ export class SettingsController {
   private saveTimer: number | null = null;
   private loadError: string | null = null;
   private systemFonts: SystemFontCatalog = { all: ["MiSans Latin"], monospace: ["Fira Mono"] };
-  private languageProviders: LanguageProviderOption[] = [];
   private readonly timingEntries: SettingsTimingEntry[] = [];
   private projectTerminology: TerminologyEntry[] = [];
   private rendererCompatibility: LinuxRendererCompatibility | null = null;
@@ -124,13 +122,6 @@ export class SettingsController {
     void this.persist();
   }
 
-  public setLanguageProviders(providers: LanguageProviderOption[]): void {
-    this.languageProviders = [...providers].sort((left, right) =>
-      this.languageProviderLabel(left).localeCompare(this.languageProviderLabel(right))
-    );
-    this.populateLanguageProviders();
-  }
-
   public setProjectTerminology(
     entries: readonly TerminologyEntry[],
     update?: (entries: TerminologyEntry[]) => void,
@@ -195,12 +186,6 @@ export class SettingsController {
     onChange("settings-indent-guides", (settings, control) => { settings.editor.indentationGuides = (control as HTMLInputElement).checked; });
     onChange("settings-spellcheck", (settings, control) => { settings.editor.spellcheck = (control as HTMLInputElement).checked; });
     onChange("settings-word-completion", (settings, control) => { settings.editor.wordCompletion = (control as HTMLInputElement).checked; });
-    onChange("settings-completion-language-source", (settings, control) => {
-      settings.editor.completionLanguageSource = control.value as AppSettings["editor"]["completionLanguageSource"];
-    });
-    onChange("settings-manual-completion-language", (settings, control) => {
-      settings.editor.manualCompletionLanguage = control.value.trim() || null;
-    });
     onChange("settings-show-zws", (settings, control) => { settings.editor.showZws = (control as HTMLInputElement).checked; });
     onChange("settings-format-on-save", (settings, control) => { settings.editor.formatOnSave = (control as HTMLInputElement).checked; });
     onChange("settings-preview-render-mode", (settings, control) => { settings.preview.renderMode = control.value as AppSettings["preview"]["renderMode"]; });
@@ -304,8 +289,6 @@ export class SettingsController {
     setValue("settings-preview-render-mode", preview.renderMode);
     setValue("settings-sync-debounce", String(preview.syncDebounceMs));
     setValue("settings-highlight-duration", String(preview.highlightDurationMs));
-    setValue("settings-completion-language-source", editor.completionLanguageSource);
-    setValue("settings-manual-completion-language", editor.manualCompletionLanguage ?? "");
     setChecked("settings-word-wrap", editor.wordWrap);
     setChecked("settings-line-numbers", editor.lineNumbers);
     setChecked("settings-active-line", editor.highlightActiveLine);
@@ -313,8 +296,6 @@ export class SettingsController {
     setChecked("settings-indent-guides", editor.indentationGuides);
     setChecked("settings-spellcheck", editor.spellcheck);
     setChecked("settings-word-completion", editor.wordCompletion);
-    const manualCompletion = document.getElementById("settings-manual-completion-language") as HTMLInputElement | null;
-    if (manualCompletion) manualCompletion.disabled = editor.completionLanguageSource !== "manual";
     setChecked("settings-show-zws", editor.showZws);
     setChecked("settings-format-on-save", editor.formatOnSave);
     setChecked("settings-cursor-sync", preview.cursorSync);
@@ -339,7 +320,6 @@ export class SettingsController {
     developerLogFilters?.querySelectorAll<HTMLInputElement>("input").forEach(control => {
       control.disabled = !this.settings.developerMode;
     });
-    this.populateLanguageProviders();
     this.populateTerminology();
     this.populateRendererCompatibility();
 
@@ -500,94 +480,6 @@ export class SettingsController {
       return row;
     });
     container.replaceChildren(...rows);
-  }
-
-  private populateLanguageProviders(): void {
-    const container = document.getElementById("settings-language-providers");
-    if (!container) return;
-    if (this.languageProviders.length === 0) {
-      const empty = document.createElement("small");
-      empty.textContent = "No languages are installed.";
-      container.replaceChildren(empty);
-      return;
-    }
-
-    const explicit = this.settings.editor.languageProviders;
-    const enabled = explicit === null
-      ? new Set(this.languageProviders.map(provider => provider.id))
-      : new Set(explicit);
-
-    const controls = this.languageProviders.map(provider => {
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "language-provider-enabled";
-      checkbox.value = provider.id;
-      checkbox.checked = enabled.has(provider.id);
-      checkbox.addEventListener("change", () => {
-        const checked = new Set(
-          Array.from(container.querySelectorAll<HTMLInputElement>("input.language-provider-enabled:checked"))
-            .map(input => input.value)
-        );
-        this.update(settings => {
-          const allEnabled = this.languageProviders.every(candidate => checked.has(candidate.id));
-          settings.editor.languageProviders = allEnabled ? null : [...checked].sort();
-        });
-      });
-
-      const title = document.createElement("div");
-      title.className = "settings-language-provider-title";
-      title.textContent = this.languageProviderLabel(provider);
-      const support = supportLevelPresentation(provider.supportLevel);
-      const supportBadge = this.createSupportBadge(support.level, support.label, support.description);
-      const titleRow = document.createElement("div");
-      titleRow.className = "settings-language-provider-title-row";
-      titleRow.append(title, supportBadge, this.createStabilityBadge(provider.stability));
-      const details = document.createElement("div");
-      details.className = "settings-language-provider-meta";
-      details.textContent = [
-        provider.languageTag,
-        boundaryModeLabel(provider.boundaryMode),
-        provider.engine?.split("_").join(" ")
-      ].filter(Boolean).join(" · ");
-      const features = document.createElement("div");
-      features.className = "settings-language-provider-features";
-      features.textContent = providerFeatureLabels(provider).join(" · ") || "No active language-tool capabilities";
-      const text = document.createElement("div");
-      text.className = "settings-language-provider-text";
-      text.append(titleRow, details, features);
-      const label = document.createElement("label");
-      label.className = "settings-language-provider";
-      label.title = support.description;
-      const controls = document.createElement("span");
-      controls.className = "settings-language-provider-controls";
-      const embedded = document.createElement("input");
-      embedded.type = "checkbox";
-      embedded.checked = this.settings.editor.embeddedSpellcheckLanguages.includes(provider.id);
-      embedded.disabled = !checkbox.checked;
-      embedded.title = "Allow this provider to check a disjoint foreign script inside another language scope";
-      embedded.setAttribute("aria-label", `Use ${this.languageProviderLabel(provider)} as an embedded spellcheck language`);
-      embedded.addEventListener("change", () => this.update(settings => {
-        const scripts = new Set(provider.scripts.map(script => script.toLowerCase()));
-        settings.editor.embeddedSpellcheckLanguages = embedded.checked
-          ? [...settings.editor.embeddedSpellcheckLanguages.filter(id => {
-              if (id === provider.id) return false;
-              const candidate = this.languageProviders.find(item => item.id === id);
-              return !candidate?.scripts.some(script => scripts.has(script.toLowerCase()));
-            }), provider.id]
-          : settings.editor.embeddedSpellcheckLanguages.filter(id => id !== provider.id);
-      }));
-      checkbox.addEventListener("change", () => { embedded.disabled = !checkbox.checked; });
-      const embeddedLabel = document.createElement("small");
-      embeddedLabel.textContent = "Embedded spellcheck";
-      controls.append(checkbox, embedded, embeddedLabel);
-      label.append(text, controls);
-      return label;
-    });
-    container.replaceChildren(...controls);
-  }
-
-  private languageProviderLabel(provider: LanguageProviderOption): string {
-    return provider.displayName || provider.languageTag || provider.id;
   }
 
   private populateTerminology(): void {
@@ -755,13 +647,7 @@ export class SettingsController {
       const providers = parseLanguageProviderCapabilitiesList(
         await invoke<unknown>("install_hunspell_dictionary", { locale: entry.locale })
       );
-      this.setLanguageProviders(providers);
       this.onLanguageProvidersChanged(providers);
-      this.update(settings => {
-        if (settings.editor.languageProviders !== null && !settings.editor.languageProviders.includes(entry.id)) {
-          settings.editor.languageProviders.push(entry.id);
-        }
-      });
       await this.populateLanguageCatalog();
     } catch (error) {
       button.disabled = false;
@@ -778,13 +664,7 @@ export class SettingsController {
       const providers = parseLanguageProviderCapabilitiesList(
         await invoke<unknown>("remove_hunspell_dictionary", { locale: entry.locale })
       );
-      this.setLanguageProviders(providers);
       this.onLanguageProvidersChanged(providers);
-      this.update(settings => {
-        if (settings.editor.languageProviders !== null) {
-          settings.editor.languageProviders = settings.editor.languageProviders.filter(id => id !== entry.id);
-        }
-      });
       await this.populateLanguageCatalog();
     } catch (error) {
       button.disabled = false;

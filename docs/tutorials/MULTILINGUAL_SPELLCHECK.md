@@ -1,48 +1,37 @@
-# Multilingual spellcheck
+# Multilingual spellcheck and completion
 
-## The document scope is authoritative
+## Assign a language to each document script
 
-Typsastra derives spellcheck language from static Typst text scopes:
+1. Open the `Aa` Typography toolbar.
+2. Add every script used by the document.
+3. Choose a font for each script.
+4. Choose a language-tools provider, or leave **Language tools off**.
+5. Apply the configuration to the main document.
 
-```typst
-#set text(lang: "en")
-English paragraph.
+For an English, Khmer, and Arabic document, choose English for Latin, Khmer for
+Khmer, and Arabic for Arabic. Typsastra writes these choices into the
+`typsastra:document-scripts` directive. Spellcheck and completion then use the
+same assignment.
 
-#text(lang: "fr")[Texte français.]
+Text in an undeclared script is left alone. Typsastra does not show warnings or
+guess a provider for it. If a selected provider is unavailable, install it from
+Settings and return to the Typography toolbar.
 
-#[
-  #set text(lang: "es")
-  Texto español.
-]
-```
+## Same-script languages
 
-`#set text` applies through its content scope. Typsastra recognizes named blocks
-such as `#block[...]`, anonymous blocks `#[...]`, nested text calls, and included
-files. A nested explicit scope overrides its parent until that scope ends.
+English, French, and Spanish all use Latin. A document-script entry can select
+only one of them at a time. Choosing French means English is not used as a
+fallback, even if the English provider is installed. Change the Latin language
+when you intentionally want to review the document with another dictionary.
 
-## Same-script languages remain isolated
-
-English, French, and Spanish share Latin script but not dictionary ownership.
-An explicit French scope never falls back to English merely because an English
-provider is installed. If French is unavailable, spellcheck is disabled for
-that scope and the `lang` declaration receives a hint and warning marker.
-
-Mixed-script runs may use configured embedded providers only when ownership is
-unambiguous and the scripts are disjoint. This convenience cannot substitute a
-same-script language provider.
+Typst `lang` still controls Typst behavior such as hyphenation. It does not
+change Typsastra's provider selection.
 
 ## Terminology
 
-Use the spelling context menu to accept a term globally, for the project, or for
-a language family. Global and project terminology can recognize a product name
-such as `Typsastra` across languages. Language-family terminology stays isolated
-so accepting an ordinary French word does not hide a typo in English.
+Use the spelling context menu to accept a product or proper name globally, for
+the project, or for the configured language family. Project terminology is
+stored in `.typsastra/config.json`.
 
-## Diagnose routing
-
-Enable **Spellcheck and language scopes** under Settings → Developer → Log
-categories. The log records resolved scopes, provider catalog readiness, routed
-chunks, rejected results, and published hints without changing analysis.
-
-Try `02-multilingual-writing/02-language-scoped-spellcheck` and the complete
-`04-research-projects/01-multilingual-article` example.
+Try `02-multilingual-writing/02-language-scoped-spellcheck` and
+`04-research-projects/01-multilingual-article`.

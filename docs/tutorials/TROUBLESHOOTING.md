@@ -5,18 +5,18 @@
 Run `bun run tauri dev`. `bun run dev` starts only the browser frontend and
 cannot provide native filesystem, process, dialog, or managed-toolchain APIs.
 
-## A language scope has no spelling marks
+## A script has no spelling marks
 
-Check that its matching provider is installed and enabled. An unavailable
-explicit scope should mark the `lang` declaration instead of borrowing another
-dictionary. Enable Settings → Developer → Spellcheck and language scopes, then
-inspect provider catalog and routing events.
+Open the `Aa` Typography toolbar and check that the script has a language
+selected and its provider is installed. A script with Language tools off is
+intentionally ignored. Enable the Spellcheck and document scripts developer
+log, then inspect routing and analysis events.
 
 ## Completion does not appear
 
-Check the suggestion toggle, selected language source, provider completion
-capability, current keyboard mapping, and whether an IME composition is active.
-Keyboard-language completion does not change document spellcheck scope.
+Check the suggestion toggle, the language assigned to the typed script, the
+provider's completion capability, and whether an IME composition is active.
+Typsastra does not use the keyboard layout or Typst `lang` to choose completion.
 
 ## An included file previews by itself
 

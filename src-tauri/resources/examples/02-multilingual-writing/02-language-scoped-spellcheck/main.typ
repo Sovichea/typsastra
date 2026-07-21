@@ -1,54 +1,41 @@
-#set document(title: "Scope-aware Language Tools")
+#set document(title: "Document-script Language Tools")
 #set page(margin: 24mm)
 // typsastra:typography:start
-#set text(font: ("MiSans Latin", "MiSans Khmer"), size: 11pt)
+// typsastra:document-scripts [{"family":"MiSans Latin","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+#set text(
+  font: (
+    (name: "MiSans Latin", covers: regex("\p{scx=Latin}")),
+    (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
+    (name: "MiSans Arabic", covers: regex("\p{scx=Arabic}")),
+  ),
+  size: 11pt,
+)
 // typsastra:typography:end
 #set heading(numbering: "1.")
-#set par(leading: 0.7em)
-#set text(lang: "en")
 
-= Scope-aware Language Tools
+= Document-script language tools
 
-Typsastra derives spellcheck language from static Typst `text` scopes. Typing suggestions can independently follow the keyboard language, the current scope, or a manual language selected in Settings.
+The directive above assigns English to Latin, Khmer to Khmer, and Arabic to
+Arabic. Spellcheck and word completion use those assignments directly.
 
-== Disjoint scripts in one English scope
+== Three configured scripts
 
-Enable Khmer and Arabic as *Embedded* languages in Settings. English owns Latin runs; the embedded providers may check only their disjoint Khmer and Arabic scripts.
+This English sentance contains an intentional typo.
 
-English with an intentional sentance typo. សួស្តី ពិភពលោក។ مرحبًا بالعالم.
+សួស្តី ពិភពលោក។
 
-== Named and anonymous set-rule blocks
+#text(dir: rtl)[مرحبًا بالعالم.]
 
-#block[
-  #set text(lang: "km")
-  អត្ថបទខ្មែរនេះស្ថិតក្នុង named block។ English remains an explicitly configured embedded run only when its provider owns a disjoint script.
-]
+== Typst language remains independent
 
-#[
-  #set text(lang: "ar")
-  #text(dir: rtl)[هذا النص داخل anonymous content block.]
-]
+#text(lang: "fr")[Le français conserve le comportement linguistique de Typst,
+mais Typsastra utilise toujours le fournisseur anglais assigné au script latin.]
 
-== Nested direct text scopes
+Change the Latin language to French in the Typography toolbar when you want
+Typsastra to review the Latin text with the French provider. It never silently
+substitutes English or French for the other.
 
-#text(lang: "fr", region: "FR")[Le français utilise son propre dictionnaire. #text(lang: "en")[This nested sentence is English.] Retour au français.]
+== Tools off
 
-#text(lang: "es", region: "ES", "El español también funciona dans une chaîne directe.")
-
-English, French, and Spanish all use Latin script. Typsastra therefore requires these explicit scopes and never accepts a French word merely because an English dictionary recognizes it.
-
-== Missing-provider recovery
-
-#text(lang: "eo")[Ĉi tiu Esperanto-scope intentionally demonstrates an unavailable language provider.]
-
-The `lang: "eo"` declaration receives a dotted hint and gutter warning when no provider is installed. Activate the gutter marker to open Language Tools. Installing or enabling the provider removes the warning and starts analysis without reopening this file.
-
-== Terminology and scoped ignores
-
-Right-click an unknown word such as Typsastra and choose global, project, or language-family terminology. Global and project terminology apply across scopes; a language-family term remains isolated. New ignores also record an explicit language or global scope, while migrated legacy ignores remain visible.
-
-== Keyboard-language completion
-
-In Settings, set *Suggestion language source* to Keyboard language. Switch the operating-system layout, type a prefix in a compatible prose scope, and open completion. Suggestions follow the keyboard language but spellcheck remains owned by the Typst scope. IME composition is never interrupted.
-
-Dynamic expressions such as `#text(lang: selected-language)[...]`, spread style dictionaries, and show-set rules remain unresolved. Typsastra does not evaluate Typst code to guess their language.
+Remove a language selection while retaining its script font. Typsastra then
+leaves that script untouched: no warning, spellcheck, or word completion.

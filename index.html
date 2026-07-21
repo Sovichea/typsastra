@@ -542,13 +542,13 @@
                                             class="toolbar-typography-divider"
                                         ></div>
                                         <div class="toolbar-typography-option-header">
-                                            <label>Script fonts</label>
+                                            <label>Document scripts</label>
                                             <button id="toolbar-add-script-font" type="button">Add script</button>
                                         </div>
                                         <div class="toolbar-typography-hint">
-                                            Font order does not let one script consume another: Typsastra restricts each entry with Unicode Script Extensions.
+                                            Assign a font, optional visual scale, and optional language-tools provider to each script. Scripts without a language are not spellchecked and receive no word completions.
                                         </div>
-                                        <div id="toolbar-script-fonts" class="toolbar-font-fallbacks"></div>
+                                        <div id="toolbar-document-scripts" class="toolbar-font-fallbacks"></div>
                                         <div class="toolbar-typography-actions">
                                             <button
                                                 id="toolbar-typography-apply"
@@ -2369,24 +2369,8 @@
                                 ></label
                             >
                             <div class="settings-field">
-                                <label for="settings-completion-language-source">Suggestion language source</label>
-                                <select id="settings-completion-language-source">
-                                    <option value="keyboard">Keyboard language</option>
-                                    <option value="scope">Typst language scope</option>
-                                    <option value="manual">Manual language</option>
-                                </select>
-                                <input id="settings-manual-completion-language" type="text" maxlength="10" placeholder="en-US" aria-label="Manual completion language" />
-                                <small>Suggestions may follow the keyboard language without changing the document's spellcheck scope. IME candidate composition always takes priority.</small>
-                            </div>
-                            <div class="settings-field">
-                                <label>Installed languages and embedded routing</label>
+                                <label>Language providers</label>
                                 <div class="settings-language-tools">
-                                    <div
-                                        id="settings-language-providers"
-                                        class="settings-check-list"
-                                        role="group"
-                                        aria-label="Enabled language support"
-                                    ></div>
                                     <button
                                         id="settings-add-language"
                                         class="settings-secondary-button"
@@ -2401,10 +2385,10 @@
                                     ></div>
                                 </div>
                                 <small
-                                    >Enable the languages that can participate
-                                    in spellcheck and typing suggestions. Each
-                                    row lists its actual capabilities and
-                                    support depth.</small
+                                    >Install providers here, then assign one to
+                                    a script from the document Typography
+                                    toolbar. Unassigned scripts receive no
+                                    spellcheck or word completion.</small
                                 >
                             </div>
                             <div class="settings-field">
@@ -2656,8 +2640,8 @@
                                 ></label>
                                 <label class="settings-toggle"
                                     ><input id="settings-dev-log-spellcheck" type="checkbox"
-                                    /><span><strong>Spellcheck and language scopes</strong
-                                    ><small>Provider catalogs, language-scope resolution, routing, and analysis responses.</small></span
+                                    /><span><strong>Spellcheck and document scripts</strong
+                                    ><small>Document-script configuration, provider routing, and analysis responses.</small></span
                                 ></label>
                                 <label class="settings-toggle"
                                     ><input id="settings-dev-log-general" type="checkbox"

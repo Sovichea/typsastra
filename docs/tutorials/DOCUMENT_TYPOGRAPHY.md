@@ -23,7 +23,8 @@ its own font, Unicode coverage restriction, and optional visual scale.
 2. Set the shared document size.
 3. Add each script used by the document.
 4. Choose its installed font and adjust its scale if necessary.
-5. Choose **Apply to document**, or **Apply as template** for shared project
+5. Optionally assign the language provider used for spellcheck and completion.
+6. Choose **Apply to document**, or **Apply as template** for shared project
    typography.
 
 For example:
@@ -69,12 +70,15 @@ fonts and may not be represented accurately.
 
 ## What this does not control
 
-Script-font assignments do not change:
+Script assignments do not change:
 
 - the source editor's font;
 - Typst `lang` or `dir`;
-- spellcheck, segmentation, or completion providers;
-- the Language Tools **Embedded spellcheck** setting.
+- Typst's `lang` or `dir` behavior.
+
+The optional language field does select Typsastra spellcheck and word
+completion for that script. Leave it off when the script should receive no
+language analysis.
 
 For implementation details and limitations, see
 [Document typography](../DOCUMENT_TYPOGRAPHY.md). Try

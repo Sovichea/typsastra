@@ -284,34 +284,13 @@ function getCmCompletionType(kind?: number): string {
 
 export type ProviderCapabilities = LanguageProviderCapabilities;
 
-type CompletionRoutingProvider = Pick<ProviderCapabilities, "id" | "scripts">;
-
-export function chooseLanguageCompletionProvider<T extends CompletionRoutingProvider>(
-  matchingProviders: readonly T[],
-  preferredProvider: T | null,
-): T | null {
-  if (preferredProvider) {
-    const preferredMatch = matchingProviders.find(provider => provider.id === preferredProvider.id);
-    if (preferredMatch) return preferredMatch;
-
-    const preferredScripts = new Set(preferredProvider.scripts.map(script => script.toLowerCase()));
-    const disjointMatches = matchingProviders.filter(provider =>
-      provider.id !== preferredProvider.id
-      && provider.scripts.every(script => !preferredScripts.has(script.toLowerCase()))
-    );
-    return disjointMatches.length === 1 ? disjointMatches[0]! : null;
-  }
-
-  return matchingProviders.length === 1 ? matchingProviders[0]! : null;
-}
-
 export function createTypstAutocomplete(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
   flushLspSync: () => void | Promise<void>,
   languageWordCompletion = true,
   getProviders: () => ProviderCapabilities[] = () => [],
-  getLanguageCompletionProvider?: (position: number) => Promise<CompletionProviderSelection | null>,
+  getLanguageCompletionProvider?: (providers: ProviderCapabilities[]) => CompletionProviderSelection | null,
   getLanguageCompletionGeneration?: () => number,
   onLanguageCompletionPerformance?: (milliseconds: number) => void,
 ) {
@@ -320,9 +299,6 @@ export function createTypstAutocomplete(
       async (context: CompletionContext) => {
         if (languageWordCompletion && !context.view?.composing && context.state.selection.ranges.length === 1) {
           const languageCompletionStartedAt = performance.now();
-          const selected = getLanguageCompletionProvider
-            ? await getLanguageCompletionProvider(context.pos)
-            : null;
           const matches = getProviders()
             .filter(provider => provider.supportsCompletion === true)
             .map(provider => ({
@@ -332,19 +308,15 @@ export function createTypstAutocomplete(
             .filter((match): match is { provider: ProviderCapabilities; word: NonNullable<typeof match.word> } =>
               match.word !== null
             );
-          const provider = chooseLanguageCompletionProvider(
-            matches.map(match => match.provider),
-            selected?.provider ?? null,
-          );
+          const selected = getLanguageCompletionProvider?.(matches.map(match => match.provider)) ?? null;
+          const provider = selected?.provider ?? null;
           const match = provider ? matches.find(candidate => candidate.provider.id === provider.id) : null;
-          if (provider && match) {
-            const usesPreferredProvider = selected?.provider.id === provider.id;
+          if (selected && provider && match) {
             const line = context.state.doc.lineAt(context.pos);
-            if (!usesPreferredProvider
-              && !allowsLanguageWordCompletionOnLine(line.text, match.word.from - line.from)) return null;
+            if (!allowsLanguageWordCompletionOnLine(line.text, match.word.from - line.from)) return null;
             try {
               const documentIdentity = context.state.doc;
-              const inputGeneration = selected?.generation;
+              const inputGeneration = selected.generation;
               const completion = await invoke<LanguageCompletionResponse | null>("complete_language_word", {
                 request: {
                   provider: provider.id,
@@ -365,9 +337,7 @@ export function createTypstAutocomplete(
                   options: completion.options.map(w => ({
                     label: w,
                     type: "text",
-                    detail: usesPreferredProvider && selected
-                      ? `${completion.provider} · ${selected.languageTag} (${selected.source})`
-                      : `${completion.provider} · typed script`
+                    detail: `${completion.provider} · ${selected.languageTag} (document script)`
                   })),
                   // Results are deliberately bounded and ranked for the current
                   // segmented prefix, so every typed character must query again.

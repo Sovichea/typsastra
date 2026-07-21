@@ -16,8 +16,6 @@ use tokio_tungstenite::{
 mod compatibility;
 mod examples;
 mod font_store;
-mod input_language;
-mod language_scopes;
 mod project_archive;
 mod render_prepare;
 mod scaled_fonts;
@@ -456,6 +454,22 @@ mod workspace_metadata_tests {
 #[tauri::command]
 fn read_workspace_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+fn read_workspace_text_prefix(path: String, max_bytes: usize) -> Result<String, String> {
+    use std::io::Read;
+    let limit = max_bytes.clamp(1, 256 * 1024);
+    let file =
+        std::fs::File::open(&path).map_err(|error| format!("Failed to open file: {error}"))?;
+    let mut bytes = Vec::with_capacity(limit);
+    file.take(limit as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Failed to read file prefix: {error}"))?;
+    while !bytes.is_empty() && std::str::from_utf8(&bytes).is_err() {
+        bytes.pop();
+    }
+    String::from_utf8(bytes).map_err(|error| format!("File prefix is not UTF-8: {error}"))
 }
 
 #[tauri::command]
@@ -2701,6 +2715,7 @@ pub fn run() {
             compile_typst_document,
             check_typst_document,
             read_workspace_file,
+            read_workspace_text_prefix,
             workspace_file_size,
             workspace_text_line_count,
             open_file_externally,
@@ -2741,8 +2756,6 @@ pub fn run() {
             remove_hunspell_dictionary,
             open_devtools,
             complete_language_word,
-            input_language::get_input_language,
-            language_scopes::extract_typst_language_scopes,
             prepare_examples_workspace,
             list_tinymist_releases,
             install_tinymist_toolchain,

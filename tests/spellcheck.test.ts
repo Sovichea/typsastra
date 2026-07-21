@@ -54,19 +54,6 @@ mock.module("@tauri-apps/api/core", () => ({
       ]);
     }
     if (command === "list_hunspell_catalog") return Promise.resolve([]);
-    if (command === "extract_typst_language_scopes") {
-      const request = args?.request;
-      return Promise.resolve({
-        documentKey: request?.documentKey ?? "a.typ",
-        revision: request?.revision ?? 0,
-        parserVersion: "test",
-        documentUtf16: request?.text?.length ?? 0,
-        mutations: [],
-        proseRanges: [{ fromUtf16: 0, toUtf16: request?.text?.length ?? 0 }],
-        syntaxErrors: [],
-        elapsedMicros: 0
-      });
-    }
     return new Promise((resolve, reject) => invocations.push({ command, resolve, reject, args }));
   }
 }));
@@ -131,7 +118,10 @@ async function controllerFor(text: string) {
     issues => visibleIssueSnapshots.push([...issues])
   );
   await controller.initialize();
-  controller.setEmbeddedProviders(["khmer-segmenter"]);
+  controller.setDocumentScripts([
+    { script: "latin", family: "Test Latin", scale: 1, language: "en-US" },
+    { script: "khmer", family: "Test Khmer", scale: 1, language: "km" },
+  ]);
   controller.activateDocument("a.typ");
   activeController = controller;
   return { controller, state, visibleIssueSnapshots, get replacementCount() { return replacementCount; } };
@@ -360,7 +350,13 @@ describe("spellcheck request safety", () => {
     const fixture = await controllerFor("mispell");
     fixture.controller.typingStarted("mispell".length);
     const analyzeRequest = await startAnalysis(fixture.controller);
-    analyzeRequest.resolve(analysis("mispell"));
+    analyzeRequest.resolve({
+      tokens: [{
+        ...analysis("mispell").tokens[0],
+        provider: "test-corrections",
+      }],
+      failures: [],
+    });
     await wait(20);
     expect(fixture.visibleIssueSnapshots.at(-1)).toEqual([]);
 

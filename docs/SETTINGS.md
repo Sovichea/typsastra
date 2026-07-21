@@ -15,7 +15,6 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
     "unicodeFont": "auto",
     "spellcheck": true,
     "wordCompletion": true,
-    "languageProviders": null,
     "userDictionary": [],
     "wordWrap": true,
     "tabSize": 2,
@@ -91,10 +90,9 @@ Script-aware editing, spellcheck, correction suggestions, and typing word sugges
 
 Spellcheck and typing word suggestions can be controlled independently in Editor settings. Corrections are shown only when the active provider advertises reliable correction support.
 
-The **Language tools** setting chooses which installed providers participate:
-
-- `languageProviders: null` means all available providers are enabled.
-- An explicit array stores the selected provider IDs.
+Settings installs language providers globally. A provider participates in a
+document only after its language is assigned to a script through the Typography
+toolbar and stored in `typsastra:document-scripts`.
 
 **Add language...** opens the catalog dialog to download additional Hunspell dictionaries. Each catalog entry row displays detailed onboarding metadata:
 - **Provider Type:** Displays the type level (e.g. `Deep provider` or `Dictionary only`).

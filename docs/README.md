@@ -9,7 +9,7 @@ the reference documents when you need exact behavior or contributor contracts.
 1. [Getting started](tutorials/GETTING_STARTED.md)
 2. [Projects and main files](tutorials/PROJECTS_AND_MAIN_FILES.md)
 3. [Multilingual spellcheck](tutorials/MULTILINGUAL_SPELLCHECK.md)
-4. [Keyboard-language completion](tutorials/KEYBOARD_LANGUAGE_COMPLETION.md)
+4. [Document-script word completion](tutorials/KEYBOARD_LANGUAGE_COMPLETION.md)
 5. [Document typography](tutorials/DOCUMENT_TYPOGRAPHY.md)
 6. [Installing language providers](tutorials/LANGUAGE_PROVIDER_INSTALLATION.md)
 7. [Long-document workflow](tutorials/LONG_DOCUMENT_WORKFLOW.md)
@@ -21,7 +21,7 @@ the reference documents when you need exact behavior or contributor contracts.
 
 - [Settings](SETTINGS.md)
 - [Language tools](LANGUAGE_TOOLS.md)
-- [Scope-aware language tools](SCOPE_AWARE_LANGUAGE_TOOLS.md)
+- [Document-script language tools](SCOPE_AWARE_LANGUAGE_TOOLS.md)
 - [Document typography](DOCUMENT_TYPOGRAPHY.md)
 - [Research-document workflows](RESEARCH_DOCUMENT_WORKFLOWS.md)
 - [Project archive format](TYPSASTRA_PROJECT_FORMAT.md)
@@ -45,5 +45,5 @@ the reference documents when you need exact behavior or contributor contracts.
 - [v1.0 implementation plan](V1_RELEASE_IMPLEMENTATION_PLAN.md)
 
 First-class RTL editor behavior is planned for v0.9.0. Current Arabic and
-Hebrew examples demonstrate Typst rendering and language scopes, not a completed
+Hebrew examples demonstrate Typst rendering and text direction, not a completed
 RTL editing conformance claim.

@@ -102,7 +102,7 @@ Typsastra also treats a document as a project rather than an isolated file. A re
 - Lao language support with ICU4X word segmentation and optional `lo_LA` Hunspell dictionary.
 - English spellcheck bundled by default, with optional Hunspell-compatible dictionaries for additional languages.
 - Independent controls for script-aware editing, spellcheck, and typing suggestions.
-- Typst language-scope-aware spellcheck with keyboard-language-aware completion.
+- Document-script language routing: each configured script can select one spellcheck and word-completion provider, with no keyboard or same-script guessing.
 - Tinymist diagnostics and managed Typst tooling.
 - Hardware-accelerated, virtualized PDF preview designed for responsive long-document scrolling and constrained memory use.
 - Direct in-app PDF viewing with editable current-page navigation.

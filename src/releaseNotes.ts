@@ -12,7 +12,7 @@ const releaseSummaries: Record<string, ReleaseSummary> = {
     highlights: [
       "A versioned, guided examples workspace with task-oriented tutorials.",
       "Script-specific font assignments with Unicode coverage and independent fine scaling.",
-      "More reliable language-scoped spellcheck, provider warnings, and word completion.",
+      "Deterministic document-script spellcheck and word completion.",
       "A private global scaled-font cache that is reused across projects and never exported."
     ],
     detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.5.1"

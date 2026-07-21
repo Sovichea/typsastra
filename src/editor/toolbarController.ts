@@ -4,6 +4,12 @@ import { undo, redo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  parseLanguageCatalog,
+  parseLanguageProviderCapabilitiesList,
+  type LanguageCatalogCapabilities,
+  type LanguageProviderCapabilities,
+} from "../languageSupport";
+import {
   detectTypographyScripts,
   parseTypographyBlock,
   preferredInstalledFamily,
@@ -61,9 +67,11 @@ export class EditorToolbarController {
   private readonly toolbar = document.getElementById("editor-visual-toolbar")!;
   private systemFontFamilies: string[] = ["MiSans Latin", "Fira Mono"];
   private scriptFontFamilies: Record<string, string[]> = {};
+  private languageCatalog: LanguageCatalogCapabilities[] = [];
+  private installedLanguageProviders: LanguageProviderCapabilities[] = [];
   private typographyDefaults: DocumentTypography = {
     baseSizePt: 11,
-    fonts: [{ script: "latin", family: "MiSans Latin", scale: 1 }]
+    fonts: [{ script: "latin", family: "MiSans Latin", scale: 1, language: null }]
   };
   private rememberedTypography: DocumentTypography | null = null;
   private coverageGeneration = 0;
@@ -73,6 +81,7 @@ export class EditorToolbarController {
   public initialize(): void {
     void this.initializeTypographyControls();
     document.addEventListener("typsastra:system-fonts-changed", () => void this.initializeTypographyControls());
+    document.addEventListener("typsastra:language-providers-changed", () => void this.initializeTypographyControls());
     document.getElementById("toolbar-typography-apply")?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -88,7 +97,7 @@ export class EditorToolbarController {
       const used = new Set(this.fallbackRows().map(row => this.rowScript(row).value));
       const script = typographyScripts.find(candidate => !used.has(candidate.id));
       if (!script) return;
-      this.fallbackContainer()?.append(this.createFallbackRow({ script: script.id, family: "", scale: 1 }));
+      this.fallbackContainer()?.append(this.createFallbackRow({ script: script.id, family: "", scale: 1, language: null }));
       this.updateTypographyAvailability();
     });
     this.toolbar.addEventListener("pointerdown", event => {
@@ -125,11 +134,17 @@ export class EditorToolbarController {
   private async initializeTypographyControls(): Promise<void> {
     this.rememberedTypography = this.loadRememberedTypography();
     try {
-      const catalog = await invoke<{ all: string[]; scripts: Record<string, string[]> }>("list_system_fonts");
-      this.systemFontFamilies = [...new Set(catalog.all)].sort((left, right) => left.localeCompare(right));
-      this.scriptFontFamilies = catalog.scripts ?? {};
+      const [fontCatalog, languageCatalog, providers] = await Promise.all([
+        invoke<{ all: string[]; scripts: Record<string, string[]> }>("list_system_fonts"),
+        invoke<unknown>("list_hunspell_catalog"),
+        invoke<unknown>("get_provider_capabilities"),
+      ]);
+      this.systemFontFamilies = [...new Set(fontCatalog.all)].sort((left, right) => left.localeCompare(right));
+      this.scriptFontFamilies = fontCatalog.scripts ?? {};
+      this.languageCatalog = parseLanguageCatalog(languageCatalog);
+      this.installedLanguageProviders = parseLanguageProviderCapabilitiesList(providers);
     } catch (error) {
-      console.warn("Unable to load document font families.", error);
+      console.warn("Unable to load document script options.", error);
     }
     this.syncTypographyControls();
   }
@@ -157,7 +172,7 @@ export class EditorToolbarController {
   }
 
   private fallbackContainer(): HTMLElement | null {
-    return document.getElementById("toolbar-script-fonts");
+    return document.getElementById("toolbar-document-scripts");
   }
 
   private fallbackRows(): HTMLElement[] {
@@ -166,6 +181,58 @@ export class EditorToolbarController {
 
   private rowScript(row: HTMLElement): HTMLSelectElement {
     return row.querySelector<HTMLSelectElement>("[data-fallback-script]")!;
+  }
+
+  private languageOptions(scriptId: string): Array<{ tag: string; label: string; installed: boolean }> {
+    const script = typographyScripts.find((candidate) => candidate.id === scriptId);
+    if (!script) return [];
+    const matchesScript = (scripts: readonly string[]) => scripts.some((value) =>
+      value.toLowerCase() === script.iso15924.toLowerCase());
+    const byTag = new Map<string, { tag: string; label: string; installed: boolean }>();
+    for (const entry of this.languageCatalog.filter((candidate) => matchesScript(candidate.scripts))) {
+      byTag.set(entry.languageTag, {
+        tag: entry.languageTag,
+        label: entry.displayName,
+        installed: entry.installed,
+      });
+    }
+    for (const provider of this.installedLanguageProviders.filter((candidate) => matchesScript(candidate.scripts))) {
+      byTag.set(provider.languageTag, {
+        tag: provider.languageTag,
+        label: provider.displayName,
+        installed: true,
+      });
+    }
+    return [...byTag.values()].sort((left, right) => left.label.localeCompare(right.label));
+  }
+
+  private populateRowLanguages(row: HTMLElement, scriptId: string, selected: string | null): void {
+    const select = row.querySelector<HTMLSelectElement>("[data-fallback-language]");
+    if (!select) return;
+    const options = this.languageOptions(scriptId);
+    const off = document.createElement("option");
+    off.value = "";
+    off.textContent = "Language tools off";
+    select.replaceChildren(off, ...options.map((entry) => {
+      const option = document.createElement("option");
+      option.value = entry.tag;
+      option.textContent = `${entry.label} (${entry.tag})${entry.installed ? "" : " · not installed"}`;
+      return option;
+    }));
+    if (selected && !options.some((entry) => entry.tag === selected)) {
+      const unavailable = document.createElement("option");
+      unavailable.value = selected;
+      unavailable.textContent = `${selected} (unavailable)`;
+      select.append(unavailable);
+    }
+    select.value = selected ?? "";
+    const hint = row.querySelector<HTMLElement>("[data-language-hint]");
+    const selectedOption = options.find((entry) => entry.tag === select.value);
+    if (hint) hint.textContent = !selectedOption
+      ? "Spellcheck and word completion are disabled for this script."
+      : selectedOption.installed
+        ? `${selectedOption.label} owns language tools for this script.`
+        : `${selectedOption.label} is selected but its provider is not installed.`;
   }
 
   private populateRowFonts(
@@ -203,7 +270,7 @@ export class EditorToolbarController {
     return supported;
   }
 
-  private createFallbackRow(fallback: { script: string; family: string; scale: number }, detected = false): HTMLElement {
+  private createFallbackRow(fallback: DocumentScriptFont, detected = false): HTMLElement {
     const row = document.createElement("div");
     row.className = "toolbar-font-fallback-row";
     const script = document.createElement("select");
@@ -225,6 +292,9 @@ export class EditorToolbarController {
     scale.step = "0.01";
     scale.value = String(fallback.scale);
     scale.setAttribute("aria-label", "Script font scale");
+    const language = document.createElement("select");
+    language.dataset.fallbackLanguage = "";
+    language.setAttribute("aria-label", "Script language tools");
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "toolbar-remove-fallback";
@@ -232,8 +302,12 @@ export class EditorToolbarController {
     const hint = document.createElement("div");
     hint.dataset.fallbackHint = "";
     hint.className = "toolbar-typography-hint";
-    row.append(script, font, scale, remove, hint);
+    const languageHint = document.createElement("div");
+    languageHint.dataset.languageHint = "";
+    languageHint.className = "toolbar-typography-hint";
+    row.append(script, font, scale, language, remove, hint, languageHint);
     this.populateRowFonts(row, fallback.script, fallback.family || undefined);
+    this.populateRowLanguages(row, fallback.script, fallback.language);
     if (detected) hint.textContent = `Detected ${typographyScripts.find(item => item.id === fallback.script)?.label}. ${hint.textContent}`;
     script.addEventListener("change", () => {
       const duplicate = this.fallbackRows().some(other => other !== row && this.rowScript(other).value === script.value);
@@ -244,9 +318,11 @@ export class EditorToolbarController {
         if (replacement) script.value = replacement.id;
       }
       this.populateRowFonts(row, script.value);
+      this.populateRowLanguages(row, script.value, null);
       this.updateTypographyAvailability();
     });
     font.addEventListener("change", () => this.updateTypographyAvailability());
+    language.addEventListener("change", () => this.populateRowLanguages(row, script.value, language.value || null));
     remove.addEventListener("click", () => {
       row.remove();
       this.updateTypographyAvailability();
@@ -290,7 +366,8 @@ export class EditorToolbarController {
     const fonts = preferred?.fonts ?? scripts.map(script => ({
       script: script.id,
       family: preferredInstalledFamily(script, this.supportedFonts(script.id)) ?? this.supportedFonts(script.id)[0] ?? "",
-      scale: 1
+      scale: 1,
+      language: null
     }));
     this.typographyDefaults = {
       baseSizePt: preferred?.baseSizePt ?? 11,
@@ -340,7 +417,8 @@ export class EditorToolbarController {
       return [{
         family,
         script: this.rowScript(row).value,
-        scale: this.boundedTypographyNumber(row.querySelector<HTMLInputElement>("[data-fallback-scale]")?.value ?? "1", 0.5, 2, 1)
+        scale: this.boundedTypographyNumber(row.querySelector<HTMLInputElement>("[data-fallback-scale]")?.value ?? "1", 0.5, 2, 1),
+        language: row.querySelector<HTMLSelectElement>("[data-fallback-language]")?.value || null
       }];
     });
     if (fonts.length === 0) return;
@@ -376,22 +454,22 @@ export class EditorToolbarController {
       const storedFonts = Array.isArray(candidate.fonts) ? candidate.fonts : [];
       const legacyPrimary = candidate.primary && typeof candidate.primary.family === "string"
         && typeof candidate.primary.script === "string"
-        ? [{ family: candidate.primary.family, script: candidate.primary.script, scale: 1 }]
+        ? [{ family: candidate.primary.family, script: candidate.primary.script, scale: 1, language: null }]
         : typeof candidate.latinFont === "string"
-          ? [{ family: candidate.latinFont, script: "latin", scale: 1 }]
+          ? [{ family: candidate.latinFont, script: "latin", scale: 1, language: null }]
           : [];
       const rawFallbacks = Array.isArray(candidate.embedded)
         ? candidate.embedded
         : Array.isArray(candidate.fallbacks)
           ? candidate.fallbacks
         : candidate.complexFont && candidate.complexScript
-          ? [{ family: candidate.complexFont, script: candidate.complexScript, scale: candidate.complexScale ?? 1 }]
+          ? [{ family: candidate.complexFont, script: candidate.complexScript, scale: candidate.complexScale ?? 1, language: null }]
           : [];
       const fonts = [...storedFonts, ...legacyPrimary, ...rawFallbacks].flatMap(font =>
         font && typeof font.family === "string"
           && typeof font.script === "string"
           && typographyScripts.some(script => script.id === font.script)
-          ? [{ family: font.family, script: font.script, scale: this.boundedTypographyNumber(String(font.scale), 0.5, 2, 1) }]
+          ? [{ family: font.family, script: font.script, scale: this.boundedTypographyNumber(String(font.scale), 0.5, 2, 1), language: typeof font.language === "string" ? font.language : null }]
           : []
       ).filter((font, index, all) => all.findIndex(candidate => candidate.script === font.script) === index);
       if (fonts.length === 0) return null;

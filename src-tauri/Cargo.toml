@@ -46,8 +46,7 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_ProcessStatus",
   "Win32_System_Threading",
-  "Win32_UI_WindowsAndMessaging",
-  "Win32_UI_Input_KeyboardAndMouse"
+  "Win32_UI_WindowsAndMessaging"
 ] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
