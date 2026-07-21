@@ -1,7 +1,5 @@
 # Typsastra v0.5.1 release notes
 
-> Draft: finalize screenshots and clean-install verification before release.
-
 Typsastra v0.5.1 is a maintenance and learning-experience update for the
 multilingual foundations introduced in v0.5.0. It makes those workflows easier
 to discover while correcting provider routing and completion regressions found
@@ -12,6 +10,9 @@ after release.
 - Reorganized the writable example workspace into a guided path covering
   basics, multilingual writing, language providers, research projects, and
   project portability.
+- Installed writable examples into a versioned Documents folder such as
+  `Typsastra Examples v0.5.1`, preventing a new release from overwriting or
+  silently reusing an older example workspace.
 - Added focused examples for script-specific font assignments,
   language-scoped spellcheck, keyboard-language completion, optional-provider
   recovery, main-file ownership, portable workspace state, and font-free export.
@@ -24,6 +25,8 @@ after release.
 - Added a user documentation index and task-oriented tutorials for projects,
   language tools, typography, long documents, preview synchronization, and
   project interchange.
+- Added a once-per-version startup summary with a direct link to the complete
+  release notes.
 
 ## Document typography
 
@@ -85,10 +88,10 @@ after release.
 
 ## Upgrade behavior
 
-Typsastra installs the reorganized learning path beside the existing writable
-examples. Untouched retired examples are removed. Any retired example that the
-user edited remains in place as a user-owned legacy copy and is never silently
-overwritten.
+Typsastra installs the reorganized learning path in
+`Typsastra Examples v0.5.1`. Earlier versioned example folders remain untouched
+as user-owned workspaces and are never silently overwritten or selected for the
+new release.
 
 ## Known boundaries
 

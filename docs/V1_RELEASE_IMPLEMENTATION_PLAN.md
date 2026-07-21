@@ -69,7 +69,7 @@ Rules:
 - Generated caches, render mirrors, `.git`, `target`, and `node_modules` remain excluded.
 - `.typsastra/project.json` is the only generated `.typsastra` content exported.
 - Font binaries are never included, regardless of location or license. Recipients install required fonts separately.
-- Local generated/scaled fonts remain workspace cache data and are excluded from every archive.
+- Generated/scaled fonts remain private global application cache data and are excluded from every archive.
 - A legacy plain ZIP may still be exported through an explicitly named **Export Source ZIP** action, but it carries no compatibility promise.
 - The archive format must be documented and forward-compatible: unknown optional fields are ignored; unsupported schema versions are rejected with a useful message.
 

@@ -56,8 +56,9 @@ English and Khmer are bundled. Optional providers are installed from Settings
 - `03-font-free-project-export`: lightweight archives and external font requirements.
 
 Open a `main.typ` file from Explorer. Set it as the project main file when the
-example contains included files. Your installed examples are writable: an app
-update refreshes untouched examples but preserves anything you edited.
+example contains included files. Your installed examples are writable. Each
+Typsastra release uses a new versioned examples folder, so a future update does
+not overwrite or silently reopen anything you edited here.
 
 The full tutorials are available at
 `https://github.com/Sovichea/typsastra/tree/main/docs/tutorials`.

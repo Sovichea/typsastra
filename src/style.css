@@ -1267,6 +1267,25 @@ body.typsastra-resizing #input-container-wrapper::after {
 
 .about-footer { justify-content: flex-end; }
 
+.release-summary-dialog {
+  width: min(560px, 100%);
+  height: auto;
+  max-height: calc(100vh - 48px);
+}
+
+.release-summary-content {
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+  color: var(--ui-header-text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.release-summary-content p { margin: 0 0 12px; }
+.release-summary-content ul { margin: 0; padding-left: 22px; }
+.release-summary-content li + li { margin-top: 9px; }
+.release-summary-footer { justify-content: flex-end; }
+
 .recent-projects-dialog {
   width: min(720px, 100%);
   height: min(620px, calc(100vh - 48px));

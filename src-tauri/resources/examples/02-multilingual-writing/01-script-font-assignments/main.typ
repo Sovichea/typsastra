@@ -51,6 +51,11 @@ Typsastra prepares uniformly scaled local fonts without wrapping or replacing
 source runs. Forward and inverse synchronization therefore retain the original
 source ownership.
 
+Scaled variants are stored in Typsastra's private global cache. A matching font
+and scale is reused across projects, so it is not generated again. Typsastra
+recommends at most 10 cached scale variants per font face and asks before
+creating another. Existing variants are never removed automatically.
+
 Non-unit scales are experimental for PDF output. Typst may normalize a scaled
 font while subsetting it, leaving scaled advances with unscaled outlines.
 Typsastra keeps preview faithful to the exported PDF; use `1.0` when dependable
@@ -68,4 +73,5 @@ Latin uses its assigned family: Multilingual documents should remain readable.
 
 Script-font assignments do not control the source-editor font, spellcheck,
 completion, Typst `lang`, or text direction. Generated scaled fonts stay in
-Typsastra's private global cache and never enter the project or its exports.
+Typsastra's private global cache and never enter `.typsastra`, a copied project,
+or its exports. Advanced cache management is planned for v0.5.2.

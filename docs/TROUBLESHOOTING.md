@@ -75,7 +75,7 @@ WEBKIT_DISABLE_DMABUF_RENDERER=1 typsastra
 For an AppImage:
 
 ```bash
-WEBKIT_DISABLE_DMABUF_RENDERER=1 ./Typsastra_0.5.0_amd64.AppImage
+WEBKIT_DISABLE_DMABUF_RENDERER=1 ./Typsastra_0.5.1_amd64.AppImage
 ```
 
 This is a WebKitGTK rendering workaround. It does not change Typst compilation or the exported PDF and may reduce rendering performance. When reporting the issue, also include `echo "$XDG_SESSION_TYPE"` and the installed `libwebkit2gtk-4.1-0` version where available.

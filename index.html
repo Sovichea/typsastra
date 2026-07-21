@@ -2757,6 +2757,38 @@ SOFTWARE.</pre>
             </section>
         </div>
 
+        <div id="release-summary-overlay" class="settings-overlay hidden" role="presentation">
+            <section
+                class="settings-dialog release-summary-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="release-summary-title"
+                aria-describedby="release-summary-subtitle"
+            >
+                <header class="settings-header">
+                    <div>
+                        <h2 id="release-summary-title">What's new in Typsastra</h2>
+                        <p id="release-summary-subtitle">Release highlights</p>
+                    </div>
+                    <button
+                        id="release-summary-close"
+                        class="settings-icon-button"
+                        type="button"
+                        aria-label="Close release summary"
+                        title="Close"
+                    >×</button>
+                </header>
+                <div class="release-summary-content">
+                    <p>This version includes:</p>
+                    <ul id="release-summary-highlights"></ul>
+                </div>
+                <footer class="settings-footer release-summary-footer">
+                    <button id="release-summary-details" type="button">View full release notes</button>
+                    <button id="release-summary-done" class="settings-primary" type="button">Continue</button>
+                </footer>
+            </section>
+        </div>
+
         <div
             id="toolchain-setup-overlay"
             class="settings-overlay hidden"

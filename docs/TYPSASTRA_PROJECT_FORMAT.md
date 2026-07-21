@@ -24,7 +24,7 @@ The locked frontend fixture is [`tests/fixtures/projectArchive/manifest-v2.json`
   "schemaVersion": 2,
   "createdBy": {
     "application": "Typsastra",
-    "version": "0.5.0"
+    "version": "0.5.1"
   },
   "project": {
     "name": "example-project",

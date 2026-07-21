@@ -41,10 +41,9 @@ a newly prepared examples workspace.
   example to its new location, replacement, or retirement reason. Keep coverage
   for basics, mixed scripts, complex-script shaping, language tools, Lao,
   project structure, and long-form Khmer documents.
-- [x] **V051-P.2 Define the installed-example migration behavior.** Verify how
-  `examples-state.json` handles renamed and retired managed files. Untouched old
-  examples may be pruned after their replacements are installed; edited copies
-  must remain in place and be clearly treated as user-owned legacy examples.
+- [x] **V051-P.2 Define the installed-example migration behavior.** Install each
+  release into a versioned Documents folder and keep a versioned examples-state
+  file. Never overwrite, prune, or reopen an older release's writable examples.
 - [x] **V051-P.3 Establish terminology and support labels.** Use the same names
   everywhere for script-font assignments, explicit language scope,
   provider, project main file, included file, standalone preview, and workspace
@@ -252,6 +251,8 @@ Required visual candidates:
 - [x] **V051-Q.8 Prepare v0.5.1 release notes.** Summarize the learning-path
   redesign, documentation additions, post-v0.5.0 language-tool fixes, and other
   maintenance changes without presenting documentation work as a new subsystem.
+- [x] **V051-Q.9 Add first-open release guidance.** Show a concise changelog
+  once per application version and link to the complete release notes.
 
 ## Final acceptance criteria
 
@@ -270,18 +271,18 @@ Required visual candidates:
   obsolete screenshots.
 - Shipped, experimental, and planned capabilities are clearly labeled.
 
-## Remaining manual release work
+## Remaining manual follow-up verification
 
-The implementation and automated gates are complete. The following items stay
-open until v0.5.1 release qualification:
+The implementation, automated gates, v0.5.1 version bump, and release notes are
+complete. The following manual verification items remain useful follow-up work:
 
 - `V051-P.4`: capture the clean-install visual baseline and replacement list;
 - tutorial screenshots under `docs/assets/tutorials/`;
 - `V051-Q.6`: review platform-specific wording on Windows, Linux, and macOS;
 - `V051-Q.7`: complete clean-install and v0.5.0-to-v0.5.1 upgrade walkthroughs.
 
-Do not remove the draft marker from the v0.5.1 release notes or bump the
-application version until these manual checks are complete.
+Record any platform-specific findings as maintenance corrections without
+changing the shipped v0.5.1 feature contract.
 
 ## Recommended execution order
 

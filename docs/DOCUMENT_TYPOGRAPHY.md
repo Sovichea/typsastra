@@ -55,7 +55,7 @@ surrounding run or fallback context; script-specific letters and marks remain
 restricted by the descriptors above.
 
 The metadata comment is ignored by Typst. Typsastra uses it to restore the
-toolbar configuration and prepare local scaled fonts. Older primary/embedded
+toolbar configuration and prepare private cached font variants. Older primary/embedded
 metadata is migrated when Typsastra reads and reapplies the configuration.
 
 ## Uniform script scaling

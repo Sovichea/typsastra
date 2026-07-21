@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental build
 
-Typsastra is currently beta software. The latest release is v0.5.0.
+Typsastra is currently beta software. The latest release is v0.5.1.
 
 [![Release](https://img.shields.io/github/v/release/Sovichea/typsastra?include_prereleases)](https://github.com/Sovichea/typsastra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -201,8 +201,8 @@ Typsastra downloads and manages Tinymist for preview and diagnostics. A separate
 - [Research-document workflows](./docs/RESEARCH_DOCUMENT_WORKFLOWS.md)
 - [Reliability and performance gates](./docs/PERFORMANCE_GATES.md)
 - [Published benchmark results](./docs/BENCHMARKS.md)
+- [Typsastra v0.5.1 release notes](./docs/RELEASE_NOTES_V0.5.1.md)
 - [Typsastra v0.5.0 release notes](./docs/RELEASE_NOTES_V0.5.0.md)
-- [Typsastra v0.5.1 draft release notes](./docs/RELEASE_NOTES_V0.5.1.md)
 
 ## Contributing a language
 

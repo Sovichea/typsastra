@@ -3,8 +3,15 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use tauri::Manager;
 
-const EXAMPLES_DIRECTORY_NAME: &str = "Typsastra Examples";
 const START_FILE_NAME: &str = "START-HERE.typ";
+
+fn examples_directory_name(version: &str) -> String {
+    format!("Typsastra Examples v{version}")
+}
+
+fn examples_state_file_name(version: &str) -> String {
+    format!("examples-state-v{version}.json")
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,6 +217,7 @@ fn prune_removed_managed_examples(
 pub fn install_examples_workspace(
     app_handle: &tauri::AppHandle,
 ) -> Result<ExamplesWorkspace, String> {
+    let version = app_handle.package_info().version.to_string();
     let source = app_handle
         .path()
         .resource_dir()
@@ -226,12 +234,12 @@ pub fn install_examples_workspace(
         .path()
         .document_dir()
         .map_err(|error| format!("Failed to resolve the operating system Documents path: {error}"))?
-        .join(EXAMPLES_DIRECTORY_NAME);
+        .join(examples_directory_name(&version));
     let state_path = app_handle
         .path()
         .app_config_dir()
         .map_err(|error| format!("Failed to resolve application configuration: {error}"))?
-        .join("examples-state.json");
+        .join(examples_state_file_name(&version));
     sync_examples(&source, &destination, &state_path)?;
 
     let entry_path = destination.join(START_FILE_NAME);
@@ -258,6 +266,18 @@ pub fn prepare_examples_workspace(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scopes_installed_examples_and_state_to_the_application_version() {
+        assert_eq!(
+            examples_directory_name("0.5.1"),
+            "Typsastra Examples v0.5.1"
+        );
+        assert_eq!(
+            examples_state_file_name("0.5.1"),
+            "examples-state-v0.5.1.json"
+        );
+    }
 
     #[test]
     fn installs_missing_examples_without_overwriting_user_changes() {
