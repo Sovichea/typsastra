@@ -29,6 +29,16 @@ export function workspaceParentDirectories(rootPath: string, targetPath: string)
   return parents;
 }
 
+export function inlineCreationPlacement(
+  targetIsDirectory: boolean,
+  targetPaddingLeft: number
+): { nestUnderTarget: boolean; depth: number } {
+  const targetDepth = Math.max(0, (targetPaddingLeft - 8) / 12);
+  return targetIsDirectory
+    ? { nestUnderTarget: true, depth: targetDepth + 1 }
+    : { nestUnderTarget: false, depth: targetDepth };
+}
+
 function getFileIconSvg(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase();
   const icon: AppIconName = ext === "typ"
@@ -362,19 +372,27 @@ export class WorkspaceExplorer {
        if (!targetLabel) {
            parentContainer = this.container.querySelector(".file-tree-branch") as HTMLElement;
        } else {
+           const placement = inlineCreationPlacement(
+             targetLabel.dataset.isDir === "true",
+             parseInt(targetLabel.style.paddingLeft || "8")
+           );
            const li = targetLabel.parentElement!;
-           li.classList.remove("collapsed"); // Expand folder
-           let childrenContainer = li.querySelector(".tree-children") as HTMLElement;
-           if (!childrenContainer) {
-               childrenContainer = document.createElement("div");
-               childrenContainer.className = "tree-children";
-               const newBranch = document.createElement("ul");
-               newBranch.className = "file-tree-branch";
-               childrenContainer.appendChild(newBranch);
-               li.appendChild(childrenContainer);
+           if (placement.nestUnderTarget) {
+               li.classList.remove("collapsed"); // Expand folder
+               let childrenContainer = li.querySelector(":scope > .tree-children") as HTMLElement;
+               if (!childrenContainer) {
+                   childrenContainer = document.createElement("div");
+                   childrenContainer.className = "tree-children";
+                   const newBranch = document.createElement("ul");
+                   newBranch.className = "file-tree-branch";
+                   childrenContainer.appendChild(newBranch);
+                   li.appendChild(childrenContainer);
+               }
+               parentContainer = childrenContainer.querySelector(":scope > .file-tree-branch") as HTMLElement;
+           } else {
+               parentContainer = li.parentElement as HTMLElement;
            }
-           parentContainer = childrenContainer.querySelector(".file-tree-branch") as HTMLElement;
-           depth = (parseInt(targetLabel.style.paddingLeft || "8") - 8) / 12 + 1;
+           depth = placement.depth;
        }
     } else {
        parentContainer = this.container.querySelector(".file-tree-branch") as HTMLElement;

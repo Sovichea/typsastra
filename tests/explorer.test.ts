@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isHiddenWorkspaceEntry, sortFileNodes, workspaceParentDirectories, workspacePathSetContains, type FileNode } from "../src/components/explorer";
+import { inlineCreationPlacement, isHiddenWorkspaceEntry, sortFileNodes, workspaceParentDirectories, workspacePathSetContains, type FileNode } from "../src/components/explorer";
 import { explorerKeyboardAction, isMainFileCandidate } from "../src/components/contextMenuController";
 
 describe("workspace explorer", () => {
@@ -51,6 +51,12 @@ describe("workspace explorer", () => {
     expect(workspaceParentDirectories("//server/share", "\\\\server\\share\\book\\main.typ"))
       .toEqual(["//server/share/book"]);
     expect(workspaceParentDirectories("/home/writer/book", "/outside/main.typ")).toEqual([]);
+  });
+
+  test("places inline creation beside files and inside directories", () => {
+    expect(inlineCreationPlacement(false, 32)).toEqual({ nestUnderTarget: false, depth: 2 });
+    expect(inlineCreationPlacement(true, 32)).toEqual({ nestUnderTarget: true, depth: 3 });
+    expect(inlineCreationPlacement(false, 8)).toEqual({ nestUnderTarget: false, depth: 0 });
   });
 
   test("hides Typsastra's managed workspace cache directory", () => {
