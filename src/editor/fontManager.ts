@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { editorFontCompartment } from "./extensions";
 import {
   codeEditorFontStack,
+  configuredUnicodeEditorFamilies,
   detectUnicodeEditorFonts,
   unicodeEditorFonts,
   type CodeEditorFontId,
@@ -25,6 +26,7 @@ export class EditorFontManager {
   private documentUpdateTimer: number | null = null;
   private activeCandidates: UnicodeFontCandidate[] = [];
   private appliedStack = "";
+  private appliedView: EditorView | undefined;
   private showSettingsAction = false;
   private dismissDeclines = false;
   private readonly systemFamilies = new Set<string>();
@@ -101,21 +103,16 @@ export class EditorFontManager {
 
   private refresh(dispatchEffect = true): StateEffect<unknown> | null {
     const detected = detectUnicodeEditorFonts(this.documentText);
-    const families: string[] = [];
     const missing: UnicodeFontCandidate[] = [];
     for (const candidate of detected) {
       const preference = this.unicodePreferences[candidate.id] ?? this.unicodePreference;
       if (preference === "none") continue;
       const family = preference === "auto" ? candidate.fontFamily : preference;
-      families.push(family);
       if (preference === "auto" && !candidate.bundled && !this.systemFamilies.has(family.toLocaleLowerCase())) {
         missing.push(candidate);
       }
     }
-    if (detected.length === 0 && this.unicodePreference !== "auto" && this.unicodePreference !== "none") {
-      families.push(this.unicodePreference);
-    }
-    const effect = this.applyStack(families, dispatchEffect);
+    const effect = this.applyStack(this.configuredFamilies(), dispatchEffect);
     this.activeCandidates = missing;
     if (missing.length === 0) {
       this.hide();
@@ -205,11 +202,7 @@ export class EditorFontManager {
         await document.fonts.load(`16px "${installed.family}"`);
       }
       if (candidates.some(candidate => !this.activeCandidates.some(active => active.id === candidate.id))) return;
-      this.applyStack(detectUnicodeEditorFonts(this.documentText).flatMap(candidate => {
-        const preference = this.unicodePreferences[candidate.id] ?? this.unicodePreference;
-        if (preference === "none") return [];
-        return [preference === "auto" ? candidate.fontFamily : preference];
-      }));
+      this.applyStack(this.configuredFamilies());
       this.renderApplied(candidates);
       document.dispatchEvent(new Event("typsastra:system-fonts-changed"));
     } catch (error) {
@@ -236,10 +229,18 @@ export class EditorFontManager {
     document.documentElement.style.setProperty("--ui-font", uiStack);
     document.documentElement.style.setProperty("--editor-code-font", stack);
     document.documentElement.style.setProperty("--editor-unicode-font", unicodeFamilies.length > 0 ? uiStack : "sans-serif");
-    if (this.appliedStack === stack) return null;
+    const view = this.getEditorView();
+    if (this.appliedStack === stack && (!dispatchEffect || this.appliedView === view)) return null;
     this.appliedStack = stack;
     const effect = editorFontCompartment.reconfigure(editorFontTheme(stack));
-    if (dispatchEffect) this.getEditorView()?.dispatch({ effects: effect });
+    if (dispatchEffect && view) {
+      view.dispatch({ effects: effect });
+      this.appliedView = view;
+    }
     return effect;
+  }
+
+  private configuredFamilies(): string[] {
+    return configuredUnicodeEditorFamilies(this.unicodePreference, this.unicodePreferences);
   }
 }

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   codeEditorFonts,
   codeEditorFontStack,
+  configuredUnicodeEditorFamilies,
   detectUnicodeEditorFont,
   unicodeEditorFonts
 } from "../src/editor/fontCatalog";
@@ -38,6 +39,13 @@ describe("editor font catalog", () => {
 
   test("places an explicit Unicode fallback after the selected code font", () => {
     expect(codeEditorFontStack("Fira Mono", ["MiSans Khmer"]).startsWith('"Fira Mono", "MiSans Khmer"')).toBe(true);
+  });
+
+  test("prepares configured script fonts before the first character is entered", () => {
+    const automatic = configuredUnicodeEditorFamilies("auto");
+    expect(automatic).toContain("MiSans Khmer");
+    expect(configuredUnicodeEditorFamilies("none", { "mi-sans-khmer": "Khmer OS" }))
+      .toEqual(["Khmer OS"]);
   });
 
   test("keeps system complex-script fallbacks in the editor stack", () => {

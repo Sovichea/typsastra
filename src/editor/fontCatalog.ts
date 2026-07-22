@@ -101,6 +101,17 @@ export function codeEditorFontStack(id: CodeEditorFontId, unicodeFamilies: reado
   return [...new Set(families.filter((family): family is string => !!family))].join(", ");
 }
 
+export function configuredUnicodeEditorFamilies(
+  defaultPreference: UnicodeFontPreference,
+  preferences: Readonly<Record<string, UnicodeFontPreference>> = {}
+): string[] {
+  return [...new Set(unicodeEditorFonts.flatMap(candidate => {
+    const preference = preferences[candidate.id] ?? defaultPreference;
+    if (preference === "none") return [];
+    return [preference === "auto" ? candidate.fontFamily : preference];
+  }))];
+}
+
 export function detectUnicodeEditorFont(text: string) {
   return detectUnicodeEditorFonts(text)[0] ?? null;
 }
