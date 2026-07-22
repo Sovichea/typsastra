@@ -26,7 +26,9 @@ export type PreviewMemorySnapshot = {
   loading: boolean;
 };
 
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { PERFORMANCE_BUDGETS, type PerformanceMetric } from "../performance/diagnostics";
+import { previewLinkModifierPressed, previewLinkTarget, type PreviewLinkTarget } from "./previewLinks";
 import { pageDimensionsChanged, pagesToEvict, visiblePageIndexes } from "./virtualization";
 import { PreviewMotionController } from "./previewMotion";
 import {
@@ -109,6 +111,7 @@ export class PreviewFrame {
   private zoomStartedAt: number | null = null;
   private lastPageStatusKey = "";
   private instantScrollTargetPage: number | null = null;
+  private readonly annotationTargets = new WeakMap<HTMLElement, PreviewLinkTarget>();
 
   constructor(
     private readonly pane: HTMLElement,
@@ -128,6 +131,14 @@ export class PreviewFrame {
         }
       }
     }, { passive: false });
+    window.addEventListener("keydown", event => {
+      const doc = this.iframe?.contentDocument;
+      if (doc) this.setPreviewLinkModifier(doc, previewLinkModifierPressed(event) || event.key === "Control" || event.key === "Meta");
+    });
+    window.addEventListener("keyup", event => {
+      const doc = this.iframe?.contentDocument;
+      if (doc) this.setPreviewLinkModifier(doc, previewLinkModifierPressed(event));
+    });
 
     this.resizeObserver = new ResizeObserver(() => {
       if (this.resizeLayoutSuspended) {
@@ -409,7 +420,8 @@ export class PreviewFrame {
       .pdf-page-canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
       .forward-sync-ripple{position:fixed;z-index:2147483647;box-sizing:border-box;width:18px;height:18px;margin:-9px 0 0 -9px;border:2px solid ${TYPSASTRA_GREEN};border-radius:999px;background:${TYPSASTRA_GREEN_RIPPLE_FILL};box-shadow:0 0 0 0 ${TYPSASTRA_GREEN_RIPPLE_SHADOW};pointer-events:none;animation:typsastra-forward-ripple 900ms ease-out forwards}
       @keyframes typsastra-forward-ripple{0%{opacity:0;transform:scale(.55);box-shadow:0 0 0 0 rgba(61,180,137,.38)}12%{opacity:1}100%{opacity:0;transform:scale(3.1);box-shadow:0 0 0 14px rgba(61,180,137,0)}}
-      .annotation-link{position:absolute;display:block}
+      .annotation-link{position:absolute;display:block;box-sizing:border-box;cursor:default;text-decoration:none}
+      .preview-link-modifier .annotation-link:hover{cursor:pointer;background:color-mix(in srgb,var(--preview-ui-accent) 14%,transparent)}
       ::selection{background:rgba(0,120,215,.35)}
     </style></head><body><div id="viewer-container"></div></body></html>`;
     iframe.addEventListener("load", () => this.setupIframeInteractions());
@@ -828,16 +840,23 @@ export class PreviewFrame {
     try {
       const annotationLinks: HTMLElement[] = [];
       for (const annotation of await page.getAnnotations()) {
-        if (annotation.subtype !== "Link" || !annotation.url) continue;
+        const target = previewLinkTarget(annotation);
+        if (!target) continue;
         const rect = viewportRectangle(viewport, annotation.rect);
         if (!rect) continue;
+        const left = Math.min(rect[0], rect[2]);
+        const top = Math.max(0, Math.min(rect[1], rect[3]) - 2);
+        const right = Math.max(rect[0], rect[2]);
+        const bottom = Math.min(Number(viewport.height), Math.max(rect[1], rect[3]) + 2);
         const link = doc.createElement("a");
         link.className = "annotation-link";
-        link.href = annotation.url;
-        link.style.left = `${Math.min(rect[0], rect[2])}px`;
-        link.style.top = `${Math.min(rect[1], rect[3])}px`;
-        link.style.width = `${Math.abs(rect[2] - rect[0])}px`;
-        link.style.height = `${Math.abs(rect[3] - rect[1])}px`;
+        link.setAttribute("role", "link");
+        link.setAttribute("aria-label", target.kind === "external" ? target.url : "PDF document link");
+        this.annotationTargets.set(link, target);
+        link.style.left = `${left}px`;
+        link.style.top = `${top}px`;
+        link.style.width = `${right - left}px`;
+        link.style.height = `${Math.max(0, bottom - top)}px`;
         annotationLinks.push(link);
       }
       return annotationLinks;
@@ -1088,15 +1107,36 @@ export class PreviewFrame {
     doc.addEventListener("pointerdown", () => this.motion.setPointerDown(true), true);
     this.iframe?.contentWindow?.addEventListener("pointerup", () => this.motion.setPointerDown(false), true);
     this.iframe?.contentWindow?.addEventListener("pointercancel", () => this.motion.setPointerDown(false), true);
-    this.iframe?.contentWindow?.addEventListener("blur", () => this.motion.setPointerDown(false));
+    this.iframe?.contentWindow?.addEventListener("blur", () => {
+      this.motion.setPointerDown(false);
+      this.setPreviewLinkModifier(doc, false);
+    });
+    doc.addEventListener("pointermove", event => {
+      this.setPreviewLinkModifier(doc, previewLinkModifierPressed(event));
+    }, { passive: true });
+    doc.addEventListener("keydown", event => {
+      this.setPreviewLinkModifier(doc, previewLinkModifierPressed(event) || event.key === "Control" || event.key === "Meta");
+    });
+    doc.addEventListener("keyup", event => {
+      this.setPreviewLinkModifier(doc, previewLinkModifierPressed(event));
+    });
     doc.addEventListener("click", event => {
       const target = event.target as Element | null;
+      const annotationLink = target?.closest<HTMLElement>(".annotation-link");
+      const mouse = event as MouseEvent;
+      if (annotationLink) {
+        event.preventDefault();
+        if (mouse.button === 0 && previewLinkModifierPressed(mouse)) {
+          event.stopPropagation();
+          void this.activatePreviewLink(annotationLink);
+          return;
+        }
+      }
       const slot = target?.closest<HTMLElement>(".pdf-page-container");
       if (!slot) {
         this.debugInverse("Click ignored: no PDF page container at target.");
         return;
       }
-      const mouse = event as MouseEvent;
       const pageNo = Number(slot.dataset.pageNo);
       this.debugInverse(`Click received: page=${pageNo}, x=${mouse.clientX.toFixed(1)}, y=${mouse.clientY.toFixed(1)}, target=${target?.tagName ?? "unknown"}.`);
       const point = this.pdfDocumentPointAtClick(pageNo, slot, mouse);
@@ -1119,6 +1159,61 @@ export class PreviewFrame {
       () => this.deferPageRenderingDuringScroll(),
       { passive: true }
     );
+  }
+
+  private setPreviewLinkModifier(doc: Document, active: boolean): void {
+    doc.documentElement.classList.toggle("preview-link-modifier", active);
+  }
+
+  private async activatePreviewLink(link: HTMLElement): Promise<void> {
+    const target = this.annotationTargets.get(link);
+    if (!target) return;
+    if (target.kind === "external") {
+      try {
+        await openUrl(target.url);
+      } catch (error) {
+        console.warn("Failed to open PDF link:", error);
+      }
+      return;
+    }
+    await this.jumpToPdfDestination(target.destination);
+  }
+
+  private async jumpToPdfDestination(destination: string | unknown[]): Promise<void> {
+    if (!this.pdfDoc) return;
+    try {
+      const resolved = typeof destination === "string"
+        ? await this.pdfDoc.getDestination(destination)
+        : destination;
+      if (!Array.isArray(resolved) || resolved.length === 0) return;
+      const pageReference = resolved[0];
+      const pageIndex = typeof pageReference === "number"
+        ? pageReference
+        : await this.pdfDoc.getPageIndex(pageReference);
+      if (!Number.isInteger(pageIndex)) return;
+      const pageNo = pageIndex + 1;
+      const slot = this.iframe?.contentDocument
+        ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
+      if (!slot) return;
+
+      const destinationKind = typeof resolved[1] === "object" && resolved[1] !== null
+        ? String((resolved[1] as { name?: unknown }).name ?? "")
+        : "";
+      const x = Number(resolved[2]);
+      const y = Number(resolved[3]);
+      if (destinationKind === "XYZ" && Number.isFinite(y)) {
+        const page = await this.pdfDoc.getPage(pageNo);
+        const viewport = page.getViewport({ scale: 1 });
+        const point = viewport.convertToViewportPoint(Number.isFinite(x) ? x : 0, y);
+        if (Array.isArray(point) && point.length >= 2) {
+          await this.revealDocumentPosition({ page_no: pageNo, x: Number(point[0]), y: Number(point[1]) });
+          return;
+        }
+      }
+      this.scrollToPage(pageNo);
+    } catch (error) {
+      console.warn("Failed to follow PDF destination:", error);
+    }
   }
 
   private pdfDocumentPointAtClick(pageNo: number, slot: HTMLElement, event: MouseEvent): PreviewClickPoint {
