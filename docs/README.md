@@ -35,6 +35,7 @@ the reference documents when you need exact behavior or contributor contracts.
 - [Compatibility policy](COMPATIBILITY_POLICY.md)
 - [Performance gates](PERFORMANCE_GATES.md)
 - [Published benchmarks](BENCHMARKS.md)
+- [WebView storage policy](WEBVIEW_STORAGE_POLICY.md)
 
 ## Releases and plans
 

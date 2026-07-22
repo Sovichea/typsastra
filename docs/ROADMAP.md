@@ -66,6 +66,11 @@ The detailed tasks and acceptance criteria are in the
 - Allow users to delete selected or unused variants and renew stale variants.
 - Preserve the 10-variant recommendation while keeping deletion explicitly
   user-controlled.
+- Add read-only, background WebView-profile monitoring with runtime-resolved
+  paths, classified disk usage, bounded local history, and non-disruptive size
+  warnings. Manual cleanup may ship only for disposable categories that pass
+  the [WebView storage policy](./WEBVIEW_STORAGE_POLICY.md); automatic deletion
+  remains deferred until platform qualification.
 
 ## v0.5.3 — portable active-file preview
 

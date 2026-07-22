@@ -123,6 +123,20 @@ Provider architecture is documented in [LANGUAGE_TOOLS.md](./LANGUAGE_TOOLS.md),
 
 Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
 
+## WebView storage monitoring (planned for v0.5.2)
+
+Typsastra will monitor its embedded-browser profile in the background without
+placing directory traversal on the UI thread. Settings will report total size,
+disposable cache, recent growth, and the resolved platform-specific location.
+Routine measurements will not interrupt editing.
+
+Monitoring does not authorize deleting the complete WebView profile. Normal
+maintenance will preserve persistent application state and offer cleanup only
+for qualified disposable categories. See the
+[WebView storage monitoring and maintenance policy](./WEBVIEW_STORAGE_POLICY.md)
+for cadence, thresholds, warning behavior, cleanup boundaries, and validation
+gates.
+
 ## Formatting
 
 Typst formatting is available from **Edit → Format Document** or `Ctrl+Shift+F`. **Format on save** is an Editor setting and defaults off.
