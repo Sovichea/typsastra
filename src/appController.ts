@@ -3699,6 +3699,14 @@ export class TypsastraWorkspaceController {
     await this.lspClient.notifyTextChange(lspUri, lspContent, version);
   }
 
+  private async restoreActiveDocumentAfterTinymistRestart(forcePreview = true): Promise<void> {
+    if (!this.activeFilePath) return;
+    await this.refreshActivePreviewRoot(forcePreview);
+    const tab = this.getActiveTab();
+    if (!tab?.contentLoaded || !isTypstDocumentPath(tab.path)) return;
+    await this.recheckActiveDocumentAfterPin(this.editorInstance.state.doc.toString());
+  }
+
 
 
 
@@ -6059,7 +6067,7 @@ export class TypsastraWorkspaceController {
         }
       }
       if (this.workspaceRootPath === selected && this.activeFilePath) {
-        await this.refreshActivePreviewRoot(true);
+        await this.restoreActiveDocumentAfterTinymistRestart();
       }
     } catch (error) {
       if (this.workspaceRootPath === selected) {
@@ -6447,7 +6455,7 @@ export class TypsastraWorkspaceController {
       if (this.lspClient) {
         await this.restartTinymistSession("Starting Tinymist for the approved main preview...");
       }
-      if (this.activeFilePath) await this.refreshActivePreviewRoot(true);
+      if (this.activeFilePath) await this.restoreActiveDocumentAfterTinymistRestart();
       else await this.loadFile(path, { temporary: false });
     });
 
@@ -6494,7 +6502,11 @@ export class TypsastraWorkspaceController {
 
     if (path && !this.getActiveTab()?.contentLoaded) return;
     
-    await this.refreshActivePreviewRoot(mainWasAlreadyActive);
+    if (mainChanged && (!path || mainWasAlreadyActive)) {
+      await this.restoreActiveDocumentAfterTinymistRestart(mainWasAlreadyActive);
+    } else {
+      await this.refreshActivePreviewRoot(mainWasAlreadyActive);
+    }
   }
 
   private async closeProject(options: { confirmUnsaved?: boolean } = {}): Promise<boolean> {
