@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { inlineCreationPlacement, isHiddenWorkspaceEntry, sortFileNodes, workspaceParentDirectories, workspacePathSetContains, type FileNode } from "../src/components/explorer";
-import { explorerKeyboardAction, isMainFileCandidate } from "../src/components/contextMenuController";
+import { duplicateFileName, explorerKeyboardAction, isMainFileCandidate } from "../src/components/contextMenuController";
 
 describe("workspace explorer", () => {
   test("sorts folders before files without mutating the source list", () => {
@@ -75,5 +75,12 @@ describe("workspace explorer", () => {
     const source = await Bun.file(new URL("../src/components/contextMenuController.ts", import.meta.url)).text();
     expect(source).toContain("const mainAction = this.mainFileItem()");
     expect(source).toContain("`${this.mainFileItem()}<div");
+  });
+
+  test("derives editable duplicate names without losing extensions", () => {
+    expect(duplicateFileName("chapter.typ")).toBe("chapter copy.typ");
+    expect(duplicateFileName("archive.tar.gz")).toBe("archive.tar copy.gz");
+    expect(duplicateFileName("README")).toBe("README copy");
+    expect(duplicateFileName(".gitignore")).toBe(".gitignore copy");
   });
 });

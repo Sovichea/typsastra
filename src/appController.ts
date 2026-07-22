@@ -2282,6 +2282,46 @@ export class TypsastraWorkspaceController {
     }
   }
 
+  private async saveActiveFileAs(): Promise<void> {
+    if (!this.activeFilePath || !isSupportedInAppPath(this.activeFilePath) || isBinaryImagePath(this.activeFilePath) || fileExtension(this.activeFilePath) === "pdf") {
+      return;
+    }
+
+    const sourceWasPinnedMain = this.isPinnedMainFile(this.activeFilePath);
+    const extension = fileExtension(this.activeFilePath);
+    const savePath = await save({
+      defaultPath: this.activeFilePath,
+      filters: extension ? [{ name: `${extension.toUpperCase()} File`, extensions: [extension] }] : undefined
+    });
+    if (typeof savePath !== "string") return;
+    if (filePathKey(savePath) === filePathKey(this.activeFilePath)) {
+      await this.saveActiveFile();
+      return;
+    }
+
+    try {
+      if (this.activeMode === "CODE" && this.settingsController.value.editor.formatOnSave) {
+        await this.formatActiveDocument({ silent: true });
+        this.removeTrailingSpaces();
+      }
+      const content = this.activeMode === "WYSIWYM"
+        ? this.mapWysiwymToMarkup()
+        : this.editorInstance.state.doc.toString();
+      await invoke("save_workspace_file", { path: savePath, contents: content });
+      if (this.workspaceRootPath) await this.explorer.loadWorkspace(this.workspaceRootPath);
+      await this.loadFile(savePath);
+      if (sourceWasPinnedMain && isTypstDocumentPath(savePath)) {
+        await this.setPinnedMainFile(savePath);
+      }
+      this.setLspStatus({ kind: "preview-ready", message: "File saved as a new document" });
+    } catch (error) {
+      const failure = `Save As failed: ${String(error)}`;
+      console.error(failure);
+      this.setLspStatus({ kind: "error", message: failure });
+      alert(failure);
+    }
+  }
+
   private deferWordWrapForResize(): void {
     const editor = this.editorInstance;
     if (!editor || !this.settingsController.value.editor.wordWrap || this.wordWrapDeferredForResize) return;
@@ -6608,6 +6648,12 @@ export class TypsastraWorkspaceController {
         return;
       }
 
+      if (cmdOrCtrl && e.shiftKey && !e.altKey && keyCode === "KeyS") {
+        e.preventDefault();
+        void this.saveActiveFileAs();
+        return;
+      }
+
       const recentProjectIndex = recentProjectShortcutIndex(e);
       const welcomeScreen = document.getElementById("welcome-screen");
       if (
@@ -6737,6 +6783,10 @@ export class TypsastraWorkspaceController {
 
     document.getElementById("action-save-file")?.addEventListener("click", async () => {
       await this.saveActiveFile();
+    });
+
+    document.getElementById("action-save-file-as")?.addEventListener("click", async () => {
+      await this.saveActiveFileAs();
     });
 
     document.getElementById("action-export-pdf")?.addEventListener("click", async () => {

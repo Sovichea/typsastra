@@ -52,6 +52,13 @@ export function isMainFileCandidate(path: string, isDirectory = false): boolean 
   return !isDirectory && path.toLowerCase().endsWith(".typ");
 }
 
+export function duplicateFileName(name: string): string {
+  const extensionIndex = name.lastIndexOf(".");
+  return extensionIndex > 0
+    ? `${name.slice(0, extensionIndex)} copy${name.slice(extensionIndex)}`
+    : `${name} copy`;
+}
+
 export class ContextMenuController {
   private targetPath = "";
   private targetIsDirectory = false;
@@ -119,6 +126,7 @@ export class ContextMenuController {
       case "ctx-fs-new-folder": return this.createFolder();
       case "ctx-fs-rename": return this.renameTarget();
       case "ctx-fs-delete": return this.deleteTarget();
+      case "ctx-fs-duplicate": return this.duplicateFile();
       case "ctx-fs-paste": return this.pasteFile();
       case "ctx-open-project": document.getElementById("action-open-folder")?.click(); return;
       case "ctx-set-main-file":
@@ -268,6 +276,32 @@ export class ContextMenuController {
       await invoke("copy_workspace_file", { source: this.copiedFilePath, dest: destination });
       await this.refreshExplorer();
     } catch (error) { alert(`Failed to paste file: ${error}`); }
+  }
+
+  private async duplicateFile(): Promise<void> {
+    const workspace = this.dependencies.getWorkspaceRoot();
+    if (!workspace || !this.targetPath || this.targetIsDirectory) return;
+    const source = this.targetPath;
+    const defaultName = duplicateFileName(await basename(source));
+    await new Promise<void>(resolve => {
+      this.dependencies.getExplorer().showInlineInput(source, "file", defaultName, async name => {
+        if (name) {
+          try {
+            const destination = await join(await dirname(source), name);
+            if (await invoke<boolean>("workspace_path_exists", { path: destination })) {
+              alert(`A file named "${name}" already exists.`);
+            } else {
+              await invoke("copy_workspace_file", { source, dest: destination });
+              await this.refreshExplorer();
+              await this.dependencies.loadFile(destination);
+            }
+          } catch (error) {
+            alert(`Failed to duplicate file: ${error}`);
+          }
+        }
+        resolve();
+      });
+    });
   }
 
   private async pasteText(): Promise<void> {
@@ -458,7 +492,7 @@ export class ContextMenuController {
 
   private explorerItems(): string {
     const mainAction = this.mainFileItem();
-    return `${mainAction}<div class="dropdown-item" id="ctx-new-file">New File <span class="hotkey">Ctrl+N</span></div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-rename">Rename <span class="hotkey">F2</span></div><div class="dropdown-item" id="ctx-fs-delete">Delete <span class="hotkey">Delete</span></div>${this.targetIsDirectory ? "" : '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy">Copy File <span class="hotkey">Ctrl+C</span></div>'}${this.copiedFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File <span class="hotkey">Ctrl+V</span></div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+O</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
+    return `${mainAction}<div class="dropdown-item" id="ctx-new-file">New File <span class="hotkey">Ctrl+N</span></div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-rename">Rename <span class="hotkey">F2</span></div><div class="dropdown-item" id="ctx-fs-delete">Delete <span class="hotkey">Delete</span></div>${this.targetIsDirectory ? "" : '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-duplicate">Duplicate File</div><div class="dropdown-item" id="ctx-fs-copy">Copy File <span class="hotkey">Ctrl+C</span></div>'}${this.copiedFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File <span class="hotkey">Ctrl+V</span></div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+O</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
   }
 
   private explorerBackgroundItems(): string {
