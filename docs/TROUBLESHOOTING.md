@@ -30,6 +30,26 @@ Enable **VBSCRIPT** under Windows Optional Features. This is needed only for MSI
 
 Install the WebKitGTK 4.1 packages for your distribution. See [INSTALL.md](./INSTALL.md).
 
+## macOS reports that Typsastra is damaged
+
+The current experimental macOS release is unsigned and unnotarized. Gatekeeper
+can consequently display **“Typsastra.app is damaged and can't be opened”**
+after a browser download even when the application bundle is intact.
+
+First ensure the app was downloaded from the official Typsastra GitHub release.
+Move it to `/Applications`, then remove quarantine from Typsastra only and open
+it:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Typsastra.app"
+open "/Applications/Typsastra.app"
+```
+
+Never disable Gatekeeper globally. If this targeted workaround fails, delete
+the app and download it again before reporting the release filename, Mac model,
+processor architecture, and macOS version. See the complete safety notes in
+[INSTALL.md](./INSTALL.md#open-the-current-unsigned-macos-release).
+
 ## Shell cannot find `bun` or `cargo`
 
 Restart the terminal and verify that the relevant directories are on `PATH`:

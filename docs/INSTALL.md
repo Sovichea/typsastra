@@ -10,9 +10,44 @@ Available packages:
 
 - Windows: `.msi`
 - Linux: `.AppImage` and `.deb`
-- macOS: experimental build
+- macOS: experimental, currently unsigned and unnotarized build
 
 Typsastra is currently beta software. The latest release is v0.5.1.
+
+### Open the current unsigned macOS release
+
+The experimental macOS release is not yet signed or notarized. When it is
+downloaded through a browser, Gatekeeper may therefore report that
+`Typsastra.app` is damaged and cannot be opened.
+
+Only continue if the app came from the official
+[Typsastra GitHub releases page](https://github.com/Sovichea/typsastra/releases).
+Delete and download it again if its origin or integrity is uncertain.
+
+1. Move `Typsastra.app` to `/Applications`.
+2. Open Terminal and remove the quarantine attribute from this app only:
+
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Typsastra.app"
+   ```
+
+3. Launch Typsastra:
+
+   ```bash
+   open "/Applications/Typsastra.app"
+   ```
+
+If the app is stored elsewhere, type
+`xattr -dr com.apple.quarantine ` with a trailing space, drag the app from
+Finder into Terminal to insert its exact path, and press Return.
+
+This workaround does not disable Gatekeeper system-wide. Do not use commands
+that globally disable Gatekeeper. If Typsastra still cannot be opened after a
+fresh download and this targeted removal, report the release filename, Mac
+model, processor architecture, and macOS version.
+
+This procedure is temporary. Public macOS distribution ultimately requires a
+Developer ID signature and Apple notarization.
 
 ## Build from source
 

@@ -12,9 +12,15 @@ Available packages:
 
 - Windows: `.msi`
 - Linux: `.AppImage` and `.deb`
-- macOS: experimental build
+- macOS: experimental, currently unsigned and unnotarized build
 
 Typsastra is currently beta software. The latest release is v0.5.1.
+
+On macOS, Gatekeeper may report the current experimental build as damaged
+because it is not yet signed or notarized. Download it only from the official
+release page, then follow the narrowly scoped workaround in the
+[installation guide](./docs/INSTALL.md#open-the-current-unsigned-macos-release).
+Do not disable Gatekeeper globally.
 
 [![Release](https://img.shields.io/github/v/release/Sovichea/typsastra?include_prereleases)](https://github.com/Sovichea/typsastra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -207,7 +213,7 @@ CI automatically enforces: no duplicate script ownership, no missing licenses, n
 
 ## Beta status
 
-Typsastra is beta software. Windows and Linux builds are the most actively tested. macOS builds are experimental and require broader verification, signing, and notarization work before general release.
+Typsastra is beta software. Windows and Linux builds are the most actively tested. macOS builds are experimental, unsigned, and unnotarized, and require broader verification before general release. See the [macOS installation instructions](./docs/INSTALL.md#open-the-current-unsigned-macos-release) if Gatekeeper reports that the downloaded app is damaged.
 
 When reporting an issue, include:
 

@@ -33,5 +33,13 @@ editor pane. Inactive large tabs stay lazy to keep workspace startup responsive.
 Use the Linux DMA-BUF compatibility setting described in
 [PDF preview and source synchronization](PDF_PREVIEW_AND_SYNC.md).
 
+## macOS says the app is damaged
+
+The current experimental macOS build is unsigned and unnotarized. If it was
+downloaded from the official Typsastra release page, follow the targeted
+quarantine-removal procedure in the
+[installation guide](../INSTALL.md#open-the-current-unsigned-macos-release).
+Do not disable Gatekeeper globally.
+
 For build, packaging, platform, and detailed preview diagnostics, see the full
 [troubleshooting reference](../TROUBLESHOOTING.md).

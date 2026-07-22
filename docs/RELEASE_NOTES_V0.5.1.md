@@ -130,6 +130,10 @@ new release.
 
 ## Known boundaries
 
+- The experimental macOS build is currently unsigned and unnotarized. Browser
+  downloads may be blocked by Gatekeeper with a damaged-app message; use only
+  the targeted workaround documented in the
+  [installation guide](INSTALL.md#open-the-current-unsigned-macos-release).
 - Optional language providers must be installed and assigned to a document
   script before that script receives spellcheck or completion.
 - Scripts without a language-provider assignment intentionally receive no
