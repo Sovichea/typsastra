@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.5.1.
+Typsastra is currently beta software. The latest release is v0.5.2.
 
 Typsastra is an open-source project and does not plan to purchase Apple
 Developer ID signing or notarization. On macOS, Gatekeeper may therefore report
@@ -189,7 +189,7 @@ Typsastra downloads and manages Tinymist for preview and diagnostics. A separate
 - [PDF preview and source synchronization](./docs/tutorials/PDF_PREVIEW_AND_SYNC.md)
 - [Roadmap](./docs/ROADMAP.md)
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)
-- [Typsastra v0.5.1 release notes](./docs/RELEASE_NOTES_V0.5.1.md)
+- [Typsastra v0.5.2 release notes](./docs/RELEASE_NOTES_V0.5.2.md)
 
 ## Contributing a language
 

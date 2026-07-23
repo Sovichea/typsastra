@@ -8,7 +8,7 @@ projects. A project is a directory containing ordinary Typst source and assets.
 
 To learn without changing your own files, choose **Open Examples**. Typsastra
 installs writable copies in a versioned Documents folder such as
-`Typsastra Examples v0.5.1` and opens `START-HERE.typ`. Every release uses a new
+`Typsastra Examples v0.5.2` and opens `START-HERE.typ`. Every release uses a new
 folder, so upgrading never overwrites or silently reuses an older example copy.
 
 ## Choose the main document

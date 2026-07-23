@@ -270,12 +270,12 @@ mod tests {
     #[test]
     fn scopes_installed_examples_and_state_to_the_application_version() {
         assert_eq!(
-            examples_directory_name("0.5.1"),
-            "Typsastra Examples v0.5.1"
+            examples_directory_name("0.5.2"),
+            "Typsastra Examples v0.5.2"
         );
         assert_eq!(
-            examples_state_file_name("0.5.1"),
-            "examples-state-v0.5.1.json"
+            examples_state_file_name("0.5.2"),
+            "examples-state-v0.5.2.json"
         );
     }
 

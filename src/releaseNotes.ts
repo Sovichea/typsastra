@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.5.2": {
+    version: "0.5.2",
+    title: "Responsive previews and safer editing workflows",
+    highlights: [
+      "Debounced PDF render-on-type is available again for responsive short-document editing.",
+      "Contextual quotation editing, clearer wrapped indentation, and Khmer caret fixes improve everyday authoring.",
+      "Save As, file duplication, dependency-aware preview guards, and lifecycle fixes make projects safer to manage.",
+      "Updates can be staged until restart, while WebView storage monitoring surfaces unusual profile growth."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.5.2"
+  },
   "0.5.1": {
     version: "0.5.1",
     title: "Examples, multilingual tools, and safer typography",

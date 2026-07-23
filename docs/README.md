@@ -40,6 +40,7 @@ the reference documents when you need exact behavior or contributor contracts.
 ## Releases and plans
 
 - [Roadmap](ROADMAP.md)
+- [v0.5.2 release notes](RELEASE_NOTES_V0.5.2.md)
 - [v0.5.1 release notes](RELEASE_NOTES_V0.5.1.md)
 - [v0.5.0 release notes](RELEASE_NOTES_V0.5.0.md)
 - [v0.5.1 implementation plan](V0_5_1_EXAMPLES_DOCUMENTATION_IMPLEMENTATION_PLAN.md)

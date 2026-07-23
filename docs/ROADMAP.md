@@ -50,31 +50,28 @@ line:
 The detailed tasks and acceptance criteria are in the
 [v0.5.1 examples and documentation implementation plan](./V0_5_1_EXAMPLES_DOCUMENTATION_IMPLEMENTATION_PLAN.md).
 
-## v0.5.2 — font-variant cache management
+## v0.5.2 — maintenance, responsiveness, and safer workflows (released)
 
-- Keep the release focused on bug fixes, regressions, performance, and minor
-  refinements to the existing v0.5.1 feature set.
-- **TODO — revisit document-language configuration UX.** The main file now
-  provides language routing to its included and imported dependencies, but the
-  workflow is not yet convenient enough. Re-evaluate metadata ownership,
-  inherited-versus-standalone state, configuration discoverability, and how the
-  Typography UI can manage project language providers without requiring users
-  to understand or manually maintain directives. Preserve deterministic routing
-  and keep unrelated files isolated while simplifying the authoring workflow.
-- Add advanced settings for inspecting the private global scaled-font cache.
-- Restore debounced PDF render-on-type for responsive short documents while
-  retaining render-on-save for long or resource-intensive projects. Continue
-  measuring replacement latency and WebView memory before choosing another
-  live-preview architecture.
-- Show cached variants by font face, scale, disk usage, and last use.
-- Allow users to delete selected or unused variants and renew stale variants.
-- Preserve the 10-variant recommendation while keeping deletion explicitly
-  user-controlled.
-- Added read-only, background Windows WebView2 profile monitoring with runtime-resolved
-  paths, classified disk usage, bounded local history, and non-disruptive size
-  warnings. Manual cleanup may ship only for disposable categories that pass
-  the [WebView storage policy](./WEBVIEW_STORAGE_POLICY.md); automatic deletion
-  remains deferred until platform qualification.
+Released July 23, 2026.
+
+- Restored debounced PDF render-on-type for responsive short documents while
+  retaining render-on-save for long or resource-intensive projects.
+- Added PDF Ctrl/Cmd-click link navigation, dependency-aware large-preview
+  guards, quieter LSP status reporting, and more reliable preview preservation.
+- Added contextual quotation editing, paired-quote deletion, clearer wrapped
+  indentation, and fixes for Khmer line-leading caret placement and font
+  fallback flicker.
+- Added Save As, file duplication, safer inline file creation, duplicate-tab
+  prevention, and lifecycle-safe diagnostic restoration.
+- Added optional shared-character typography ownership so one configured script
+  font can own numbers, punctuation, spaces, and other Common characters.
+- Improved language-provider discovery with installed-first ordering and search.
+- Changed application updates to stage until an explicit restart or normal
+  shutdown instead of installing immediately after download.
+- Added read-only Windows WebView2 profile monitoring with classified usage,
+  bounded history, and non-disruptive growth warnings.
+- Documented and tested unsigned macOS distribution without weakening
+  Gatekeeper globally.
 
 ## v0.5.3 — portable active-file preview
 
@@ -117,6 +114,11 @@ The detailed tasks and acceptance criteria are in the
 
 Make Typsastra's document-engineering strengths easier to discover while adding broadly useful research-authoring tools. This milestone does not expand into discipline-specific computation or visual tooling.
 
+- Revisit document-language configuration so project inheritance and provider
+  assignment are easier to understand without weakening deterministic routing.
+- Add advanced management for the private global scaled-font cache: inspect
+  variants by face, scale, disk usage, and last use; delete selected or unused
+  variants; and renew stale variants under explicit user control.
 - Add a separate, sanitized Markdown live-preview renderer for `.md` files,
   with debounced updates, theme-aware typography, local images, common
   GitHub-Flavored Markdown constructs, link navigation, and preserved scroll
@@ -211,7 +213,7 @@ The long-term research tasks and gates are in the [v2 implementation plan](./V2_
 
 ## Current release status
 
-Typsastra is beta software. The latest release is v0.5.1; see the
-[release notes](./RELEASE_NOTES_V0.5.1.md). Planned development continues with
-the v0.5.2 font-variant cache manager and v0.5.3 portable Active File preview
-before the v0.6.0 research-productivity milestone.
+Typsastra is beta software. The latest release is v0.5.2; see the
+[release notes](./RELEASE_NOTES_V0.5.2.md). Planned development continues with
+the v0.5.3 portable Active File preview before the v0.6.0
+research-productivity milestone.
