@@ -53,6 +53,10 @@ export const baseEditorLayoutTheme = EditorView.theme({
       borderColor: "var(--ui-accent-color)"
   },
   ".cm-line": { padding: "0 12px", overflow: "visible !important" },
+  ".cm-line.cm-wrapped-indent": {
+      paddingLeft: "calc(12px + var(--cm-wrapped-indent))",
+      textIndent: "calc(0px - var(--cm-wrapped-indent))"
+  },
   ".cm-gutters": { borderRight: "1px solid var(--ui-border)" },
   ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "var(--editor-cursor-color, #3db489) !important",

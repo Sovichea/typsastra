@@ -5,6 +5,7 @@ const style = readFileSync(new URL("../src/style.css", import.meta.url), "utf8")
 const controller = readFileSync(new URL("../src/appController.ts", import.meta.url), "utf8");
 const explorer = readFileSync(new URL("../src/components/explorer.ts", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const editorExtensions = readFileSync(new URL("../src/editor/extensions.ts", import.meta.url), "utf8");
 
 describe("theme-aware application accents", () => {
   test("uses the shared UI typography for log-console actions", async () => {
@@ -43,5 +44,12 @@ describe("theme-aware application accents", () => {
     expect(focusRule).toContain("outline: 1px solid color-mix(in srgb, var(--ui-accent-color) 42%, transparent)");
     expect(focusRule).toContain("outline-offset: -1px");
     expect(focusRule).not.toContain("box-shadow:");
+  });
+
+  test("keeps indentation guides visible across editor themes", () => {
+    expect(editorExtensions).toContain('color-mix(in srgb, var(--ui-text) 38%, transparent)');
+    expect(editorExtensions).toContain('color-mix(in srgb, var(--ui-accent-color) 72%, var(--ui-text))');
+    expect(editorExtensions).toContain("activeThickness: 2");
+    expect(controller).toContain("visibleIndentationMarkers()");
   });
 });

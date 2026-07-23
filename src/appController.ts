@@ -10,8 +10,7 @@ import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers
 import { undo, redo, undoDepth } from "@codemirror/commands";
 import { foldAll, foldable, foldEffect, foldedRanges, indentUnit, unfoldAll, unfoldEffect } from "@codemirror/language";
 import { closeBrackets, completionStatus } from "@codemirror/autocomplete";
-import { indentationMarkers } from "@replit/codemirror-indentation-markers";
-import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, languageCompartment, showZwsCompartment, showZeroWidthSpaces } from "./editor/extensions";
+import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, languageCompartment, showZwsCompartment, showZeroWidthSpaces, visibleIndentationMarkers } from "./editor/extensions";
 import { typstLanguage } from "./editor/typstLanguage";
 import { createTypstAutocomplete } from "./editor/autocomplete";
 import { cursorRowColumn } from "./editor/verticalCursor";
@@ -834,7 +833,7 @@ export class TypsastraWorkspaceController {
           lineNumbersCompartment.reconfigure(editor.lineNumbers ? lineNumbers() : []),
           activeLineCompartment.reconfigure(editor.highlightActiveLine ? [highlightActiveLineGutter(), highlightActiveLine()] : []),
           closeBracketsCompartment.reconfigure(editor.autoCloseBrackets ? closeBrackets() : []),
-          indentationGuidesCompartment.reconfigure(editor.indentationGuides ? indentationMarkers() : []),
+          indentationGuidesCompartment.reconfigure(editor.indentationGuides ? visibleIndentationMarkers() : []),
           tabSizeCompartment.reconfigure([EditorState.tabSize.of(editor.tabSize), indentUnit.of(indentation)]),
           showZwsCompartment.reconfigure(editor.showZws ? showZeroWidthSpaces : []),
           completionCompartment.reconfigure(createTypstAutocomplete(

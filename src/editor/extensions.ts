@@ -23,6 +23,7 @@ import { deleteNextGrapheme, deletePreviousGrapheme, graphemeSelectionBoundaryFi
 import { editingPolicyRegistry } from "./editingPolicies/registry";
 import { showInvisibleCharacters } from "./invisibles";
 import { TYPSASTRA_GREEN, TYPSASTRA_GREEN_GLOW } from "../ui/brandColors";
+import { wrappedLineIndentation } from "./wrappedIndent";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -35,6 +36,21 @@ export const tabSizeCompartment = new Compartment();
 export const completionCompartment = new Compartment();
 export const showZwsCompartment = new Compartment();
 export const languageCompartment = new Compartment();
+
+export function visibleIndentationMarkers(): Extension {
+  const inactive = "color-mix(in srgb, var(--ui-text) 38%, transparent)";
+  const active = "color-mix(in srgb, var(--ui-accent-color) 72%, var(--ui-text))";
+  return indentationMarkers({
+    thickness: 1,
+    activeThickness: 2,
+    colors: {
+      light: inactive,
+      dark: inactive,
+      activeLight: active,
+      activeDark: active,
+    },
+  });
+}
 
 const completionNavigationHandler = Prec.highest(EditorView.domEventHandlers({
   keydown(event, view) {
@@ -317,12 +333,13 @@ export function getEditorExtensions(
     drawSelection(), dropCursor(), history(), 
     languageCompartment.of(typstLanguage),
     baseEditorLayoutTheme,
+    wrappedLineIndentation,
     codeFolding({
       preparePlaceholder: foldedTypstPlaceholderSuffix,
       placeholderDOM: foldedTypstPlaceholderDOM
     }),
     editorDiagnosticsExtension,
-    indentationGuidesCompartment.of(indentationMarkers()),
+    indentationGuidesCompartment.of(visibleIndentationMarkers()),
     tabSizeCompartment.of([EditorState.tabSize.of(2), indentUnit.of("  ")]),
     wrapCompartment.of(EditorView.lineWrapping),
     search({ top: true }),
