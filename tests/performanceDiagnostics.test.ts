@@ -30,6 +30,19 @@ describe("performance diagnostics", () => {
     expect(diagnostics.summary("preview.motion-settle")).toBeNull();
   });
 
+  test("separates editor transaction, listener, frame, and long-task timings", () => {
+    const diagnostics = new PerformanceDiagnostics();
+    diagnostics.record({ name: "editor.input-update", milliseconds: 2 });
+    diagnostics.record({ name: "editor.update-listener", milliseconds: 5 });
+    diagnostics.record({ name: "editor.input-frame", milliseconds: 18 });
+    diagnostics.record({ name: "editor.long-task", milliseconds: 54 });
+
+    expect(diagnostics.summary("editor.input-update")?.p95).toBe(2);
+    expect(diagnostics.summary("editor.update-listener")?.p95).toBe(5);
+    expect(diagnostics.summary("editor.input-frame")?.p95).toBe(18);
+    expect(diagnostics.summary("editor.long-task")?.p95).toBe(54);
+  });
+
   test("keeps resident PDF pages and queued language work explicitly bounded", () => {
     expect(PERFORMANCE_BUDGETS.maxResidentPdfPages).toBeLessThanOrEqual(7);
     expect(PERFORMANCE_BUDGETS.maxQueuedLanguageRequests).toBe(1);

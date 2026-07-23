@@ -111,7 +111,7 @@ export const defaultAppSettings: AppSettings = {
     formatOnSave: false
   },
   preview: {
-    renderMode: "on-type",
+    renderMode: "on-save",
     // TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability
     // cursorSync: true,
     cursorSync: false,
@@ -143,10 +143,11 @@ function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function previewRenderMode(value: unknown): PreviewRenderMode {
-  return value === "on-save" || value === "on-type"
-    ? value
-    : defaultAppSettings.preview.renderMode;
+function previewRenderMode(_value: unknown): PreviewRenderMode {
+  // PDF render-on-type is disabled for the v0.5.2 stabilization release.
+  // Existing preferences migrate to on-save. A bounded SVG/PDF hybrid is
+  // planned for v0.5.3.
+  return "on-save";
 }
 
 function terminologyEntries(value: unknown, limit = 2_000): TerminologyEntry[] {

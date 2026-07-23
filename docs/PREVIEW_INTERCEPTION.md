@@ -80,10 +80,14 @@ The previous PDF text-matching fallback was removed. It was not deterministic en
 
 ## Render modes
 
-The preview setting `renderMode` controls refresh timing:
+v0.5.2 enables only `on-save`: the PDF preview compiles after a successful
+save. Existing `on-type` preferences migrate to `on-save`. On-type preview is
+temporarily disabled after repeated PDF replacement was found to provide poor
+interaction latency and unsafe WebView resource growth.
 
-- `on-type`: compile after edits for live preview.
-- `on-save`: compile only when files are saved.
+v0.5.3 will reintroduce on-type updates through bounded SVG live preview for
+qualified small documents. Documents that exceed the measured page or resource
+budget will remain on PDF-on-save automatically.
 
 Imported files currently preview through their configured main document. Independent standalone roots remain disabled pending the portable v0.5.3 Full Document/Active File implementation plan; `V1X-P.1` owns later qualification and hardening.
 

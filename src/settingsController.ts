@@ -196,7 +196,9 @@ export class SettingsController {
     onChange("settings-word-completion", (settings, control) => { settings.editor.wordCompletion = (control as HTMLInputElement).checked; });
     onChange("settings-show-zws", (settings, control) => { settings.editor.showZws = (control as HTMLInputElement).checked; });
     onChange("settings-format-on-save", (settings, control) => { settings.editor.formatOnSave = (control as HTMLInputElement).checked; });
-    onChange("settings-preview-render-mode", (settings, control) => { settings.preview.renderMode = control.value as AppSettings["preview"]["renderMode"]; });
+    onChange("settings-preview-render-mode", settings => {
+      settings.preview.renderMode = "on-save";
+    });
     onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
@@ -311,6 +313,17 @@ export class SettingsController {
     if (cursorSync) {
       cursorSync.disabled = true;
       cursorSync.title = "Forward sync is disabled until the v0.9.0 prerelease reliability work.";
+    }
+    const previewRenderMode = document.getElementById("settings-preview-render-mode") as HTMLSelectElement | null;
+    if (previewRenderMode) {
+      previewRenderMode.value = "on-save";
+      previewRenderMode.disabled = true;
+      previewRenderMode.title = "On-type preview is temporarily disabled and will return as a bounded SVG/PDF hybrid in v0.5.3.";
+    }
+    const previewDebounce = document.getElementById("settings-sync-debounce") as HTMLInputElement | null;
+    if (previewDebounce) {
+      previewDebounce.disabled = true;
+      previewDebounce.title = "This setting will be available again with on-type preview in v0.5.3.";
     }
     setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
     setChecked("settings-disable-webkit-dmabuf", this.settings.compatibility.disableWebkitDmabufRenderer);

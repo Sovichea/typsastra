@@ -18,6 +18,19 @@ project layout and cross-chapter reference rendering for a smaller compilation
 root and faster chapter iteration. Typsastra must communicate that boundary
 without introducing private Typst syntax or hidden generated entry points.
 
+Preview scope and refresh policy are separate. v0.5.3 also reintroduces
+on-type updates through a bounded renderer policy:
+
+```text
+qualified small document -> Live SVG after typing pauses
+document over budget     -> PDF on save
+```
+
+Qualification must use measured compiled output and runtime resource budgets,
+not source-file size alone. Typsastra must show the active renderer, switch
+without retaining both full representations, and preserve PDF export regardless
+of the interactive renderer.
+
 ## Product contract
 
 ### Full Document
@@ -252,4 +265,3 @@ its portable entry point plus Typsastra's lightweight reference catalog.
   document remain active and settled memory is bounded.
 - Failed migration or compiler switching cannot modify source partially or lose
   unsaved work.
-

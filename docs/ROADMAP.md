@@ -62,6 +62,9 @@ The detailed tasks and acceptance criteria are in the
   to understand or manually maintain directives. Preserve deterministic routing
   and keep unrelated files isolated while simplifying the authoring workflow.
 - Add advanced settings for inspecting the private global scaled-font cache.
+- Temporarily disable PDF render-on-type and migrate existing preferences to
+  render-on-save. Repeated PDF replacement is not a useful live-editing path
+  and can create unsafe WebView canvas and font-resource pressure.
 - Show cached variants by font face, scale, disk usage, and last use.
 - Allow users to delete selected or unused variants and renew stale variants.
 - Preserve the 10-variant recommendation while keeping deletion explicitly
@@ -74,6 +77,18 @@ The detailed tasks and acceptance criteria are in the
 
 ## v0.5.3 — portable active-file preview
 
+- Reintroduce on-type updates through SVG live preview only for documents that
+  remain within measured page-count, output-size, and memory budgets.
+- Automatically use PDF-on-save when the compiled document exceeds the live
+  SVG budget. Do not classify documents from source-file size alone because a
+  small Typst source can generate thousands of pages.
+- Show whether the active preview is **Live SVG** or **PDF on save**, and explain
+  automatic fallback without interrupting editing.
+- Keep only one renderer active when changing policy; release SVG resources
+  before installing PDF state and never retain both complete document
+  representations.
+- Qualify thresholds with representative text, complex-script, image, and
+  vector documents on Windows WebView2, Linux WebKitGTK, and macOS WKWebView.
 - Add explicit **Full Document** and **Active File** preview modes.
 - Restrict Active File preview to the configured main file and documents
   directly or transitively reachable through `#include`.

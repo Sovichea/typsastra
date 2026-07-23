@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { dirname, join } from "@tauri-apps/api/path";
-import { EditorState, Transaction } from "@codemirror/state";
+import { EditorState, Transaction, type Text } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { undo, redo, undoDepth } from "@codemirror/commands";
 import { foldAll, foldable, foldEffect, foldedRanges, indentUnit, unfoldAll, unfoldEffect } from "@codemirror/language";
@@ -101,6 +101,13 @@ type StartupTimingEntry = {
   source: string;
   label: string;
   ms: number;
+};
+
+type EditorInputProfile = {
+  sequence: number;
+  inputType: string;
+  inputStartedAt: number;
+  listenerStartedAt: number;
 };
 
 type ProcessMemorySample = {
@@ -271,6 +278,8 @@ export class TypsastraWorkspaceController {
   private isLoadingFile = false;
   private lspReady = false;
   private readonly lspSyncDebounceMs = 50;
+  private pendingEditorMutationTimer: number | null = null;
+  private pendingEditorMutation: { path: string; doc: Text } | null = null;
   private forwardSyncDebounceMs = 120;
   private pendingLspSyncTimer: number | null = null;
   private pendingLspSyncPath: string | null = null;
@@ -360,6 +369,11 @@ export class TypsastraWorkspaceController {
 
   private editorInstance!: EditorView;
   private isComposing = false;
+  private editorInputSequence = 0;
+  private editorInputStartedAt: number | null = null;
+  private editorInputType = "unknown";
+  private editorLastInputAt = 0;
+  private editorLongTaskObserver: PerformanceObserver | null = null;
   private readonly performanceSummaryCounts = new Map<PerformanceMetric["name"], number>();
   private readonly performanceDiagnostics = new PerformanceDiagnostics(metric => this.publishPerformanceMetric(metric));
   private readonly editorFontManager = new EditorFontManager(() => this.editorInstance);
@@ -1029,23 +1043,20 @@ export class TypsastraWorkspaceController {
           ),
           this.spellcheckController.extension(),
           EditorView.updateListener.of((update) => {
+            const inputProfile = this.beginEditorInputProfile();
             this.spellcheckController.completionStateChanged(completionStatus(update.state) !== null);
             const wasComposing = this.isComposing;
             this.isComposing = update.view.composing;
 
             if (update.docChanged && !this.isLoadingFile) {
-              const currentText = update.state.doc.toString();
-              this.configureDocumentLanguageTools(currentText);
               this.previewSyncController.clearForward();
-              this.editorFontManager.scheduleDocumentUpdate(currentText);
+              this.markActiveTabDirty();
               if (!update.view.composing) {
-                this.handleContentMutation(currentText);
+                this.scheduleEditorContentMutation(update.state.doc);
                 this.spellcheckController.documentChanged(update);
               }
             } else if (!this.isLoadingFile && wasComposing && !update.view.composing) {
-              const currentText = update.state.doc.toString();
-              this.configureDocumentLanguageTools(currentText);
-              this.handleContentMutation(currentText);
+              this.scheduleEditorContentMutation(update.state.doc);
               this.spellcheckController.documentChanged(update);
             }
             if (update.selectionSet) {
@@ -1083,6 +1094,7 @@ export class TypsastraWorkspaceController {
             if (!update.docChanged && this.shouldForwardSyncSelectionUpdate(update)) {
               this.previewSyncController.schedule(this.forwardSyncDebounceMs);
             }
+            this.finishEditorInputProfile(inputProfile, update.state.doc.length, update.view.composing);
           })
         ]
       }),
@@ -1091,6 +1103,14 @@ export class TypsastraWorkspaceController {
     // The editor remains mouse- and command-focusable, but ordinary Tab
     // navigation between application controls must never land in source text.
     this.editorInstance.contentDOM.tabIndex = -1;
+    this.editorInstance.contentDOM.addEventListener("beforeinput", event => {
+      if (!this.isDeveloperLogEnabled("performance")) return;
+      this.editorInputSequence += 1;
+      this.editorInputStartedAt = performance.now();
+      this.editorLastInputAt = this.editorInputStartedAt;
+      this.editorInputType = event.inputType || "unknown";
+    }, { capture: true });
+    this.initializeEditorLongTaskObserver();
     this.editorInstance.dom.addEventListener("pointerup", event => {
       if (!(event instanceof PointerEvent) || event.button !== 0) return;
       if (this.editorScrollbarPointerActive) {
@@ -1132,6 +1152,78 @@ export class TypsastraWorkspaceController {
     );
     label.textContent = `Ln ${row}, Col ${column}`;
     status.setAttribute("aria-label", `Cursor at row ${row}, column ${column}`);
+  }
+
+  private beginEditorInputProfile(): EditorInputProfile | null {
+    if (
+      !this.isDeveloperLogEnabled("performance")
+      || this.editorInputStartedAt === null
+    ) return null;
+    return {
+      sequence: this.editorInputSequence,
+      inputType: this.editorInputType,
+      inputStartedAt: this.editorInputStartedAt,
+      listenerStartedAt: performance.now(),
+    };
+  }
+
+  private finishEditorInputProfile(
+    profile: EditorInputProfile | null,
+    documentLength: number,
+    composing: boolean,
+  ): void {
+    if (!profile) return;
+    const listenerFinishedAt = performance.now();
+    const detail = {
+      sequence: profile.sequence,
+      inputType: profile.inputType,
+      documentLength,
+      composing,
+    };
+    this.performanceDiagnostics.record({
+      name: "editor.input-update",
+      milliseconds: profile.listenerStartedAt - profile.inputStartedAt,
+      detail,
+    });
+    this.performanceDiagnostics.record({
+      name: "editor.update-listener",
+      milliseconds: listenerFinishedAt - profile.listenerStartedAt,
+      detail,
+    });
+    this.editorInputStartedAt = null;
+
+    requestAnimationFrame(() => {
+      this.performanceDiagnostics.record({
+        name: "editor.input-frame",
+        milliseconds: performance.now() - profile.inputStartedAt,
+        detail,
+      });
+    });
+  }
+
+  private initializeEditorLongTaskObserver(): void {
+    if (
+      this.editorLongTaskObserver
+      || typeof PerformanceObserver === "undefined"
+      || !PerformanceObserver.supportedEntryTypes?.includes("longtask")
+    ) return;
+    this.editorLongTaskObserver = new PerformanceObserver(list => {
+      if (
+        !this.isDeveloperLogEnabled("performance")
+        || performance.now() - this.editorLastInputAt > 1_500
+      ) return;
+      for (const entry of list.getEntries()) {
+        this.performanceDiagnostics.record({
+          name: "editor.long-task",
+          milliseconds: entry.duration,
+          detail: {
+            inputAgeMs: Math.max(0, entry.startTime - this.editorLastInputAt),
+            entryType: entry.entryType,
+          },
+        });
+      }
+    });
+    this.editorLongTaskObserver.observe({ type: "longtask", buffered: false });
   }
 
   private refreshEditorLayout(reason: string): void {
@@ -1250,6 +1342,7 @@ export class TypsastraWorkspaceController {
   }
 
   private persistActiveTabState() {
+    this.flushEditorContentMutation();
     const tab = this.getActiveTab();
     if (!tab || !tab.contentLoaded || !this.editorInstance) return;
     if (!isSupportedInAppPath(tab.path) || isBinaryImagePath(tab.path) || fileExtension(tab.path) === "pdf") return;
@@ -1491,6 +1584,70 @@ export class TypsastraWorkspaceController {
     } else if (wasDirty !== tab.isDirty) {
       this.renderEditorTabs();
     }
+  }
+
+  private markActiveTabDirty(): void {
+    const tab = this.getActiveTab();
+    if (!tab) return;
+    const wasDirty = tab.isDirty;
+    tab.isDirty = true;
+    if (tab.temporary) {
+      void this.promoteToPermanent(tab);
+    } else if (!wasDirty) {
+      this.renderEditorTabs();
+    }
+  }
+
+  private scheduleEditorContentMutation(doc: Text): void {
+    if (!this.activeFilePath) return;
+    const startsTypingSequence = this.pendingEditorMutation === null;
+    if (
+      startsTypingSequence
+      && this.settingsController.value.preview.renderMode === "on-type"
+      && activeFileCanRenderPreview(
+        this.activeFilePath,
+        this.pinnedMainFilePath,
+        this.previewImported,
+        this.previewDisabled
+      )
+    ) {
+      // Cancel stale scheduled or preparatory work once at the beginning of a
+      // typing burst. Further keystrokes only replace the in-memory snapshot.
+      this.invalidatePreviewWork("editor input");
+    }
+    this.pendingEditorMutation = { path: this.activeFilePath, doc };
+    if (this.pendingEditorMutationTimer !== null) {
+      window.clearTimeout(this.pendingEditorMutationTimer);
+    }
+    // Keep the CodeMirror document as the in-memory source of truth while the
+    // user is typing. For on-type preview, copy one settled snapshot to
+    // Tinymist at the configured preview debounce boundary rather than after
+    // every input transaction.
+    const delay = 300;
+    this.pendingEditorMutationTimer = window.setTimeout(() => {
+      this.pendingEditorMutationTimer = null;
+      this.flushEditorContentMutation(true);
+    }, delay);
+  }
+
+  private flushEditorContentMutation(previewDebounceElapsed = false): void {
+    if (this.pendingEditorMutationTimer !== null) {
+      window.clearTimeout(this.pendingEditorMutationTimer);
+      this.pendingEditorMutationTimer = null;
+    }
+    const pending = this.pendingEditorMutation;
+    this.pendingEditorMutation = null;
+    if (
+      !pending
+      || !this.activeFilePath
+      || filePathKey(pending.path) !== filePathKey(this.activeFilePath)
+      || pending.doc !== this.editorInstance.state.doc
+    ) return;
+
+    const currentText = pending.doc.toString();
+    this.configureDocumentLanguageTools(currentText);
+    this.editorFontManager.scheduleDocumentUpdate(currentText);
+    this.handleContentMutation(currentText, previewDebounceElapsed);
   }
 
   private async renameWorkspacePath(oldPath: string, newPath: string): Promise<void> {
@@ -2343,6 +2500,7 @@ export class TypsastraWorkspaceController {
 
   private async saveActiveFile() {
     if (this.saveInProgress) return await this.saveInProgress;
+    this.flushEditorContentMutation();
     const operation = this.performSaveActiveFile();
     this.saveInProgress = operation;
     try {
@@ -3484,7 +3642,7 @@ export class TypsastraWorkspaceController {
     }, debounceMs);
   }
 
-  private handleContentMutation(rawText: string) {
+  private handleContentMutation(rawText: string, previewDebounceElapsed = false) {
     const canRenderPreview = activeFileCanRenderPreview(
       this.activeFilePath,
       this.pinnedMainFilePath,
@@ -3546,7 +3704,11 @@ export class TypsastraWorkspaceController {
       && this.settingsController.value.preview.renderMode === "on-type"
       && !this.previewDisabled
     ) {
-      this.schedulePdfPreview(rawText);
+      if (previewDebounceElapsed) {
+        void this.renderPdfPreview(rawText);
+      } else {
+        this.schedulePdfPreview(rawText);
+      }
     }
   }
 
@@ -3735,6 +3897,10 @@ export class TypsastraWorkspaceController {
   }
 
   private async flushPendingLspSync(): Promise<void> {
+    // Completion, navigation, save, and other explicit LSP requests must see
+    // the latest editor snapshot even when routine on-save synchronization is
+    // waiting for an input pause.
+    this.flushEditorContentMutation();
     if (this.pendingLspSyncTimer) {
       window.clearTimeout(this.pendingLspSyncTimer);
       this.pendingLspSyncTimer = null;
@@ -5384,6 +5550,23 @@ export class TypsastraWorkspaceController {
 
   private publishPerformanceMetric(metric: PerformanceMetric): void {
     if (!this.isDeveloperLogEnabled("performance")) return;
+    if (metric.name.startsWith("editor.") && metric.milliseconds !== undefined) {
+      const count = (this.performanceSummaryCounts.get(metric.name) ?? 0) + 1;
+      this.performanceSummaryCounts.set(metric.name, count);
+      if (metric.name !== "editor.long-task") {
+        if (count % 20 !== 0) return;
+        const summary = this.performanceDiagnostics.summary(metric.name);
+        if (!summary) return;
+        const message = `${metric.name} rolling summary: n=${summary.samples}; p50=${summary.p50.toFixed(1)} ms; p95=${summary.p95.toFixed(1)} ms; max=${summary.maximum.toFixed(1)} ms`;
+        console.info(`[performance] ${message}`);
+        this.appendDeveloperLog({
+          kind: summary.p95 > 16 ? "warning" : "info",
+          source: "editor performance",
+          message,
+        });
+        return;
+      }
+    }
     const value = metric.milliseconds !== undefined
       ? `${metric.milliseconds.toFixed(1)} ms`
       : metric.bytes !== undefined

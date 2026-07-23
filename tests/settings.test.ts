@@ -18,7 +18,7 @@ describe("application settings", () => {
     expect(settings.editor.userDictionary).toEqual([]);
     expect(settings.editor.ignoredWords).toEqual([]);
     expect(settings.editor.formatOnSave).toBe(false);
-    expect(settings.preview.renderMode).toBe("on-type");
+    expect(settings.preview.renderMode).toBe("on-save");
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
     expect(settings.preview.khmerRenderPreparation).toBe(false);
     expect(settings.compatibility.disableWebkitDmabufRenderer).toBe(false);
@@ -44,7 +44,7 @@ describe("application settings", () => {
     expect(settings.editor.formatOnSave).toBe(false);
     expect(settings.preview.syncDebounceMs).toBe(50);
     expect(settings.preview.highlightDurationMs).toBe(10000);
-    expect(settings.preview.renderMode).toBe("on-type");
+    expect(settings.preview.renderMode).toBe("on-save");
     expect(settings.toolchain.tinymistVersion).toBeNull();
   });
 
@@ -111,8 +111,9 @@ describe("application settings", () => {
     expect(second.developerLogs.memory).toBe(true);
   });
 
-  test("keeps the selected preview render mode", () => {
+  test("keeps on-save and migrates the temporarily disabled on-type mode", () => {
     expect(normalizeAppSettings({ preview: { renderMode: "on-save" } }).preview.renderMode).toBe("on-save");
+    expect(normalizeAppSettings({ preview: { renderMode: "on-type" } }).preview.renderMode).toBe("on-save");
   });
 
   test("keeps the Linux WebKit DMA-BUF compatibility override", () => {

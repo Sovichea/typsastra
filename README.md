@@ -138,7 +138,8 @@ The scalable workflow covers:
 
 - project and main-document identity;
 - included chapters, templates, imports, bibliographies, figures, and data;
-- render-on-type and render-on-save policies;
+- render-on-save preview for the v0.5.2 stabilization release, with a bounded
+  SVG/PDF hybrid planned for v0.5.3;
 - revision-safe diagnostics, language analysis, compilation, and source navigation;
 - virtualized preview rendering for long PDFs;
 - workspace restoration and recovery after compiler or LSP failures.

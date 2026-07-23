@@ -2506,12 +2506,12 @@
                                 <label for="settings-preview-render-mode"
                                     >Render preview</label
                                 >
-                                <select id="settings-preview-render-mode">
-                                    <option value="on-type">On type</option>
+                                <select id="settings-preview-render-mode" disabled>
+                                    <option value="on-type" disabled>On type (returns in v0.5.3)</option>
                                     <option value="on-save">On save</option>
                                 </select>
                                 <small
-                                    >Choose whether Tinymist refreshes the preview while typing or only after saving.</small
+                                    >v0.5.2 updates the PDF preview only after saving. On-type preview will return in v0.5.3 with bounded SVG rendering for small documents.</small
                                 >
                             </div>
                             <!-- TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability -->
@@ -2556,11 +2556,11 @@
                                     min="50"
                                     max="2000"
                                     step="10"
+                                    disabled
                                 />
                                 <small
-                                    >Quiet time before on-type cache preparation
-                                    and preview compilation, in milliseconds
-                                    (50-2000).</small
+                                    >Temporarily unavailable while on-type
+                                    preview is disabled for v0.5.2.</small
                                 >
                             </div>
                             <div class="settings-field">
@@ -2707,7 +2707,7 @@
                                 <label class="settings-toggle"
                                     ><input id="settings-dev-log-performance" type="checkbox"
                                     /><span><strong>Performance</strong
-                                    ><small>Startup, editor, and preview timing measurements.</small></span
+                                    ><small>Startup and preview timings. Editor input-to-update, listener, and input-to-frame results are batched every 20 inputs so logging does not distort typing performance.</small></span
                                 ></label>
                                 <label class="settings-toggle"
                                     ><input id="settings-dev-log-memory" type="checkbox"
