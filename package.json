@@ -14,6 +14,7 @@
     "benchmark:performance": "bun scripts/run-performance-benchmarks.ts",
     "validate:examples": "bun scripts/validate-examples.ts",
     "tauri": "tauri",
+    "dev:update": "bun run tauri:dev:update",
     "tauri:dev:update": "tauri dev --config src-tauri/tauri.update-test.conf.json",
     "tauri:dev:macos-titlebar": "tauri dev --config src-tauri/tauri.macos-layout-test.conf.json"
   },

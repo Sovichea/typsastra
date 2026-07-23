@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { modalTabDestination } from "../src/ui/modalFocus";
+import { dialogActionSlots } from "../src/ui/appDialog";
 
 describe("modal focus navigation", () => {
   test("cycles forward and backward without leaving the modal", () => {
@@ -13,6 +14,12 @@ describe("modal focus navigation", () => {
     expect(modalTabDestination(-1, 3, false)).toBe(0);
     expect(modalTabDestination(-1, 3, true)).toBe(2);
     expect(modalTabDestination(-1, 0, false)).toBeNull();
+  });
+
+  test("lays out one, two, and three application-dialog actions consistently", () => {
+    expect(dialogActionSlots(1)).toEqual([2]);
+    expect(dialogActionSlots(2)).toEqual([0, 2]);
+    expect(dialogActionSlots(3)).toEqual([0, 1, 2]);
   });
 
   test("ships document typography as an accessible dialog", async () => {

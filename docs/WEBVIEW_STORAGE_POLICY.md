@@ -152,7 +152,8 @@ Before cleanup ships on a platform, verify:
   cleanup;
 - language providers, generated-font variants, workspaces, and Tinymist remain
   untouched;
-- automatic updates still verify, install, and relaunch;
+- staged updates still verify and download without installation, then install
+  only through **Restart to update** or the explicit close-time choice;
 - cleanup interruption, locked files, disk-full state, and application crash;
 - canonical-path and link traversal protection;
 - before/after sizes agree within a documented tolerance;

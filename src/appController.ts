@@ -39,6 +39,7 @@ import { EditorFontManager } from "./editor/fontManager";
 import { TabStripController } from "./editor/tabStripController";
 import { createAppIcon, updateMaximizeIcon } from "./ui/icons";
 import { installModalFocusTrap } from "./ui/modalFocus";
+import { AppDialogController } from "./ui/appDialog";
 import {
   TYPSASTRA_GREEN,
   TYPSASTRA_GREEN_RIPPLE_FILL,
@@ -547,8 +548,10 @@ export class TypsastraWorkspaceController {
     document.getElementById("document-outline-section")!,
     heading => void this.navigateToOutlineHeading(heading)
   );
+  private readonly appDialogController = new AppDialogController();
   private readonly appUpdateController = new AppUpdateController(
-    () => this.openTabs.some(tab => tab.isDirty)
+    () => this.openTabs.some(tab => tab.isDirty),
+    this.appDialogController
   );
   private readonly webviewStorageController = new WebviewStorageController(() =>
     this.pdfPreviewRunning
@@ -7291,16 +7294,26 @@ export class TypsastraWorkspaceController {
     void appWindow.isMaximized().then(maximized => updateMaximizeIcon(maximized));
     document.getElementById("titlebar-close")?.addEventListener("click", () => appWindow.close());
 
+    let closeRequestInProgress = false;
     void appWindow.onCloseRequested(async (event) => {
       event.preventDefault();
+      if (closeRequestInProgress) return;
+      closeRequestInProgress = true;
       const hasUnsaved = this.openTabs.some(tab => tab.isDirty);
       let proceed = true;
       if (hasUnsaved) {
-        proceed = await confirm(
-          "You have unsaved changes. Are you sure you want to close Typsastra?",
-          { title: "Unsaved Changes", kind: "warning" }
-        );
+        const action = await this.appDialogController.show({
+          title: "Unsaved Changes",
+          description: "You have unsaved changes. Are you sure you want to close Typsastra?",
+          actions: [
+            { id: "cancel", label: "Cancel" },
+            { id: "close", label: "Close Without Saving", primary: true }
+          ],
+          cancelAction: "cancel"
+        });
+        proceed = action === "close";
       }
+      if (proceed) proceed = await this.appUpdateController.prepareForClose();
       if (proceed) {
         try {
           const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
@@ -7312,7 +7325,9 @@ export class TypsastraWorkspaceController {
           console.error("Failed to close preview window on exit:", e);
         }
         void appWindow.destroy();
+        return;
       }
+      closeRequestInProgress = false;
     });
 
     this.wysiwymContainer.addEventListener("input", () => {

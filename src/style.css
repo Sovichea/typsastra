@@ -1145,6 +1145,26 @@ body.typsastra-resizing #input-container-wrapper::after {
   max-height: calc(100vh - 48px);
 }
 
+.app-dialog {
+  width: min(520px, 100%);
+  height: auto;
+  max-height: calc(100vh - 48px);
+}
+
+.app-dialog-content {
+  padding: 18px;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.app-dialog-content p {
+  margin: 0;
+}
+
+.app-dialog-footer {
+  align-items: center;
+}
+
 .about-content {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
