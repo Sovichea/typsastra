@@ -24,6 +24,17 @@ describe("cross-platform scrollbar design", () => {
     expect(source).toContain("var(--preview-ui-accent)");
   });
 
+  test("distinguishes live preview from directly opened PDF surfaces", async () => {
+    const source = await Bun.file(new URL("../src/preview/previewFrame.ts", import.meta.url)).text();
+    const controller = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    expect(source).toContain('export type PreviewSurface = "live" | "pdf"');
+    expect(source).toContain('iframeDoc.documentElement.dataset.previewSurface = surface');
+    expect(source).toContain(':root[data-preview-surface="pdf"]{--preview-surface-bg:#b8b8b8}');
+    expect(source).toContain('background:var(--preview-surface-bg)');
+    expect(controller).toContain('surface: PreviewSurface = isTypstDocumentPath(identity) ? "live" : "pdf"');
+    expect(controller).toContain('this.previewFrame.loadPdfBytes(bytes, identity, sessionKey, surface)');
+  });
+
   test("does not build an unused PDF text layer", async () => {
     const source = await Bun.file(new URL("../src/preview/previewFrame.ts", import.meta.url)).text();
     expect(source).not.toContain("renderTextLayer");

@@ -25,7 +25,7 @@ import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath, remapFilePath } from "./platform/paths";
 import { isBinaryImagePath, isSupportedInAppPath, isTypstDocumentPath, fileExtension } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
-import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus, type PreviewPageStatus } from "./preview/previewFrame";
+import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus, type PreviewPageStatus, type PreviewSurface } from "./preview/previewFrame";
 import { PreviewSyncController } from "./preview/previewSyncController";
 import {
   tinymistDataPlaneFrameConfirmsSourceMap,
@@ -199,6 +199,13 @@ type PreviewSessionState = Pick<
   "previewRootPath" | "previewMainPath" | "previewTaskId" | "previewSessionKey" | "previewImported" | "previewStandalone" | "previewDisabled"
 >;
 
+type PdfUpdatePayload = {
+  path: string;
+  identity: string;
+  sessionKey: string;
+  surface: PreviewSurface;
+};
+
 type ActivateEditorTabOptions = {
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
@@ -326,6 +333,8 @@ export class TypsastraWorkspaceController {
   private projectImportQueue: Promise<void> = Promise.resolve();
   private saveInProgress: Promise<void> | null = null;
   private pdfPreviewGeneration = 0;
+  private pdfLoadRequestGeneration = 0;
+  private readonly blockedLargePdfPaths = new Set<string>();
   private previewPageStatus: PreviewPageStatus = { currentPage: 0, pageCount: 0 };
   private imageZoomIn: (() => void) | null = null;
   private imageZoomOut: (() => void) | null = null;
@@ -372,6 +381,9 @@ export class TypsastraWorkspaceController {
   private exportInProgress = false;
   private deferredTypographyPreviewContents: string | null = null;
   private lastPdfPath = "";
+  private lastPdfIdentity = "";
+  private lastPdfSessionKey = "";
+  private lastPdfSurface: PreviewSurface = "live";
   private pdfPreviewFailureAt: number | null = null;
   private memoryDiagnosticSequence = 0;
   private saveMemoryDiagnosticGeneration = 0;
@@ -721,10 +733,17 @@ export class TypsastraWorkspaceController {
 
     const { listen, emit } = await import("@tauri-apps/api/event");
     
-    listen<string>("pdf-update", (event) => {
-      const pdfPath = event.payload;
-      const rootPath = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath ?? "preview";
-      void this.loadPdfPath(pdfPath, rootPath);
+    listen<string | PdfUpdatePayload>("pdf-update", (event) => {
+      const fallbackIdentity = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath ?? "preview";
+      const update = typeof event.payload === "string"
+        ? {
+            path: event.payload,
+            identity: fallbackIdentity,
+            sessionKey: fallbackIdentity,
+            surface: "live" as const
+          }
+        : event.payload;
+      void this.loadPdfPath(update.path, update.identity, update.sessionKey, update.surface);
     });
 
     listen<{ page_no: number; x: number; y: number }>("pdf-forward-sync", (event) => {
@@ -3632,7 +3651,12 @@ export class TypsastraWorkspaceController {
         this.performanceDiagnostics.record({ name: "memory.heap", bytes: memory.usedJSHeapSize });
       }
       import("@tauri-apps/api/event").then(({ emit }) => {
-        emit("pdf-update", pdfPath);
+        emit("pdf-update", {
+          path: pdfPath,
+          identity: previewPath,
+          sessionKey: this.previewSessionKey ?? previewPath,
+          surface: "live"
+        } satisfies PdfUpdatePayload);
       }).catch(err => console.error("Error emitting pdf-update", err));
     } catch (error) {
       if (this.typographyFontUpdateInProgress) {
@@ -3770,15 +3794,33 @@ export class TypsastraWorkspaceController {
     return result.generatedEntryFile;
   }
 
-  private async loadPdfPath(path: string, identity: string, sessionKey = identity): Promise<number> {
+  private async loadPdfPath(
+    path: string,
+    identity: string,
+    sessionKey = identity,
+    surface: PreviewSurface = isTypstDocumentPath(identity) ? "live" : "pdf"
+  ): Promise<number> {
+    const pathKey = filePathKey(path);
+    if (this.blockedLargePdfPaths.has(pathKey)) return 0;
+    const requestGeneration = ++this.pdfLoadRequestGeneration;
     const response = await invoke<ArrayBuffer | Uint8Array | number[]>("read_binary_file", { path });
+    if (
+      requestGeneration !== this.pdfLoadRequestGeneration
+      || this.blockedLargePdfPaths.has(pathKey)
+    ) return 0;
     const bytes = response instanceof Uint8Array
       ? response
       : response instanceof ArrayBuffer
         ? new Uint8Array(response)
         : new Uint8Array(response);
     const byteLength = bytes.byteLength;
-    await this.previewFrame.loadPdfBytes(bytes, identity, sessionKey);
+    await this.previewFrame.loadPdfBytes(bytes, identity, sessionKey, surface);
+    if (this.previewFrame.currentUrl === identity) {
+      this.lastPdfPath = path;
+      this.lastPdfIdentity = identity;
+      this.lastPdfSessionKey = sessionKey;
+      this.lastPdfSurface = surface;
+    }
     return byteLength;
   }
 
@@ -4687,6 +4729,14 @@ export class TypsastraWorkspaceController {
       }).catch(err => console.error("Error emitting pdf-click", err));
       return;
     }
+    if (!this.activeFilePath || !isTypstDocumentPath(this.activeFilePath)) {
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "preview iframe",
+        message: "Ignored source-sync click because the active preview is a direct PDF document."
+      });
+      return;
+    }
     if (this.externalPreviewRefreshPending) {
       this.appendDeveloperLog({
         kind: "info",
@@ -5160,6 +5210,16 @@ export class TypsastraWorkspaceController {
 
   private reportPreviewInteractionStatus(status: PreviewInteractionStatus): void {
     if (!this.settingsController.value.developerMode) return;
+    if (!this.activeFilePath || !isTypstDocumentPath(this.activeFilePath)) {
+      if (status.kind === "installed") {
+        this.appendDeveloperLog({
+          kind: "info",
+          source: "preview iframe",
+          message: `PDF interaction listener installed for ${status.url}; source synchronization is disabled for direct PDF documents.`
+        });
+      }
+      return;
+    }
     if (status.kind === "debug") {
       this.appendDeveloperLog({
         kind: "info",
@@ -6342,6 +6402,22 @@ export class TypsastraWorkspaceController {
     if (imageViewerImg) imageViewerImg.style.display = "none";
     document.getElementById("wysiwym-editor-pane")?.classList.add("hidden");
 
+    if (notice.kind === "pdf") {
+      // A guarded PDF owns the preview pane as soon as its tab is selected.
+      // Leaving the previous compiler preview mounted makes it appear that the
+      // unopened PDF is already visible and allows an in-flight Typst render
+      // to repaint the stale document behind the confirmation.
+      this.blockedLargePdfPaths.add(filePathKey(path));
+      this.pdfLoadRequestGeneration += 1;
+      this.invalidatePreviewWork(`waiting for confirmation to open ${path}`);
+      this.previewFrame.setMessage(
+        `<div class="preview-disabled-placeholder">` +
+        `<div class="preview-disabled-title">Large PDF Preview Paused</div>` +
+        `<div class="preview-disabled-msg">Confirm opening this file in the editor pane before Typsastra decodes and renders it.</div>` +
+        `</div>`
+      );
+    }
+
     if (info) {
       const placeholder = document.createElement("div");
       placeholder.className = "preview-disabled-placeholder editor-file-placeholder";
@@ -6384,8 +6460,14 @@ export class TypsastraWorkspaceController {
       confirmButton.addEventListener("click", () => {
         confirmButton.disabled = true;
         confirmButton.textContent = "Opening…";
+        if (notice.kind === "pdf") {
+          this.blockedLargePdfPaths.delete(filePathKey(path));
+        }
         void this.activateEditorTab(path, false, { largeFileConfirmed: true }).catch(error => {
           console.error("Failed to open large file:", error);
+          if (notice.kind === "pdf") {
+            this.blockedLargePdfPaths.add(filePathKey(path));
+          }
           confirmButton.disabled = false;
           confirmButton.textContent = confirmLabel;
           void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
@@ -7323,6 +7405,9 @@ export class TypsastraWorkspaceController {
     this.pdfSyncSocketUrl = "";
     this.externalPreviewRefreshPending = false;
     this.lastPdfPath = "";
+    this.lastPdfIdentity = "";
+    this.lastPdfSessionKey = "";
+    this.lastPdfSurface = "live";
     this.imageZoomIn = null;
     this.imageZoomOut = null;
     this.imageZoomToFit = null;
@@ -7367,7 +7452,12 @@ export class TypsastraWorkspaceController {
     import("@tauri-apps/api/event").then(({ listen, emit }) => {
       listen("preview-window-ready", () => {
         if (this.lastPdfPath) {
-          emit("pdf-update", this.lastPdfPath);
+          emit("pdf-update", {
+            path: this.lastPdfPath,
+            identity: this.lastPdfIdentity || this.pdfPreviewSourceMapRootPath || this.previewRootPath || "preview",
+            sessionKey: this.lastPdfSessionKey || this.previewSessionKey || this.lastPdfIdentity || "preview",
+            surface: this.lastPdfSurface
+          } satisfies PdfUpdatePayload);
         }
       });
       listen<PreviewClickPoint>("pdf-click", (event) => {

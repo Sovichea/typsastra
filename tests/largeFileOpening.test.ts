@@ -68,4 +68,26 @@ describe("large file opening notice", () => {
     expect(formatFileSize(1.5 * 1024 * 1024)).toBe("1.5 MB");
     expect(formatFileSize(100 * 1024 * 1024)).toBe("100 MB");
   });
+
+  test("replaces a stale live preview while a large PDF awaits confirmation", async () => {
+    const controller = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const confirmationStart = controller.indexOf("private showLargeFileConfirmation");
+    const confirmationEnd = controller.indexOf("private async openFileExternally", confirmationStart);
+    const confirmationSource = controller.slice(confirmationStart, confirmationEnd);
+
+    expect(confirmationSource).toContain('if (notice.kind === "pdf")');
+    expect(confirmationSource).toContain("this.blockedLargePdfPaths.add(filePathKey(path))");
+    expect(confirmationSource).toContain("this.pdfLoadRequestGeneration += 1");
+    expect(confirmationSource).toContain("this.invalidatePreviewWork(");
+    expect(confirmationSource).toContain("this.previewFrame.setMessage(");
+    expect(confirmationSource).toContain("Large PDF Preview Paused");
+    expect(confirmationSource).toContain("this.blockedLargePdfPaths.delete(filePathKey(path))");
+
+    const loadStart = controller.indexOf("private async loadPdfPath");
+    const loadEnd = controller.indexOf("private async syncPreparedPreviewDocuments", loadStart);
+    const loadSource = controller.slice(loadStart, loadEnd);
+    expect(loadSource).toContain("if (this.blockedLargePdfPaths.has(pathKey)) return 0");
+    expect(loadSource).toContain("const requestGeneration = ++this.pdfLoadRequestGeneration");
+    expect(loadSource).toContain("this.blockedLargePdfPaths.has(pathKey)");
+  });
 });

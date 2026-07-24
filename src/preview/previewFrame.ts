@@ -14,6 +14,8 @@ export type PreviewPageStatus = {
   pageCount: number;
 };
 
+export type PreviewSurface = "live" | "pdf";
+
 export type PreviewMemorySnapshot = {
   pdfGeneration: number;
   pdfBytes: number;
@@ -292,6 +294,7 @@ export class PreviewFrame {
     source: Uint8Array | ArrayBuffer | Promise<Uint8Array | ArrayBuffer>,
     identity = "compiler-pdf",
     sessionKey = identity,
+    surface: PreviewSurface = "live",
   ): Promise<void> {
     const startedAt = performance.now();
     const generation = ++this.pdfGeneration;
@@ -306,6 +309,8 @@ export class PreviewFrame {
     if (generation !== this.pdfGeneration) return;
     const iframeDoc = iframe.contentDocument;
     if (!iframeDoc) throw new Error("PDF preview document is unavailable.");
+    iframe.dataset.previewSurface = surface;
+    iframeDoc.documentElement.dataset.previewSurface = surface;
 
     let nextPdfDoc: any = null;
     let nextLoadingTask: { destroy(): Promise<void> } | null = null;
@@ -423,7 +428,8 @@ export class PreviewFrame {
     const iframe = document.createElement("iframe");
     iframe.className = "preview-frame";
     iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
-      :root{--preview-ui-bg:#fcfcfc;--preview-ui-header:#616161;--preview-ui-accent:${TYPSASTRA_GREEN};--scrollbar-track:transparent;--scrollbar-thumb:color-mix(in srgb,var(--preview-ui-header) 62%,var(--preview-ui-bg));--scrollbar-hover:color-mix(in srgb,var(--preview-ui-accent) 72%,var(--preview-ui-header))}
+      :root{--preview-ui-bg:#fcfcfc;--preview-ui-header:#616161;--preview-ui-accent:${TYPSASTRA_GREEN};--preview-surface-bg:#fff;--scrollbar-track:transparent;--scrollbar-thumb:color-mix(in srgb,var(--preview-ui-header) 62%,var(--preview-ui-bg));--scrollbar-hover:color-mix(in srgb,var(--preview-ui-accent) 72%,var(--preview-ui-header))}
+      :root[data-preview-surface="pdf"]{--preview-surface-bg:#b8b8b8}
       @supports not selector(::-webkit-scrollbar){html,body{scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track);scrollbar-width:auto}}
       body::-webkit-scrollbar{width:15px;height:15px}
       body::-webkit-scrollbar-track{background:transparent}
@@ -431,7 +437,7 @@ export class PreviewFrame {
       body::-webkit-scrollbar-thumb:hover,body::-webkit-scrollbar-thumb:active{background:var(--scrollbar-hover);background-clip:padding-box}
       body::-webkit-scrollbar-corner{background:transparent}
       body::-webkit-scrollbar-button{display:none;width:0;height:0}
-      html,body{margin:0;width:100%;height:100%;background:transparent}
+      html,body{margin:0;width:100%;height:100%;background:var(--preview-surface-bg)}
       body{overflow:auto;font-family:sans-serif}
       #viewer-container{box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
       .pdf-page-container{position:relative;box-sizing:border-box;flex:none;margin:0 auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);overflow:hidden}
