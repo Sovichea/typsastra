@@ -75,6 +75,10 @@ Released July 23, 2026.
 
 ## v0.5.3 — portable active-file preview
 
+- Recover the preview source-map connection and any interrupted pane-resize
+  presentation after Windows hibernate or sleep. Continue monitoring this as an
+  intermittent issue because WebView2, GPU-driver, and display-scaling resume
+  timing can still vary between machines and wake cycles.
 - Keep project-opening compilation from competing with UI interaction: reserve
   processor capacity for the WebView, lower compiler priority, batch diagnostic
   rendering, and replace Base64 LSP preview payloads with file-backed raw binary

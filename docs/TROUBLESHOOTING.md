@@ -105,3 +105,26 @@ WEBKIT_DISABLE_DMABUF_RENDERER=1 ./Typsastra_0.5.2_amd64.AppImage
 ```
 
 This is a WebKitGTK rendering workaround. It does not change Typst compilation or the exported PDF and may reduce rendering performance. When reporting the issue, also include `echo "$XDG_SESSION_TYPE"` and the installed `libwebkit2gtk-4.1-0` version where available.
+
+### Windows layout or preview sync is incorrect after waking
+
+Windows hibernate or sleep can invalidate the hidden preview source-map
+WebSocket without a normal closing handshake. If suspension interrupts a pane
+drag, Windows can also omit the final pointer event and leave Typsastra's
+temporary resizing presentation active.
+
+The v0.5.3 development line detects a system-resume gap, clears interrupted
+resize state, restores the editor layout, and rebuilds the source-map
+connection without recompiling an otherwise valid PDF. The specific
+`Connection reset without closing handshake` message is treated as an expected
+suspension disconnect.
+
+This remains an intermittent known issue under monitoring. WebView2,
+GPU-driver, and display-scaling behavior can vary between wake cycles. If the
+problem recurs, include:
+
+- the developer-log entry beginning `Recovered after system resume`;
+- whether the whole interface or only the PDF preview is scaled incorrectly;
+- whether moving or resizing the application window restores the layout;
+- Windows display scaling and whether a monitor was connected or removed;
+- whether forward and inverse synchronization recover afterward.

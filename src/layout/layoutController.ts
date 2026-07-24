@@ -1,5 +1,6 @@
 export class LayoutController {
   private static readonly dragThresholdPx = 4;
+  private readonly interruptResizeCallbacks = new Set<() => void>();
 
   constructor(
     private readonly onLayoutChanged: () => void,
@@ -12,6 +13,17 @@ export class LayoutController {
   public initialize(): void {
     this.initializeResizers();
     this.initializePreviewUndocking();
+  }
+
+  public recoverInterruptedResize(): boolean {
+    const wasResizing = document.body.classList.contains("typsastra-resizing");
+    for (const interrupt of this.interruptResizeCallbacks) interrupt();
+    document.querySelectorAll<HTMLElement>(".resizer.resizing, .horizontal-resizer.resizing")
+      .forEach(resizer => resizer.classList.remove("resizing"));
+    document.body.classList.remove("typsastra-resizing");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    return wasResizing;
   }
 
   public dockPreview(): void {
@@ -165,6 +177,25 @@ export class LayoutController {
       latestPosition = null;
       if (dragging && position) onDrag(position);
     };
+
+    const interrupt = (): void => {
+      if (!pending && !dragging) return;
+      const pointerId = pending?.pointerId;
+      const wasDragging = dragging;
+      pending = null;
+      dragging = false;
+      latestPosition = null;
+      if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+      dragFrame = null;
+      if (pointerId !== undefined && resizer.hasPointerCapture(pointerId)) {
+        resizer.releasePointerCapture(pointerId);
+      }
+      if (wasDragging) {
+        this.endResize(resizer);
+        onEnd();
+      }
+    };
+    this.interruptResizeCallbacks.add(interrupt);
 
     resizer.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;

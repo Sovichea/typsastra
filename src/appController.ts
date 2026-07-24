@@ -88,6 +88,7 @@ import type { ImportedTypsastraProject, TypsastraProjectPreflight } from "./proj
 import { AppUpdateController } from "./appUpdateController";
 import { releaseSummaryForVersion, shouldShowReleaseSummary } from "./releaseNotes";
 import { WebviewStorageController } from "./webviewStorageController";
+import { SystemResumeMonitor } from "./platform/systemResume";
 
 import {
   ensureTypographyTemplateApplication,
@@ -617,6 +618,9 @@ export class TypsastraWorkspaceController {
     || this.toolchainController.isBusy
     || this.appUpdateController.isInstalling
   );
+  private readonly systemResumeMonitor = new SystemResumeMonitor(suspendedMs => {
+    this.recoverAfterSystemResume(suspendedMs);
+  });
   private lspStatus = document.getElementById("lsp-status")!;
   private lspStatusDot = this.lspStatus.querySelector(".status-dot") as HTMLElement;
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
@@ -641,6 +645,7 @@ export class TypsastraWorkspaceController {
     this.timeStartupSync("initialize tab strip", () => this.tabStripController.initialize());
     this.timeStartupSync("bind global events", () => this.bindGlobalEvents());
     this.timeStartupSync("initialize layout", () => this.layoutController.initialize());
+    this.timeStartupSync("monitor system resume", () => this.systemResumeMonitor.start());
     this.timeStartupSync("initialize word wrap label", () => this.initWordWrap());
     this.timeStartupSync("initialize invisibles toggle", () => this.initZwsToggle());
     this.timeStartupSync("initialize settings panel", () => this.settingsController.initializePanel());
@@ -2703,6 +2708,37 @@ export class TypsastraWorkspaceController {
     this.horizontalPaneResizeWaiters.clear();
     this.restoreWordWrapAfterResize();
     this.previewFrame.resumeResizeLayout();
+  }
+
+  private recoverAfterSystemResume(suspendedMs: number): void {
+    const interruptedResize = this.layoutController.recoverInterruptedResize();
+    if (this.horizontalPaneResizeActive) this.endHorizontalPaneResize();
+
+    this.cancelManualForwardSync();
+    this.pdfSourceMapStartup = null;
+    this.pdfSourceMapStartupKey = null;
+    this.pdfSourceMapRetryKey = null;
+    this.pdfSourceMapRetryNotBefore = 0;
+    this.pdfSourceMapFailureCount = 0;
+    this.clearPdfSourceMapDocumentReadiness();
+    this.pdfSyncSocket?.close();
+    this.pdfSyncSocket = null;
+    this.pdfSyncSocketUrl = "";
+
+    this.refreshEditorLayout("system resume");
+    if (
+      this.lspReady
+      && this.previewFrame.currentUrl
+      && this.pdfPreviewGeneration > 0
+      && !this.pdfPreviewRunning
+    ) {
+      this.schedulePdfSourceMapWarmup(this.pdfPreviewGeneration);
+    }
+    this.appendDeveloperLog({
+      kind: "info",
+      source: "workspace",
+      message: `Recovered after system resume (${Math.round(suspendedMs / 1000)}s suspended); interruptedResize=${interruptedResize}.`
+    });
   }
 
   private waitForHorizontalPaneResizeEnd(): Promise<void> {
@@ -7345,6 +7381,7 @@ export class TypsastraWorkspaceController {
     });
 
     window.addEventListener("beforeunload", () => {
+      this.systemResumeMonitor.stop();
       if (this.pdfSyncRegisteredTaskId && this.lspClient) {
         void this.lspClient.stopPreview(this.pdfSyncRegisteredTaskId).catch(() => {});
       }

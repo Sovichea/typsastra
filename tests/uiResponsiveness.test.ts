@@ -33,6 +33,16 @@ describe("UI responsiveness safeguards", () => {
     expect(source).toContain("this.schedulePdfSourceMapWarmup(generation)");
   });
 
+  test("recovers an interrupted pane drag and stale source-map socket after system resume", async () => {
+    const appSource = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const layoutSource = await Bun.file(new URL("../src/layout/layoutController.ts", import.meta.url)).text();
+    expect(appSource).toContain("recoverAfterSystemResume");
+    expect(appSource).toContain("this.layoutController.recoverInterruptedResize()");
+    expect(appSource).toContain('this.refreshEditorLayout("system resume")');
+    expect(layoutSource).toContain("recoverInterruptedResize");
+    expect(layoutSource).toContain('document.body.classList.remove("typsastra-resizing")');
+  });
+
   test("does not sample memory or build an unbounded promise chain for no-op file events", async () => {
     const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
     expect(source).not.toContain('logMemoryDiagnostics("workspace watcher: self-save suppressed")');

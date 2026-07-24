@@ -2794,9 +2794,13 @@ fn is_tinymist_vector_document_message(message: &WsMessage) -> bool {
 
 fn report_preview_ws_proxy_error(direction: &str, error: tokio_tungstenite::tungstenite::Error) {
     use std::io::ErrorKind;
-    use tokio_tungstenite::tungstenite::Error;
+    use tokio_tungstenite::tungstenite::{error::ProtocolError, Error};
 
     let expected_shutdown = matches!(&error, Error::ConnectionClosed | Error::AlreadyClosed)
+        || matches!(
+            &error,
+            Error::Protocol(ProtocolError::ResetWithoutClosingHandshake)
+        )
         || matches!(
             &error,
             Error::Io(io_error)
