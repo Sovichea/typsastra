@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   acceptedExternalChangePaths,
+  excludeManagedWorkspacePaths,
   shouldSuppressWorkspaceSelfSave,
   workspaceChangeKind
 } from "../src/workspace/workspaceWatcher";
@@ -44,6 +45,20 @@ describe("workspace watcher", () => {
     const conflicts = new Set([key(paths[0])]);
     expect(acceptedExternalChangePaths(paths, key, conflicts)).toEqual([
       "C:\\Project\\image.png"
+    ]);
+  });
+
+  test("excludes application-managed preview outputs from workspace changes", () => {
+    const paths = [
+      "C:\\Project\\main.pdf",
+      "C:\\Project\\figure.png",
+      "C:\\Project\\chapter.typ"
+    ];
+    const key = (path: string) => path.replace(/\\/g, "/").toLowerCase();
+    const managed = new Set([key(paths[0])]);
+    expect(excludeManagedWorkspacePaths(paths, key, managed)).toEqual([
+      "C:\\Project\\figure.png",
+      "C:\\Project\\chapter.typ"
     ]);
   });
 });

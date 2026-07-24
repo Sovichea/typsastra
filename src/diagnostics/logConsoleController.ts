@@ -103,6 +103,8 @@ export class LogConsoleController {
   private readonly errorCount = document.getElementById("diagnostic-error-count")!;
   private readonly warningCount = document.getElementById("diagnostic-warning-count")!;
   private readonly tabs = [...document.querySelectorAll<HTMLButtonElement>("[data-log-console-tab]")];
+  private renderFrame: number | null = null;
+  private renderPending = false;
 
   constructor(private readonly onNavigate: (entry: LogConsoleEntryInput) => void | Promise<void>) {}
 
@@ -113,10 +115,10 @@ export class LogConsoleController {
     for (const tab of this.tabs) {
       tab.addEventListener("click", () => {
         this.activeTab = tab.dataset.logConsoleTab as LogConsoleTab;
-        this.render();
+        this.renderNow();
       });
     }
-    this.render();
+    this.renderNow();
     this.setVisible(false);
   }
 
@@ -147,12 +149,12 @@ export class LogConsoleController {
 
     this.diagnostics = Array.from(this.diagnosticsByFile.values()).flat();
     this.logs = this.logs.filter(log => !duplicatesStructuredDiagnostic(log, this.diagnostics));
-    this.render();
+    this.requestRender();
   }
 
   public setSpellcheckIssues(entries: LogConsoleEntryInput[]): void {
     this.spellcheckIssues = entries.map(entry => this.createEntry({ ...entry, channel: "spellcheck" }));
-    this.render();
+    this.requestRender();
   }
 
   public setActiveSpellcheckLocation(filePath: string | null, offset?: number, toOffset?: number): void {
@@ -178,18 +180,18 @@ export class LogConsoleController {
 
     this.logs.unshift(log);
     this.logs = this.logs.slice(0, 100);
-    this.render();
+    this.requestRender();
   }
 
   public clearDiagnostics(): void {
     this.diagnosticsByFile.clear();
     this.diagnostics = [];
-    this.render();
+    this.requestRender();
   }
 
   public clearLogs(): void {
     this.logs = [];
-    this.render();
+    this.requestRender();
   }
 
   public toggle(): void {
@@ -201,13 +203,32 @@ export class LogConsoleController {
     this.console.classList.toggle("hidden", !visible);
     document.getElementById("log-console-resizer")?.classList.toggle("hidden", !visible);
     this.updateCount();
+    if (visible && this.renderPending) this.renderNow();
   }
 
   private createEntry(entry: LogConsoleEntryInput): LogConsoleEntry {
     return { ...entry, id: this.nextEntryId++, timestamp: new Date() };
   }
 
-  private render(): void {
+  private requestRender(): void {
+    this.renderPending = true;
+    this.updateCount();
+    // Compiler messages and diagnostics often arrive in bursts. Rebuilding a
+    // hidden console—or rebuilding a visible one for every message—competes
+    // directly with pointer and keyboard input.
+    if (!this.visible || this.renderFrame !== null) return;
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      if (this.visible && this.renderPending) this.renderNow();
+    });
+  }
+
+  private renderNow(): void {
+    if (this.renderFrame !== null) {
+      cancelAnimationFrame(this.renderFrame);
+      this.renderFrame = null;
+    }
+    this.renderPending = false;
     this.updateCount();
     this.body.replaceChildren();
     for (const tab of this.tabs) {

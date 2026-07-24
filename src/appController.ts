@@ -56,6 +56,7 @@ import { RecentProjectsController, recentProjectShortcutIndex } from "./workspac
 import {
   WorkspaceWatcher,
   acceptedExternalChangePaths,
+  excludeManagedWorkspacePaths,
   shouldSuppressWorkspaceSelfSave,
   type WorkspaceChange
 } from "./workspace/workspaceWatcher";
@@ -319,7 +320,8 @@ export class TypsastraWorkspaceController {
   private readonly preparedPreviewDocumentVersions = new Map<string, number>();
   private lastKhmerRenderPrepState: boolean | undefined = undefined;
   private lastPreviewRenderMode: PreviewRefreshStyle | undefined = undefined;
-  private workspaceChangeQueue: Promise<void> = Promise.resolve();
+  private readonly pendingWorkspaceChanges = new Map<string, WorkspaceChange>();
+  private workspaceChangeDrainRunning = false;
   private projectImportQueue: Promise<void> = Promise.resolve();
   private saveInProgress: Promise<void> | null = null;
   private pdfPreviewGeneration = 0;
@@ -333,11 +335,19 @@ export class TypsastraWorkspaceController {
   private pdfSyncRegisteredTaskId: string | null = null;
   private pdfSourceMapStartupKey: string | null = null;
   private pdfSourceMapStartup: Promise<{ socket: WebSocket; taskId: string } | null> | null = null;
+  private pdfSourceMapRetryKey: string | null = null;
+  private pdfSourceMapRetryNotBefore = 0;
+  private pdfSourceMapFailureCount = 0;
   private pdfSyncSocket: WebSocket | null = null;
   private pdfSyncSocketUrl = "";
   private pdfSyncDocumentReadySocket: WebSocket | null = null;
   private pdfSyncDocumentReadyPromise: Promise<boolean> | null = null;
   private resolvePdfSyncDocumentReady: ((ready: boolean) => void) | null = null;
+  private pdfSourceMapWarmupSocket: WebSocket | null = null;
+  private pdfSourceMapWarmup: Promise<boolean> | null = null;
+  private pdfSourceMapWarmupTimer: number | null = null;
+  private horizontalPaneResizeActive = false;
+  private readonly horizontalPaneResizeWaiters = new Set<() => void>();
   private pdfForwardSyncGeneration = 0;
   private pendingPdfForwardSync: { generation: number; requestedAt: number } | null = null;
   private manualForwardSyncGeneration: number | null = null;
@@ -360,7 +370,7 @@ export class TypsastraWorkspaceController {
   private typographyFontUpdateInProgress = false;
   private exportInProgress = false;
   private deferredTypographyPreviewContents: string | null = null;
-  private lastPdfBase64 = "";
+  private lastPdfPath = "";
   private pdfPreviewFailureAt: number | null = null;
   private memoryDiagnosticSequence = 0;
   private saveMemoryDiagnosticGeneration = 0;
@@ -368,6 +378,8 @@ export class TypsastraWorkspaceController {
   private editorScrollbarPointerActive = false;
   private readonly externalConflictPaths = new Set<string>();
   private externalPreviewRefreshPending = false;
+  private readonly managedPreviewPdfPathKeys = new Set<string>();
+  private tinymistRestartSequence = 0;
   private readonly settingsController = new SettingsController(
     settings => this.applySettingsToRuntime(settings),
     providers => this.handleLanguageProvidersChanged(providers)
@@ -460,11 +472,7 @@ export class TypsastraWorkspaceController {
   private readonly workspaceStateStore = new WorkspaceStateStore();
   private readonly recentProjectsController = new RecentProjectsController(path => this.openWorkspace(path));
   private readonly workspaceWatcher = new WorkspaceWatcher(
-    change => {
-      this.workspaceChangeQueue = this.workspaceChangeQueue
-        .then(() => this.handleWorkspaceChange(change))
-        .catch(error => this.reportWorkspaceWatchError(error));
-    },
+    change => this.enqueueWorkspaceChange(change),
     error => this.reportWorkspaceWatchError(error)
   );
   private readonly editorToolbarController = new EditorToolbarController({
@@ -696,9 +704,9 @@ export class TypsastraWorkspaceController {
     const { listen, emit } = await import("@tauri-apps/api/event");
     
     listen<string>("pdf-update", (event) => {
-      const base64Data = event.payload;
+      const pdfPath = event.payload;
       const rootPath = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath ?? "preview";
-      void this.previewFrame?.loadPdfData(base64Data, rootPath);
+      void this.loadPdfPath(pdfPath, rootPath);
     });
 
     listen<{ page_no: number; x: number; y: number }>("pdf-forward-sync", (event) => {
@@ -2068,9 +2076,11 @@ export class TypsastraWorkspaceController {
   private async loadEditorTabContent(tab: EditorTab): Promise<void> {
     if (tab.contentLoaded) return;
 
-    const contents = (isBinaryImagePath(tab.path) || fileExtension(tab.path) === "pdf")
-      ? await invoke<string>("read_workspace_file_as_base64", { path: tab.path })
-      : normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
+    const contents = fileExtension(tab.path) === "pdf"
+      ? ""
+      : isBinaryImagePath(tab.path)
+        ? await invoke<string>("read_workspace_file_as_base64", { path: tab.path })
+        : normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
     tab.content = contents;
     tab.savedContent = contents;
     tab.contentLoaded = true;
@@ -2174,7 +2184,7 @@ export class TypsastraWorkspaceController {
           if (isBinaryImagePath(path)) {
             this.renderInteractiveImageViewer(tab.content);
           } else if (isPdf) {
-            void this.previewFrame.loadPdfData(tab.content, path);
+            void this.loadPdfPath(path, path);
           } else {
             this.previewFrame.setMessage(
               `<div class="preview-disabled-placeholder">` +
@@ -2461,14 +2471,30 @@ export class TypsastraWorkspaceController {
 
   private restartTinymistSession(statusMessage: string): Promise<void> {
     return this.queueTinymistLifecycle(async () => {
+      const sequence = ++this.tinymistRestartSequence;
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "lsp lifecycle",
+        message: `Tinymist restart ${sequence} requested: ${statusMessage}`
+      });
       this.resetTinymistSessionState();
       this.setLspStatus({ kind: "starting", message: statusMessage });
       if (!this.lspClient) {
         await this.initLsp();
+        this.appendDeveloperLog({
+          kind: "info",
+          source: "lsp lifecycle",
+          message: `Tinymist restart ${sequence} completed through LSP initialization.`
+        });
         return;
       }
       await this.lspClient.restart();
       this.lspReady = true;
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "lsp lifecycle",
+        message: `Tinymist restart ${sequence} completed.`
+      });
     });
   }
 
@@ -2653,13 +2679,22 @@ export class TypsastraWorkspaceController {
   }
 
   private beginHorizontalPaneResize(): void {
+    this.horizontalPaneResizeActive = true;
     this.previewFrame.suspendResizeLayout();
     this.deferWordWrapForResize();
   }
 
   private endHorizontalPaneResize(): void {
+    this.horizontalPaneResizeActive = false;
+    for (const resolve of this.horizontalPaneResizeWaiters) resolve();
+    this.horizontalPaneResizeWaiters.clear();
     this.restoreWordWrapAfterResize();
     this.previewFrame.resumeResizeLayout();
+  }
+
+  private waitForHorizontalPaneResizeEnd(): Promise<void> {
+    if (!this.horizontalPaneResizeActive) return Promise.resolve();
+    return new Promise(resolve => this.horizontalPaneResizeWaiters.add(resolve));
   }
 
   private restoreWordWrapAfterResize(): void {
@@ -3459,12 +3494,35 @@ export class TypsastraWorkspaceController {
           message: `Render generation ${generation}: invalidated ${preparedPaths.length} prepared file(s) and synchronized ${syncedPreparedDocuments} in-memory document(s) in Tinymist.`
         });
       }
-      const pdf = await this.lspClient.exportPdfToMemory(previewPath);
+      // Tinymist normally writes <root>.pdf beside the Typst root. Register
+      // that output before awaiting the RPC because the workspace watcher can
+      // observe the write before Tinymist returns its result.
+      const anticipatedPdfPath = previewPath.replace(/\.typ$/i, ".pdf");
+      const anticipatedPdfPathKey = filePathKey(anticipatedPdfPath);
+      this.managedPreviewPdfPathKeys.add(anticipatedPdfPathKey);
+      const pdfPath = await this.lspClient.exportPdfToFile(previewPath);
+      const actualPdfPathKey = filePathKey(pdfPath);
+      this.managedPreviewPdfPathKeys.add(actualPdfPathKey);
+      if (actualPdfPathKey !== anticipatedPdfPathKey) {
+        // Keep the anticipated path through delayed watcher delivery, but do
+        // not permanently reserve a project PDF that Tinymist did not write.
+        window.setTimeout(() => {
+          if (filePathKey(this.lastPdfPath) !== anticipatedPdfPathKey) {
+            this.managedPreviewPdfPathKeys.delete(anticipatedPdfPathKey);
+          }
+        }, 60_000);
+      }
       this.ensurePreviewPreparationCurrent(preparationRevision);
       this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message: `Render generation ${generation}: Tinymist PDF export complete.` });
+      // Export is native and may finish while the user is dragging a pane.
+      // Do not install a new PDF, query process memory, allocate canvases, or
+      // start the hidden source-map preview behind the resize placeholder.
+      // One completed generation resumes after pointer release.
+      await this.waitForHorizontalPaneResizeEnd();
+      this.ensurePreviewPreparationCurrent(preparationRevision);
       await this.logMemoryDiagnostics(
         `render ${generation}: after Tinymist export`,
-        { exportBase64Chars: pdf.data?.length ?? 0 }
+        { transport: "binary-file" }
       );
       this.performanceDiagnostics.record({
         name: "preview.compile",
@@ -3498,14 +3556,14 @@ export class TypsastraWorkspaceController {
       // Never let optional cursor-sync lifecycle work block PDF presentation.
       this.pdfPreviewSourceMapRootPath = previewPath;
       this.pdfPreviewSourceMapTaskId = sourceMapTaskId;
-      this.lastPdfBase64 = pdf.data!;
-      await this.previewFrame.loadPdfData(pdf.data!, previewPath, this.previewSessionKey ?? previewPath);
+      this.lastPdfPath = pdfPath;
+      await this.loadPdfPath(pdfPath, previewPath, this.previewSessionKey ?? previewPath);
       if (reportRenderStatus) {
         this.setLspStatus({ kind: "preview-ready", message: "Preview ready" });
       }
       this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message: `Render generation ${generation}: PDF presentation complete.` });
-      void this.warmPdfSourceMapSession(generation);
-      await this.logMemoryDiagnostics(`render ${generation}: after PDF cleanup/presentation`);
+      this.schedulePdfSourceMapWarmup(generation);
+      await this.logMemoryDiagnostics(`render ${generation}: after PDF presentation`);
       window.setTimeout(() => {
         void this.logMemoryDiagnostics(`render ${generation}: settled after page rendering`);
       }, 1000);
@@ -3521,7 +3579,7 @@ export class TypsastraWorkspaceController {
         this.performanceDiagnostics.record({ name: "memory.heap", bytes: memory.usedJSHeapSize });
       }
       import("@tauri-apps/api/event").then(({ emit }) => {
-        emit("pdf-update", pdf.data!);
+        emit("pdf-update", pdfPath);
       }).catch(err => console.error("Error emitting pdf-update", err));
     } catch (error) {
       if (this.typographyFontUpdateInProgress) {
@@ -3608,14 +3666,14 @@ export class TypsastraWorkspaceController {
     const rootPath = this.previewStandalone ? (this.previewRootPath ?? this.activeFilePath) : (this.previewMainPath ?? this.previewRootPath ?? this.activeFilePath);
     if (!rootPath) return null;
 
-    const shouldMirror = this.settingsController.value.preview.renderMode === "on-type";
-    if (!shouldMirror || !this.workspaceRootPath) {
-      this.pdfPreviewGeneratedFiles.clear();
-      return rootPath;
-    }
-
+    // Every live preview compiles from Typsastra's private render mirror.
+    // Tinymist normally honors PREVIEW_OUTPUT_PATH, but older or incompatible
+    // versions can fall back to writing beside their compilation root. Keeping
+    // that root under .typsastra guarantees that even the fallback output
+    // cannot create main.pdf or another generated file beside user sources.
+    if (!this.workspaceRootPath) return null;
     const cacheRoot = this.getCacheRootPath();
-    if (!cacheRoot) return rootPath;
+    if (!cacheRoot) return null;
     this.pdfPreviewGeneratedFiles.clear();
     const originalRootPath = this.mapToOriginalPath(rootPath);
     const originalActivePath = this.mapToOriginalPath(this.activeFilePath);
@@ -3657,6 +3715,18 @@ export class TypsastraWorkspaceController {
       this.pdfPreviewGeneratedFiles.set(filePathKey(originalActivePath), activeGenerated);
     }
     return result.generatedEntryFile;
+  }
+
+  private async loadPdfPath(path: string, identity: string, sessionKey = identity): Promise<number> {
+    const response = await invoke<ArrayBuffer | Uint8Array | number[]>("read_binary_file", { path });
+    const bytes = response instanceof Uint8Array
+      ? response
+      : response instanceof ArrayBuffer
+        ? new Uint8Array(response)
+        : new Uint8Array(response);
+    const byteLength = bytes.byteLength;
+    await this.previewFrame.loadPdfBytes(bytes, identity, sessionKey);
+    return byteLength;
   }
 
   private async syncPreparedPreviewDocuments(previewPath: string): Promise<number> {
@@ -4454,10 +4524,18 @@ export class TypsastraWorkspaceController {
     client: TinymistLspClient,
     rootPath: string,
     taskId: string,
-    source: "forward sync" | "inverse sync"
+    source: "forward sync" | "inverse sync",
+    background = false
   ): Promise<{ socket: WebSocket; taskId: string } | null> {
     const sourceMapTaskId = sourceMapPreviewTaskId(taskId);
     const taskKey = `${filePathKey(rootPath)}\u0000${sourceMapTaskId}`;
+    if (
+      background
+      && this.pdfSourceMapRetryKey === taskKey
+      && performance.now() < this.pdfSourceMapRetryNotBefore
+    ) {
+      return null;
+    }
     if (this.pdfSourceMapStartupKey === taskKey && this.pdfSourceMapStartup) {
       return await this.pdfSourceMapStartup;
     }
@@ -4524,7 +4602,12 @@ export class TypsastraWorkspaceController {
 
     const dataPlaneUrl = client.getLatestPreviewDataPlaneUrl();
     const socket = await this.ensurePdfSyncSocket(dataPlaneUrl, source);
-    if (socket) return { socket, taskId: sourceMapTaskId };
+    if (socket) {
+      this.pdfSourceMapRetryKey = null;
+      this.pdfSourceMapRetryNotBefore = 0;
+      this.pdfSourceMapFailureCount = 0;
+      return { socket, taskId: sourceMapTaskId };
+    }
 
     this.appendDeveloperLog({
       kind: "warning",
@@ -4534,6 +4617,12 @@ export class TypsastraWorkspaceController {
     await client.stopPreview(sourceMapTaskId).catch(() => {});
     if (this.pdfSyncRegisteredTaskId === sourceMapTaskId) this.pdfSyncRegisteredTaskId = null;
     if (this.pdfSyncPreviewTaskKey === taskKey) this.pdfSyncPreviewTaskKey = null;
+    this.pdfSourceMapFailureCount = this.pdfSourceMapRetryKey === taskKey
+      ? this.pdfSourceMapFailureCount + 1
+      : 1;
+    this.pdfSourceMapRetryKey = taskKey;
+    this.pdfSourceMapRetryNotBefore = performance.now()
+      + Math.min(60_000, 2_000 * (2 ** Math.min(5, this.pdfSourceMapFailureCount - 1)));
     return null;
   }
 
@@ -4728,7 +4817,7 @@ export class TypsastraWorkspaceController {
     const taskId = this.pdfPreviewSourceMapTaskId ?? this.previewTaskId;
     if (!client || !rootPath || !taskId || !this.lspReady || generation !== this.pdfPreviewGeneration) return;
     const startedAt = performance.now();
-    const session = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "forward sync");
+    const session = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "forward sync", true);
     if (!session || generation !== this.pdfPreviewGeneration) return;
     const activePath = this.activeFilePath;
     const cursor = this.editorInstance?.state.selection.main.head ?? 0;
@@ -4737,29 +4826,34 @@ export class TypsastraWorkspaceController {
       : null;
     if (!target || generation !== this.pdfPreviewGeneration) return;
 
-    // The initial vector frame can be emitted before the data-plane WebSocket
-    // connects. Tinymist has no lightweight readiness command: `current`
-    // serializes the complete vector document. Probe the actual source-map path
-    // instead. Requests made before the compile view exists are harmlessly
-    // dropped; the first returned `jump` proves that mapping is usable.
+    // One position probe is enough to make Tinymist materialize the source map.
+    // Repeated probes are especially expensive for long documents because each
+    // one can schedule another full vector update, even though the native bridge
+    // discards that vector payload. Let a manual sync retry later if this single
+    // background probe does not become ready.
     let ready = this.pdfSyncDocumentReadySocket === session.socket;
-    let probeWaitMs = 250;
-    while (!ready
-      && generation === this.pdfPreviewGeneration
-      && this.pdfSyncSocket === session.socket
-      && performance.now() - startedAt < PDF_SOURCE_MAP_READY_TIMEOUT_MS) {
-      await client.scrollPreview(session.taskId, {
-        event: "panelScrollTo",
-        filepath: nativeFilePath(target.filepath),
-        line: target.line,
-        character: target.character
-      });
-      const remainingMs = PDF_SOURCE_MAP_READY_TIMEOUT_MS - (performance.now() - startedAt);
-      ready = await this.waitForPdfSourceMapDocument(
-        session.socket,
-        Math.max(1, Math.min(probeWaitMs, remainingMs))
-      );
-      probeWaitMs = Math.min(probeWaitMs * 2, 8000);
+    if (!ready && this.pdfSyncSocket === session.socket) {
+      if (this.pdfSourceMapWarmupSocket !== session.socket || !this.pdfSourceMapWarmup) {
+        const socket = session.socket;
+        const warmup = (async () => {
+          await client.scrollPreview(session.taskId, {
+            event: "panelScrollTo",
+            filepath: nativeFilePath(target.filepath),
+            line: target.line,
+            character: target.character
+          });
+          return await this.waitForPdfSourceMapDocument(socket);
+        })();
+        this.pdfSourceMapWarmupSocket = socket;
+        this.pdfSourceMapWarmup = warmup;
+        void warmup.finally(() => {
+          if (this.pdfSourceMapWarmup === warmup) {
+            this.pdfSourceMapWarmup = null;
+            this.pdfSourceMapWarmupSocket = null;
+          }
+        });
+      }
+      ready = await (this.pdfSourceMapWarmup ?? Promise.resolve(false));
     }
     if (generation !== this.pdfPreviewGeneration) return;
     this.appendDeveloperLog({
@@ -4769,6 +4863,24 @@ export class TypsastraWorkspaceController {
         ? `Source-map session warmed after PDF presentation in ${(performance.now() - startedAt).toFixed(1)}ms.`
         : `Source-map session did not become ready within ${PDF_SOURCE_MAP_READY_TIMEOUT_MS}ms.`
     });
+  }
+
+  private schedulePdfSourceMapWarmup(generation: number): void {
+    if (this.pdfSourceMapWarmupTimer !== null) {
+      window.clearTimeout(this.pdfSourceMapWarmupTimer);
+    }
+    const attempt = () => {
+      this.pdfSourceMapWarmupTimer = null;
+      if (generation !== this.pdfPreviewGeneration) return;
+      if (this.horizontalPaneResizeActive || this.pdfPreviewRunning) {
+        this.pdfSourceMapWarmupTimer = window.setTimeout(attempt, 250);
+        return;
+      }
+      void this.warmPdfSourceMapSession(generation);
+    };
+    // PDF presentation and the first visible-page render have priority over
+    // optional cursor-sync preparation.
+    this.pdfSourceMapWarmupTimer = window.setTimeout(attempt, 250);
   }
 
   private waitForPdfSourceMapDocument(
@@ -4803,6 +4915,8 @@ export class TypsastraWorkspaceController {
     this.resolvePdfSyncDocumentReady = null;
     this.pdfSyncDocumentReadyPromise = null;
     this.pdfSyncDocumentReadySocket = null;
+    this.pdfSourceMapWarmup = null;
+    this.pdfSourceMapWarmupSocket = null;
   }
 
   private initializePreviewPageControls(): void {
@@ -5620,15 +5734,29 @@ export class TypsastraWorkspaceController {
     if (!workspaceRoot || filePathKey(change.rootPath) !== filePathKey(workspaceRoot)) return;
 
     // Ignore changes that are only inside the cache (.typsastra) directory to prevent infinite loops and race conditions
-    const externalPaths = change.paths.filter(path => {
+    const nonCachePaths = change.paths.filter(path => {
       const relPath = path.startsWith(workspaceRoot)
         ? path.substring(workspaceRoot.length)
         : path;
       const cleanRel = relPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
       return !cleanRel.startsWith(".typsastra");
     });
+    const externalPaths = excludeManagedWorkspacePaths(
+      nonCachePaths,
+      filePathKey,
+      this.managedPreviewPdfPathKeys
+    );
     
-    if (externalPaths.length === 0) return;
+    if (externalPaths.length === 0) {
+      if (nonCachePaths.length > 0) {
+        this.appendDeveloperLog({
+          kind: "info",
+          source: "workspace",
+          message: `Suppressed ${nonCachePaths.length} application-managed preview PDF change${nonCachePaths.length === 1 ? "" : "s"}.`
+        });
+      }
+      return;
+    }
 
     const openPathKeysBeforeReload = new Set(this.openTabs.map(tab => filePathKey(tab.path)));
 
@@ -5647,10 +5775,9 @@ export class TypsastraWorkspaceController {
     )) {
       this.appendDeveloperLog({
         kind: "info",
-        source: "memory diagnostics",
+        source: "workspace",
         message: "Workspace watcher self-save event suppressed; mirror preparation and duplicate Tinymist invalidation skipped."
       });
-      await this.logMemoryDiagnostics("workspace watcher: self-save suppressed");
       return;
     }
 
@@ -5667,6 +5794,11 @@ export class TypsastraWorkspaceController {
       await this.explorer.loadWorkspace(workspaceRoot);
       return;
     }
+    this.appendDeveloperLog({
+      kind: "info",
+      source: "workspace",
+      message: `Accepted workspace ${change.kind}: ${acceptedPaths.join(", ")}`
+    });
 
     // External edits must use the same ordered path as editor-driven renders.
     // That path rebuilds the mirror and source map, synchronizes Tinymist's
@@ -5696,6 +5828,51 @@ export class TypsastraWorkspaceController {
     } finally {
       this.externalPreviewRefreshPending = false;
       this.updateManualForwardSyncAction();
+    }
+  }
+
+  private enqueueWorkspaceChange(change: WorkspaceChange): void {
+    // Cloud-backed folders may publish the same metadata-only modification
+    // indefinitely. A Promise.then chain retains one closure per event and can
+    // grow without bound while a slower refresh is running. Keep at most one
+    // pending batch per root/kind and merge its paths instead.
+    const batchKey = `${filePathKey(change.rootPath)}\u0000${change.kind}`;
+    // Preserve the old/new pairing of independent rename events. Repeated
+    // notifications for the same rename still collapse to one batch.
+    const key = change.kind === "rename"
+      ? `${batchKey}\u0000${change.paths.map(filePathKey).join("\u0000")}`
+      : batchKey;
+    const pending = this.pendingWorkspaceChanges.get(key);
+    if (pending) {
+      pending.paths = [...new Set([...pending.paths, ...change.paths])];
+    } else {
+      this.pendingWorkspaceChanges.set(key, {
+        rootPath: change.rootPath,
+        kind: change.kind,
+        paths: [...new Set(change.paths)]
+      });
+    }
+    if (!this.workspaceChangeDrainRunning) void this.drainWorkspaceChanges();
+  }
+
+  private async drainWorkspaceChanges(): Promise<void> {
+    if (this.workspaceChangeDrainRunning) return;
+    this.workspaceChangeDrainRunning = true;
+    try {
+      while (this.pendingWorkspaceChanges.size > 0) {
+        const changes = [...this.pendingWorkspaceChanges.values()];
+        this.pendingWorkspaceChanges.clear();
+        for (const change of changes) {
+          try {
+            await this.handleWorkspaceChange(change);
+          } catch (error) {
+            this.reportWorkspaceWatchError(error);
+          }
+        }
+      }
+    } finally {
+      this.workspaceChangeDrainRunning = false;
+      if (this.pendingWorkspaceChanges.size > 0) void this.drainWorkspaceChanges();
     }
   }
 
@@ -5859,7 +6036,7 @@ export class TypsastraWorkspaceController {
         `finalCanvas=${preview.residentFinalCanvases}; mountedCanvas=${preview.residentCanvases} (${mib(preview.canvasPixels * 4)} MiB estimated RGBA)`,
         `fontFaces=${preview.fontFaces}`,
         `activeRenders=${preview.activeRenders}; pdfLoading=${preview.loading}`,
-        `lastPdfBase64=${mib(this.lastPdfBase64.length * 2)} MiB estimated UTF-16`,
+        `lastPdfPath=${this.lastPdfPath || "none"}`,
         `openTabs=${this.openTabs.length}; openDocumentUtf16=${openDocumentChars}; undoDepth=${undoDepth(this.editorInstance.state)}`,
         detailSummary ? `detail: ${detailSummary}` : "",
         `processes: ${processSummary || "unavailable"}`
@@ -5893,10 +6070,16 @@ export class TypsastraWorkspaceController {
         tab.lineCount = undefined;
         continue;
       }
+      if (fileExtension(tab.path) === "pdf") {
+        if (this.activeFilePath && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
+          void this.loadPdfPath(tab.path, tab.path);
+        }
+        continue;
+      }
 
       let contents: string;
       try {
-        contents = (isBinaryImagePath(tab.path) || fileExtension(tab.path) === "pdf")
+        contents = isBinaryImagePath(tab.path)
           ? await invoke<string>("read_workspace_file_as_base64", { path: tab.path })
           : normalizeEditorText(await invoke<string>("read_workspace_file", { path: tab.path }));
       } catch (error) {
@@ -5950,7 +6133,7 @@ export class TypsastraWorkspaceController {
 
     if (fileExtension(tab.path) === "pdf") {
       if (refreshPreview) {
-        void this.previewFrame.loadPdfData(contents, tab.path);
+        void this.loadPdfPath(tab.path, tab.path);
       }
       this.renderEditorTabs();
       return;
@@ -6341,7 +6524,7 @@ export class TypsastraWorkspaceController {
       if (isBinaryImagePath(path)) {
         this.renderInteractiveImageViewer(tab.content);
       } else if (isPdf) {
-        void this.previewFrame.loadPdfData(tab.content, path);
+        void this.loadPdfPath(path, path);
       } else {
         this.previewFrame.setMessage(
           `<div class="preview-disabled-placeholder">` +
@@ -7012,6 +7195,7 @@ export class TypsastraWorkspaceController {
 
     await this.saveWorkspaceState();
     this.workspaceWatcher.stop();
+    this.pendingWorkspaceChanges.clear();
 
     const previewTaskIds = new Set([
       this.previewTaskId,
@@ -7075,6 +7259,7 @@ export class TypsastraWorkspaceController {
     this.pdfPreviewSourceMapRootPath = null;
     this.pdfPreviewSourceMapTaskId = null;
     this.pdfPreviewGeneratedFiles.clear();
+    this.managedPreviewPdfPathKeys.clear();
     this.pdfSyncPreviewTaskKey = null;
     this.pdfSyncRegisteredTaskId = null;
     this.pdfSourceMapStartup = null;
@@ -7084,7 +7269,7 @@ export class TypsastraWorkspaceController {
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = "";
     this.externalPreviewRefreshPending = false;
-    this.lastPdfBase64 = "";
+    this.lastPdfPath = "";
     this.imageZoomIn = null;
     this.imageZoomOut = null;
     this.imageZoomToFit = null;
@@ -7128,8 +7313,8 @@ export class TypsastraWorkspaceController {
     installModalFocusTrap();
     import("@tauri-apps/api/event").then(({ listen, emit }) => {
       listen("preview-window-ready", () => {
-        if (this.lastPdfBase64) {
-          emit("pdf-update", this.lastPdfBase64);
+        if (this.lastPdfPath) {
+          emit("pdf-update", this.lastPdfPath);
         }
       });
       listen<PreviewClickPoint>("pdf-click", (event) => {
@@ -7355,7 +7540,6 @@ export class TypsastraWorkspaceController {
 
     document.getElementById("action-export-pdf")?.addEventListener("click", async () => {
       if (this.activeFilePath) {
-        this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
         const content = this.editorInstance.state.doc.toString();
         this.exportInProgress = true;
         try {
@@ -7365,6 +7549,34 @@ export class TypsastraWorkspaceController {
           
           if (!rootPath) throw new Error("No export root path available");
 
+          const originalPdfPath = (this.previewStandalone
+            ? this.activeFilePath
+            : (this.previewMainPath ?? this.activeFilePath)).replace(/\.typ$/i, ".pdf");
+          const outputExists = await invoke<boolean>("workspace_path_exists", {
+            path: originalPdfPath
+          }).catch(() => false);
+          const exportAction = await this.appDialogController.show({
+            title: outputExists ? "Replace Exported PDF?" : "Export PDF?",
+            subtitle: fileNameFromPath(originalPdfPath),
+            description: outputExists
+              ? `This will replace the existing PDF at ${originalPdfPath}. Live-preview files remain private under .typsastra/cache.`
+              : `This will create ${originalPdfPath}. Live-preview files remain private under .typsastra/cache.`,
+            actions: [
+              { id: "cancel", label: "Cancel" },
+              {
+                id: "export",
+                label: outputExists ? "Replace PDF" : "Export PDF",
+                primary: true
+              }
+            ],
+            cancelAction: "cancel"
+          });
+          if (exportAction !== "export") {
+            this.setLspStatus({ kind: "preview-ready", message: "PDF export cancelled" });
+            return;
+          }
+
+          this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
           let targetFilePath = rootPath;
           let targetContent = "";
           if (filePathKey(targetFilePath) === filePathKey(this.activeFilePath)) {
@@ -7414,10 +7626,6 @@ export class TypsastraWorkspaceController {
             sourceCode: targetContent,
             filePath: targetFilePath
           });
-
-          const originalPdfPath = (this.previewStandalone
-            ? this.activeFilePath
-            : (this.previewMainPath ?? this.activeFilePath)).replace(/\.typ$/, ".pdf");
           
           await invoke("copy_workspace_file", { source: pdfPath, dest: originalPdfPath });
           await invoke("move_to_trash", { path: pdfPath });

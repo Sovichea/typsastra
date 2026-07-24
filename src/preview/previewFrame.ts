@@ -86,6 +86,7 @@ export class PreviewFrame {
   private resizeLayoutSuspended = false;
   private resizeLayoutPending = false;
   private resizeScrollAnchor: ScrollAnchor | null = null;
+  private pdfCleanupQueue: Promise<void> = Promise.resolve();
   private lastInteractionStatusKey = "";
   private pdfJsPromise: Promise<PdfJsModule> | null = null;
   private pdfWorker: { destroyed?: boolean; destroy(): void } | null = null;
@@ -287,7 +288,11 @@ export class PreviewFrame {
     }
   }
 
-  public async loadPdfData(base64Data: string, identity = "compiler-pdf", sessionKey = identity): Promise<void> {
+  public async loadPdfBytes(
+    source: Uint8Array | ArrayBuffer | Promise<Uint8Array | ArrayBuffer>,
+    identity = "compiler-pdf",
+    sessionKey = identity,
+  ): Promise<void> {
     const startedAt = performance.now();
     const generation = ++this.pdfGeneration;
     const obsoleteLoadingTask = this.pendingPdfLoadingTask;
@@ -310,7 +315,9 @@ export class PreviewFrame {
       if (!this.pdfWorker || this.pdfWorker.destroyed) {
         this.pdfWorker = pdfjs.PDFWorker.create({ name: "typsastra-preview" });
       }
-      const bytes = decodeBase64(base64Data);
+      const resolved = await source;
+      if (generation !== this.pdfGeneration) return;
+      const bytes = resolved instanceof Uint8Array ? resolved : new Uint8Array(resolved);
       const pdfByteLength = bytes.byteLength;
       const loadingTask = pdfjs.getDocument({
         data: bytes,
@@ -376,10 +383,10 @@ export class PreviewFrame {
           pdfBytes: pdfByteLength
         }
       });
-      // The old page remains visible while the replacement is prepared, then
-      // release its document resources before this generation completes. The
-      // worker itself is shared and remains available for the next refresh.
-      await cleanupPdfResources(oldPdfDoc, oldLoadingTask);
+      // The replacement is already installed. Release the previous PDF during
+      // browser idle time so resource disposal and GC do not contend with a
+      // pane drag or the first interaction with the new preview.
+      this.schedulePdfResourceCleanup(oldPdfDoc, oldLoadingTask);
     } catch (error) {
       if (generation !== this.pdfGeneration) return;
       this.setError("PDF Loading Failed", String(error));
@@ -995,6 +1002,20 @@ export class PreviewFrame {
     this.jumpToPreviewOffset(slot.offsetTop, normalizedPage);
   }
 
+  private schedulePdfResourceCleanup(
+    pdfDoc: any,
+    loadingTask: { destroy(): Promise<void> } | null,
+  ): void {
+    if (!pdfDoc && !loadingTask) return;
+    this.pdfCleanupQueue = this.pdfCleanupQueue
+      .catch(() => {})
+      .then(async () => {
+        await waitForUiIdle();
+        while (this.resizeLayoutSuspended) await delay(32);
+        await cleanupPdfResources(pdfDoc, loadingTask);
+      });
+  }
+
   public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<void> {
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
@@ -1381,19 +1402,6 @@ export class PreviewFrame {
 
 }
 
-function decodeBase64(value: string): Uint8Array {
-  if (value.startsWith("data:")) {
-    const comma = value.indexOf(",");
-    if (comma >= 0) {
-      value = value.slice(comma + 1);
-    }
-  }
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
 async function readInitialPdfPageDimensions(pdfDoc: any): Promise<Map<number, PageDimensions>> {
   const dimensions = new Map<number, PageDimensions>();
   if (pdfDoc.numPages < 1) return dimensions;
@@ -1409,6 +1417,16 @@ async function readInitialPdfPageDimensions(pdfDoc: any): Promise<Map<number, Pa
 
 function nextTurn(): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, 0));
+}
+
+function waitForUiIdle(): Promise<void> {
+  return new Promise(resolve => {
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => resolve(), { timeout: 750 });
+    } else {
+      window.setTimeout(resolve, 50);
+    }
+  });
 }
 
 async function cleanupPdfResources(

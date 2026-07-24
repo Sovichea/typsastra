@@ -17,6 +17,8 @@ export type TinymistPdfExport = {
   data: string | null;
 };
 
+const PREVIEW_OUTPUT_PATH = "$root/.typsastra/cache/preview/$dir/$name";
+
 export type LspStatusKind = "starting" | "running" | "initializing" | "ready" | "preview-starting" | "preview-ready" | "sync-pending" | "syncing" | "stopped" | "error";
 
 export type LspStatus = {
@@ -437,12 +439,14 @@ export class TinymistLspClient {
           exportPdf: "never",
           exportSvg: "never",
           exportPng: "never",
+          outputPath: PREVIEW_OUTPUT_PATH,
           formatterMode: "typstyle",
           preview: { background: { enabled: false } },
           tinymist: {
             exportPdf: "never",
             exportSvg: "never",
             exportPng: "never",
+            outputPath: PREVIEW_OUTPUT_PATH,
             formatterMode: "typstyle",
             preview: { background: { enabled: false } }
           }
@@ -520,13 +524,13 @@ export class TinymistLspClient {
     }, 5000);
   }
 
-  public async exportPdfToMemory(path: string): Promise<TinymistPdfExport> {
+  public async exportPdfToFile(path: string): Promise<string> {
     const result = await this.request<TinymistPdfExport | null>("workspace/executeCommand", {
       command: "tinymist.exportPdf",
-      arguments: [path, {}, { write: false, open: false }]
+      arguments: [path, {}, { write: true, open: false }]
     }, 30000);
-    if (!result?.data) throw new Error("Tinymist returned no PDF preview data.");
-    return result;
+    if (!result?.path) throw new Error("Tinymist returned no PDF preview path.");
+    return result.path;
   }
 
   public notifyTextChange(uri: string, text: string, version: number): Promise<void> {
@@ -725,7 +729,14 @@ export class TinymistLspClient {
             if (section === "tinymist.exportSvg") return "never";
             if (section === "tinymist.exportPng") return "never";
             if (section === "tinymist.formatterMode") return "typstyle";
-            if (section === "tinymist") return { exportPdf: "never", exportSvg: "never", exportPng: "never", formatterMode: "typstyle" };
+            if (section === "tinymist.outputPath") return PREVIEW_OUTPUT_PATH;
+            if (section === "tinymist") return {
+              exportPdf: "never",
+              exportSvg: "never",
+              exportPng: "never",
+              formatterMode: "typstyle",
+              outputPath: PREVIEW_OUTPUT_PATH,
+            };
             return null;
         });
 

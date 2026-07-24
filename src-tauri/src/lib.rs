@@ -212,6 +212,60 @@ async fn install_unicode_font(font_id: String) -> Result<font_store::InstalledFo
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+fn background_compiler_worker_limit(available: usize) -> Option<usize> {
+    (available > 2).then_some(available - 1)
+}
+
+fn configure_background_compiler(command: &mut tokio::process::Command) {
+    if let Ok(available) = std::thread::available_parallelism() {
+        if let Some(limit) = background_compiler_worker_limit(available.get()) {
+            // Typst uses Rayon for parallel compilation. Reserve one logical
+            // processor for the WebView compositor and input thread.
+            command.env("RAYON_NUM_THREADS", limit.to_string());
+        }
+    }
+}
+
+#[cfg(windows)]
+fn lower_background_process_priority(pid: u32) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, SetPriorityClass, BELOW_NORMAL_PRIORITY_CLASS, PROCESS_SET_INFORMATION,
+    };
+
+    let process = unsafe { OpenProcess(PROCESS_SET_INFORMATION, 0, pid) };
+    if process.is_null() {
+        return;
+    }
+    unsafe {
+        SetPriorityClass(process, BELOW_NORMAL_PRIORITY_CLASS);
+        CloseHandle(process);
+    }
+}
+
+#[cfg(unix)]
+fn lower_background_process_priority(pid: u32) {
+    unsafe {
+        libc::setpriority(libc::PRIO_PROCESS, pid, 5);
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn lower_background_process_priority(_pid: u32) {}
+
+#[cfg(test)]
+mod background_compiler_tests {
+    use super::background_compiler_worker_limit;
+
+    #[test]
+    fn reserves_one_logical_processor_without_throttling_small_devices() {
+        assert_eq!(background_compiler_worker_limit(1), None);
+        assert_eq!(background_compiler_worker_limit(2), None);
+        assert_eq!(background_compiler_worker_limit(4), Some(3));
+        assert_eq!(background_compiler_worker_limit(16), Some(15));
+    }
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SettingsFilePayload {
@@ -500,6 +554,12 @@ mod workspace_metadata_tests {
 #[tauri::command]
 fn read_workspace_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+fn read_binary_file(path: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = std::fs::read(&path).map_err(|error| format!("Failed to read file: {error}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 #[tauri::command]
@@ -2504,6 +2564,7 @@ async fn start_tinymist_lsp(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
+    configure_background_compiler(&mut command);
 
     #[cfg(windows)]
     {
@@ -2513,6 +2574,9 @@ async fn start_tinymist_lsp(
     let mut child = command
         .spawn()
         .map_err(|e| format!("Failed to spawn LSP: {}", e))?;
+    if let Some(pid) = child.id() {
+        lower_background_process_priority(pid);
+    }
 
     let mut stdout = child.stdout.take().unwrap();
     let mut stdin = child.stdin.take().unwrap();
@@ -2828,7 +2892,7 @@ async fn start_preview_ws_proxy(target_url: String) -> Result<String, String> {
         {
             Ok((socket, _response)) => socket,
             Err(error) => {
-                eprintln!("Preview WebSocket proxy upstream handshake failed: {error}");
+                report_preview_ws_proxy_error("upstream handshake", error);
                 return;
             }
         };
@@ -3268,6 +3332,7 @@ pub fn run() {
             compile_typst_document,
             check_typst_document,
             read_workspace_file,
+            read_binary_file,
             read_workspace_text_prefix,
             workspace_file_size,
             workspace_text_line_count,

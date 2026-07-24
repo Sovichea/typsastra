@@ -46,7 +46,7 @@ Invalid or missing fields fall back to bounded defaults. Existing theme and word
 
 Workspace-specific state lives under the project’s `.typsastra/` directory. `config.json` is portable and stores project identity, the relative main document, and the recommended toolchain. `workspace.json` stores the local editing session using relative paths, including tabs, cursor/scroll/fold state, explorer expansion, layout, sidebar visibility, and the selected toolchain override. The session file and preview cache are ignored by the managed `.gitignore`; `config.json` may be committed. Generated fonts never reside in this directory. `.typsastra/project.json` remains reserved for the signed Typsastra project-archive manifest.
 
-Typsastra project exports include `config.json` and `workspace.json` only from this directory. Render caches, generated PDFs, maps, generated fonts, and other internal metadata are never exported. Font binaries are excluded everywhere in project and source ZIP exports regardless of location or license; recipients install required fonts separately.
+Typsastra project exports include `config.json` and `workspace.json` only from this directory. Every live-preview mirror, generated preview PDF, source map, and temporary compiler artifact is confined to `.typsastra/cache`; none is created beside user sources. A user-facing PDF is written into the workspace only after explicit confirmation through **Export PDF**. Render caches, generated PDFs, maps, generated fonts, and other internal metadata are never included in project exports. Font binaries are excluded everywhere in project and source ZIP exports regardless of location or license; recipients install required fonts separately.
 
 ## Toolchain
 
@@ -56,7 +56,9 @@ The Toolchain panel installs stable Tinymist releases and shows each release's e
 
 `renderMode` accepts `"on-type"` and `"on-save"`. On-type keeps editor changes
 in memory and starts a PDF update after `syncDebounceMs`; on-save updates only
-after a successful save. Use on-save for long or resource-intensive documents.
+after a successful save. Both modes compile from a private mirror under
+`.typsastra/cache`, so live preview never creates `main.pdf` beside the source.
+Use on-save for long or resource-intensive documents.
 Imported files continue to preview through their configured main document. The
 former standalone-preview directive remains disabled; its portable replacement
 is planned for v0.5.3 and hardened in v1.x.

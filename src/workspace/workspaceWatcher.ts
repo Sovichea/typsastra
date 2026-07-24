@@ -25,6 +25,14 @@ export function acceptedExternalChangePaths(
   return paths.filter(path => !conflictPathKeys.has(pathKey(path)));
 }
 
+export function excludeManagedWorkspacePaths(
+  paths: readonly string[],
+  pathKey: (path: string) => string,
+  managedPathKeys: ReadonlySet<string>
+): string[] {
+  return paths.filter(path => !managedPathKeys.has(pathKey(path)));
+}
+
 export function workspaceChangeKind(type: WatchEventKind): WorkspaceChangeKind | null {
   if (typeof type === "string") return null;
   if ("create" in type) return "create";

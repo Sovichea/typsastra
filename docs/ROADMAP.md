@@ -75,6 +75,13 @@ Released July 23, 2026.
 
 ## v0.5.3 — portable active-file preview
 
+- Keep project-opening compilation from competing with UI interaction: reserve
+  processor capacity for the WebView, lower compiler priority, batch diagnostic
+  rendering, and replace Base64 LSP preview payloads with file-backed raw binary
+  IPC.
+- Confine every live-preview source mirror, generated PDF, source map, and
+  temporary compiler artifact to `.typsastra/cache`; require explicit user
+  confirmation before creating or replacing an exported PDF in the workspace.
 - Rebuild externally changed previews through one revision-safe pipeline so
   forward and inverse synchronization cannot retain a stale render-cache task.
 - Filter oversized Tinymist vector frames from the PDF source-map bridge while

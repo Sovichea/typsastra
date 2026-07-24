@@ -25,9 +25,16 @@ the workspace UI appears. PDF compilation may continue asynchronously.
 
 ## Generated data
 
-`.typsastra/cache` and generated font data are disposable. Do not copy, commit,
-or share them. They can be rebuilt from source. Project export retains applicable
-workspace settings but filters generated data.
+All live-preview mirrors, generated PDFs, source maps, and other temporary
+artifacts stay under `.typsastra/cache`. Typsastra does not create generated
+files beside project sources unless the user explicitly confirms an export or
+file operation. Cache content is disposable: do not copy, commit, or share it.
+It can be rebuilt from source, and project export filters it automatically.
+
+The **Export PDF** command is separate from live preview. It asks for
+confirmation before creating or replacing the user-facing PDF in the project.
+Globally cached scaled-font variants remain in Typsastra's application-data
+directory and are never copied into the workspace.
 
 ## Large restored tabs
 
