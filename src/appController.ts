@@ -8,7 +8,7 @@ import { dirname, join } from "@tauri-apps/api/path";
 import { EditorState, type Extension, type Text } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { undo, redo, undoDepth } from "@codemirror/commands";
-import { foldAll, foldEffect, foldedRanges, indentUnit, unfoldAll, unfoldEffect } from "@codemirror/language";
+import { foldAll, foldEffect, foldedRanges, forceParsing, indentUnit, syntaxTreeAvailable, unfoldAll, unfoldEffect } from "@codemirror/language";
 import { closeBrackets, completionStatus } from "@codemirror/autocomplete";
 import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, languageCompartment, showZwsCompartment, showZeroWidthSpaces, visibleIndentationMarkers } from "./editor/extensions";
 import { typstLanguage } from "./editor/typstLanguage";
@@ -2936,6 +2936,21 @@ export class TypsastraWorkspaceController {
 
     path = tab.path;
     const isTypstDocument = isTypstDocumentPath(path);
+    // Large files remain behind their confirmation placeholder while their
+    // editor font policy is prepared. Waiting here prevents CodeMirror from
+    // painting the confirmed document once with its monospace defaults before
+    // the configured text and complex-script fonts become available.
+    const editorFontEffect = this.isInternallySupportedPath(path)
+      && !isBinaryImagePath(path)
+      && fileExtension(path) !== "pdf"
+      ? this.editorFontManager.prepareDocument(tab.content)
+      : null;
+    if (options.largeFileConfirmed && editorFontEffect) {
+      await this.editorFontManager.ready();
+    }
+    const prepareLargeEditorPresentation = Boolean(
+      options.largeFileConfirmed && editorFontEffect && isTypstDocument
+    );
     this.acceptedTypographyScales.set(
       filePathKey(path),
       this.documentTypographyFromText(tab.content)?.fonts.map(font => ({ ...font })) ?? []
@@ -2953,6 +2968,10 @@ export class TypsastraWorkspaceController {
 
       const unsupportedFile = !this.isInternallySupportedPath(path);
       const isPdf = fileExtension(path) === "pdf";
+      codeRenderPane?.classList.toggle(
+        "large-file-editor-preparing",
+        prepareLargeEditorPresentation
+      );
       if (unsupportedFile || isBinaryImagePath(path) || isPdf) {
         codeRenderPane?.classList.add("hidden");
         imageViewerPane?.classList.remove("hidden");
@@ -3036,7 +3055,6 @@ export class TypsastraWorkspaceController {
       // text becomes visible. Updating it later allows one paint with the
       // previous tab's fallback stack, which is especially noticeable for
       // Khmer text.
-      const editorFontEffect = this.editorFontManager.prepareDocument(tab.content);
       this.editorInstance.setState(createTabEditorState({
         doc: tab.content,
         anchor: tab.selectionAnchor,
@@ -3097,9 +3115,24 @@ export class TypsastraWorkspaceController {
       // CodeMirror has just received a completely new EditorState.
       // Give it two layout frames so line geometry, folds and the scroll
       // container are established before restoring the saved position.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(restoreScroll);
-      });
+      if (prepareLargeEditorPresentation) {
+        await nextAnimationFrame();
+        await nextAnimationFrame();
+        restoreScroll();
+      } else {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(restoreScroll);
+        });
+      }
+    }
+
+    if (prepareLargeEditorPresentation) {
+      try {
+        await this.prepareLargeEditorPresentation();
+      } finally {
+        document.getElementById("code-render-pane")
+          ?.classList.remove("large-file-editor-preparing");
+      }
     }
 
     if (path.toLowerCase().endsWith(".typ")) this.diagnosticWaitStartedAt = performance.now();
@@ -3218,6 +3251,33 @@ export class TypsastraWorkspaceController {
     const workspacePath = this.workspaceRootPath;
     this.workspaceServicesDeferredForLargeFile = false;
     void this.startWorkspaceServices(workspacePath);
+  }
+
+  private async prepareLargeEditorPresentation(): Promise<void> {
+    const view = this.editorInstance;
+    view.requestMeasure();
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+
+    // Proportional document fonts are applied through Typst syntax tags. Parse
+    // the actual visible range in short frame-bounded slices while the loading
+    // cover remains mounted, rather than exposing the monospace fallback and
+    // letting CodeMirror recolor it afterward.
+    const deadline = performance.now() + 15_000;
+    while (performance.now() < deadline) {
+      const visibleTo = view.visibleRanges.length > 0
+        ? view.visibleRanges[view.visibleRanges.length - 1].to
+        : view.viewport.to;
+      if (syntaxTreeAvailable(view.state, visibleTo)) break;
+      forceParsing(view, visibleTo, 12);
+      await nextAnimationFrame();
+    }
+
+    // Let the committed syntax tree, highlighting decorations, and loaded font
+    // faces reach one paint before removing the cover.
+    view.requestMeasure();
+    await nextAnimationFrame();
+    await nextAnimationFrame();
   }
 
   private async initLsp(shouldConnect = true) {
@@ -3505,11 +3565,10 @@ export class TypsastraWorkspaceController {
     this.openedDocumentUris.clear();
     this.previewFrame.clear();
     await this.initLsp(status.lspAvailable);
-    const activePath = this.activeFilePath;
-    if (activePath) {
-      this.activeFilePath = null;
-      await this.activateEditorTab(activePath, false);
-    }
+    // Toolchain changes restart Tinymist, not the editor. Reinstalling the
+    // active tab here discarded CodeMirror's syntax tree and briefly rendered
+    // document prose with the monospace fallback while it parsed again.
+    await this.restoreActiveDocumentAfterTinymistRestart();
   }
 
 
@@ -9942,7 +10001,6 @@ export class TypsastraWorkspaceController {
     });
 
     document.getElementById("action-restart-lsp")?.addEventListener("click", async () => {
-      const activePath = this.activeFilePath;
       this.tinymistPreviewRecoveryAttempts = 0;
       this.logConsoleController.clearAllLogs();
       this.previewFrame.clear();
@@ -9953,10 +10011,11 @@ export class TypsastraWorkspaceController {
         this.setLspStatus({ kind: "error", message: `LSP restart failed: ${String(error)}` });
         return;
       }
-      if (activePath && this.openTabs.some(tab => filePathKey(tab.path) === filePathKey(activePath))) {
-        this.activeFilePath = null;
-        await this.activateEditorTab(activePath, false);
-      }
+      // Re-register the existing in-memory document with Tinymist without
+      // replacing CodeMirror's EditorState. The editor parser, selection,
+      // viewport, undo history, and proportional document-font styling are
+      // independent of the LSP lifecycle and must remain intact.
+      await this.restoreActiveDocumentAfterTinymistRestart();
     });
 
     document.getElementById("action-docs-typsastra")?.addEventListener("click", () => {

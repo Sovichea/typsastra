@@ -116,4 +116,27 @@ describe("large file opening notice", () => {
     const servicesSource = controller.slice(servicesStart, servicesEnd);
     expect(servicesSource).toContain("if (this.workspaceServicesDeferredForLargeFile) return");
   });
+
+  test("loads the large document font policy before exposing its editor state", async () => {
+    const controller = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const activationStart = controller.indexOf("private async activateEditorTab");
+    const activationEnd = controller.indexOf("private resumeDeferredWorkspaceServices", activationStart);
+    const activation = controller.slice(activationStart, activationEnd);
+    const prepareFont = activation.indexOf("this.editorFontManager.prepareDocument(tab.content)");
+    const waitForFonts = activation.indexOf("await this.editorFontManager.ready()", prepareFont);
+    const installState = activation.indexOf("this.editorInstance.setState(createTabEditorState", waitForFonts);
+
+    expect(activation).toContain("if (options.largeFileConfirmed && editorFontEffect)");
+    expect(activation).toContain('"large-file-editor-preparing"');
+    expect(activation).toContain("await this.prepareLargeEditorPresentation()");
+    expect(prepareFont).toBeGreaterThan(0);
+    expect(waitForFonts).toBeGreaterThan(prepareFont);
+    expect(installState).toBeGreaterThan(waitForFonts);
+
+    const preparationStart = controller.indexOf("private async prepareLargeEditorPresentation");
+    const preparationEnd = controller.indexOf("private async initLsp", preparationStart);
+    const preparation = controller.slice(preparationStart, preparationEnd);
+    expect(preparation).toContain("syntaxTreeAvailable(view.state, visibleTo)");
+    expect(preparation).toContain("forceParsing(view, visibleTo, 12)");
+  });
 });

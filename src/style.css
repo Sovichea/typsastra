@@ -667,6 +667,23 @@ button.dropdown-item {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+#code-render-pane.large-file-editor-preparing::after {
+  content: "Preparing document fonts and syntax\2026";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 24px;
+  background: var(--ui-bg);
+  color: var(--ui-header-text);
+  font: 600 13px/1.5 var(--font-family-sans);
+  text-align: center;
 }
 
 .editor-tab-strip {

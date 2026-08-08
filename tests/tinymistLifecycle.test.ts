@@ -105,6 +105,23 @@ describe("Tinymist workspace lifecycle", () => {
     expect(restartClear).toBeLessThan(restartCall);
   });
 
+  test("restarts Tinymist without reinstalling the active editor document", async () => {
+    const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const manualRestart = source.indexOf('document.getElementById("action-restart-lsp")');
+    const nextAction = source.indexOf('document.getElementById("action-docs-typsastra")', manualRestart);
+    const restartHandler = source.slice(manualRestart, nextAction);
+    const toolchainChange = source.indexOf("private async handleToolchainChanged");
+    const toolchainChangeEnd = source.indexOf("private async loadFile", toolchainChange);
+    const toolchainHandler = source.slice(toolchainChange, toolchainChangeEnd);
+
+    expect(restartHandler).toContain("await this.restoreActiveDocumentAfterTinymistRestart();");
+    expect(restartHandler).not.toContain("this.activeFilePath = null");
+    expect(restartHandler).not.toContain("activateEditorTab(");
+    expect(toolchainHandler).toContain("await this.restoreActiveDocumentAfterTinymistRestart();");
+    expect(toolchainHandler).not.toContain("this.activeFilePath = null");
+    expect(toolchainHandler).not.toContain("activateEditorTab(");
+  });
+
   test("restarts and requeues a preview interrupted by an unexpected Tinymist stop", async () => {
     const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
     const clientSource = await Bun.file(new URL("../src/compiler/lsp.ts", import.meta.url)).text();
