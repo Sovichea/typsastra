@@ -3,6 +3,9 @@ export const codeEditorFonts = [
 ] as const;
 
 export type CodeEditorFontId = string;
+export type TextEditorFontPreference = string;
+
+export const SAME_AS_CODE_FONT = "same-as-code";
 
 export const unicodeEditorFonts = [
   { id: "mi-sans-arabic", label: "MiSans Arabic", language: "Arabic", fontFamily: "MiSans Arabic", pattern: /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/u, bundled: false },
@@ -75,6 +78,11 @@ export function normalizeCodeEditorFont(value: unknown): CodeEditorFontId {
   return legacyCodeFonts[value] ?? value;
 }
 
+export function normalizeTextEditorFont(value: unknown): TextEditorFontPreference {
+  if (value === SAME_AS_CODE_FONT) return SAME_AS_CODE_FONT;
+  return validFamily(value) ? value : SAME_AS_CODE_FONT;
+}
+
 export function normalizeUnicodeFontPreference(value: unknown): UnicodeFontPreference {
   if (!validFamily(value)) return "auto";
   if (value === "auto" || value === "none") return value;
@@ -97,6 +105,21 @@ export function codeEditorFontStack(id: CodeEditorFontId, unicodeFamilies: reado
     '"Liberation Mono"',
     ...complexScriptFallbackFonts.map(family => family === "sans-serif" ? family : quoteFamily(family)),
     "monospace"
+  ];
+  return [...new Set(families.filter((family): family is string => !!family))].join(", ");
+}
+
+export function textEditorFontStack(
+  preference: TextEditorFontPreference,
+  codeFont: CodeEditorFontId,
+  unicodeFamilies: readonly string[] = []
+): string {
+  if (preference === SAME_AS_CODE_FONT) return codeEditorFontStack(codeFont, unicodeFamilies);
+  const families = [
+    quoteFamily(preference),
+    ...unicodeFamilies.map(quoteFamily),
+    ...complexScriptFallbackFonts.map(family => family === "sans-serif" ? family : quoteFamily(family)),
+    "sans-serif"
   ];
   return [...new Set(families.filter((family): family is string => !!family))].join(", ");
 }

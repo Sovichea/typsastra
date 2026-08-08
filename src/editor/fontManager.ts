@@ -6,8 +6,11 @@ import {
   codeEditorFontStack,
   configuredUnicodeEditorFamilies,
   detectUnicodeEditorFonts,
+  SAME_AS_CODE_FONT,
+  textEditorFontStack,
   unicodeEditorFonts,
   type CodeEditorFontId,
+  type TextEditorFontPreference,
   type UnicodeFontPreference
 } from "./fontCatalog";
 import { editorFontTheme } from "./themes";
@@ -20,6 +23,8 @@ const declinedStorageKey = "typsastra-declined-unicode-fonts";
 
 export class EditorFontManager {
   private codeFont: CodeEditorFontId = "Fira Mono";
+  private textFont: TextEditorFontPreference = SAME_AS_CODE_FONT;
+  private textFontScale = 1.08;
   private unicodePreference: UnicodeFontPreference = "auto";
   private unicodePreferences: Record<string, UnicodeFontPreference> = {};
   private documentText = "";
@@ -58,10 +63,14 @@ export class EditorFontManager {
 
   public configure(
     codeFont: CodeEditorFontId,
+    textFont: TextEditorFontPreference,
+    textFontScale: number,
     unicodeFont: UnicodeFontPreference,
     unicodeFonts: Record<string, UnicodeFontPreference> = {}
   ): void {
     this.codeFont = codeFont;
+    this.textFont = textFont;
+    this.textFontScale = textFontScale;
     this.unicodePreference = unicodeFont;
     this.unicodePreferences = unicodeFonts;
     this.refresh();
@@ -70,6 +79,7 @@ export class EditorFontManager {
   public async ready(): Promise<void> {
     const families = [
       this.codeFont,
+      ...(this.textFont === SAME_AS_CODE_FONT ? [] : [this.textFont]),
       ...this.configuredFamilies()
     ];
   
@@ -236,20 +246,25 @@ export class EditorFontManager {
     dispatchEffect = true
   ): StateEffect<unknown> | null {
     const stack = codeEditorFontStack(this.codeFont, unicodeFamilies);
+    const textStack = textEditorFontStack(this.textFont, this.codeFont, unicodeFamilies);
+    const effectiveTextScale = this.textFont === SAME_AS_CODE_FONT ? 1 : this.textFontScale;
+    const stackKey = `${stack}\n${textStack}\n${effectiveTextScale}`;
     const uiStack = [...new Set(["MiSans Latin", ...unicodeFamilies])]
       .map(family => `"${family.replace(/"/g, '\\"')}"`)
       .join(", ");
     document.documentElement.style.setProperty("--ui-font", uiStack);
     document.documentElement.style.setProperty("--editor-code-font", stack);
+    document.documentElement.style.setProperty("--editor-text-font", textStack);
+    document.documentElement.style.setProperty("--editor-text-size", `${effectiveTextScale}em`);
     document.documentElement.style.setProperty("--editor-unicode-font", unicodeFamilies.length > 0 ? uiStack : "sans-serif");
     const view = this.getEditorView();
     // A caller requesting an effect is about to replace the complete
     // EditorState. The replacement reinstalls the compartment's default font,
     // even when the configured stack itself has not changed, so it must always
     // receive a fresh reconfiguration effect.
-    if (dispatchEffect && this.appliedStack === stack && this.appliedView === view) return null;
-    this.appliedStack = stack;
-    const effect = editorFontCompartment.reconfigure(editorFontTheme(stack));
+    if (dispatchEffect && this.appliedStack === stackKey && this.appliedView === view) return null;
+    this.appliedStack = stackKey;
+    const effect = editorFontCompartment.reconfigure(editorFontTheme(stack, textStack));
     if (dispatchEffect && view) {
       view.dispatch({ effects: effect });
       this.appliedView = view;

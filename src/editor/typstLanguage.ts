@@ -232,6 +232,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
 
     // Skip white space
     if (stream.eatSpace()) {
+      const isLeadingIndentation = stream.start === 0;
       if (state.inCodeExpression && !state.isStatement && state.bracketStack.length <= state.expressionBracketDepth) {
         state.expressionSawWhitespace = true;
       }
@@ -242,9 +243,13 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
           state.inHeading = false;
           return null;
         }
-        return "heading";
+        return "content";
       }
 
+      // Indentation belongs to the editor's structural layout. Keeping it on
+      // the monospace base font preserves stable guide and continuation-column
+      // geometry even when prose uses a proportional font.
+      if (getCurrentMode(state) === "markup" && !isLeadingIndentation) return "content";
       return null;
     }
 
@@ -308,7 +313,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
           return "punctuation";
         }
         if (stream.match(/[^:]+/)) {
-          return "term";
+          return "content term";
         }
       }
 
@@ -368,7 +373,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
       }
 
       // Links/URLs
-      if (stream.match(/https?:\/\/[^\s"'()<>]+/)) return "link";
+      if (stream.match(/https?:\/\/[^\s"'()<>]+/)) return "content link";
 
       // Labels and References
       if (stream.match(/<[\p{L}\p{N}_:-]+>/u)) {

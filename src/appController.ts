@@ -1199,7 +1199,13 @@ export class TypsastraWorkspaceController {
     );
     this.forwardSyncDebounceMs = preview.syncDebounceMs;
     this.configureAutoSave(editor.autoSave, editor.autoSaveIntervalSeconds);
-    this.editorFontManager.configure(editor.codeFont, editor.unicodeFont, editor.unicodeFonts);
+    this.editorFontManager.configure(
+      editor.codeFont,
+      editor.textFont,
+      editor.textFontScale,
+      editor.unicodeFont,
+      editor.unicodeFonts
+    );
     this.spellcheckController.setEnabled(editor.spellcheck);
     this.spellcheckController.setUserDictionary(editor.userDictionary);
     this.spellcheckController.setIgnoredWords(editor.ignoredWords);

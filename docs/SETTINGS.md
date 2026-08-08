@@ -12,6 +12,8 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
   },
   "editor": {
     "codeFont": "Fira Mono",
+    "textFont": "same-as-code",
+    "textFontScale": 1.08,
     "unicodeFont": "auto",
     "spellcheck": true,
     "wordCompletion": true,
@@ -128,6 +130,12 @@ Only MiSans Latin and Fira Mono are bundled. Typsastra installs them in the curr
 Settings enumerates the operating system's fonts:
 
 - The code-font selector contains monospace families.
+- The document-text selector accepts any installed family and applies it only
+  to prose. **Same as code font** preserves the traditional all-monospace
+  editor.
+- **Document text size** adjusts prose from 80–140% of the code-font size. Its
+  default is 108% to compensate for the smaller apparent x-height common in
+  proportional fonts. **Same as code font** always renders at 100%.
 - The Unicode fallback selector accepts any installed family.
 - Automatic detection recommends the matching MiSans family when one exists and a script-specific Noto Sans family otherwise.
 
@@ -160,7 +168,13 @@ variation axes and non-unit scaling remains experimental. See
 
 Typsastra never downloads fonts without confirmation and does not repeat a recommendation the user declines. MiSans downloads and use are subject to Xiaomi's [MiSans license agreement](https://hyperos.mi.com/font/en/download/); Noto fonts use the [SIL Open Font License](https://openfontlicense.org/).
 
-The selected Unicode fallback is also included in Typsastra's own UI font stack for app-rendered text such as search controls, hover popups, and preview status messages.
+The selected Unicode fallback follows both editor stacks: Typst syntax starts
+with the selected monospace code font, while document prose starts with the
+selected text font. Complex-script fallbacks remain available to both. Strings,
+comments, raw blocks, equations, function names, arguments, and punctuation
+remain in the code font. The fallback is also included in Typsastra's own UI
+font stack for app-rendered text such as search controls, hover popups, and
+preview status messages.
 
 The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin family, the complex-script fallback family, or both. **Apply to document** writes a source-preserving fallback stack in a managed `typsastra:typography` block. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typsastra-template.typ` when no editable local template can be identified.
 

@@ -4,6 +4,8 @@ import {
   codeEditorFontStack,
   configuredUnicodeEditorFamilies,
   detectUnicodeEditorFont,
+  SAME_AS_CODE_FONT,
+  textEditorFontStack,
   unicodeEditorFonts
 } from "../src/editor/fontCatalog";
 
@@ -39,6 +41,13 @@ describe("editor font catalog", () => {
 
   test("places an explicit Unicode fallback after the selected code font", () => {
     expect(codeEditorFontStack("Fira Mono", ["MiSans Khmer"]).startsWith('"Fira Mono", "MiSans Khmer"')).toBe(true);
+  });
+
+  test("keeps prose on the code font by default and supports a proportional text font", () => {
+    expect(textEditorFontStack(SAME_AS_CODE_FONT, "Fira Mono", ["MiSans Khmer"]))
+      .toBe(codeEditorFontStack("Fira Mono", ["MiSans Khmer"]));
+    expect(textEditorFontStack("Georgia", "Fira Mono", ["MiSans Khmer"]))
+      .toMatch(/^"Georgia", "MiSans Khmer"/);
   });
 
   test("prepares configured script fonts before the first character is entered", () => {

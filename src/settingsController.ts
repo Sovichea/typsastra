@@ -10,6 +10,7 @@ import {
   type ThemeName
 } from "./settings";
 import {
+  SAME_AS_CODE_FONT,
   unicodeEditorFonts,
   unicodeFontPreferenceOptions,
 } from "./editor/fontCatalog";
@@ -210,6 +211,10 @@ export class SettingsController {
     onChange("settings-font-size", (settings, control) => { settings.appearance.editorFontSize = Number(control.value); });
     onChange("settings-line-height", (settings, control) => { settings.appearance.editorLineHeight = Number(control.value); });
     onChange("settings-code-font", (settings, control) => { settings.editor.codeFont = control.value; });
+    onChange("settings-text-font", (settings, control) => { settings.editor.textFont = control.value; });
+    onChange("settings-text-font-scale", (settings, control) => {
+      settings.editor.textFontScale = Number(control.value) / 100;
+    });
     onChange("settings-unicode-font", (settings, control) => { settings.editor.unicodeFont = control.value; });
     onChange("settings-word-wrap", (settings, control) => { settings.editor.wordWrap = (control as HTMLInputElement).checked; });
     onChange("settings-tab-size", (settings, control) => { settings.editor.tabSize = Number(control.value) as 2 | 4 | 8; });
@@ -336,6 +341,8 @@ export class SettingsController {
     setValue("settings-font-size", String(appearance.editorFontSize));
     setValue("settings-line-height", String(appearance.editorLineHeight));
     setValue("settings-code-font", editor.codeFont);
+    setValue("settings-text-font", editor.textFont);
+    setValue("settings-text-font-scale", String(Math.round(editor.textFontScale * 100)));
     setValue("settings-unicode-font", editor.unicodeFont);
     setValue("settings-tab-size", String(editor.tabSize));
     const effectivePreviewRenderMode = this.workspacePreviewRenderMode ?? preview.renderMode;
@@ -518,10 +525,17 @@ export class SettingsController {
     const codeFamilies = new Set(this.systemFonts.monospace);
     codeFamilies.add(this.settings.editor.codeFont);
     const fallbackFamilies = new Set(this.systemFonts.all);
+    if (this.settings.editor.textFont !== SAME_AS_CODE_FONT) {
+      fallbackFamilies.add(this.settings.editor.textFont);
+    }
     if (this.settings.editor.unicodeFont !== "auto" && this.settings.editor.unicodeFont !== "none") {
       fallbackFamilies.add(this.settings.editor.unicodeFont);
     }
     populate("settings-code-font", [...codeFamilies].sort().map(family => ({ id: family, label: family })));
+    populate("settings-text-font", [
+      { id: SAME_AS_CODE_FONT, label: "Same as code font" },
+      ...[...fallbackFamilies].sort().map(family => ({ id: family, label: family }))
+    ]);
     populate("settings-unicode-font", [
       ...unicodeFontPreferenceOptions,
       ...[...fallbackFamilies].sort().map(family => ({ id: family, label: family }))
@@ -980,6 +994,12 @@ export class SettingsController {
         this.scheduleSave();
       }
       const selectedFallback = this.settings.editor.unicodeFont;
+      const selectedTextFont = this.settings.editor.textFont;
+      if (selectedTextFont !== SAME_AS_CODE_FONT
+        && !this.systemFonts.all.some(family => family.toLocaleLowerCase() === selectedTextFont.toLocaleLowerCase())) {
+        this.settings.editor.textFont = SAME_AS_CODE_FONT;
+        this.scheduleSave();
+      }
       if (selectedFallback !== "auto"
         && selectedFallback !== "none"
         && !this.systemFonts.all.some(family => family.toLocaleLowerCase() === selectedFallback.toLocaleLowerCase())) {

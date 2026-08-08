@@ -29,6 +29,8 @@
 :root {
   --ui-font: 'MiSans Latin';
   --editor-code-font: 'Fira Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  --editor-text-font: var(--editor-code-font);
+  --editor-text-size: 1em;
   --editor-unicode-font: sans-serif;
   --font-family-sans: var(--ui-font), var(--editor-unicode-font), sans-serif;
   --font-family-mono: var(--editor-code-font);

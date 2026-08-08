@@ -39,6 +39,8 @@ export type AppSettings = {
   };
   editor: {
     codeFont: CodeEditorFontId;
+    textFont: TextEditorFontPreference;
+    textFontScale: number;
     unicodeFont: UnicodeFontPreference;
     unicodeFonts: Record<string, UnicodeFontPreference>;
     wordWrap: boolean;
@@ -98,6 +100,8 @@ export const defaultAppSettings: AppSettings = {
   },
   editor: {
     codeFont: "Fira Mono",
+    textFont: SAME_AS_CODE_FONT,
+    textFontScale: 1.08,
     unicodeFont: "auto",
     unicodeFonts: {},
     wordWrap: true,
@@ -261,6 +265,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     },
     editor: {
       codeFont: normalizeCodeEditorFont(editor.codeFont),
+      textFont: normalizeTextEditorFont(editor.textFont),
+      textFontScale: boundedNumber(editor.textFontScale, defaultAppSettings.editor.textFontScale, 0.8, 1.4),
       unicodeFont: normalizeUnicodeFontPreference(editor.unicodeFont),
       unicodeFonts: unicodeFontPreferences(editor.unicodeFonts),
       wordWrap: booleanValue(editor.wordWrap, defaultAppSettings.editor.wordWrap),
@@ -327,7 +333,10 @@ export function cloneDefaultAppSettings(): AppSettings {
 }
 import {
   normalizeCodeEditorFont,
+  normalizeTextEditorFont,
   normalizeUnicodeFontPreference,
+  SAME_AS_CODE_FONT,
   type CodeEditorFontId,
+  type TextEditorFontPreference,
   type UnicodeFontPreference
 } from "./editor/fontCatalog";

@@ -12,6 +12,8 @@ describe("application settings", () => {
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.unicodeFonts).toEqual({});
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
+    expect(settings.editor.textFont).toBe("same-as-code");
+    expect(settings.editor.textFontScale).toBe(1.08);
     expect(settings.editor.spellcheck).toBe(true);
     expect(settings.editor.wordCompletion).toBe(true);
     expect(settings.editor.showZws).toBe(true);
@@ -86,6 +88,14 @@ describe("application settings", () => {
       "mi-sans-khmer": "Noto Sans Khmer",
       "mi-sans-lao": "none"
     });
+  });
+
+  test("keeps a selected proportional document text font", () => {
+    const settings = normalizeAppSettings({ editor: { textFont: "Georgia", textFontScale: 1.12 } });
+    expect(settings.editor.textFont).toBe("Georgia");
+    expect(settings.editor.textFontScale).toBe(1.12);
+    expect(normalizeAppSettings({ editor: { textFont: "" } }).editor.textFont).toBe("same-as-code");
+    expect(normalizeAppSettings({ editor: { textFontScale: 3 } }).editor.textFontScale).toBe(1.4);
   });
 
   test("keeps developer log category selections independently", () => {

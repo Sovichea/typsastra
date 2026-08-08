@@ -6,6 +6,8 @@ import { typstLanguage } from "../src/editor/typstLanguage";
 type ParsedToken = {
   name: string;
   text: string;
+  from: number;
+  to: number;
 };
 
 function parseTokens(doc: string): ParsedToken[] {
@@ -15,11 +17,15 @@ function parseTokens(doc: string): ParsedToken[] {
 
   do {
     if (cursor.name !== "Document") {
-      tokens.push({ name: cursor.name, text: doc.slice(cursor.from, cursor.to) });
+      tokens.push({ name: cursor.name, text: doc.slice(cursor.from, cursor.to), from: cursor.from, to: cursor.to });
     }
   } while (cursor.next());
 
   return tokens;
+}
+
+function tokenAt(tokens: ParsedToken[], position: number): ParsedToken | undefined {
+  return tokens.find(token => token.from <= position && token.to > position);
 }
 
 function tokenName(tokens: ParsedToken[], text: string): string | undefined {
@@ -30,28 +36,56 @@ describe("Typst stream language", () => {
   test("applies heading, strong, and emphasis tags to their content", () => {
     const tokens = parseTokens("= Heading *bold* _italic_");
 
-    expect(tokenName(tokens, "Heading")).toContain("heading");
+    expect(tokenAt(tokens, 3)?.name).toContain("content");
+    expect(tokenAt(tokens, 3)?.name).toContain("heading");
     expect(tokenName(tokens, "bold")).toContain("strong");
+    expect(tokenName(tokens, "bold")).toContain("content");
     expect(tokenName(tokens, "italic")).toContain("emphasis");
+    expect(tokenName(tokens, "italic")).toContain("content");
   });
 
   test("keeps an attached heading label out of the heading style", () => {
     const tokens = parseTokens("= Heading <intro>");
 
-    expect(tokenName(tokens, "= ")).toBe("heading");
-    expect(tokenName(tokens, "Heading")).toContain("heading");
+    expect(tokenAt(tokens, 0)?.name).toBe("heading");
+    expect(tokenAt(tokens, 3)?.name).toContain("content");
+    expect(tokenAt(tokens, 3)?.name).toContain("heading");
     expect(tokenName(tokens, "<intro>")).toBe("label");
   });
 
   test("continues a hash expression across operators and returns to prose", () => {
-    const tokens = parseTokens("#x + y and prose");
+    const doc = "#x + y and prose";
+    const tokens = parseTokens(doc);
 
     expect(tokenName(tokens, "#")).toBe("hashVariable");
     expect(tokenName(tokens, "+")).toBe("operator");
     expect(tokenName(tokens, "x")).toBe("referenceVariable");
     expect(tokenName(tokens, "y")).toBe("referenceVariable");
-    expect(tokenName(tokens, "and")).toBe("content");
-    expect(tokenName(tokens, "prose")).toBe("content");
+    expect(tokenAt(tokens, doc.indexOf("and"))?.name).toBe("content");
+    expect(tokenAt(tokens, doc.indexOf("prose"))?.name).toBe("content");
+  });
+
+  test("classifies prose whitespace, links, and term text as content", () => {
+    const prose = "First second https://typst.app";
+    const proseTokens = parseTokens(prose);
+    expect(tokenAt(proseTokens, prose.indexOf(" "))?.name).toBe("content");
+    expect(tokenAt(proseTokens, prose.indexOf("https"))?.name).toContain("content");
+    expect(tokenAt(proseTokens, prose.indexOf("https"))?.name).toContain("link");
+
+    const term = "/ Technical term: Definition";
+    const termTokens = parseTokens(term);
+    expect(tokenAt(termTokens, term.indexOf("Technical"))?.name).toContain("content");
+    expect(tokenAt(termTokens, term.indexOf("Technical"))?.name).toContain("term");
+  });
+
+  test("keeps leading indentation structural while prose spaces use the text font", () => {
+    const doc = "#block[\n  First second\n]";
+    const tokens = parseTokens(doc);
+    const lineStart = doc.indexOf("  First");
+
+    expect(tokenAt(tokens, lineStart)).toBeUndefined();
+    expect(tokenAt(tokens, lineStart + 1)).toBeUndefined();
+    expect(tokenAt(tokens, doc.indexOf(" ", lineStart + 2))?.name).toBe("content");
   });
 
   test("distinguishes math variables, numbers, and embedded code", () => {

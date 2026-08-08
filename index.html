@@ -2424,6 +2424,31 @@
                                 >
                             </div>
                             <div class="settings-field">
+                                <label for="settings-text-font"
+                                    >Document text font</label
+                                >
+                                <select id="settings-text-font"></select>
+                                <small
+                                    >Used for prose while Typst syntax remains
+                                    in the selected monospace code font.</small
+                                >
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-text-font-scale"
+                                    >Document text size (%)</label
+                                >
+                                <input
+                                    id="settings-text-font-scale"
+                                    type="number"
+                                    min="80"
+                                    max="140"
+                                    step="1"
+                                />
+                                <small
+                                    >Adjusts prose relative to the code font without changing the editor line height.</small
+                                >
+                            </div>
+                            <div class="settings-field">
                                 <label for="settings-unicode-font"
                                     >Default Unicode fallback policy</label
                                 >
