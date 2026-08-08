@@ -323,6 +323,10 @@ The trackable post-release work is in the [v1.x implementation plan](./V1X_IMPLE
 - **v1.3 — Git workflows:** repository status, Unicode-safe diffs, staging, commits, branches, history, and safe conflict handling before remote hosting integration. AI may explain user-selected diffs but cannot perform Git mutations implicitly.
 - **Across v1.x — Khmer workflow:** revisit Khmer project presets, typography, editing, language tools, source navigation, preview/export, and experimental render preparation using representative documents and native-speaker review. Render preparation remains default-off unless it safely outperforms tuned ordinary Typst justification.
 - **Across v1.x — indexed forward sync:** eliminate whole-document source-position scans so exact reveals from included files remain responsive in 500- to 1,500-page projects without loading Tinymist's full vector preview.
+- **Later v1.x — universal selection geometry:** use one visual-line-aware
+  selection height across proportional document text, monospace Typst syntax,
+  and complex-script fallbacks without regressing wrapped, bidirectional, or
+  multi-range selections.
 - **Later v1.x — optional SVG preview research:** reconsider a bounded SVG
   live-preview path only after v1.0, using measured page-count, output-size,
   latency, and memory budgets. PDF preview remains authoritative, and

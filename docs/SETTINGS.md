@@ -176,6 +176,19 @@ remain in the code font. The fallback is also included in Typsastra's own UI
 font stack for app-rendered text such as search controls, hover popups, and
 preview status messages.
 
+### Known limitation: mixed-font selection height
+
+When the source editor uses a proportional document-text font at a different
+scale from the monospace code font, selection rectangles can differ slightly
+in height between prose and Typst syntax. CodeMirror derives selection geometry
+from browser font metrics, while Typsastra's caret follows the editor's fixed
+line height. This is a visual limitation only; it does not change the selected
+text, cursor position, copy and paste behavior, or source synchronization.
+
+A future editor improvement will introduce a visual-line-aware universal
+selection height without breaking wrapped text, bidirectional text,
+complex-script grapheme handling, or multi-range selections.
+
 The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin family, the complex-script fallback family, or both. **Apply to document** writes a source-preserving fallback stack in a managed `typsastra:typography` block. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typsastra-template.typ` when no editable local template can be identified.
 
 Document Typography records one default text font per configured script and can prepare additional explicitly called fonts for the same script at independent scales. Typsastra writes only default text rows as an ordinary ordered Typst fallback stack; list order determines glyph priority, including numbers, punctuation, and fonts whose coverage overlaps another configured script. A **Prepared font only** row remains available by its normal family name, such as `#text(font: "Moul")[...]`, without entering that stack or owning language tools. Strict script-specific font enforcement is deferred for later exploration. Values other than `1.0` use a render-only variant from Typsastra's private global application-data cache and restart Tinymist with only the selected cache directories as font paths. Compiler-embedded fonts remain locked to `1.0` unless the same family is installed locally; manually assigning them another scale produces an error and resets the directive to `1.0` because Typsastra does not extract embedded font files. Matching variants are reused across projects without rescaling, and no font data is stored in `.typsastra`. Typsastra recommends at most 10 cached scale variants per font face and asks before creating another; it never deletes variants automatically. Non-unit scaling is experimental for PDF output because Typst may normalize generated fonts while subsetting them; use `1.0` when dependable PDF export is required. Typsastra does not create script-matching show rules because they break character-level inverse sync, and it does not patch the resulting PDF or make preview differ from export. Raw code keeps Typst's original raw font. See [Document typography](DOCUMENT_TYPOGRAPHY.md).

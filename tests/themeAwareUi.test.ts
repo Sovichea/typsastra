@@ -126,6 +126,15 @@ describe("theme-aware application accents", () => {
     );
   });
 
+  test("anchors line numbers to the first visual line of wrapped text", () => {
+    expect(editorThemes).toMatch(
+      /\.cm-lineNumbers \.cm-gutterElement"[\s\S]*?display:\s*"flex"[\s\S]*?alignItems:\s*"flex-start"/
+    );
+    expect(editorThemes).toMatch(
+      /tag:\s*tags\.content[\s\S]*?fontSize:\s*"var\(--editor-text-size, 1em\) !important"[\s\S]*?lineHeight:\s*"var\(--editor-line-height-px, 23\.8px\) !important"[\s\S]*?position:\s*"relative"[\s\S]*?top:\s*"-0\.08em"/
+    );
+  });
+
   test("does not use the cursor color as a generic UI accent", () => {
     expect(style).not.toMatch(/\.log-console-tab\.active\s*\{[^}]*editor-cursor-color/s);
     expect(style).toMatch(/\.workspace-loading-spinner\s*\{[^}]*var\(--ui-accent-color\)/s);
@@ -189,13 +198,19 @@ describe("theme-aware application accents", () => {
     );
     const selectionLayerTheme = editorThemes.slice(
       editorThemes.indexOf('"& .cm-selectionLayer .cm-selectionBackground"'),
-      editorThemes.indexOf('"& .cm-content .cm-line::selection'),
+      editorThemes.indexOf('".cm-searchMatch-selected"'),
     );
     expect(selectionLayerTheme).toContain(
       'backgroundColor: "var(--ui-word-selection-background, rgba(3, 102, 214, 0.4)) !important"',
     );
     expect(selectionLayerTheme).not.toContain(
       'backgroundColor: "transparent !important"',
+    );
+    expect(editorThemes).toMatch(
+      /\.cm-searchMatch-selected"[\s\S]*?backgroundColor:\s*"transparent !important"[\s\S]*?boxShadow:\s*"none !important"/
+    );
+    expect(editorThemes).toMatch(
+      /\.cm-searchMatch"[\s\S]*?backgroundColor:\s*"var\(--ui-navigation-background\) !important"[\s\S]*?border:\s*"none !important"[\s\S]*?boxShadow:\s*"none !important"/
     );
     expect(editorThemes).not.toContain(".cm-content ::selection");
     expect(editorThemes).not.toContain("ui-word-selection-outline");

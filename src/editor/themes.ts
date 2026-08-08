@@ -37,6 +37,12 @@ export const baseEditorLayoutTheme = EditorView.theme({
   ".cm-gutterElement": {
       lineHeight: "var(--editor-line-height, 1.7) !important"
   },
+  ".cm-lineNumbers .cm-gutterElement": {
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "flex-end",
+      boxSizing: "border-box"
+  },
   ".cm-foldGutter .cm-gutterElement": {
       fontFamily: "var(--font-family-sans) !important ",
       fontSize: "12px !important",
@@ -120,6 +126,18 @@ export const baseEditorLayoutTheme = EditorView.theme({
   },
   "&.cm-focused .cm-selectionLayer .cm-selectionBackground": {
       backgroundColor: "var(--ui-word-selection-focus-background, rgba(3, 102, 214, 0.52)) !important"
+  },
+  ".cm-searchMatch": {
+      backgroundColor: "var(--ui-navigation-background) !important",
+      border: "none !important",
+      outline: "none !important",
+      boxShadow: "none !important"
+  },
+  ".cm-searchMatch-selected": {
+      backgroundColor: "transparent !important",
+      border: "none !important",
+      outline: "none !important",
+      boxShadow: "none !important"
   },
   "& .cm-content .cm-line::selection, & .cm-content .cm-line *::selection": {
       backgroundColor: "transparent !important"
@@ -233,7 +251,10 @@ export const typstFontHighlighting = HighlightStyle.define([
   {
     tag: tags.content,
     fontFamily: "var(--editor-text-font) !important",
-    fontSize: "var(--editor-text-size, 1em) !important"
+    fontSize: "var(--editor-text-size, 1em) !important",
+    lineHeight: "var(--editor-line-height-px, 23.8px) !important",
+    position: "relative",
+    top: "-0.08em"
   },
   { tag: [tags.literal, tags.monospace], fontFamily: "var(--editor-code-font) !important", color: "var(--ui-monospace-color) !important" }
 ]);
