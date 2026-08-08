@@ -215,6 +215,9 @@ export class SettingsController {
     onChange("settings-text-font-scale", (settings, control) => {
       settings.editor.textFontScale = Number(control.value) / 100;
     });
+    onChange("settings-text-font-offset", (settings, control) => {
+      settings.editor.textFontVerticalOffset = Number(control.value) / 100;
+    });
     onChange("settings-unicode-font", (settings, control) => { settings.editor.unicodeFont = control.value; });
     onChange("settings-word-wrap", (settings, control) => { settings.editor.wordWrap = (control as HTMLInputElement).checked; });
     onChange("settings-tab-size", (settings, control) => { settings.editor.tabSize = Number(control.value) as 2 | 4 | 8; });
@@ -343,6 +346,7 @@ export class SettingsController {
     setValue("settings-code-font", editor.codeFont);
     setValue("settings-text-font", editor.textFont);
     setValue("settings-text-font-scale", String(Math.round(editor.textFontScale * 100)));
+    setValue("settings-text-font-offset", String(Math.round(editor.textFontVerticalOffset * 100)));
     setValue("settings-unicode-font", editor.unicodeFont);
     setValue("settings-tab-size", String(editor.tabSize));
     const effectivePreviewRenderMode = this.workspacePreviewRenderMode ?? preview.renderMode;

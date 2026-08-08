@@ -25,6 +25,7 @@ export class EditorFontManager {
   private codeFont: CodeEditorFontId = "Fira Mono";
   private textFont: TextEditorFontPreference = SAME_AS_CODE_FONT;
   private textFontScale = 1.08;
+  private textFontVerticalOffset = 0;
   private unicodePreference: UnicodeFontPreference = "auto";
   private unicodePreferences: Record<string, UnicodeFontPreference> = {};
   private documentText = "";
@@ -65,12 +66,14 @@ export class EditorFontManager {
     codeFont: CodeEditorFontId,
     textFont: TextEditorFontPreference,
     textFontScale: number,
+    textFontVerticalOffset: number,
     unicodeFont: UnicodeFontPreference,
     unicodeFonts: Record<string, UnicodeFontPreference> = {}
   ): void {
     this.codeFont = codeFont;
     this.textFont = textFont;
     this.textFontScale = textFontScale;
+    this.textFontVerticalOffset = textFontVerticalOffset;
     this.unicodePreference = unicodeFont;
     this.unicodePreferences = unicodeFonts;
     this.refresh();
@@ -248,7 +251,8 @@ export class EditorFontManager {
     const stack = codeEditorFontStack(this.codeFont, unicodeFamilies);
     const textStack = textEditorFontStack(this.textFont, this.codeFont, unicodeFamilies);
     const effectiveTextScale = this.textFont === SAME_AS_CODE_FONT ? 1 : this.textFontScale;
-    const stackKey = `${stack}\n${textStack}\n${effectiveTextScale}`;
+    const effectiveTextOffset = this.textFont === SAME_AS_CODE_FONT ? 0 : this.textFontVerticalOffset;
+    const stackKey = `${stack}\n${textStack}\n${effectiveTextScale}\n${effectiveTextOffset}`;
     const uiStack = [...new Set(["MiSans Latin", ...unicodeFamilies])]
       .map(family => `"${family.replace(/"/g, '\\"')}"`)
       .join(", ");
@@ -256,6 +260,7 @@ export class EditorFontManager {
     document.documentElement.style.setProperty("--editor-code-font", stack);
     document.documentElement.style.setProperty("--editor-text-font", textStack);
     document.documentElement.style.setProperty("--editor-text-size", `${effectiveTextScale}em`);
+    document.documentElement.style.setProperty("--editor-text-offset", `${effectiveTextOffset}em`);
     document.documentElement.style.setProperty("--editor-unicode-font", unicodeFamilies.length > 0 ? uiStack : "sans-serif");
     const view = this.getEditorView();
     // A caller requesting an effect is about to replace the complete

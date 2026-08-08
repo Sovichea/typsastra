@@ -254,7 +254,7 @@ export const typstFontHighlighting = HighlightStyle.define([
     fontSize: "var(--editor-text-size, 1em) !important",
     lineHeight: "var(--editor-line-height-px, 23.8px) !important",
     position: "relative",
-    top: "-0.08em"
+    top: "var(--editor-text-offset, 0em)"
   },
   { tag: [tags.literal, tags.monospace], fontFamily: "var(--editor-code-font) !important", color: "var(--ui-monospace-color) !important" }
 ]);

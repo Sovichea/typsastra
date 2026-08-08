@@ -41,6 +41,7 @@ export type AppSettings = {
     codeFont: CodeEditorFontId;
     textFont: TextEditorFontPreference;
     textFontScale: number;
+    textFontVerticalOffset: number;
     unicodeFont: UnicodeFontPreference;
     unicodeFonts: Record<string, UnicodeFontPreference>;
     wordWrap: boolean;
@@ -102,6 +103,7 @@ export const defaultAppSettings: AppSettings = {
     codeFont: "Fira Mono",
     textFont: SAME_AS_CODE_FONT,
     textFontScale: 1.08,
+    textFontVerticalOffset: 0,
     unicodeFont: "auto",
     unicodeFonts: {},
     wordWrap: true,
@@ -267,6 +269,12 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       codeFont: normalizeCodeEditorFont(editor.codeFont),
       textFont: normalizeTextEditorFont(editor.textFont),
       textFontScale: boundedNumber(editor.textFontScale, defaultAppSettings.editor.textFontScale, 0.8, 1.4),
+      textFontVerticalOffset: boundedNumber(
+        editor.textFontVerticalOffset,
+        defaultAppSettings.editor.textFontVerticalOffset,
+        -0.2,
+        0.2,
+      ),
       unicodeFont: normalizeUnicodeFontPreference(editor.unicodeFont),
       unicodeFonts: unicodeFontPreferences(editor.unicodeFonts),
       wordWrap: booleanValue(editor.wordWrap, defaultAppSettings.editor.wordWrap),

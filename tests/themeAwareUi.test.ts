@@ -131,7 +131,7 @@ describe("theme-aware application accents", () => {
       /\.cm-lineNumbers \.cm-gutterElement"[\s\S]*?display:\s*"flex"[\s\S]*?alignItems:\s*"flex-start"/
     );
     expect(editorThemes).toMatch(
-      /tag:\s*tags\.content[\s\S]*?fontSize:\s*"var\(--editor-text-size, 1em\) !important"[\s\S]*?lineHeight:\s*"var\(--editor-line-height-px, 23\.8px\) !important"[\s\S]*?position:\s*"relative"[\s\S]*?top:\s*"-0\.08em"/
+      /tag:\s*tags\.content[\s\S]*?fontSize:\s*"var\(--editor-text-size, 1em\) !important"[\s\S]*?lineHeight:\s*"var\(--editor-line-height-px, 23\.8px\) !important"[\s\S]*?position:\s*"relative"[\s\S]*?top:\s*"var\(--editor-text-offset, 0em\)"/
     );
   });
 

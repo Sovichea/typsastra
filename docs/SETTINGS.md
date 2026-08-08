@@ -14,6 +14,7 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
     "codeFont": "Fira Mono",
     "textFont": "same-as-code",
     "textFontScale": 1.08,
+    "textFontVerticalOffset": 0,
     "unicodeFont": "auto",
     "spellcheck": true,
     "wordCompletion": true,
@@ -175,6 +176,13 @@ comments, raw blocks, equations, function names, arguments, and punctuation
 remain in the code font. The fallback is also included in Typsastra's own UI
 font stack for app-rendered text such as search controls, hover popups, and
 preview status messages.
+
+Document text uses the browser's natural baseline at the default vertical
+offset of `0`. If a proportional font has unusual metrics, **Document text
+vertical offset** provides an optional fine adjustment from `-20%` to `20%` of
+the editor font size. Negative values raise document prose and positive values
+lower it. The adjustment is ignored when Document text font is set to **Same as
+code font**.
 
 ### Known limitation: mixed-font selection height
 

@@ -14,6 +14,7 @@ describe("application settings", () => {
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
     expect(settings.editor.textFont).toBe("same-as-code");
     expect(settings.editor.textFontScale).toBe(1.08);
+    expect(settings.editor.textFontVerticalOffset).toBe(0);
     expect(settings.editor.spellcheck).toBe(true);
     expect(settings.editor.wordCompletion).toBe(true);
     expect(settings.editor.showZws).toBe(true);
@@ -91,11 +92,17 @@ describe("application settings", () => {
   });
 
   test("keeps a selected proportional document text font", () => {
-    const settings = normalizeAppSettings({ editor: { textFont: "Georgia", textFontScale: 1.12 } });
+    const settings = normalizeAppSettings({ editor: {
+      textFont: "Georgia",
+      textFontScale: 1.12,
+      textFontVerticalOffset: -0.06,
+    } });
     expect(settings.editor.textFont).toBe("Georgia");
     expect(settings.editor.textFontScale).toBe(1.12);
+    expect(settings.editor.textFontVerticalOffset).toBe(-0.06);
     expect(normalizeAppSettings({ editor: { textFont: "" } }).editor.textFont).toBe("same-as-code");
     expect(normalizeAppSettings({ editor: { textFontScale: 3 } }).editor.textFontScale).toBe(1.4);
+    expect(normalizeAppSettings({ editor: { textFontVerticalOffset: 1 } }).editor.textFontVerticalOffset).toBe(0.2);
   });
 
   test("keeps developer log category selections independently", () => {

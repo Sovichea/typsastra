@@ -1203,6 +1203,7 @@ export class TypsastraWorkspaceController {
       editor.codeFont,
       editor.textFont,
       editor.textFontScale,
+      editor.textFontVerticalOffset,
       editor.unicodeFont,
       editor.unicodeFonts
     );
