@@ -1,7 +1,8 @@
 import {
-  parseDocumentScripts,
+  parseDocumentLanguages,
   parseTypographyBlock,
   renderTypographyBlock,
+  typographyEdit,
   type DocumentTypography,
   type TypographyEdit
 } from "./documentTypography";
@@ -73,12 +74,16 @@ export function effectiveTemplateTypography(
 ): DocumentTypography | null {
   const templateTypography = parseTypographyBlock(templateText);
   if (!templateTypography) return null;
-  const documentScripts = parseDocumentScripts(mainText);
+  const documentLanguages = parseDocumentLanguages(mainText);
   return {
     baseSizePt: templateTypography.baseSizePt,
-    // The main-file directive owns document language routing and script order.
-    // The template owns the effective text rule, including its base size.
-    fonts: documentScripts.length > 0 ? documentScripts : templateTypography.fonts
+    // The main file owns language routing. The template owns font order and size.
+    fonts: templateTypography.fonts.map((font, index) => ({
+      ...font,
+      language: documentLanguages.find(language => language.script === font.script)?.language
+        ?? documentLanguages[index]?.language
+        ?? null,
+    }))
   };
 }
 
@@ -108,7 +113,6 @@ export function renderTemplateTypographyBlock(config: DocumentTypography): strin
     fonts: config.fonts.map(font => ({ ...font, language: null }))
   };
   return renderTypographyBlock(typographyOnly)
-    .replace("// typsastra:document-scripts ", "// typsastra:script-fonts ")
     .trimEnd()
     .split("\n")
     .map(line => line.startsWith("#") ? `  ${line.slice(1)}` : `  ${line}`)
@@ -138,7 +142,24 @@ export function templateTypographyEdit(
   if (!/(?:^|[,\s])body(?:[,\s]|$)/.test(parameters)) return null;
   const bodyOpening = templateText.indexOf("{", closingParenthesis);
   if (bodyOpening < 0 || !/^\s*=\s*\{/.test(templateText.slice(closingParenthesis + 1, bodyOpening + 1))) return null;
+  const bodyClosing = matchingDelimiter(templateText, bodyOpening, "{", "}");
+  if (bodyClosing < 0) return null;
+  const body = templateText.slice(bodyOpening + 1, bodyClosing);
+  const hashableBody = body.replace(/(^|\n)(\s*)set\s+text\s*\(/, "$1$2#set text(");
+  if (hashableBody !== body) {
+    const edit = typographyEdit(hashableBody, typographyOnlyConfig(config));
+    const updated = `${hashableBody.slice(0, edit.from)}${edit.insert}${hashableBody.slice(edit.to)}`
+      .replace(/(^|\n)(\s*)#set\s+text\s*\(/, "$1$2set text(");
+    return { from: bodyOpening + 1, to: bodyClosing, insert: updated };
+  }
   return { from: bodyOpening + 1, to: bodyOpening + 1, insert: `\n${insert}\n` };
+}
+
+function typographyOnlyConfig(config: DocumentTypography): DocumentTypography {
+  return {
+    ...config,
+    fonts: config.fonts.map(font => ({ ...font, language: null })),
+  };
 }
 
 export function newTypographyTemplate(config: DocumentTypography): string {

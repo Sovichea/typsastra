@@ -8,6 +8,7 @@ pub enum ScaleError {
     InvalidFont,
     MissingHeadTable,
     InvalidScale,
+    MissingNameTable,
 }
 
 impl fmt::Display for ScaleError {
@@ -17,6 +18,7 @@ impl fmt::Display for ScaleError {
             Self::InvalidFont => "invalid or truncated OpenType font",
             Self::MissingHeadTable => "font has no valid head table",
             Self::InvalidScale => "scale must be between 0.5 and 2.0",
+            Self::MissingNameTable => "font has no valid name table",
         };
         formatter.write_str(message)
     }
@@ -115,6 +117,151 @@ pub fn scale_font_uniform(bytes: &[u8], scale: f32) -> Result<Vec<u8>, ScaleErro
     Ok(output)
 }
 
+/// Scale a face and give it a distinct family identity. Prepared variants must
+/// not retain the source family: otherwise font selection collapses multiple
+/// percentages into whichever face the platform font database finds first.
+pub fn scale_and_rename_font(
+    bytes: &[u8],
+    scale: f32,
+    family: &str,
+) -> Result<Vec<u8>, ScaleError> {
+    let scaled = scale_font_uniform(bytes, scale)?;
+    rewrite_name_table(&scaled, family)
+}
+
+fn rewrite_name_table(bytes: &[u8], family: &str) -> Result<Vec<u8>, ScaleError> {
+    let table_count = read_u16(bytes, 4).ok_or(ScaleError::InvalidFont)? as usize;
+    let mut tables = Vec::<([u8; 4], Vec<u8>)>::new();
+    let mut found_name = false;
+    for index in 0..table_count {
+        let record = 12 + index * 16;
+        let tag: [u8; 4] = bytes
+            .get(record..record + 4)
+            .ok_or(ScaleError::InvalidFont)?
+            .try_into()
+            .map_err(|_| ScaleError::InvalidFont)?;
+        let offset = read_u32(bytes, record + 8).ok_or(ScaleError::InvalidFont)? as usize;
+        let length = read_u32(bytes, record + 12).ok_or(ScaleError::InvalidFont)? as usize;
+        let data = bytes
+            .get(offset..offset.checked_add(length).ok_or(ScaleError::InvalidFont)?)
+            .ok_or(ScaleError::InvalidFont)?;
+        let data = if &tag == b"name" {
+            found_name = true;
+            renamed_name_table(data, family)?
+        } else {
+            data.to_vec()
+        };
+        tables.push((tag, data));
+    }
+    if !found_name {
+        return Err(ScaleError::MissingNameTable);
+    }
+
+    let directory_len = 12 + tables.len() * 16;
+    let mut output = vec![0u8; directory_len];
+    output[..12].copy_from_slice(bytes.get(..12).ok_or(ScaleError::InvalidFont)?);
+    let mut cursor = directory_len;
+    let mut head_offset = None;
+    for (index, (tag, data)) in tables.iter().enumerate() {
+        cursor = (cursor + 3) & !3;
+        output.resize(cursor, 0);
+        let offset = cursor;
+        output.extend_from_slice(data);
+        cursor += data.len();
+        let record = 12 + index * 16;
+        output[record..record + 4].copy_from_slice(tag);
+        write_u32(&mut output, record + 4, checksum(data))?;
+        write_u32(&mut output, record + 8, offset as u32)?;
+        write_u32(&mut output, record + 12, data.len() as u32)?;
+        if tag == b"head" {
+            head_offset = Some((record, offset, data.len()));
+        }
+    }
+    output.resize((output.len() + 3) & !3, 0);
+    let (head_record, head, head_len) = head_offset.ok_or(ScaleError::MissingHeadTable)?;
+    write_u32(&mut output, head + 8, 0)?;
+    let head_checksum = checksum(&output[head..head + head_len]);
+    write_u32(&mut output, head_record + 4, head_checksum)?;
+    let adjustment = CHECKSUM_MAGIC.wrapping_sub(checksum(&output));
+    write_u32(&mut output, head + 8, adjustment)?;
+    Ok(output)
+}
+
+fn renamed_name_table(table: &[u8], family: &str) -> Result<Vec<u8>, ScaleError> {
+    let format = read_u16(table, 0).ok_or(ScaleError::MissingNameTable)?;
+    let count = read_u16(table, 2).ok_or(ScaleError::MissingNameTable)? as usize;
+    let storage = read_u16(table, 4).ok_or(ScaleError::MissingNameTable)? as usize;
+    if format > 1 || storage > table.len() || 6 + count * 12 > table.len() {
+        return Err(ScaleError::MissingNameTable);
+    }
+    let mut records = Vec::with_capacity(count);
+    let mut strings = Vec::new();
+    for index in 0..count {
+        let offset = 6 + index * 12;
+        let platform = read_u16(table, offset).ok_or(ScaleError::MissingNameTable)?;
+        let encoding = read_u16(table, offset + 2).ok_or(ScaleError::MissingNameTable)?;
+        let language = read_u16(table, offset + 4).ok_or(ScaleError::MissingNameTable)?;
+        let name_id = read_u16(table, offset + 6).ok_or(ScaleError::MissingNameTable)?;
+        let length = read_u16(table, offset + 8).ok_or(ScaleError::MissingNameTable)? as usize;
+        let old_offset = read_u16(table, offset + 10).ok_or(ScaleError::MissingNameTable)? as usize;
+        let old = table
+            .get(storage + old_offset..storage + old_offset + length)
+            .ok_or(ScaleError::MissingNameTable)?;
+        let replace = matches!(name_id, 1 | 4 | 6 | 16);
+        let value = if replace {
+            encode_name(family, platform, name_id == 6)
+        } else {
+            old.to_vec()
+        };
+        let string_offset = u16::try_from(strings.len()).map_err(|_| ScaleError::InvalidFont)?;
+        let string_length = u16::try_from(value.len()).map_err(|_| ScaleError::InvalidFont)?;
+        strings.extend_from_slice(&value);
+        records.push((
+            platform,
+            encoding,
+            language,
+            name_id,
+            string_length,
+            string_offset,
+        ));
+    }
+    let header_len = 6 + records.len() * 12;
+    let mut output = vec![0u8; header_len];
+    write_u16(&mut output, 0, 0)?; // Drop format-1 language tags; records remain valid.
+    write_u16(&mut output, 2, records.len() as u16)?;
+    write_u16(&mut output, 4, header_len as u16)?;
+    for (index, record) in records.into_iter().enumerate() {
+        let offset = 6 + index * 12;
+        for (field, value) in [record.0, record.1, record.2, record.3, record.4, record.5]
+            .into_iter()
+            .enumerate()
+        {
+            write_u16(&mut output, offset + field * 2, value)?;
+        }
+    }
+    output.extend_from_slice(&strings);
+    Ok(output)
+}
+
+fn encode_name(value: &str, platform: u16, postscript: bool) -> Vec<u8> {
+    let value = if postscript {
+        value
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect::<String>()
+    } else {
+        value.to_string()
+    };
+    if platform == 0 || platform == 3 {
+        value.encode_utf16().flat_map(u16::to_be_bytes).collect()
+    } else {
+        value
+            .bytes()
+            .map(|byte| if byte.is_ascii() { byte } else { b'?' })
+            .collect()
+    }
+}
+
 #[cfg(feature = "wasm")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn scale_font_uniform_wasm(bytes: &[u8], scale: f32) -> Result<Vec<u8>, wasm_bindgen::JsValue> {
@@ -164,5 +311,17 @@ mod tests {
         assert_ne!(scaled, source);
         let face = ttf_parser::Face::parse(&scaled, 0).unwrap();
         assert_eq!(face.units_per_em(), 952);
+    }
+
+    #[test]
+    fn assigns_a_distinct_prepared_family_name() {
+        let source = include_bytes!("../../../src-tauri/fonts/MiSansLatin-Regular.ttf");
+        let scaled = scale_and_rename_font(source, 0.95, "MiSans Latin 95").unwrap();
+        let face = ttf_parser::Face::parse(&scaled, 0).unwrap();
+        assert_eq!(face.units_per_em(), 1053);
+        assert!(face.names().into_iter().any(|name| {
+            name.name_id == ttf_parser::name_id::FAMILY
+                && name.to_string().as_deref() == Some("MiSans Latin 95")
+        }));
     }
 }

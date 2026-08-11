@@ -6,6 +6,6 @@ contracts.
 
 The current contract is documented in
 [Document-script language tools](SCOPE_AWARE_LANGUAGE_TOOLS.md): the configured
-main file's `typsastra:document-scripts` directive assigns at most one language
+main file's `typsastra:document-languages` directive assigns at most one language
 provider to each script. Typst `lang` scopes and operating-system keyboard
 layouts do not reroute spellcheck or word completion.

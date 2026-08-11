@@ -10,7 +10,7 @@ Installation is global, but activation is per document. After installation:
 3. select the provider's language for that script;
 4. apply the configuration to the main document.
 
-The toolbar stores the selection in `typsastra:document-scripts`. A provider
+The toolbar stores the selection in `typsastra:document-languages`. A provider
 that is installed but not assigned does not spellcheck or complete text. A
 script with **Language tools off** is intentionally ignored.
 

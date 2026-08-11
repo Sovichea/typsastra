@@ -315,6 +315,8 @@ export class ImageToolsController {
       this.sidebar.replaceChildren(controls, list, footer);
     }
 
+    if (!controls || !list || !footer || !explorer) return;
+
     const search = controls.querySelector<HTMLInputElement>(".image-tool-search")!;
     const filter = controls.querySelector<HTMLSelectElement>(".image-tool-filter")!;
     search.value = this.query;

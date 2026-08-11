@@ -281,6 +281,9 @@
                     <button type="button" id="sidebar-images-button" class="sidebar-activity-button" title="Images" aria-label="Show Images" aria-pressed="false">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
                     </button>
+                    <button type="button" id="sidebar-fonts-button" class="sidebar-activity-button" title="Font Tools" aria-label="Show Font Tools" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16M7 20 12 4l5 16M9 14h6"/></svg>
+                    </button>
                 </nav>
                 <aside id="explorer-sidebar" aria-label="Project sidebar">
                     <div id="explorer-sidebar-content" class="sidebar-tool-content">
@@ -324,6 +327,10 @@
                     <div id="image-tools-sidebar-content" class="sidebar-tool-content hidden">
                         <div class="sidebar-section-header"><span id="image-tools-sidebar-title">IMAGES</span></div>
                         <div id="image-tools-sidebar" class="sidebar-section-content"></div>
+                    </div>
+                    <div id="font-tools-sidebar-content" class="sidebar-tool-content hidden">
+                        <div class="sidebar-section-header"><span>FONT TOOLS</span></div>
+                        <div id="font-tools-sidebar" class="sidebar-section-content"></div>
                     </div>
                 </aside>
                 <div class="resizer" id="explorer-resizer"></div>
@@ -1676,6 +1683,7 @@
                                 <div id="image-viewer-info" style="margin-top:12px;font-size:12px;font-family:var(--font-family-sans);color:var(--ui-header-text);text-align:center;"></div>
                             </div>
                             <div id="image-tools-inspector" class="image-tools-inspector hidden"></div>
+                            <div id="font-tools-inspector" class="font-tools-inspector hidden"></div>
                         </div>
                         <!-- WYSIWYM editor pane disabled for this release.
                         <div
@@ -1917,6 +1925,7 @@
                         </div>
                         <div id="preview-render-pane"></div>
                         <div id="image-tools-comparison" class="image-tools-comparison hidden"></div>
+                        <div id="font-tools-preview" class="font-tools-preview hidden"></div>
                     </div>
                 </div>
             </div>
@@ -2066,7 +2075,7 @@
                     <div>
                         <h2 id="document-typography-title">Document Typography</h2>
                         <p id="document-typography-description">
-                            Assign fonts, visual scale, and language tools by script.
+                            Choose the document font order and enable language tools by script.
                         </p>
                     </div>
                     <button
@@ -2081,7 +2090,7 @@
                     <section class="document-typography-size" aria-labelledby="document-size-title">
                         <div>
                             <h3 id="document-size-title">Document size</h3>
-                            <p>Every script scale is relative to this shared Typst text size.</p>
+                            <p>This writes an ordinary document-level <code>#set text</code> size.</p>
                         </div>
                         <label class="toolbar-typography-unit-field" for="toolbar-base-size">
                             <input
@@ -2100,14 +2109,13 @@
                         <div class="document-typography-section-header">
                             <div>
                                 <h3 id="document-scripts-title">Document fonts</h3>
-                                <p id="document-scripts-description">Choose one default text font per script, then add independently scaled fonts for explicit use in the document.</p>
+                                <p id="document-scripts-description">Arrange ordinary Typst fallback fonts. Prepared variants from Font Tools appear here after activation.</p>
                             </div>
                             <button id="toolbar-add-script-font" type="button">+ Add font</button>
                         </div>
                         <div class="document-typography-table-header" aria-hidden="true">
                             <span>Order / Script</span>
                             <span>Font</span>
-                            <span>Scale</span>
                             <span>Language tools</span>
                             <span>Status</span>
                             <span></span>
@@ -2147,8 +2155,9 @@
                         <p>
                             Fonts use ordinary Typst fallback order. Earlier fonts may supply numbers, punctuation, or
                             glyphs for another configured script, so arrange the list for the document's dominant typography.
-                            Scale is intended for small visual corrections; values beyond &plusmn;10% may vary between fonts.
-                            Typsastra writes portable Typst font assignments where possible and preserves source synchronization.
+                            Font order controls normal Typst fallback behavior. Language assignments only enable spellcheck and
+                            word completion. Prepare machine-local scaled variants separately in Font Tools; fonts are never
+                            copied into exported projects.
                         </p>
                     </details>
                 </div>

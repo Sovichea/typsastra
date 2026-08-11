@@ -12,6 +12,7 @@ pub struct ScaledFontResult {
     pub scale: f32,
     pub generated_files: Vec<String>,
     pub changed: bool,
+    pub alias: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -68,6 +69,39 @@ pub struct ScaledFontCacheReport {
 
 pub const RECOMMENDED_VARIANTS_PER_FONT_FACE: usize = 10;
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparedFontRequest {
+    pub family: String,
+    pub percent: u16,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparedFontRecord {
+    pub family: String,
+    pub alias: String,
+    pub percent: u16,
+    pub source_status: String,
+    pub active: bool,
+    pub generated_at_ms: Option<u64>,
+}
+
+pub fn prepared_alias(family: &str, percent: u16) -> Result<String, String> {
+    let family = family.trim();
+    if family.is_empty() {
+        return Err("A source font family is required.".into());
+    }
+    if !(50..=200).contains(&percent) {
+        return Err("Prepared font scale must be a whole percent between 50 and 200.".into());
+    }
+    Ok(if percent == 100 {
+        family.to_string()
+    } else {
+        format!("{family} {percent}")
+    })
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceFontSelection {
@@ -80,6 +114,8 @@ struct WorkspaceFontSelection {
 struct ScaledFontManifest {
     version: u32,
     family: String,
+    #[serde(default)]
+    alias: String,
     scale: f32,
     files: Vec<String>,
     #[serde(default)]
@@ -195,21 +231,14 @@ fn requested_scaled_fonts(
     workspace_root: &Path,
     requests: &[ScaledFontRequest],
 ) -> Result<Vec<ScaledFontRequest>, String> {
-    let mut requested = std::collections::BTreeMap::<String, ScaledFontRequest>::new();
+    let mut requested = std::collections::BTreeMap::<(String, u32), ScaledFontRequest>::new();
     for request in requests {
         validate_request(workspace_root, &request.family, request.scale)?;
-        let key = request.family.to_lowercase();
-        if requested
-            .get(&key)
-            .is_some_and(|existing| (existing.scale - request.scale).abs() > 0.0001)
-        {
-            return Err(format!(
-                "The font family {:?} cannot use different scales for different scripts. Choose separate families or use one scale.",
-                request.family
-            ));
-        }
         if (request.scale - 1.0).abs() > 0.0001 {
-            requested.insert(key, request.clone());
+            requested.insert(
+                (request.family.to_lowercase(), request.scale.to_bits()),
+                request.clone(),
+            );
         }
     }
     Ok(requested.into_values().collect())
@@ -245,7 +274,9 @@ pub fn scaled_workspace_font_update_required(
     let Some(manifest) = current_manifest(&generated_dir) else {
         return Ok(true);
     };
-    Ok(!manifest.family.eq_ignore_ascii_case(family) || (manifest.scale - scale).abs() > 0.0001)
+    Ok(!manifest.family.eq_ignore_ascii_case(family)
+        || (manifest.scale - scale).abs() > 0.0001
+        || manifest_source_status(&manifest) == "changed")
 }
 
 pub fn scaled_workspace_font_set_update_required(
@@ -354,15 +385,28 @@ pub fn prepare_scaled_workspace_font(
 
     let generated_dir = generated_family_dir(cache_root, family, scale);
     if !scaled_workspace_font_update_required(cache_root, workspace_root, family, scale)? {
-        let generated_files = current_manifest(&generated_dir)
-            .map(|manifest| manifest.files)
+        let cached = current_manifest(&generated_dir);
+        let generated_files = cached
+            .as_ref()
+            .map(|manifest| manifest.files.clone())
             .unwrap_or_default();
+        let alias = cached
+            .map(|manifest| {
+                if manifest.alias.is_empty() {
+                    prepared_alias(family, (scale * 100.0).round() as u16)
+                        .unwrap_or_else(|_| family.to_string())
+                } else {
+                    manifest.alias
+                }
+            })
+            .unwrap_or_else(|| family.to_string());
         return Ok(ScaledFontResult {
             directory: generated_dir,
             family: family.to_string(),
             scale,
             generated_files,
             changed: false,
+            alias,
         });
     }
     if generated_dir.exists() {
@@ -376,6 +420,7 @@ pub fn prepare_scaled_workspace_font(
             scale,
             generated_files: Vec::new(),
             changed: true,
+            alias: family.to_string(),
         });
     }
     fs::create_dir_all(&generated_dir)
@@ -421,7 +466,8 @@ pub fn prepare_scaled_workspace_font(
                     "{family:?} is stored in a font collection. Select an individual TTF or OTF face for scaling."
                 ));
             }
-            let scaled = typsastra_font_scaler::scale_font_uniform(&bytes, scale)
+            let alias = prepared_alias(family, (scale * 100.0).round() as u16)?;
+            let scaled = typsastra_font_scaler::scale_and_rename_font(&bytes, scale, &alias)
                 .map_err(|error| format!("Failed to scale {family:?}: {error}"))?;
             let extension = source_path
                 .and_then(Path::extension)
@@ -452,6 +498,7 @@ pub fn prepare_scaled_workspace_font(
     let manifest = ScaledFontManifest {
         version: 2,
         family: family.to_string(),
+        alias: prepared_alias(family, (scale * 100.0).round() as u16)?,
         scale,
         files: generated_files.clone(),
         generated_at_ms: Some(generated_at_ms),
@@ -470,7 +517,124 @@ pub fn prepare_scaled_workspace_font(
         scale,
         generated_files,
         changed: true,
+        alias: prepared_alias(family, (scale * 100.0).round() as u16)?,
     })
+}
+
+pub fn prepare_named_workspace_font(
+    cache_root: &Path,
+    workspace_root: &Path,
+    request: &PreparedFontRequest,
+    private_font_directories: &[PathBuf],
+) -> Result<ScaledFontResult, String> {
+    let alias = prepared_alias(&request.family, request.percent)?;
+    if request.percent == 100 {
+        return Ok(ScaledFontResult {
+            directory: PathBuf::new(),
+            family: request.family.clone(),
+            scale: 1.0,
+            generated_files: Vec::new(),
+            changed: false,
+            alias,
+        });
+    }
+    prepare_scaled_workspace_font(
+        cache_root,
+        workspace_root,
+        &request.family,
+        request.percent as f32 / 100.0,
+        private_font_directories,
+    )
+}
+
+pub fn prepared_font_library(cache_root: &Path, workspace_root: &Path) -> Vec<PreparedFontRecord> {
+    let active = current_selection(cache_root, workspace_root);
+    let mut records = Vec::new();
+    for family_dir in fs::read_dir(cache_root.join("variants"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+    {
+        for variant_dir in fs::read_dir(family_dir.path())
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+        {
+            let Some(manifest) = current_manifest(&variant_dir.path()) else {
+                continue;
+            };
+            let percent = (manifest.scale * 100.0).round() as u16;
+            let alias = if manifest.alias.is_empty() {
+                prepared_alias(&manifest.family, percent)
+                    .unwrap_or_else(|_| manifest.family.clone())
+            } else {
+                manifest.alias.clone()
+            };
+            records.push(PreparedFontRecord {
+                active: active.iter().any(|font| {
+                    font.family.eq_ignore_ascii_case(&manifest.family)
+                        && (font.scale - manifest.scale).abs() < 0.0001
+                }),
+                family: manifest.family.clone(),
+                alias,
+                percent,
+                source_status: manifest_source_status(&manifest).to_string(),
+                generated_at_ms: manifest.generated_at_ms,
+            });
+        }
+    }
+    for selection in &active {
+        let already_listed = records.iter().any(|record| {
+            record.family.eq_ignore_ascii_case(&selection.family)
+                && ((record.percent as f32 / 100.0) - selection.scale).abs() < 0.0001
+        });
+        if already_listed {
+            continue;
+        }
+        let percent = (selection.scale * 100.0).round() as u16;
+        records.push(PreparedFontRecord {
+            family: selection.family.clone(),
+            alias: prepared_alias(&selection.family, percent)
+                .unwrap_or_else(|_| selection.family.clone()),
+            percent,
+            source_status: "missing".into(),
+            active: true,
+            generated_at_ms: None,
+        });
+    }
+    records.sort_by(|left, right| left.alias.to_lowercase().cmp(&right.alias.to_lowercase()));
+    records
+}
+
+pub fn prepared_font_directory(cache_root: &Path, alias: &str) -> Option<PathBuf> {
+    for family_dir in fs::read_dir(cache_root.join("variants"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+    {
+        for variant_dir in fs::read_dir(family_dir.path())
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+        {
+            let Some(manifest) = current_manifest(&variant_dir.path()) else {
+                continue;
+            };
+            let percent = (manifest.scale * 100.0).round() as u16;
+            let candidate = if manifest.alias.is_empty() {
+                let Ok(alias) = prepared_alias(&manifest.family, percent) else {
+                    continue;
+                };
+                alias
+            } else {
+                manifest.alias
+            };
+            if candidate.eq_ignore_ascii_case(alias) {
+                return Some(variant_dir.path());
+            }
+        }
+    }
+    None
 }
 
 pub fn activate_scaled_workspace_fonts(
@@ -785,6 +949,15 @@ pub fn clear_scaled_workspace_fonts(
 mod tests {
     use super::*;
 
+    #[test]
+    fn prepared_aliases_are_deterministic_and_bounded() {
+        assert_eq!(prepared_alias("Moul", 95).unwrap(), "Moul 95");
+        assert_eq!(prepared_alias("  Moul  ", 100).unwrap(), "Moul");
+        assert!(prepared_alias("Moul", 49).is_err());
+        assert!(prepared_alias("Moul", 201).is_err());
+        assert!(prepared_alias("   ", 95).is_err());
+    }
+
     fn seed_variant(cache: &Path, family: &str, scale: f32) -> PathBuf {
         let generated = generated_family_dir(cache, family, scale);
         fs::create_dir_all(&generated).unwrap();
@@ -839,6 +1012,31 @@ mod tests {
         clear_scaled_workspace_fonts(cache.path(), workspace.path()).unwrap();
         assert!(generated.exists());
         assert!(workspace_font_directories(cache.path(), workspace.path()).is_empty());
+    }
+
+    #[test]
+    fn prepared_library_reports_active_missing_variants() {
+        let cache = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        let generated = seed_variant(cache.path(), "Moul", 0.95);
+        activate_scaled_workspace_fonts(
+            cache.path(),
+            workspace.path(),
+            &[ScaledFontRequest {
+                family: "Moul".into(),
+                scale: 0.95,
+            }],
+        )
+        .unwrap();
+        fs::remove_dir_all(generated).unwrap();
+
+        let library = prepared_font_library(cache.path(), workspace.path());
+        assert_eq!(library.len(), 1);
+        assert_eq!(library[0].family, "Moul");
+        assert_eq!(library[0].alias, "Moul 95");
+        assert_eq!(library[0].percent, 95);
+        assert_eq!(library[0].source_status, "missing");
+        assert!(library[0].active);
     }
 
     #[test]
@@ -949,7 +1147,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_conflicting_scales_for_one_internal_family() {
+    fn allows_multiple_prepared_variants_for_one_internal_family() {
         let cache = tempfile::tempdir().unwrap();
         let workspace = tempfile::tempdir().unwrap();
         let requests = [
@@ -967,8 +1165,7 @@ mod tests {
             workspace.path(),
             &requests
         )
-        .unwrap_err()
-        .contains("cannot use different scales"));
+        .unwrap());
     }
 
     #[test]

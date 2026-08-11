@@ -21,6 +21,8 @@ export type DocumentScriptFont = {
   defaultText?: boolean;
 };
 
+export type DocumentLanguage = { script: string; language: string | null };
+
 export type TypographyEdit = { from: number; to: number; insert: string };
 export type TypographyScaleChange = "unchanged" | "apply" | "confirm";
 
@@ -233,11 +235,10 @@ function normalizeLanguageTag(value: unknown): string | null {
 }
 
 export function renderTypographyBlock(config: DocumentTypography): string {
-  const lines = [blockStart];
   const fonts = documentScriptMetadata(config.fonts);
-  if (fonts.length > 0) {
-    lines.push(`// typsastra:document-scripts ${JSON.stringify(fonts)}`);
-  }
+  const languages = documentLanguageMetadata(config.fonts);
+  const lines: string[] = [];
+  if (languages.length > 0) lines.push(`// typsastra:document-languages ${JSON.stringify(languages)}`);
   if (fonts.length > 0) {
     const descriptors = fonts
       .filter(font => font.defaultText !== false)
@@ -253,8 +254,45 @@ export function renderTypographyBlock(config: DocumentTypography): string {
       ")"
     );
   }
-  lines.push(blockEnd, "");
+  lines.push("");
   return lines.join("\n");
+}
+
+function documentLanguageMetadata(fonts: readonly Pick<DocumentScriptFont, "script" | "language">[]) {
+  return fonts.flatMap(font => font.language ? [{ script: font.script, language: font.language }] : []);
+}
+
+export function documentLanguagesEdit(text: string, languages: readonly DocumentLanguage[]): TypographyEdit {
+  const normalized = documentLanguageMetadata(languages);
+  const directive = normalized.length > 0
+    ? `// typsastra:document-languages ${JSON.stringify(normalized)}`
+    : "";
+  const existing = /\/\/ typsastra:document-languages \[[^\r\n]+\]/.exec(text);
+  if (existing?.index !== undefined) {
+    return { from: existing.index, to: existing.index + existing[0].length, insert: directive };
+  }
+  return { from: text.startsWith("\uFEFF") ? 1 : 0, to: text.startsWith("\uFEFF") ? 1 : 0, insert: directive ? `${directive}\n` : "" };
+}
+
+export function parseDocumentLanguages(text: string): DocumentLanguage[] {
+  const match = /\/\/ typsastra:document-languages (\[[^\r\n]+\])/.exec(text);
+  if (!match) return parseDocumentScripts(text).flatMap(font => font.language
+    ? [{ script: font.script, language: font.language }]
+    : []);
+  try {
+    const parsed: unknown = JSON.parse(match[1]);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap(item => {
+      if (!item || typeof item !== "object") return [];
+      const entry = item as Partial<DocumentLanguage>;
+      const language = normalizeLanguageTag(entry.language);
+      return typeof entry.script === "string"
+        && typographyScripts.some(script => script.id === entry.script)
+        && language
+        ? [{ script: entry.script, language }]
+        : [];
+    });
+  } catch { return []; }
 }
 
 function documentScriptMetadata(fonts: readonly DocumentScriptFont[]) {
@@ -277,6 +315,10 @@ export function documentScriptsEdit(text: string, fonts: readonly DocumentScript
 }
 
 export function parseDocumentScripts(text: string): DocumentScriptFont[] {
+  const languages = parseDocumentLanguagesDirect(text);
+  if (languages.length > 0) return languages.map(entry => ({
+    script: entry.script, language: entry.language, family: "", scale: 1,
+  }));
   const current = /\/\/ typsastra:document-scripts (\[[^\r\n]+\])/.exec(text);
   const legacy = /\/\/ typsastra:script-fonts (\[[^\r\n]+\])/.exec(text);
   const raw = current?.[1] ?? legacy?.[1];
@@ -306,11 +348,26 @@ export function parseDocumentScripts(text: string): DocumentScriptFont[] {
   }
 }
 
+function parseDocumentLanguagesDirect(text: string): DocumentLanguage[] {
+  const match = /\/\/ typsastra:document-languages (\[[^\r\n]+\])/.exec(text);
+  if (!match) return [];
+  try {
+    const parsed: unknown = JSON.parse(match[1]);
+    return Array.isArray(parsed) ? parsed.flatMap(item => {
+      if (!item || typeof item !== "object") return [];
+      const candidate = item as Partial<DocumentLanguage>;
+      const language = normalizeLanguageTag(candidate.language);
+      return typeof candidate.script === "string"
+        && typographyScripts.some(script => script.id === candidate.script)
+        && language ? [{ script: candidate.script, language }] : [];
+    }) : [];
+  } catch { return []; }
+}
+
 export function parseTypographyBlock(text: string): DocumentTypography | null {
   const start = text.indexOf(blockStart);
   const end = start >= 0 ? text.indexOf(blockEnd, start) : -1;
-  if (start < 0 || end < 0) return null;
-  const block = text.slice(start, end);
+  const block = start >= 0 && end >= 0 ? text.slice(start, end) : text;
   const documentScriptMetadata = /\/\/ typsastra:document-scripts (\[[^\r\n]+\])/.exec(block);
   const scriptFontMetadata = /\/\/ typsastra:script-fonts (\[[^\r\n]+\])/.exec(block);
   const roleMetadata = /\/\/ typsastra:font-roles (\{[^\r\n]+\})/.exec(block);
@@ -390,6 +447,15 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
       language: null
     }));
   }
+  const languages = parseDocumentLanguagesDirect(text);
+  if (languages.length > 0) {
+    fonts = fonts.map((font, index) => ({
+      ...font,
+      language: languages.find(language => language.script === font.script)?.language
+        ?? languages[index]?.language
+        ?? null,
+    }));
+  }
   const fallbackIndexes = fonts.flatMap((font, index) => font.defaultText === false ? [] : [index]);
   if (stackFonts.length > 0 && fallbackIndexes.length === stackFonts.length) {
     fonts = fonts.map((font, index) => {
@@ -402,19 +468,53 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
 }
 
 export function typographyEdit(text: string, config: DocumentTypography): TypographyEdit {
-  const insert = renderTypographyBlock(config);
-  const start = text.indexOf(blockStart);
-  if (start >= 0) {
-    const endMarker = text.indexOf(blockEnd, start);
-    if (endMarker >= 0) {
-      let to = endMarker + blockEnd.length;
+  const legacyStart = text.indexOf(blockStart);
+  let source = text;
+  if (legacyStart >= 0) {
+    const legacyEnd = text.indexOf(blockEnd, legacyStart);
+    if (legacyEnd >= 0) {
+      let to = legacyEnd + blockEnd.length;
       if (text.slice(to, to + 2) === "\r\n") to += 2;
       else if (text[to] === "\n") to += 1;
-      return { from: start, to, insert };
+      source = text.slice(0, legacyStart) + text.slice(to);
     }
   }
+  const legacyDirective = /\/\/ typsastra:(?:document-scripts|script-fonts) \[[^\r\n]+\]\r?\n?/g;
+  source = source.replace(legacyDirective, "");
+  const languageEdit = documentLanguagesEdit(source, config.fonts);
+  source = source.slice(0, languageEdit.from) + languageEdit.insert + source.slice(languageEdit.to);
 
-  const bomOffset = text.startsWith("\uFEFF") ? 1 : 0;
-  const from = bomOffset;
-  return { from, to: from, insert };
+  const families = config.fonts.filter(font => font.defaultText !== false && font.family.trim()).map(font => font.family);
+  const fontValue = families.length === 1
+    ? `"${escapeTypstString(families[0]!)}"`
+    : `(\n${families.map(family => `    "${escapeTypstString(family)}",`).join("\n")}\n  )`;
+  const rules = [...source.matchAll(/(^|\n)(\s*)#set\s+text\s*\(/gm)];
+  if (rules.length > 1) {
+    throw new Error("Document Typography found multiple #set text rules. Keep one document-level rule or edit the intended rule directly.");
+  }
+  const rule = rules[0] ?? null;
+  if (rule?.index !== undefined) {
+    const callStart = source.indexOf("(", rule.index);
+    const callEnd = matchingDelimiter(source, callStart, "(", ")");
+    if (callEnd >= 0) {
+      const args = splitTopLevel(source.slice(callStart + 1, callEnd));
+      const retained = args.filter(argument => !/^(?:font|size)\s*:/.test(argument));
+      const nextArgs = [`font: ${fontValue}`, `size: ${decimal(config.baseSizePt)}pt`, ...retained];
+      source = source.slice(0, callStart + 1) + `\n  ${nextArgs.join(",\n  ")},\n` + source.slice(callEnd);
+    }
+  } else {
+    const insertion = `#set text(\n  font: ${fontValue},\n  size: ${decimal(config.baseSizePt)}pt,\n)\n`;
+    const directiveEnd = /\/\/ typsastra:document-languages \[[^\r\n]+\]\r?\n?/.exec(source);
+    const at = directiveEnd?.index !== undefined ? directiveEnd.index + directiveEnd[0].length : (source.startsWith("\uFEFF") ? 1 : 0);
+    source = source.slice(0, at) + insertion + source.slice(at);
+  }
+
+  let prefix = 0;
+  while (prefix < text.length && prefix < source.length && text[prefix] === source[prefix]) prefix += 1;
+  let oldSuffix = text.length;
+  let newSuffix = source.length;
+  while (oldSuffix > prefix && newSuffix > prefix && text[oldSuffix - 1] === source[newSuffix - 1]) {
+    oldSuffix -= 1; newSuffix -= 1;
+  }
+  return { from: prefix, to: oldSuffix, insert: source.slice(prefix, newSuffix) };
 }

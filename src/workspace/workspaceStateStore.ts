@@ -33,7 +33,7 @@ export type StoredWorkspaceState = {
     inputContainerWidthPct: number;
     explorerSidebarWidthPx: number;
     sidebarVisible: boolean;
-    activeSidebarTool: "explorer" | "images";
+    activeSidebarTool: "explorer" | "images" | "fonts";
   };
   selectedToolchain: StoredWorkspaceToolchain | null;
   previewContentMode: "normal" | "draft";
@@ -127,7 +127,9 @@ export function normalizeWorkspaceMetadata(
         inputContainerWidthPct: numberOr(layout.inputContainerWidthPct, 50),
         explorerSidebarWidthPx: numberOr(layout.explorerSidebarWidthPx, 250),
         sidebarVisible: typeof layout.sidebarVisible === "boolean" ? layout.sidebarVisible : true,
-        activeSidebarTool: layout.activeSidebarTool === "images" ? "images" : "explorer"
+        activeSidebarTool: layout.activeSidebarTool === "images"
+          ? "images"
+          : layout.activeSidebarTool === "fonts" ? "fonts" : "explorer"
       },
       selectedToolchain: toolchainOrNull(workspace.selectedToolchain),
       previewContentMode: workspace.previewContentMode === "draft" ? "draft" : "normal",

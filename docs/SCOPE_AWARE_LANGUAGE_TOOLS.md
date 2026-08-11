@@ -1,15 +1,16 @@
-# Document-script language tools
+# Document language tools
 
-Typsastra uses one explicit document setting for both typography and language
-tools:
+Typsastra keeps language-tool routing in a small directive that is independent
+from the document's ordinary Typst font configuration:
 
 ```typst
-// typsastra:document-scripts [{"family":"MiSans Latin","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+// typsastra:document-languages [{"script":"latin","language":"en-US"},{"script":"khmer","language":"km"},{"script":"arabic","language":"ar"}]
 ```
 
-Each entry assigns a font and optional scale to a Unicode script. Its optional
-`language` selects the spellcheck and word-completion provider for that script.
-The Typography toolbar writes this directive.
+Each entry selects the spellcheck and word-completion provider for one Unicode
+script. The Typography toolbar writes this directive. Font order and size stay
+in an ordinary `#set text(...)` rule; prepared font variants are managed by
+Font Tools and do not appear in this metadata.
 
 ## Routing contract
 
@@ -33,7 +34,7 @@ directive into those files, and a dependency-local directive does not override
 the main document's language routing.
 
 Files outside that dependency graph do not inherit the main setting. An
-unrelated file can opt in with its own `document-scripts` directive; otherwise
+unrelated file can opt in with its own `document-languages` directive; otherwise
 Typsastra leaves its spellcheck and word completion disabled. When a workspace
 has no configured main file, the active standalone document owns its setting.
 

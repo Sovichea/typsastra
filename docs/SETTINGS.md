@@ -154,17 +154,30 @@ Private directory discovery supports `.ttf`, `.otf`, `.ttc`, and `.otc`.
 Collections are available at their original scale but cannot be transformed
 into scaled variants. WOFF and WOFF2 files are ignored; a directory containing
 only those web-font formats is rejected. Variable TTF and OTF files are
-available at `1.0×`, but Document Typography does not expose arbitrary
-variation axes and non-unit scaling remains experimental. See
-[Document typography](DOCUMENT_TYPOGRAPHY.md#supported-private-font-formats).
+available at their default instance, but Font Tools does not expose arbitrary
+variation axes. Scaled preparation requires an individual TTF or OTF face. See
+[Document typography and Font Tools](DOCUMENT_TYPOGRAPHY.md#private-font-folders).
 
 Typsastra never downloads fonts without confirmation and does not repeat a recommendation the user declines. MiSans downloads and use are subject to Xiaomi's [MiSans license agreement](https://hyperos.mi.com/font/en/download/); Noto fonts use the [SIL Open Font License](https://openfontlicense.org/).
 
 The selected Unicode fallback is also included in Typsastra's own UI font stack for app-rendered text such as search controls, hover popups, and preview status messages.
 
-The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin family, the complex-script fallback family, or both. **Apply to document** writes a source-preserving fallback stack in a managed `typsastra:typography` block. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typsastra-template.typ` when no editable local template can be identified.
+The typography toolbar controls the fonts used by the compiled document,
+separately from editor font settings. **Apply to document** writes an ordinary
+top-level `#set text` rule with an ordered fallback stack and preserves
+unrelated text arguments. **Apply as template** updates the local function used
+by the main document's `#show: ...with(...)` rule, or creates
+`typsastra-template.typ` when no editable local template can be identified.
 
-Document Typography records one default text font per configured script and can prepare additional explicitly called fonts for the same script at independent scales. Typsastra writes only default text rows as an ordinary ordered Typst fallback stack; list order determines glyph priority, including numbers, punctuation, and fonts whose coverage overlaps another configured script. A **Prepared font only** row remains available by its normal family name, such as `#text(font: "Moul")[...]`, without entering that stack or owning language tools. Strict script-specific font enforcement is deferred for later exploration. Values other than `1.0` use a render-only variant from Typsastra's private global application-data cache and restart Tinymist with only the selected cache directories as font paths. Compiler-embedded fonts remain locked to `1.0` unless the same family is installed locally; manually assigning them another scale produces an error and resets the directive to `1.0` because Typsastra does not extract embedded font files. Matching variants are reused across projects without rescaling, and no font data is stored in `.typsastra`. Typsastra recommends at most 10 cached scale variants per font face and asks before creating another; it never deletes variants automatically. Non-unit scaling is experimental for PDF output because Typst may normalize generated fonts while subsetting them; use `1.0` when dependable PDF export is required. Typsastra does not create script-matching show rules because they break character-level inverse sync, and it does not patch the resulting PDF or make preview differ from export. Raw code keeps Typst's original raw font. See [Document typography](DOCUMENT_TYPOGRAPHY.md).
+Font preparation is separate. **Font Tools** creates deterministic,
+machine-local aliases such as `Moul 95`, previews an actual compiled specimen,
+and explicitly activates selected variants for the workspace. Activated aliases
+appear in Document Typography and may be used directly in ordinary source.
+Prepared variants live only in Typsastra's global cache, are reused across
+projects, and are never copied into `.typsastra` or project exports. Typsastra
+warns outside the recommended 90–110% fine-adjustment range and asks before a
+font face exceeds 10 cached variants. See [Document typography and Font
+Tools](DOCUMENT_TYPOGRAPHY.md).
 
 ## Language tools
 
@@ -174,7 +187,7 @@ Spellcheck and typing word suggestions can be controlled independently in Editor
 
 Settings installs language providers globally. A provider participates in a
 document only after its language is assigned to a script through the Typography
-toolbar and stored in the configured main file's `typsastra:document-scripts`.
+toolbar and stored in the configured main file's `typsastra:document-languages`.
 That one assignment is inherited by included chapters, imported templates, and
 imported local libraries; it does not need to be copied into those files.
 Unrelated files inherit nothing and may declare their own routing.

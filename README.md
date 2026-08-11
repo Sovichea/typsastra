@@ -61,9 +61,14 @@ https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db
 
 
 
-### Document typography and language tools
+### Document typography, Font Tools, and language tools
 
-Assign fonts and language providers by writing script from one document-focused interface. Spellcheck and word completion are enabled through Document Typography, allowing different files in the same project to use different language tools while keeping the resulting Typst source explicit.
+Document Typography writes an ordinary Typst fallback stack and text size while
+keeping spellcheck and word-completion routing in a small language-only
+directive. Font Tools separately prepares reusable machine-local aliases such
+as `Moul 95`, previews the actual compiled glyphs, and activates only the
+variants a project needs. Font files are never copied into the project or its
+exports.
 
 
 

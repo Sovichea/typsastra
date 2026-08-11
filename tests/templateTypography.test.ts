@@ -44,17 +44,25 @@ describe("template typography", () => {
     expect(updated).toContain('  set text(');
     expect(updated).toContain('"MiSans Khmer",');
     expect(updated).not.toContain("covers:");
-    expect(updated).toContain("// typsastra:script-fonts ");
-    expect(updated).not.toContain("// typsastra:document-scripts ");
+    expect(updated).not.toContain("typsastra:script-fonts");
+    expect(updated).not.toContain("typsastra:document-scripts");
     expect(updated).not.toContain('"language"');
     expect(updated).not.toContain("show regex(");
     expect(effectiveTemplateTypography(
-      '#import "template.typ": thesis\n#show: thesis\n// typsastra:document-scripts [{"family":"Main Latin","script":"latin","scale":1,"language":"en"}]',
+      '#import "template.typ": thesis\n#show: thesis\n// typsastra:document-languages [{"script":"latin","language":"en"}]',
       updated.replace("size: 11pt", "size: 13pt")
     )).toEqual({
       baseSizePt: 13,
-      fonts: [{ family: "Main Latin", script: "latin", scale: 1, language: "en" }]
+      fonts: [
+        { family: "MiSans Latin", script: "latin", scale: 1, language: "en" },
+        { family: "MiSans Khmer", script: "khmer", scale: 1, language: null },
+      ]
     });
+
+    const second = templateTypographyEdit(updated, "thesis", { ...config, baseSizePt: 12 })!;
+    const updatedAgain = updated.slice(0, second.from) + second.insert + updated.slice(second.to);
+    expect(updatedAgain.match(/set text\(/g)?.length).toBe(1);
+    expect(updatedAgain).toContain("size: 12pt");
   });
 
   test("creates a portable local fallback and preview source", () => {

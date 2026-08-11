@@ -770,7 +770,7 @@ export class SettingsController {
     container.replaceChildren(...rows);
   }
 
-  private async addPrivateFontDirectory(): Promise<void> {
+  public async addPrivateFontDirectory(): Promise<void> {
     const selected = await open({
       directory: true,
       multiple: false,

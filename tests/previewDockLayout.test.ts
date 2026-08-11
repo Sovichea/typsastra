@@ -7,7 +7,7 @@ describe("preview dock layout", () => {
     const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
 
     expect(layout).toContain("private dockedInputWidthPct = 50");
-    expect(layout).toContain("this.captureDockedPaneSize();\n      previewWrapper.style.display = \"none\"");
+    expect(layout).toContain("this.captureDockedPaneSize();\n      this.previewUndocked = true;\n      previewWrapper.style.display = \"none\"");
     expect(layout).toContain("input.style.width = `${this.dockedInputWidthPct}%`");
     expect(layout).toContain("previewWrapper.style.width = `${100 - this.dockedInputWidthPct}%`");
     expect(app).toContain("inputContainerWidthPct: this.layoutController.getDockedInputWidthPct()");

@@ -197,6 +197,12 @@ snippets instead of introducing a separate snippet popup.
 Make local images, language tools, and non-Typst previews manageable without
 weakening project portability or silently modifying source assets.
 
+- Separate **Font Tools** from Document Typography. Prepare deterministic
+  machine-local aliases with a compiled specimen, explicit workspace
+  activation, changed/missing-source health, and guided legacy migration.
+  Keep Document Typography limited to ordinary Typst fallback fonts, text size,
+  and language-provider routing.
+
 - Add an explicit, user-invoked **Image Optimizer** from the Images Problems
   category, image-path context menu, and image viewer. Support downscaling and
   re-encoding statically resolved local raster images after showing original

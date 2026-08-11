@@ -27,6 +27,7 @@ import { editorDiagnosticsStateField, looksLikeStalePrefixDiagnostic, setEditorD
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
 import { WorkspaceExplorer } from "./components/explorer";
 import { ImageToolsController, type ProjectImageReference } from "./components/imageTools";
+import { FontToolsController } from "./components/fontTools";
 import { TinymistLspClient } from "./compiler/lsp";
 import { isTinymistStoppedRequestError, type EditorTextEdit, type LspDiagnostic, type LspInverseSyncResult, type LspLogEntry, type LspSourcePosition, type LspStatus, type PreviewDocumentPosition } from "./compiler/lsp";
 import {
@@ -92,6 +93,7 @@ import { WindowStateController } from "./window/windowStateController";
 import {
   parseTypographyBlock,
   parseDocumentScripts,
+  documentLanguagesEdit,
   documentScriptsEdit,
   typographyEdit,
   typographyScaleExceedsFineAdjustment,
@@ -435,7 +437,7 @@ export class TypsastraWorkspaceController {
   private readonly startupTimings: StartupTimingEntry[] = [];
   private readonly loggedNativeStartupTimings = new Set<string>();
   private sidebarVisible = true;
-  private activeSidebarTool: "explorer" | "images" = "explorer";
+  private activeSidebarTool: "explorer" | "images" | "fonts" = "explorer";
   private activeMode: EditorMode = "CODE";
   private activeFilePath: string | null = null;
   private previewRootPath: string | null = null;
@@ -647,6 +649,21 @@ export class TypsastraWorkspaceController {
     reference => void this.navigateToImageReference(reference),
     (source, imagePath) => this.renderImageToolPreview(source, imagePath),
     (paths, phase) => this.handleImageToolFilesWritten(paths, phase),
+  );
+  private readonly fontToolsController = new FontToolsController(
+    document.getElementById("font-tools-sidebar")!,
+    document.getElementById("font-tools-inspector")!,
+    document.getElementById("font-tools-preview")!,
+    alias => this.applyPreparedFontToSelection(alias),
+    async () => {
+      await this.handlePrivateFontDirectoriesChanged();
+    },
+    async () => {
+      await this.editorToolbarController.addWorkspacePrivateFontDirectory();
+    },
+    async () => {
+      await this.settingsController.addPrivateFontDirectory();
+    },
   );
   private readonly previewFrame = new PreviewFrame(this.previewPane, point => {
     void this.handlePdfPreviewClick(point);
@@ -1171,32 +1188,46 @@ export class TypsastraWorkspaceController {
     void this.saveWorkspaceState();
   }
 
-  private setSidebarTool(tool: "explorer" | "images", persist = true): void {
+  private setSidebarTool(tool: "explorer" | "images" | "fonts", persist = true): void {
     if (!this.workspaceRootPath) return;
     const toolChanged = this.activeSidebarTool !== tool;
     this.activeSidebarTool = tool;
     this.sidebarVisible = true;
 
     const showingImages = tool === "images";
+    const showingFonts = tool === "fonts";
+    const showingTool = showingImages || showingFonts;
     document.body.classList.toggle("image-tools-active", showingImages);
-    document.getElementById("explorer-sidebar-content")?.classList.toggle("hidden", showingImages);
+    document.body.classList.toggle("font-tools-active", showingFonts);
+    document.getElementById("explorer-sidebar-content")?.classList.toggle("hidden", showingTool);
     document.getElementById("image-tools-sidebar-content")?.classList.toggle("hidden", !showingImages);
+    document.getElementById("font-tools-sidebar-content")?.classList.toggle("hidden", !showingFonts);
     const explorerButton = document.getElementById("sidebar-explorer-button") as HTMLButtonElement | null;
     const imagesButton = document.getElementById("sidebar-images-button") as HTMLButtonElement | null;
-    explorerButton?.classList.toggle("active", !showingImages);
+    const fontsButton = document.getElementById("sidebar-fonts-button") as HTMLButtonElement | null;
+    explorerButton?.classList.toggle("active", !showingTool);
     imagesButton?.classList.toggle("active", showingImages);
-    explorerButton?.setAttribute("aria-pressed", String(!showingImages));
+    fontsButton?.classList.toggle("active", showingFonts);
+    explorerButton?.setAttribute("aria-pressed", String(!showingTool));
     imagesButton?.setAttribute("aria-pressed", String(showingImages));
+    fontsButton?.setAttribute("aria-pressed", String(showingFonts));
 
-    this.codeRenderPane.classList.toggle("hidden", showingImages);
+    this.codeRenderPane.classList.toggle("hidden", showingTool);
     document.getElementById("image-viewer-pane")?.classList.add("hidden");
-    this.previewPane.classList.remove("hidden");
-    this.layoutController.setMainPreviewVisibleWhileUndocked(showingImages);
+    this.previewPane.classList.toggle("hidden", showingFonts);
+    this.layoutController.setMainPreviewVisibleWhileUndocked(showingTool);
     if (showingImages) {
       if (toolChanged) this.invalidatePreviewWork("switched to Image Tools");
+      this.fontToolsController.hide();
       this.imageToolsController.show();
-    } else {
+    } else if (showingFonts) {
+      if (toolChanged) this.invalidatePreviewWork("switched to Font Tools");
       this.imageToolsController.hide();
+      this.fontToolsController.show();
+    } else {
+      this.previewPane.classList.remove("hidden");
+      this.imageToolsController.hide();
+      this.fontToolsController.hide();
       const path = this.activeFilePath;
       const nonTextSurface = !!path && (
         !this.isInternallySupportedPath(path)
@@ -1217,6 +1248,23 @@ export class TypsastraWorkspaceController {
     }
     this.applySidebarVisibility();
     if (persist) void this.saveWorkspaceState();
+  }
+
+  private applyPreparedFontToSelection(alias: string): void {
+    if (!this.activeFilePath || !isTypstDocumentPath(this.activeFilePath)) return;
+    const selection = this.editorInstance.state.selection.main;
+    const escaped = alias.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"');
+    const selected = this.editorInstance.state.sliceDoc(selection.from, selection.to);
+    const insert = `#text(font: "${escaped}")[${selected}]`;
+    const contentFrom = selection.from + insert.indexOf("[") + 1;
+    this.editorInstance.dispatch({
+      changes: { from: selection.from, to: selection.to, insert },
+      selection: selected
+        ? { anchor: contentFrom, head: contentFrom + selected.length }
+        : { anchor: contentFrom },
+      scrollIntoView: true,
+    });
+    this.editorInstance.focus();
   }
 
   private async navigateToImageReference(reference: ProjectImageReference): Promise<void> {
@@ -4338,8 +4386,6 @@ export class TypsastraWorkspaceController {
   ): Promise<boolean> {
     if (!this.activeFilePath) return false;
     const ownsWorkspaceTypography = this.isPinnedMainFile(this.activeFilePath);
-    if (ownsWorkspaceTypography && !await this.confirmTypographyScaleRange(config)) return false;
-    if (ownsWorkspaceTypography && !await this.confirmTypographyVariantLimit(config)) return false;
     const typographyDocumentKey = filePathKey(this.activeFilePath);
     const previousAcceptedScale = this.acceptedTypographyScales.get(typographyDocumentKey) ?? [];
     this.acceptedTypographyScales.set(typographyDocumentKey, config.fonts.map(font => ({ ...font })));
@@ -4354,10 +4400,7 @@ export class TypsastraWorkspaceController {
           userEvent: "input"
         });
         await this.saveActiveFile();
-        const fontsChanged = ownsWorkspaceTypography
-          ? await this.updateWorkspaceTypographyFont(config)
-          : false;
-        if (ownsWorkspaceTypography) await this.refreshActivePreviewRoot(fontsChanged);
+        if (ownsWorkspaceTypography) await this.refreshActivePreviewRoot(false);
         editor.focus();
         return true;
       }
@@ -4429,7 +4472,7 @@ export class TypsastraWorkspaceController {
       }
 
       const latestMainText = await this.workspaceText(mainPath!);
-      const metadataEdit = documentScriptsEdit(latestMainText, config.fonts);
+      const metadataEdit = documentLanguagesEdit(latestMainText, config.fonts);
       const mainWithDocumentScripts = this.applyEdit(latestMainText, metadataEdit);
       if (mainWithDocumentScripts !== latestMainText) {
         await this.writeWorkspaceText(mainPath!, mainWithDocumentScripts);
@@ -4530,15 +4573,6 @@ export class TypsastraWorkspaceController {
     return this.documentTypographyFromText(text);
   }
 
-  private async confirmTypographyScaleRange(config: DocumentTypography): Promise<boolean> {
-    const warning = this.typographyScaleRangeWarning(config);
-    if (!warning) return true;
-    return confirm(warning, {
-      title: "Large Font Scale Adjustment",
-      kind: "warning"
-    });
-  }
-
   private async scaledFontSetStatus(config: DocumentTypography): Promise<ScaledFontSetStatus> {
     if (!this.workspaceRootPath) {
       return { updateRequired: false, generationRequired: false, variantLimitWarnings: [] };
@@ -4556,17 +4590,6 @@ export class TypsastraWorkspaceController {
     ).join("\n");
     const limit = Math.min(...status.variantLimitWarnings.map(warning => warning.recommendedLimit));
     return `Typsastra recommends keeping no more than ${limit} scaled variants per font face. This change would add another variant for:\n\n${variants}\n\nExisting variants will not be deleted automatically. Advanced font-variant management is planned for a future update, where variants can be deleted or renewed.\n\nCreate the additional variant anyway?`;
-  }
-
-  private async confirmTypographyVariantLimit(config: DocumentTypography): Promise<boolean> {
-    const warning = this.typographyVariantLimitWarning(await this.scaledFontSetStatus(config));
-    if (!warning) return true;
-    return confirm(warning, {
-      title: "Font Variant Cache Limit",
-      kind: "warning",
-      okLabel: "Create Variant",
-      cancelLabel: "Cancel"
-    });
   }
 
   private async prepareWorkspaceTypographyFont(config: DocumentTypography): Promise<boolean> {
@@ -4612,14 +4635,10 @@ export class TypsastraWorkspaceController {
   }
 
   private async reloadTemplateTypographyContext(config: DocumentTypography): Promise<void> {
-    if (this.workspaceRootPath && this.pinnedMainFilePath) {
-      try {
-        await this.prepareWorkspaceTypographyFont(config);
-      } finally {
-        this.typographyFontUpdateInProgress = false;
-        this.deferredTypographyPreviewContents = null;
-      }
-    }
+    // Prepared variants are activated explicitly from Font Tools. Applying
+    // ordinary document/template typography must not create, clear, or replace
+    // the workspace's machine-local prepared-font selection.
+    void config;
     // A blocked large preview must remain stopped until its own confirmation
     // is accepted. Its eventual startup will read the updated template.
     if (this.blockedLargePreviewRoot) return;
@@ -5700,7 +5719,6 @@ export class TypsastraWorkspaceController {
     }
     if (!this.isLoadingFile) {
       this.updateActiveTabContent(rawText);
-      this.scheduleManualTypographyScaleCheck();
       if (this.activeFilePath && isMarkdownDocumentPath(this.activeFilePath)) {
         this.markdownPreviewFrame.schedule(this.activeFilePath, rawText);
       }
@@ -8976,7 +8994,7 @@ export class TypsastraWorkspaceController {
   }
 
   private async refreshActivePreviewRoot(forceRender = false): Promise<void> {
-    if (this.activeSidebarTool === "images") return;
+    if (this.activeSidebarTool !== "explorer") return;
     if (!this.activeFilePath) return;
     const path = this.activeFilePath;
     const ext = fileExtension(path);
@@ -9162,7 +9180,9 @@ export class TypsastraWorkspaceController {
       await this.explorer.loadWorkspace(selected, expandedDirectories);
       await this.restoreWorkspaceState(selected, this.workspaceMetadata);
       await this.imageToolsController.setWorkspace(selected, this.pinnedMainFilePath);
+      await this.fontToolsController.setWorkspace(selected);
       if (this.activeSidebarTool === "images") this.imageToolsController.show();
+      if (this.activeSidebarTool === "fonts") this.fontToolsController.show();
       if (this.activeFilePath) await this.explorer.revealPath(this.activeFilePath);
       await this.saveWorkspaceState();
       await this.explorer.loadWorkspace(selected);
@@ -9698,52 +9718,52 @@ export class TypsastraWorkspaceController {
     try {
       let source = await this.workspaceText(path);
       let config = this.documentTypographyFromText(source);
-      if (config) {
-        const unsupportedInternalScale = await this.unsupportedInternalScaleError(config);
-        if (unsupportedInternalScale) {
-          this.appendLspLog({
-            kind: "error",
-            source: "typography",
-            message: unsupportedInternalScale.message,
-          });
-          await message(unsupportedInternalScale.message, {
-            title: "Unsupported Built-in Font Scale",
-            kind: "error",
-          });
-          config = this.resetUnsupportedInternalScales(config, unsupportedInternalScale.fonts);
-          const edit = parseTypographyBlock(source)
-            ? typographyEdit(source, config)
-            : documentScriptsEdit(source, config.fonts);
-          source = this.applyEdit(source, edit);
-          await this.writeWorkspaceText(path, source);
-        }
-      }
-      if (!this.workspaceRootPath) return await this.effectiveDocumentTypography(path, source) ?? config;
-      const typography = config ?? { baseSizePt: 11, fonts: [] };
-      const status = await this.scaledFontSetStatus(typography);
-      if (!status.updateRequired) return await this.effectiveDocumentTypography(path, source) ?? config;
-
       const scaledFonts = config?.fonts.filter(font => Math.abs(font.scale - 1) > 0.0001) ?? [];
-      if (scaledFonts.length > 0 && status.generationRequired) {
+      if (scaledFonts.length > 0) {
+        if (!this.workspaceRootPath) return config;
+        const unsupportedInternalScale = await this.unsupportedInternalScaleError(config!);
+        if (unsupportedInternalScale) {
+          await message(unsupportedInternalScale.message, {
+            title: "Legacy Font Scale Cannot Be Migrated",
+            kind: "error",
+          });
+          return false;
+        }
         const outsideFineRange = scaledFonts.some(font => typographyScaleExceedsFineAdjustment(font.scale));
-        const variantWarning = this.typographyVariantLimitWarning(status);
         const accepted = await confirm(
-          `${fileNameFromPath(path)} contains a document typography directive that requires local font scaling:\n\n${scaledFonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate the fonts in its private global cache before setting this file as main. No font data will be written into the project. Font scaling is intended for fine optical adjustment${outsideFineRange ? "; one or more values also exceed the recommended ±10% range, where accurate representation is not guaranteed and varies between fonts" : ""}.${variantWarning ? `\n\n${variantWarning}` : "\n\nPrepare the fonts and continue?"}`,
+          `${fileNameFromPath(path)} uses Typsastra's legacy in-document font scaling.\n\n${scaledFonts.map(font => `${font.family}: ${Math.round(font.scale * 100)}%`).join("\n")}\n\nMigrate it to named prepared fonts now? Typsastra will store the variants in its private global cache and rewrite this document to use names such as “Moul 95”. Font files will not be written to or exported with the project.${outsideFineRange ? "\n\nOne or more values exceed the recommended ±10% fine-adjustment range, where visual accuracy varies between fonts." : ""}`,
           {
-            title: "Prepare Document Fonts?",
+            title: "Migrate Legacy Font Scaling?",
             kind: "warning",
-            okLabel: "Prepare and Continue",
+            okLabel: "Migrate and Continue",
             cancelLabel: "Cancel"
           }
         );
         if (!accepted) return false;
-      }
-
-      try {
-        await this.prepareWorkspaceTypographyFont(typography);
-      } finally {
-        this.typographyFontUpdateInProgress = false;
-        this.deferredTypographyPreviewContents = null;
+        const aliases = new Map<string, string>();
+        for (const font of scaledFonts) {
+          const result = await invoke<{ alias: string }>("prepare_named_workspace_font", {
+            workspaceRootPath: this.workspaceRootPath,
+            request: { family: font.family, percent: Math.round(font.scale * 100) },
+          });
+          aliases.set(`${font.family}\u0000${font.scale}`, result.alias);
+        }
+        await invoke("activate_scaled_workspace_fonts", {
+          workspaceRootPath: this.workspaceRootPath,
+          fonts: scaledFonts,
+        });
+        config = {
+          ...config!,
+          fonts: config!.fonts.map(font => ({
+            ...font,
+            family: aliases.get(`${font.family}\u0000${font.scale}`) ?? font.family,
+            scale: 1,
+            defaultText: font.defaultText === false ? false : undefined,
+          })),
+        };
+        source = this.applyEdit(source, typographyEdit(source, config));
+        await this.writeWorkspaceText(path, source);
+        await this.fontToolsController.refresh();
       }
       return await this.effectiveDocumentTypography(path, source) ?? config;
     } catch (error) {
@@ -9939,6 +9959,7 @@ export class TypsastraWorkspaceController {
     this.activeSidebarTool = "explorer";
     document.body.classList.remove("image-tools-active");
     void this.imageToolsController.setWorkspace(null, null);
+    void this.fontToolsController.setWorkspace(null);
     this.workspaceMetadata = null;
     this.settingsController.setWorkspacePreviewRenderMode(null);
     this.lastPreviewRenderMode = this.settingsController.value.preview.renderMode;
@@ -10503,6 +10524,10 @@ export class TypsastraWorkspaceController {
 
     document.getElementById("sidebar-images-button")?.addEventListener("click", () => {
       this.setSidebarTool("images");
+    });
+
+    document.getElementById("sidebar-fonts-button")?.addEventListener("click", () => {
+      this.setSidebarTool("fonts");
     });
 
     document.getElementById("action-restore-default-layout")?.addEventListener("click", () => {

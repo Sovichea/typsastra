@@ -4,13 +4,12 @@
 
 1. Open the `Aa` Typography toolbar.
 2. Add every script used by the document.
-3. Choose a font for each script.
-4. Choose a language-tools provider, or leave **Language tools off**.
-5. Apply the configuration to the main document.
+3. Choose a language-tools provider, or leave **Language tools off**.
+4. Apply the configuration to the main document.
 
 For an English, Khmer, and Arabic document, choose English for Latin, Khmer for
 Khmer, and Arabic for Arabic. Typsastra writes these choices into the
-`typsastra:document-scripts` directive. Spellcheck and completion then use the
+`typsastra:document-languages` directive. Spellcheck and completion then use the
 same assignment.
 
 Text in an undeclared script is left alone. Typsastra does not show warnings or

@@ -270,10 +270,19 @@ fn list_system_fonts(
     app_handle: tauri::AppHandle,
     workspace_root_path: Option<String>,
 ) -> font_store::SystemFontCatalog {
-    let private = workspace_root_path
+    let mut private = workspace_root_path
         .as_deref()
         .map(|path| private_font_directories(&app_handle, Path::new(path)))
         .unwrap_or_else(|| configured_private_font_directories(&app_handle));
+    if let (Some(workspace_root), Ok(data_dir)) = (
+        workspace_root_path.as_deref(),
+        app_handle.path().app_local_data_dir(),
+    ) {
+        private.extend(scaled_fonts::workspace_font_directories(
+            &scaled_fonts::global_scaled_font_root(&data_dir),
+            Path::new(workspace_root),
+        ));
+    }
     font_store::list_system_fonts(&private)
 }
 
@@ -332,6 +341,112 @@ async fn prepare_scaled_workspace_font(
         scale,
         &private_font_directories(&app_handle, Path::new(&workspace_root_path)),
     )
+}
+
+#[tauri::command]
+async fn prepare_named_workspace_font(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, LspState>,
+    workspace_root_path: String,
+    request: scaled_fonts::PreparedFontRequest,
+) -> Result<scaled_fonts::ScaledFontResult, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    let cache_root = scaled_fonts::global_scaled_font_root(&data_dir);
+    let scale = request.percent as f32 / 100.0;
+    if request.percent != 100
+        && scaled_fonts::scaled_workspace_font_update_required(
+            &cache_root,
+            Path::new(&workspace_root_path),
+            &request.family,
+            scale,
+        )?
+    {
+        stop_lsp_process(&state).await;
+    }
+    scaled_fonts::prepare_named_workspace_font(
+        &cache_root,
+        Path::new(&workspace_root_path),
+        &request,
+        &private_font_directories(&app_handle, Path::new(&workspace_root_path)),
+    )
+}
+
+#[tauri::command]
+fn prepared_font_library(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+) -> Result<Vec<scaled_fonts::PreparedFontRecord>, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    Ok(scaled_fonts::prepared_font_library(
+        &scaled_fonts::global_scaled_font_root(&data_dir),
+        Path::new(&workspace_root_path),
+    ))
+}
+
+#[tauri::command]
+fn compile_font_specimen(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+    family: String,
+    content: String,
+) -> Result<String, String> {
+    if content.encode_utf16().count() > 4000 {
+        return Err("The font specimen is limited to 4,000 UTF-16 code units.".into());
+    }
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    let tinymist_cmd = active_tinymist(&data_dir)
+        .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
+    let directory =
+        tempfile::tempdir().map_err(|error| format!("Failed to stage font specimen: {error}"))?;
+    let input = directory.path().join("specimen.typ");
+    let output = directory.path().join("specimen.svg");
+    let escaped = family.replace('\\', "\\\\").replace('"', "\\\"");
+    let source = format!(
+        "#set page(width: 420pt, height: 220pt, margin: 18pt)\n#set text(font: \"{escaped}\", size: 34pt)\n#block(width: 100%, height: 100%)[{content}]\n"
+    );
+    std::fs::write(&input, source)
+        .map_err(|error| format!("Failed to write font specimen: {error}"))?;
+    let mut command = std::process::Command::new(tinymist_cmd);
+    command.current_dir(directory.path());
+    let cache_root = scaled_fonts::global_scaled_font_root(&data_dir);
+    let mut paths =
+        compiler_font_directories(&app_handle, &data_dir, Path::new(&workspace_root_path));
+    if let Some(path) = scaled_fonts::prepared_font_directory(&cache_root, &family) {
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    if !paths.is_empty() {
+        if let Ok(value) = std::env::join_paths(paths) {
+            command.env("TYPST_FONT_PATHS", value);
+        }
+    }
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let result = command
+        .arg("compile")
+        .arg("--root")
+        .arg(directory.path())
+        .arg("--format")
+        .arg("svg")
+        .arg(&input)
+        .arg(&output)
+        .output()
+        .map_err(|error| format!("Font specimen compiler failed to start: {error}"))?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).trim().to_string());
+    }
+    std::fs::read_to_string(output)
+        .map_err(|error| format!("Failed to read font specimen: {error}"))
 }
 
 #[tauri::command]
@@ -4968,6 +5083,9 @@ pub fn run() {
             load_workspace_private_font_directories,
             save_workspace_private_font_directories,
             prepare_scaled_workspace_font,
+            prepare_named_workspace_font,
+            prepared_font_library,
+            compile_font_specimen,
             scaled_workspace_font_update_required,
             scaled_workspace_font_set_update_required,
             scaled_workspace_font_set_status,

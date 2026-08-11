@@ -1,134 +1,57 @@
-# Document typography
+# Configure document typography
 
-## Why use it?
+Use Document Typography for portable document settings. Use Font Tools only when an existing font needs a machine-local optical adjustment.
 
-A normal Typst fallback stack applies the same size to every font:
+## Set ordinary document fonts
 
-```typst
-#set text(font: ("MiSans Khmer", "MiSans Latin"), size: 11pt)
-```
+1. Open a Typst document related to the configured main file.
+2. Select **Document Typography** from the `Aa` toolbar.
+3. Add the font families the document should use.
+4. Drag them into Typst fallback order.
+5. Set the base text size.
+6. Optionally assign a language provider to a writing script.
+7. Choose **Apply to document**.
 
-This creates two practical problems:
+Typsastra writes an ordinary `#set text` rule. You can continue editing it by hand.
 
-- fonts for different scripts may look mismatched at the same point size;
-- a font listed first may contain another script and prevent that script's
-  intended font from being used.
+Font order matters. If a Khmer family also contains Latin glyphs, placing it before the Latin family may prevent the later family from being used. Choose the order that best matches the document's dominant typography and inspect the compiled result.
 
-Typsastra preserves the familiar fallback stack without rewriting document
-content.
+## Prepare an optically adjusted family
 
-## Configure script fonts
+1. Open **Font Tools** from the sidebar.
+2. Select the source family.
+3. Enter a whole percentage, such as `95` or `105`.
+4. Edit the specimen to include the scripts and glyphs you care about.
+5. Inspect the compiled specimen preview.
+6. Choose **Prepare font**.
+7. Choose **Activate in project**.
 
-1. Open **Document Typography** from the `Aa` toolbar button.
-2. Set the shared document size.
-3. Add each script used by the document.
-4. Choose its installed font and adjust its scale if necessary.
-5. Optionally assign the language provider used for spellcheck and completion.
-6. Drag the script rows into priority order. With the drag handle focused, Up
-   and Down Arrow provide the same operation from the keyboard.
-7. Choose **Apply to document**, or **Apply as template** for shared project
-   typography.
-
-To prepare another font for the same script, choose **Add font**, select that
-script and family, then clear **Default text font**. The row becomes **Prepared
-font only**: Typsastra scales and activates the family but does not add it to
-the default fallback stack. You can call it directly anywhere in the document:
+For example, preparing Moul at 95% creates the family `Moul 95`. It can then be selected in Document Typography or used directly:
 
 ```typst
-#text(font: "Moul")[មូល]
-#show heading.where(level: 1): it => text(font: "Moul")[it]
+#text(font: "Moul 95")[Heading text]
 ```
 
-Only one row per script owns default text and language tools. Prepared-only
-fonts can each use their own scale.
+To apply it quickly, select existing text in the editor and choose **Apply to selection** in Font Tools.
 
-For example:
+## Enable language tools
 
-```text
-Document size  11pt
-Khmer          MiSans Khmer    0.95×
-Latin          MiSans Latin    1.10×
-Arabic         MiSans Arabic   1.00×
-```
-
-Typsastra generates an ordinary ordered fallback:
+Assign a provider in Document Typography only when the script should receive spellcheck and word completion. Typsastra stores language routing separately from the font stack:
 
 ```typst
-font: ("MiSans Khmer", "MiSans Latin", "MiSans Arabic")
+// typsastra:document-languages [{"script":"latin","language":"en-US"},{"script":"khmer","language":"km"}]
 ```
 
-For mixed Khmer and English, neither ordinary order can guarantee both desired
-fonts:
+Changing fonts does not silently change language providers, and changing a provider does not rewrite the document's font choices.
 
-- `("MiSans Latin", "MiSans Khmer")` preserves the Latin font, but Western
-  digits and shared punctuation normally come from the Latin family.
-- `("MiSans Khmer", "MiSans Latin")` gives those shared characters to the
-  Khmer family, but many Khmer fonts also contain Latin glyphs. Embedded English
-  may therefore use the Khmer family without ever reaching MiSans Latin.
+## Work with private fonts
 
-For v0.6, choose the order that best matches the dominant typography. Strict
-script-font enforcement is not enabled because shared digits, punctuation,
-inherited marks, and fonts with overlapping glyph coverage require a clearer
-authoring model. Typsastra may explore that model in a later release.
+Use **Workspace private fonts** in Document Typography when a project needs a font that should not be installed system-wide. Use a folder inside the workspace for a portable relative configuration, or an external folder for a machine-local absolute configuration.
 
-Typsastra asks for confirmation before generating a scaled font. Generated
-variants live only in Typsastra's private global application-data cache, where
-they can be reused by other projects. No font data or cache path is written
-into `.typsastra` or included in project exports.
+Typsastra never copies these fonts into project exports. Confirm that you have permission to use and share every font dependency.
 
-## Use a font without installing it
+## Move a legacy document
 
-If a font must remain private or should not be installed into the operating
-system, open **Settings → Editor → Private local font directories** and add the
-folder containing it. Typsastra validates the folder before saving it and
-rejects family names that collide with an existing system or private font.
+When a legacy main file contains scale factors in Typsastra metadata, accept the migration prompt to create named prepared families and rewrite the source to the new model. Review the generated aliases in Font Tools afterward.
 
-Document Typography lists families in this order:
-
-1. **Typst built-in**
-2. **Private local**
-3. **System fonts**
-
-The Settings directory is global and machine-local. For a font used by one
-project, Document Typography also offers **Workspace private fonts**. Folders
-inside the workspace are stored relatively; external folders remain absolute
-and local to that computer. These workspace entries are written only to ignored
-`.typsastra/local.json`, never to an archive or project export.
-
-Typsastra passes both kinds of directory to diagnostics, live preview, source
-synchronization, and PDF export, but does not load those fonts into the source
-editor. It also never copies the original font files into `.typsastra` or a
-project export. A recipient therefore needs the same font dependency installed
-or configured on their own machine.
-
-Typsastra recommends no more than 10 cached scale variants per font face. It
-asks before creating another variant and keeps every existing variant until the
-user explicitly manages the cache. Cache inspection, deletion, and renewal
-controls are planned for a future update.
-
-Keep script scales between `0.90×` and `1.10×` when possible. Typsastra warns
-before applying a larger adjustment because this control is for fine optical
-balancing, not for doubling the font size. Results beyond ±10% vary between
-fonts and may not be represented accurately.
-
-> **PDF limitation:** Non-`1.0` scales are experimental. Typst may normalize a
-> scaled font while creating a PDF subset, producing unscaled glyph outlines
-> with scaled spacing. Typsastra does not post-process the PDF or make preview
-> differ from export. Use `1.0` for dependable PDF output and inspect every
-> exported PDF when testing another scale.
-
-## What this does not control
-
-Script assignments do not change:
-
-- the source editor's font;
-- Typst `lang` or `dir`;
-- Typst's `lang` or `dir` behavior.
-
-The optional language field does select Typsastra spellcheck and word
-completion for that script. Leave it off when the script should receive no
-language analysis.
-
-For implementation details and limitations, see
-[Document typography](../DOCUMENT_TYPOGRAPHY.md). Try
-`02-multilingual-writing/01-script-font-assignments`.
+For storage, format, cache, and portability details, see [Document typography and Font Tools](../DOCUMENT_TYPOGRAPHY.md).

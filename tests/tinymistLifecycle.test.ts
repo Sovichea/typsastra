@@ -21,7 +21,8 @@ describe("Tinymist workspace lifecycle", () => {
     expect(source).toContain("scaled_workspace_font_set_status");
     expect(source).toContain("activate_scaled_workspace_fonts");
     expect(source).toContain("synchronizeDocumentTypography(typography)");
-    expect(source).toContain("ownsWorkspaceTypography && !await this.confirmTypographyScaleRange(config)");
+    expect(source).toContain('title: "Migrate Legacy Font Scaling?"');
+    expect(source).toContain('invoke<{ alias: string }>("prepare_named_workspace_font"');
     expect(source).toContain("if (!this.isPinnedMainFile(filePath))");
     expect(source.indexOf("preparePinnedMainTypography(path)")).toBeLessThan(
       source.indexOf("this.pinnedMainFilePath = path", source.indexOf("preparePinnedMainTypography(path)"))
