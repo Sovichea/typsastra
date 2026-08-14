@@ -520,6 +520,12 @@ export class PreviewFrame {
       ? this.pendingRestoredScrollTop!
       : this.captureScrollPosition();
     this.clearErrorOverlay();
+    // A large-file guardrail can leave a message host above the preview pane.
+    // Loading a real PDF must always replace that surface, including when the
+    // low-memory path restores a cached PDF rather than activating a resident
+    // session.
+    this.clearMessageHost();
+    this.onDebug?.(`Preview PDF load clears any prior placeholder: identity=${identity}; session=${sessionKey}; surface=${surface}.`);
 
     const iframe = await this.ensureIframe();
     if (generation !== this.pdfGeneration) return 0;
