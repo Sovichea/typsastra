@@ -36,8 +36,6 @@ export interface EditorControllerPort {
   performanceEnabled(): boolean;
   recordPerformance(metric: Omit<PerformanceMetric, "recordedAt">): void;
   logLayoutRefresh(reason: string): void;
-  suppressPreviewSync(durationMs: number): void;
-  revealPreviewAtCursor(cursor: number): void;
   activePath(): string | null;
   pathKey(path: string): string;
   contentMutationDelay(): number;
@@ -108,19 +106,6 @@ export class EditorController {
       this.inputType = event.inputType || "unknown";
     }, { capture: true });
 
-    editor.dom.addEventListener("pointerup", event => {
-      if (!(event instanceof PointerEvent) || event.button !== 0) return;
-      if (this.scrollbarPointerActive) {
-        this.scrollbarPointerActive = false;
-        this.port.suppressPreviewSync(250);
-        return;
-      }
-      window.setTimeout(() => {
-        if (this.editor !== editor) return;
-        this.port.revealPreviewAtCursor(editor.state.selection.main.head);
-      }, 0);
-    }, true);
-
     editor.scrollDOM.addEventListener("pointerdown", event => {
       if (!(event instanceof PointerEvent) || event.button !== 0) return;
 
@@ -134,7 +119,6 @@ export class EditorController {
       event.preventDefault();
       event.stopPropagation();
       this.scrollbarPointerActive = true;
-      this.port.suppressPreviewSync(1000);
 
       const trackHeight = scrollDOM.clientHeight;
       const maxScrollTop = Math.max(0, scrollDOM.scrollHeight - trackHeight);
@@ -154,10 +138,6 @@ export class EditorController {
         this.scrollbarPointerActive = false;
       }, 0);
     }, true);
-    editor.scrollDOM.addEventListener("scroll", () => {
-      this.port.suppressPreviewSync(500);
-    }, { passive: true });
-
     editor.contentDOM.addEventListener("keydown", event => {
       if (!this.isMutationKey(event)) return;
       this.mutationKeysHeld.add(event.code || event.key);
@@ -353,16 +333,6 @@ export class EditorController {
     }));
   }
 
-  shouldForwardSyncSelectionUpdate(update: {
-    selectionSet: boolean;
-    transactions: readonly { isUserEvent(event: string): boolean }[];
-  }): boolean {
-    return update.selectionSet && update.transactions.some(transaction =>
-      transaction.isUserEvent("select.pointer")
-      || transaction.isUserEvent("select.search")
-    );
-  }
-
   updateAll(): void {
     this.updateCaretMarker();
     this.updateDiagnosticMarkers();
@@ -470,7 +440,6 @@ export class EditorController {
         event.preventDefault();
         event.stopPropagation();
         this.scrollbarPointerActive = true;
-        this.port.suppressPreviewSync(1000);
         this.navigateToScrollMarker(target);
       });
       layer.appendChild(marker);

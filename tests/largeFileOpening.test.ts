@@ -108,6 +108,7 @@ describe("large file opening notice", () => {
     const noticeSource = previewGuard.slice(noticeStart, noticeEnd);
     expect(noticeSource).toContain("this.previewTargetForUnloadedTab(tab)");
     expect(noticeSource).toContain("this.noticeForRoot(target.rootPath)");
+    expect(noticeSource).toContain("this.approvedRoots.has(rootKey)");
 
     const guard = await Bun.file(
       new URL("../src/editor/editorFileGuardController.ts", import.meta.url),
@@ -130,5 +131,13 @@ describe("large file opening notice", () => {
     const servicesEnd = lifecycle.indexOf("async restoreToolchain", servicesStart);
     const servicesSource = lifecycle.slice(servicesStart, servicesEnd);
     expect(servicesSource).toContain("app.workspaceServicesDeferredForLargeFile");
+
+    const activation = await Bun.file(
+      new URL("../src/editor/editorTabActivationController.ts", import.meta.url),
+    ).text();
+    const resumeIndex = activation.indexOf("deps.resumeDeferredWorkspaceServices();");
+    const prepareIndex = activation.indexOf("await deps.previewActivation.prepare");
+    expect(resumeIndex).toBeGreaterThan(-1);
+    expect(resumeIndex).toBeLessThan(prepareIndex);
   });
 });

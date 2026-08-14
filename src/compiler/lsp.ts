@@ -550,6 +550,15 @@ export class TinymistLspClient {
     return result.path;
   }
 
+  public async exportQueryToFile(path: string, options: Record<string, unknown>): Promise<string> {
+    const result = await this.request<TinymistPdfExport | null>("workspace/executeCommand", {
+      command: "tinymist.exportQuery",
+      arguments: [path, options, { write: true, open: false }]
+    }, 60000);
+    if (!result?.path) throw new Error("Tinymist returned no query export path.");
+    return result.path;
+  }
+
   public notifyTextChange(uri: string, text: string, version: number): Promise<void> {
     return this.sendNotification("textDocument/didChange", {
       textDocument: { uri, version },

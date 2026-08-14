@@ -101,14 +101,16 @@ describe("cross-platform scrollbar design", () => {
     expect(controller).toContain("previewScrollTop: this.previewScrollTop");
   });
 
-  test("restores an independent preview offset when switching editor tabs", async () => {
+  test("shares a preview offset between tabs in the same preview session", async () => {
     const source = await Bun.file(new URL("../src/preview/previewFrame.ts", import.meta.url)).text();
     const controller = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
     const activation = await Bun.file(
       new URL("../src/editor/editorTabActivationController.ts", import.meta.url),
     ).text();
-    expect(controller).toContain("activeTab.previewScrollTop = this.previewScrollTop");
-    expect(activation).toContain("deps.queuePreviewScrollPosition(tab?.previewScrollTop)");
+    expect(controller).toContain("const previewOwnerPath = activeTab?.previewMainPath");
+    expect(controller).toContain("filePathKey(tabOwnerPath) === ownerKey");
+    expect(controller).toContain("previewScrollTopForTab: tab => {");
+    expect(activation).toContain("deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab))");
     expect(source).toContain("queueTabScrollPosition(scrollTop?: number)");
     expect(source).toContain("const restoringSavedPosition = this.pendingRestoredScrollTop !== null");
   });

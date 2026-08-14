@@ -174,7 +174,7 @@ export class ContextMenuController {
       return Boolean(element && !element.classList.contains("hidden") && !element.disabled);
     };
     const typstActions = [
-      available("preview-forward-sync-btn")
+      this.dependencies.canRevealCursorInPreview()
         ? '<div class="dropdown-item" id="ctx-preview-forward-sync">Reveal Cursor in Preview</div>'
         : "",
       available("preview-recompile-btn")
@@ -298,7 +298,7 @@ export class ContextMenuController {
       case "ctx-project-copy-abs-path": return this.copyProjectAbsolutePath();
       case "ctx-preview-open-external": return this.openPreviewPdf();
       case "ctx-preview-undock": document.getElementById("undock-preview-btn")?.click(); return;
-      case "ctx-preview-forward-sync": document.getElementById("preview-forward-sync-btn")?.click(); return;
+      case "ctx-preview-forward-sync": this.dependencies.revealCursorInPreview(); return;
       case "ctx-preview-recompile": document.getElementById("preview-recompile-btn")?.click(); return;
       case "ctx-preview-zoom-out": document.getElementById("preview-zoom-out-btn")?.click(); return;
       case "ctx-preview-zoom-fit": document.getElementById("preview-zoom-fit-btn")?.click(); return;

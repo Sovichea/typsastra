@@ -53,7 +53,10 @@ describe("compiled PDF transport", () => {
     expect(nativeSource).toContain("diagnostics: String::from_utf8_lossy(&result.stderr)");
     expect(nativeSource).toContain('.arg("compile")');
     expect(nativeSource).toContain(".kill_on_drop(true)");
-    expect(nativeSource).toContain("input.starts_with(cache_root.join(\"render\"))");
+    expect(nativeSource).toContain("input.starts_with(&render_root)");
+    expect(nativeSource).toContain(".current_dir(&render_root)");
+    expect(nativeSource).toContain(".arg(input_relative)");
+    expect(nativeSource).toContain('.arg(".")');
     expect(lifecycleSource).toContain(
       'await app.stopTinymistSession("Low memory mode: using one-shot compiler on save")',
     );
@@ -190,7 +193,7 @@ describe("compiled PDF transport", () => {
     expect(contentSource).toContain("await this.deps.updatePinnedMain(previewLspMainPath(target))");
     expect(source).not.toContain("cachedPreviewCompilerPath");
     expect(diagnosticsSource).toContain("if (this.port.isRenderCachePath(rawPath))");
-    expect(saveMethod).toContain("void this.deps.renderPdfPreview(content)");
+    expect(saveMethod).toContain("this.deps.refreshPreviewAfterManualSave(activeFilePath, content)");
     expect(saveMethod).not.toContain('effectivePreviewRenderMode === "on-save"');
   });
 

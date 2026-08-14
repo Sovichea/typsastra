@@ -14,7 +14,9 @@ type EditorFileGuardDependencies = {
   onTypstPreviewBlocked: (rootPath: string) => void;
   approveLargePreview: (tab: EditorTab, notice: LargeFileOpeningNotice) => Promise<void>;
   activateConfirmedTab: (path: string) => Promise<void>;
+  startConfirmedTypstPreview(): Promise<void>;
   onGuardedTabSelected: (path: string) => void;
+  logPreview(message: string): void;
 };
 
 export class EditorFileGuardController {
@@ -149,6 +151,7 @@ export class EditorFileGuardController {
       : `This file is ${scale}. ${work}`;
 
     const openConfirmedFile = async () => {
+      this.deps.logPreview(`Large-file confirmation accepted: tab=${path}; kind=${notice.kind}; noticeRoot=${notice.previewRootPath ?? "none"}.`);
       if (notice.kind === "pdf") {
         this.deps.onPdfUnblocked(path);
       } else if (isTypstDocumentPath(path)) {
@@ -156,6 +159,15 @@ export class EditorFileGuardController {
       }
       try {
         await this.deps.activateConfirmedTab(path);
+        this.deps.logPreview(`Large-file confirmed tab activated: tab=${path}; kind=${notice.kind}.`);
+        // Activation owns editor/LSP preparation. Start the confirmed
+        // low-memory/live preview explicitly afterward so an earlier
+        // guardrail result cannot leave the preview waiting for a tab switch.
+        if (isTypstDocumentPath(path)) {
+          this.deps.logPreview(`Large-file confirmation requests explicit preview refresh: tab=${path}.`);
+          await this.deps.startConfirmedTypstPreview();
+          this.deps.logPreview(`Large-file explicit preview refresh completed: tab=${path}.`);
+        }
       } catch (error) {
         if (notice.kind === "pdf") this.deps.onPdfReblocked(path);
         throw error;

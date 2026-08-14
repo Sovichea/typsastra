@@ -22,6 +22,7 @@ export interface LargePreviewGuardDependencies {
   isInternallySupportedPath(path: string): boolean;
   showLargeFileConfirmation(tab: EditorTab, notice: LargeFileOpeningNotice): void;
   setWorkspaceServicesDeferred(deferred: boolean): void;
+  logPreview(message: string): void;
 }
 
 /** Owns large-file and aggregate preview approval policy/state. */
@@ -61,11 +62,21 @@ export class LargePreviewGuardController {
       }
     }
     const textNotice = sizeNotice ?? largeFileOpeningNotice(tab.path, sizeBytes, tab.lineCount);
-    if (textNotice || !isTypstDocumentPath(tab.path)) return textNotice;
+    if (!isTypstDocumentPath(tab.path)) return textNotice;
 
+    // A Typst include is opened as part of its effective main preview, not as
+    // an independent compiler session. Resolve that relationship before
+    // applying the file-size guard so one approval for the main also approves
+    // every included file for this workspace session.
     const target = await this.previewTargetForUnloadedTab(tab);
-    if (!target?.rootPath || target.disabled) return null;
-    return this.noticeForRoot(target.rootPath);
+    if (target?.rootPath && !target.disabled) {
+      const rootKey = filePathKey(target.rootPath);
+      if (this.approvedRoots.has(rootKey) || this.inspectedRoots.has(rootKey)) return null;
+      const rootNotice = await this.noticeForRoot(target.rootPath);
+      if (rootNotice) return rootNotice;
+    }
+
+    return textNotice;
   }
 
   async previewTargetForUnloadedTab(tab: EditorTab): Promise<PreviewTarget | null> {
@@ -87,7 +98,10 @@ export class LargePreviewGuardController {
       ? { rootPath: notice.previewRootPath }
       : await this.previewTargetForUnloadedTab(tab);
     const rootPath = target?.rootPath;
-    if (!rootPath) return;
+    if (!rootPath) {
+      this.deps.logPreview(`Large-preview approval could not resolve a root: tab=${tab.path}; noticeRoot=${notice.previewRootPath ?? "none"}.`);
+      return;
+    }
     const rootKey = filePathKey(rootPath);
     this.approvedRoots.add(rootKey);
     this.inspectedRoots.add(rootKey);
@@ -96,6 +110,7 @@ export class LargePreviewGuardController {
     if (blockedKey === rootKey || blockedKey === filePathKey(tab.path)) {
       this.blockedRootValue = null;
     }
+    this.deps.logPreview(`Large-preview root approved: tab=${tab.path}; root=${rootPath}; blocked=${this.blockedRootValue ?? "none"}; approvedRoots=${this.approvedRoots.size}.`);
   }
 
   activeCompilerPreviewMatchesRoot(rootPath: string): boolean {
@@ -135,19 +150,34 @@ export class LargePreviewGuardController {
   }
 
   async ensureApproved(rootPath: string | null): Promise<boolean> {
-    if (!rootPath || this.activeCompilerPreviewMatchesRoot(rootPath)) return true;
+    if (!rootPath) {
+      this.deps.logPreview("Large-preview approval bypassed: no preview root.");
+      return true;
+    }
+    if (this.activeCompilerPreviewMatchesRoot(rootPath)) {
+      this.deps.logPreview(`Large-preview approval bypassed: active session already owns root=${rootPath}.`);
+      return true;
+    }
     const rootKey = filePathKey(rootPath);
-    if (this.approvedRoots.has(rootKey) || this.inspectedRoots.has(rootKey)) return true;
-    if (this.blockedRootValue && filePathKey(this.blockedRootValue) === rootKey) return false;
+    if (this.approvedRoots.has(rootKey) || this.inspectedRoots.has(rootKey)) {
+      this.deps.logPreview(`Large-preview approval reused: root=${rootPath}; approved=${this.approvedRoots.has(rootKey)}; inspected=${this.inspectedRoots.has(rootKey)}.`);
+      return true;
+    }
+    if (this.blockedRootValue && filePathKey(this.blockedRootValue) === rootKey) {
+      this.deps.logPreview(`Large-preview approval remains blocked: root=${rootPath}; blocked=${this.blockedRootValue}.`);
+      return false;
+    }
     const notice = await this.noticeForRoot(rootPath);
     if (!notice) {
       this.inspectedRoots.add(rootKey);
+      this.deps.logPreview(`Large-preview approval not required: root=${rootPath}.`);
       return true;
     }
 
-    this.blockedRootValue = rootPath;
-    this.deps.setWorkspaceServicesDeferred(true);
     const activeTab = this.deps.activeTab();
+    this.blockedRootValue = rootPath;
+    this.deps.logPreview(`Large-preview approval requested: root=${rootPath}; activeTab=${activeTab?.path ?? "none"}; lines=${notice.lineCount ?? "unknown"}; bytes=${notice.sizeBytes}.`);
+    this.deps.setWorkspaceServicesDeferred(true);
     if (activeTab) {
       this.deps.showLargeFileConfirmation(activeTab, notice);
     } else {

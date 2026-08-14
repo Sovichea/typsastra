@@ -30,8 +30,7 @@ type DocumentPersistenceDependencies = {
   logMemoryDiagnostics: (reason: string) => Promise<void>;
   clearExternalConflict: (path: string) => void;
   renderEditorTabs: () => void;
-  shouldRenderPreviewAfterManualSave: (path: string) => boolean;
-  renderPdfPreview: (content: string) => Promise<void> | void;
+  refreshPreviewAfterManualSave: (path: string, content: string) => Promise<void>;
   setLspStatus: (status: LspStatus) => void;
   log: (kind: "info" | "error", source: string, message: string) => void;
 };
@@ -200,8 +199,13 @@ export class DocumentPersistenceController {
         this.deps.renderEditorTabs();
       }
       this.deps.setLspStatus({ kind: "preview-ready", message: "File saved" });
-      if (intent === "manual" && this.deps.shouldRenderPreviewAfterManualSave(activeFilePath)) {
-        void this.deps.renderPdfPreview(content);
+      if (intent === "manual" && isTypstDocumentPath(activeFilePath)) {
+        // Saving has already succeeded. Start preview refresh separately so a
+        // compiler/indexing failure is reported by the preview without
+        // incorrectly presenting the successful file write as a save failure.
+        void this.deps.refreshPreviewAfterManualSave(activeFilePath, content).catch(error => {
+          this.deps.log("error", "preview scheduler", `Preview refresh after save failed: ${String(error)}`);
+        });
       }
     } catch (error) {
       const message = `Save failed: ${String(error)}`;

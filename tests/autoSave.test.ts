@@ -29,9 +29,9 @@ describe("auto save", () => {
     const method = persistence.slice(start, end);
 
     expect(method).toContain('intent === "manual"');
-    expect(method).toContain("shouldRenderPreviewAfterManualSave(activeFilePath)");
-    expect(controller).toContain("participatesInPreviewCompilation(path, this.pinnedMainFilePath, this.previewImported)");
-    expect(method).toContain("void this.deps.renderPdfPreview(content)");
+    expect(method).toContain("isTypstDocumentPath(activeFilePath)");
+    expect(method).toContain("this.deps.refreshPreviewAfterManualSave(activeFilePath, content)");
+    expect(controller).toContain("previewContentController.refreshActivePreviewRoot(true)");
     expect(method).not.toContain("savedChangedRevision &&");
   });
 });

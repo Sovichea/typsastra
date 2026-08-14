@@ -41,7 +41,13 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function rawErrorText(error: unknown): string {
+/**
+ * Preserve structured Tauri/LSP failures for UI and developer logs.
+ *
+ * `String(error)` turns Tauri command rejections into `[object Object]`, which
+ * hides the only useful part of a failed background operation.
+ */
+export function previewErrorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   const value = record(error);
@@ -117,7 +123,7 @@ export function typstPackageImports(source: string, filePath: string): TypstPack
 }
 
 export function parsePreviewCompilerFailure(error: unknown): PreviewCompilerFailure {
-  const message = unwrapTinymistExportMessage(rawErrorText(error));
+  const message = unwrapTinymistExportMessage(previewErrorText(error));
   const locationMatch = /^[ \t]*[^\r\n]*?((?:[A-Za-z]:[\\/]|\/)[^\r\n]+):(\d+):(\d+)[ \t]*$/m.exec(message);
   const location = locationMatch
     ? {

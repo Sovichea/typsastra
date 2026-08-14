@@ -36,7 +36,7 @@ export class SourceLocationController {
     const workspaceRootPath = this.deps.workspaceRootPath();
     if (!workspaceRootPath) return cachePath;
     const prefix = `${normalizePathForComparison(workspaceRootPath)}/.typsastra/cache/render/`;
-    const decodedCachePath = decodeRustUnicodeEscapes(cachePath);
+    const decodedCachePath = stripWindowsExtendedPathPrefix(decodeRustUnicodeEscapes(cachePath));
     const displayCachePath = decodedCachePath.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
     const cleanCache = displayCachePath.toLowerCase();
     if (cleanCache.startsWith(prefix)) {
@@ -151,5 +151,21 @@ export class SourceLocationController {
 }
 
 function normalizePathForComparison(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/\/$/, "").toLowerCase();
+  return stripWindowsExtendedPathPrefix(path)
+    .replace(/\\/g, "/")
+    .replace(/\/{2,}/g, "/")
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
+
+/**
+ * Rust may return Windows paths with the extended-length prefix (\\\\?\\).
+ * It is a filesystem transport detail, not part of the workspace-relative path,
+ * so remove it before comparing prepared render-cache paths with the workspace.
+ */
+function stripWindowsExtendedPathPrefix(path: string): string {
+  if (/^\\\\\?\\UNC\\/iu.test(path)) {
+    return `\\\\${path.slice("\\\\?\\UNC\\".length)}`;
+  }
+  return path.replace(/^\\\\\?\\/u, "");
 }

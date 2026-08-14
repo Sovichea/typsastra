@@ -58,16 +58,24 @@ describe("Tinymist preview data plane", () => {
     expect(source).not.toContain("LOW_MEMORY_SOURCE_MAP_IDLE_MS");
   });
 
-  test("keeps Tinymist stopped for inverse-sync clicks in low memory mode", async () => {
+  test("uses the persistent index for inverse-sync clicks in low memory mode", async () => {
     const appSource = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
     const navigationSource = await Bun.file(
       new URL("../src/preview/previewSourceNavigationController.ts", import.meta.url),
     ).text();
 
     expect(navigationSource).toContain("if (this.deps.isLowMemoryMode())");
-    expect(navigationSource).toContain("use the document outline for preview navigation");
+    expect(navigationSource).toContain("this.deps.lowMemorySync.findInverse(position)");
+    expect(navigationSource).toContain("Indexed inverse sync:");
     expect(appSource).not.toContain("Starting temporary inverse sync");
     expect(appSource).not.toContain("temporary inverse sync released");
+  });
+
+  test("shows a PDF ripple whenever indexed forward sync resolves an anchor", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/lowMemorySyncIndexController.ts", import.meta.url),
+    ).text();
+    expect(source).toContain("{ ripple: true }");
   });
 
   test("loads the prepared source identity before the first cache-backed forward sync", async () => {

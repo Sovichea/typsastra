@@ -20,6 +20,7 @@ export interface PreviewControllerPort {
   onPageChanged(status: PreviewPageStatus): void;
   loadDraftImage(id: string): Promise<DraftPreviewImageResult | null>;
   onScrollPositionChanged(scrollTop: number): void;
+  onDebug(message: string): void;
   onDocumentOutline(items: PreviewOutlineItem[]): void;
   onLoadStage(
     stage: string,
@@ -44,6 +45,7 @@ export class PreviewController {
       status => port.onPageChanged(status),
       id => port.loadDraftImage(id),
       scrollTop => port.onScrollPositionChanged(scrollTop),
+      message => port.onDebug(message),
       items => port.onDocumentOutline(items),
       (stage, detail) => port.onLoadStage(stage, detail),
     );

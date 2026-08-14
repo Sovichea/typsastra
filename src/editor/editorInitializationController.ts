@@ -34,7 +34,6 @@ export interface EditorInitializationDependencies {
   markActiveTabDirty(): void;
   scheduleEditorContentMutation(doc: Text): void;
   syncSelectedSpellingLocation(): void;
-  forwardSyncDebounceMs(): number;
   isDeveloperPerformanceLogEnabled(): boolean;
 }
 
@@ -84,7 +83,6 @@ export class EditorInitializationController {
           deps.documentOutline.setCursorPosition(
             update.state.selection.main.head,
             deps.activeFilePath(),
-            true,
           );
         } else if (update.docChanged) {
           deps.logConsole.setActiveSpellcheckLocation(null);
@@ -112,9 +110,6 @@ export class EditorInitializationController {
         if (update.docChanged || update.geometryChanged || diagnosticsChanged) deps.editorController.updateDiagnosticMarkers();
         if (update.docChanged || update.selectionSet || matchQueryChanged) deps.editorController.scheduleMatchMarkers();
         deps.editorController.handleFoldTransactions(update.transactions);
-        if (!update.docChanged && deps.editorController.shouldForwardSyncSelectionUpdate(update)) {
-          deps.previewSync.schedule(deps.forwardSyncDebounceMs());
-        }
         deps.editorController.finishInputProfile(inputProfile, update.state.doc.length, update.view.composing);
       }),
     ];

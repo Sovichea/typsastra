@@ -75,6 +75,15 @@ export interface PdfPreviewRenderDependencies {
   getWorkspaceRootPath(): string | null;
   getPreviewRenderMode(): PreviewRenderMode;
   isLowMemoryMode(): boolean;
+  canRestoreLowMemoryPreviewCache(): boolean;
+  restoreLowMemoryPreviewCache(): Promise<{ pdfPath: string; indexJson: string } | null>;
+  captureLowMemoryPreviewSignature(): Promise<string | null>;
+  buildLowMemorySyncIndex(
+    preparedRootPath: string,
+    generation: number,
+    pdfPath: string,
+    sourceSignature: string | null,
+  ): Promise<void>;
   ensureLargePreviewApproved(rootPath: string | null): Promise<boolean>;
   isPdfBlocked(path: string): boolean;
   getCacheRootPath(): string | null;
@@ -214,6 +223,11 @@ export class PdfPreviewRenderController {
   }
 
   public async render(contents: string, force = false): Promise<void> {
+    this.deps.log(
+      "info",
+      "preview scheduler",
+      `Render requested: force=${force}; lowMemory=${this.deps.isLowMemoryMode()}; active=${this.deps.getActiveFilePath() ?? "none"}; pinned=${this.deps.getPinnedMainFilePath() ?? "none"}; root=${this.deps.getPreviewRootPath() ?? "none"}; session=${this.deps.getPreviewSessionKey() ?? "none"}; imported=${this.deps.isPreviewImported()}; disabled=${this.deps.isPreviewDisabled()}; sourceUtf16=${contents.length}.`,
+    );
     if (this.deps.isPreviewDisabled()) {
       this.deps.log("info", "preview scheduler", "Render skipped: preview is disabled.");
       return;
@@ -281,6 +295,40 @@ export class PdfPreviewRenderController {
     const preparationRevision = this.preparationRevisionValue;
     let renderSucceeded = false;
     let preparedPreview: PreparedPdfPreview | null = null;
+
+    try {
+    // A low-memory preview is a durable snapshot of the complete workspace.
+    // Reopen it before preparation/compilation when the active source is clean.
+    // This keeps switching between the main and an included file, and reopening
+    // an unchanged project, entirely Tinymist-free.
+    if (
+      lowMemoryMode
+      && !force
+      && generationContentMode === "normal"
+      && this.deps.canRestoreLowMemoryPreviewCache()
+    ) {
+      try {
+        const cached = await this.deps.restoreLowMemoryPreviewCache();
+        if (cached && generation === this.generationValue) {
+          this.lastPdfPathValue = cached.pdfPath;
+          this.managedPdfPathKeysValue.add(filePathKey(cached.pdfPath));
+          await this.loadPdfPath(
+            cached.pdfPath,
+            this.deps.getPreviewRootPath() ?? cached.pdfPath,
+            this.deps.getPreviewSessionKey() ?? this.deps.getPreviewRootPath() ?? cached.pdfPath,
+            "live",
+            false,
+          );
+          this.deps.log("info", "preview scheduler", "Reused cached low-memory PDF and sync index for an unchanged workspace snapshot.");
+          this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
+          this.deps.onRenderSucceeded();
+          renderSucceeded = true;
+          return;
+        }
+      } catch (error) {
+        this.deps.log("warning", "preview scheduler", `Unable to restore low-memory preview cache; compiling normally: ${String(error)}`);
+      }
+    }
     await this.deps.performance.logMemoryDiagnostics(`render ${generation}: before preparation`);
     this.deps.log(
       "info",
@@ -292,7 +340,10 @@ export class PdfPreviewRenderController {
       this.deps.previewFrame.setLoading("Compiling live preview…");
     }
 
-    try {
+      const lowMemorySourceSignature = lowMemoryMode
+        ? await this.deps.captureLowMemoryPreviewSignature().catch(() => null)
+        : null;
+
       this.deps.preparation.ensureCurrent(preparationRevision);
       const draftPreparationStartedAt = performance.now();
       const useEditorOverlays = this.deps.getPreviewRenderMode() === "on-type" || force;
@@ -448,6 +499,14 @@ export class PdfPreviewRenderController {
         "live",
         true,
       );
+      if (lowMemoryMode) {
+        void this.deps.buildLowMemorySyncIndex(
+          previewPath,
+          generation,
+          stagedPdfPath,
+          lowMemorySourceSignature,
+        );
+      }
       await this.deps.draftPreview.presentGeneration({
         generation,
         mode: generationContentMode,

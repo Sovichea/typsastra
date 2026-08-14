@@ -201,6 +201,7 @@ export class PreviewFrame {
     private readonly onPageChanged?: (status: PreviewPageStatus) => void,
     private readonly onDraftImageRequest?: (id: string) => Promise<DraftPreviewImageResult | null>,
     private readonly onScrollPositionChanged?: (scrollTop: number) => void,
+    private readonly onDebug?: (message: string) => void,
     private readonly onDocumentOutline?: (items: PreviewOutlineItem[]) => void,
     private readonly onLoadStage?: (
       stage: string,
@@ -274,6 +275,7 @@ export class PreviewFrame {
     this.pendingRestoredScrollTop = typeof scrollTop === "number" && Number.isFinite(scrollTop)
       ? Math.max(0, scrollTop)
       : null;
+    this.onDebug?.(`Preview tab scroll queued: requested=${this.pendingRestoredScrollTop ?? "none"}; session=${this.mountedSessionKey || "none"}; url=${this.mountedUrl ? "mounted" : "none"}.`);
   }
 
   public syncTheme(): void {
@@ -1481,36 +1483,37 @@ export class PreviewFrame {
       });
   }
 
-  public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<void> {
+  public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<boolean> {
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
-    if (!slot) return;
+    if (!slot) return false;
     const view = this.iframe?.contentWindow;
-    if (!view) return;
+    if (!view) return false;
 
     const zoom = this.previewZoomPercent / 100;
     const targetY = slot.offsetTop + (position.y * zoom) - (view.innerHeight * 0.45);
     this.jumpToPreviewOffset(Math.max(0, targetY), position.page_no);
     if (options.ripple) {
-      await this.showForwardSyncRippleAtDocumentPosition(position);
+      return this.showForwardSyncRippleAtDocumentPosition(position);
     }
+    return true;
   }
 
-  private async showForwardSyncRippleAtDocumentPosition(position: { page_no: number; x: number; y: number }): Promise<void> {
+  private async showForwardSyncRippleAtDocumentPosition(position: { page_no: number; x: number; y: number }): Promise<boolean> {
     const generation = ++this.forwardRippleGeneration;
     const view = this.iframe?.contentWindow;
     const doc = this.iframe?.contentDocument;
-    if (!view || !doc) return;
+    if (!view || !doc) return false;
 
     await waitForPreviewScrollToSettle(view, 100, 100);
     const slot = doc.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
-    if (generation !== this.forwardRippleGeneration || !slot) return;
+    if (generation !== this.forwardRippleGeneration || !slot) return false;
 
     const zoom = this.previewZoomPercent / 100;
     const slotRect = slot.getBoundingClientRect();
     const x = slotRect.left + (position.x * zoom);
     const y = slotRect.top + (position.y * zoom);
-    this.renderForwardSyncRipple(doc, x, y);
+    return this.renderForwardSyncRipple(doc, x, y);
   }
 
   private jumpToPreviewOffset(top: number, pageNo: number): void {
@@ -1518,6 +1521,7 @@ export class PreviewFrame {
     if (!view) return;
     this.instantScrollTargetPage = pageNo;
     view.scrollTo({ top, behavior: "auto" });
+    this.onDebug?.(`Preview programmatic scroll requested: page=${pageNo}; target=${top.toFixed(1)}; observed=${view.scrollY.toFixed(1)}; session=${this.mountedSessionKey || "none"}.`);
     this.finishInstantPageJump(pageNo);
     window.setTimeout(() => {
       if (this.instantScrollTargetPage !== pageNo) return;
@@ -1539,7 +1543,16 @@ export class PreviewFrame {
     this.queueViewportFinalRenders("first-stable");
     void this.pumpPageRenderQueue();
     this.reportPageStatus(pageNo);
-    this.onScrollPositionChanged?.(view.scrollY);
+    const reportScrollPosition = (phase: string) => {
+      this.onScrollPositionChanged?.(view.scrollY);
+      this.onDebug?.(`Preview programmatic scroll observed: phase=${phase}; page=${pageNo}; observed=${view.scrollY.toFixed(1)}; session=${this.mountedSessionKey || "none"}.`);
+    };
+    // WebView can report the old scroll offset immediately after scrollTo.
+    // Report again after layout so session-linked tabs retain the position
+    // reached by forward/inverse navigation, not the previous viewport.
+    reportScrollPosition("immediate");
+    view.requestAnimationFrame(() => reportScrollPosition("animation-frame"));
+    view.setTimeout(() => reportScrollPosition("32ms"), 32);
   }
 
   private reportPageStatus(currentPage: number): void {
@@ -1553,8 +1566,8 @@ export class PreviewFrame {
     this.onPageChanged?.({ currentPage: normalizedPage, pageCount });
   }
 
-  private renderForwardSyncRipple(doc: Document, x: number, y: number): void {
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  private renderForwardSyncRipple(doc: Document, x: number, y: number): boolean {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
     doc.querySelectorAll(".forward-sync-ripple").forEach(element => element.remove());
     const ripple = doc.createElement("div");
     ripple.className = "forward-sync-ripple";
@@ -1563,7 +1576,8 @@ export class PreviewFrame {
     doc.body.appendChild(ripple);
     window.setTimeout(() => {
       if (ripple.isConnected) ripple.remove();
-    }, 1000);
+    }, 1600);
+    return true;
   }
 
   private captureScrollAnchor(): PreviewViewportAnchor | null {

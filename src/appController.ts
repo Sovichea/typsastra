@@ -23,6 +23,7 @@ import { TypographyController } from "./typography/typographyController";
 import { PinnedMainTypographyController } from "./typography/pinnedMainTypographyController";
 import { ImageToolsController, type ProjectImageReference } from "./components/imageTools";
 import { TinymistLspClient } from "./compiler/lsp";
+import { previewErrorText } from "./compiler/previewError";
 import { DocumentSessionController } from "./session/documentSessionController";
 import { LspDocumentController } from "./session/lspDocumentController";
 import { LspSyncController } from "./session/lspSyncController";
@@ -37,6 +38,8 @@ import type { PreviewFrame, PreviewClickPoint, PreviewInteractionStatus, Preview
 import type { MarkdownPreviewFrame, MarkdownResource } from "./preview/markdownPreviewFrame";
 import { PreviewController } from "./preview/previewController";
 import { PreviewSyncController } from "./preview/previewSyncController";
+import { LowMemorySyncIndexController } from "./preview/lowMemorySyncIndexController";
+import { buildLowMemorySyncIndex } from "./preview/lowMemorySyncIndexBuilder";
 import { PreviewSourceNavigationController } from "./preview/previewSourceNavigationController";
 import { PreviewUiController } from "./preview/previewUiController";
 import { PreviewContentController } from "./preview/previewContentController";
@@ -50,7 +53,7 @@ import {
 } from "./preview/draftPreviewController";
 import { PdfPreviewPreparationController } from "./preview/pdfPreviewPreparationController";
 import { PdfPreviewRenderController } from "./preview/pdfPreviewRenderController";
-import { activeFileCanRenderPreview, participatesInPreviewCompilation, previewRefreshStyle, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
+import { activeFileCanRenderPreview, previewRefreshStyle, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { DiagnosticsController } from "./diagnostics/diagnosticsController";
 import { PreviewFailureController } from "./diagnostics/previewFailureController";
@@ -275,6 +278,7 @@ export class TypsastraWorkspaceController {
     previewFrame: () => this.previewFrame,
     workspaceRootPath: () => this.workspaceRootPath,
     pinnedMainFilePath: () => this.pinnedMainFilePath,
+    isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     lspAvailable: () => this.lspReady && this.documentSessionController.hasClient,
     currentVersion: () => this.currentVersion,
     resolveLspDocument: (path, text) => this.getLspUriAndContent(path, text),
@@ -283,6 +287,7 @@ export class TypsastraWorkspaceController {
     noMainFileMessage: () => this.noMainFileMessage(),
     disabledPreviewMessage: () => this.disabledPreviewMessage(),
     renderPdfPreview: contents => { void this.renderPdfPreview(contents); },
+    logPreview: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
   });
   private readonly largePreviewGuardController = new LargePreviewGuardController({
     previewSession: this.previewSessionController,
@@ -295,6 +300,7 @@ export class TypsastraWorkspaceController {
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
     showLargeFileConfirmation: (tab, notice) => this.showLargeFileConfirmation(tab, notice),
     setWorkspaceServicesDeferred: deferred => { this.workspaceServicesDeferredForLargeFile = deferred; },
+    logPreview: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
   });
   private readonly externalFileReloadController = new ExternalFileReloadController({
     presentation: this.editorTabPresentationController,
@@ -421,8 +427,6 @@ export class TypsastraWorkspaceController {
       source: "editor layout",
       message: `Requested CodeMirror layout refresh after ${reason}.`,
     }),
-    suppressPreviewSync: durationMs => this.previewSyncController.suppressForwardFor(durationMs),
-    revealPreviewAtCursor: cursor => void this.previewSyncController.renderAtCursor(cursor),
     activePath: () => this.activeFilePath,
     pathKey: filePathKey,
     contentMutationDelay: () => this.effectivePreviewRenderMode === "on-type"
@@ -477,6 +481,12 @@ export class TypsastraWorkspaceController {
     applyLowMemoryMode: enabled => {
       document.documentElement.classList.toggle("low-memory-mode", enabled);
       this.previewSyncController.applyLowMemoryMode(enabled);
+      if (enabled) {
+        this.setLowMemoryIndexStatus({
+          kind: "stopped",
+          message: "Sync index unavailable — compile preview to build it",
+        });
+      }
       this.editorController.scheduleMatchMarkers();
       if (enabled && this.documentSessionController.hasClient) {
         void this.stopTinymistSession("Low memory mode: compiler starts only while rendering");
@@ -497,7 +507,6 @@ export class TypsastraWorkspaceController {
     },
     updateSettings: update => this.settingsController.update(update),
   });
-  private get forwardSyncDebounceMs(): number { return this.settingsRuntimeController.forwardSyncDebounceMs; }
   private get lastPreviewRenderMode(): PreviewRefreshStyle | undefined { return this.settingsRuntimeController.lastPreviewRenderMode; }
   private set lastPreviewRenderMode(mode: PreviewRefreshStyle | undefined) { this.settingsRuntimeController.lastPreviewRenderMode = mode; }
   private explorer!: WorkspaceExplorer;
@@ -627,6 +636,8 @@ export class TypsastraWorkspaceController {
     },
     approveLargePreview: (tab, notice) => this.approveLargePreviewForTab(tab, notice),
     activateConfirmedTab: path => this.activateEditorTab(path, false, { largeFileConfirmed: true }),
+    startConfirmedTypstPreview: () => this.refreshActivePreviewRoot(true),
+    logPreview: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
     onGuardedTabSelected: path => {
       this.activeFilePath = path;
       this.activateSpellcheckDocument(null);
@@ -706,11 +717,26 @@ export class TypsastraWorkspaceController {
     },
     onPageChanged: status => this.updatePreviewPageStatus(status),
     loadDraftImage: id => this.draftPreviewController.loadImage(id),
+    onDebug: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
     onDocumentOutline: items => this.documentOutlineController.updatePreviewPositions(items),
     onScrollPositionChanged: scrollTop => {
       this.previewScrollTop = Math.max(0, scrollTop);
       const activeTab = this.getActiveTab();
-      if (activeTab) activeTab.previewScrollTop = this.previewScrollTop;
+      const previewOwnerPath = activeTab?.previewMainPath
+        ?? activeTab?.previewRootPath
+        ?? this.previewMainPath
+        ?? this.previewRootPath;
+      if (previewOwnerPath) {
+        const ownerKey = filePathKey(previewOwnerPath);
+        for (const tab of this.openTabs) {
+          const tabOwnerPath = tab.previewMainPath ?? tab.previewRootPath;
+          if (tabOwnerPath && filePathKey(tabOwnerPath) === ownerKey) {
+            tab.previewScrollTop = this.previewScrollTop;
+          }
+        }
+      } else if (activeTab) {
+        activeTab.previewScrollTop = this.previewScrollTop;
+      }
       if (!this.workspaceRootPath || !this.workspaceMetadata) return;
       if (this.previewScrollSaveTimer !== null) window.clearTimeout(this.previewScrollSaveTimer);
       this.previewScrollSaveTimer = window.setTimeout(() => {
@@ -770,12 +796,18 @@ export class TypsastraWorkspaceController {
     setStatus: status => this.setLspStatus(status),
     updateManualAction: (busy, available) => this.renderManualForwardSyncAction(busy, available),
     log: (source, kind, message) => this.appendDeveloperLog({ kind, source, message }),
-    revealDocumentPosition: position => this.previewFrame.revealDocumentPosition(position, { ripple: true }),
+    revealDocumentPosition: async position => {
+      await this.previewFrame.revealDocumentPosition(position, { ripple: true });
+    },
     emitForwardPosition: position => {
       import("@tauri-apps/api/event").then(({ emit }) => {
         emit("pdf-forward-sync", position);
       }).catch(err => console.error("Error emitting pdf-forward-sync", err));
     },
+  });
+  private readonly lowMemorySyncIndexController = new LowMemorySyncIndexController({
+    revealDocumentPosition: (position, options) => this.previewFrame.revealDocumentPosition(position, options),
+    log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
   private readonly logConsoleController = new LogConsoleController(entry => this.navigateToLogEntry(entry));
   private readonly developerLogController = new DeveloperLogController({
@@ -1167,11 +1199,14 @@ export class TypsastraWorkspaceController {
     isPinnedMainFile: path => this.isPinnedMainFile(path),
     setPinnedMainFile: path => this.setPinnedMainFile(path),
     getPinnedMainFile: () => this.pinnedMainFilePath,
-    canRevealCursorInPreview: () => this.previewSyncController.canRevealManually()
-      && isForwardSyncContentPosition(
-        this.editorInstance.state,
-        this.editorInstance.state.selection.main.head
-      ),
+    canRevealCursorInPreview: () => (
+      this.settingsController.value.preview.lowMemoryMode
+        ? this.lowMemorySyncIndexController.isReady()
+        : this.previewSyncController.canRevealManually()
+    ) && isForwardSyncContentPosition(
+      this.editorInstance.state,
+      this.editorInstance.state.selection.main.head
+    ),
     revealCursorInPreview: () => this.revealCursorInPreviewManually(),
     getSurroundWithOptions: () => this.surroundWithOptions,
   });
@@ -1271,11 +1306,12 @@ export class TypsastraWorkspaceController {
     logMemoryDiagnostics: reason => this.performanceController.logMemoryDiagnostics(reason),
     clearExternalConflict: path => this.externalConflictPaths.delete(filePathKey(path)),
     renderEditorTabs: () => this.renderEditorTabs(),
-    shouldRenderPreviewAfterManualSave: path => (
-      participatesInPreviewCompilation(path, this.pinnedMainFilePath, this.previewImported)
-      && !this.previewDisabled
-    ),
-    renderPdfPreview: content => this.renderPdfPreview(content),
+    refreshPreviewAfterManualSave: async () => {
+      // Resolve the effective preview root at save time instead of relying on
+      // the tab's previous imported/standalone flags. Includes can become the
+      // active editor tab before their session state has been restored.
+      await this.previewContentController.refreshActivePreviewRoot(true);
+    },
     setLspStatus: status => this.setLspStatus(status),
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
@@ -1357,6 +1393,14 @@ export class TypsastraWorkspaceController {
     getWorkspaceRootPath: () => this.workspaceRootPath,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
+    // The durable PDF/index pair represents the on-disk workspace snapshot.
+    // Do not revive it while any open Typst buffer contains unsaved changes,
+    // even when a different, clean tab happens to be active.
+    canRestoreLowMemoryPreviewCache: () => !this.openTabs.some(tab => tab.isDirty),
+    restoreLowMemoryPreviewCache: () => this.restoreLowMemoryPreviewCache(),
+    captureLowMemoryPreviewSignature: () => this.captureLowMemoryPreviewSignature(),
+    buildLowMemorySyncIndex: (preparedRootPath, generation, pdfPath, sourceSignature) =>
+      this.buildLowMemorySyncIndex(preparedRootPath, generation, pdfPath, sourceSignature),
     ensureLargePreviewApproved: rootPath => this.ensureLargePreviewApproved(rootPath),
     isPdfBlocked: path => this.blockedLargePdfPaths.has(filePathKey(path)),
     getCacheRootPath: () => this.getCacheRootPath(),
@@ -1458,6 +1502,7 @@ export class TypsastraWorkspaceController {
     utf8ByteOffsetToStringOffset: (text, byteOffset) => this.utf8ByteOffsetToStringOffset(text, byteOffset),
     isPreviewOnlyWindow: () => this.previewWindowController.isPreviewOnlyWindow(),
     isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
+    lowMemorySync: this.lowMemorySyncIndexController,
     setPreviewReadyStatus: message => this.setLspStatus({ kind: "preview-ready", message }),
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
@@ -1518,7 +1563,6 @@ export class TypsastraWorkspaceController {
     markActiveTabDirty: () => this.markActiveTabDirty(),
     scheduleEditorContentMutation: doc => this.scheduleEditorContentMutation(doc),
     syncSelectedSpellingLocation: () => this.syncSelectedSpellingLocation(),
-    forwardSyncDebounceMs: () => this.forwardSyncDebounceMs,
     isDeveloperPerformanceLogEnabled: () => this.isDeveloperLogEnabled("performance"),
   });
   private readonly toolchainSetupController = new ToolchainSetupController({
@@ -1581,6 +1625,16 @@ export class TypsastraWorkspaceController {
     updatePreviewActionsToolbar: path => this.updatePreviewActionsToolbar(path),
     applyPreviewSessionToTab: (tab, session) => this.applyPreviewSessionToTab(tab, session),
     activatePreviewSession: sessionKey => this.previewFrame.activateSession(sessionKey),
+    previewScrollTopForTab: tab => {
+      const ownerPath = tab.previewMainPath ?? tab.previewRootPath;
+      if (!ownerPath) return tab.previewScrollTop;
+      const ownerKey = filePathKey(ownerPath);
+      return this.openTabs.find(candidate =>
+        (candidate.previewMainPath ?? candidate.previewRootPath) !== null
+        && filePathKey(candidate.previewMainPath ?? candidate.previewRootPath!) === ownerKey
+        && Number.isFinite(candidate.previewScrollTop),
+      )?.previewScrollTop ?? tab.previewScrollTop;
+    },
     queuePreviewScrollPosition: scrollTop => this.previewFrame.queueTabScrollPosition(scrollTop),
     renderEditorTabs: () => this.renderEditorTabs(),
     saveWorkspaceState: () => { void this.saveWorkspaceState(); },
@@ -1599,6 +1653,7 @@ export class TypsastraWorkspaceController {
     draftPreview: this.draftPreviewController,
     updateWorkspaceViewportVisibility: () => this.updateWorkspaceViewportVisibility(),
     resumeDeferredWorkspaceServices: () => this.resumeDeferredWorkspaceServices(),
+    isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     restoreTabFoldState: tab => this.restoreTabFoldState(tab),
     restoreEditorTabViewport: (tab, path) => this.restoreEditorTabViewport(tab, path),
     toolbar: this.editorToolbarController,
@@ -1611,6 +1666,7 @@ export class TypsastraWorkspaceController {
     activeMode: () => this.activeMode,
     mapMarkupToWysiwym: markup => { this.mapMarkupToWysiwym(markup); },
     editorController: this.editorController,
+    logPreview: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
   });
   private readonly pinnedMainFileController = new PinnedMainFileController({
     pinnedMainFilePath: () => this.pinnedMainFilePath,
@@ -1655,7 +1711,12 @@ export class TypsastraWorkspaceController {
   private readonly windowStateController = new WindowStateController(getCurrentWindow());
   private lspStatus = document.getElementById("lsp-status")!;
   private lspStatusDot = this.lspStatus.querySelector(".status-dot") as HTMLElement;
+  private lspStatusLabel = this.lspStatus.querySelector(".status-label") as HTMLElement;
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
+  private lowMemoryIndexStatus: LspStatus = {
+    kind: "stopped",
+    message: "Sync index unavailable — compile preview to build it",
+  };
 
   private get effectivePreviewRenderMode(): PreviewRenderMode {
     if (this.settingsController.value.preview.lowMemoryMode) return "on-save";
@@ -2147,11 +2208,11 @@ export class TypsastraWorkspaceController {
     return this.editorTabActivationController.activate(path, persistCurrent, options);
   }
 
-  private resumeDeferredWorkspaceServices(): void {
+  private async resumeDeferredWorkspaceServices(): Promise<void> {
     if (!this.workspaceServicesDeferredForLargeFile || !this.workspaceRootPath) return;
     const workspacePath = this.workspaceRootPath;
     this.workspaceServicesDeferredForLargeFile = false;
-    void this.startWorkspaceServices(workspacePath);
+    await this.startWorkspaceServices(workspacePath);
   }
 
   private async initLsp(shouldConnect = true) {
@@ -2166,6 +2227,123 @@ export class TypsastraWorkspaceController {
 
   private createTinymistClient(): TinymistLspClient {
     return this.tinymistIntegrationController.createClient();
+  }
+
+  private async restoreLowMemoryPreviewCache(): Promise<{ pdfPath: string; indexJson: string } | null> {
+    if (!this.workspaceRootPath || !this.previewRootPath) return null;
+    const cached = await invoke<{ pdfPath: string; indexJson: string } | null>(
+      "restore_low_memory_preview_cache",
+      {
+        workspaceRootPath: this.workspaceRootPath,
+        previewRootPath: this.previewRootPath,
+      },
+    );
+    if (!cached) return null;
+    const pdfHash = await invoke<string>("hash_cached_preview_file", { path: cached.pdfPath });
+    if (!this.lowMemorySyncIndexController.install(JSON.parse(cached.indexJson), {
+      generationId: pdfHash,
+      pdfHash,
+    })) {
+      return null;
+    }
+    this.setLowMemoryIndexStatus({ kind: "ready", message: "Sync index ready · cached" });
+    this.appendDeveloperLog({
+      kind: "info",
+      source: "forward sync",
+      message: "Low-memory sync: restored the cached PDF and persistent index for the unchanged workspace snapshot.",
+    });
+    return cached;
+  }
+
+  private async captureLowMemoryPreviewSignature(): Promise<string | null> {
+    if (!this.workspaceRootPath) return null;
+    return invoke<string>("workspace_preview_signature", {
+      workspaceRootPath: this.workspaceRootPath,
+    });
+  }
+
+  private async buildLowMemorySyncIndex(
+    preparedRootPath: string,
+    generation: number,
+    pdfPath: string,
+    sourceSignature: string | null,
+  ): Promise<void> {
+    if (!this.workspaceRootPath || !this.settingsController.value.preview.lowMemoryMode) return;
+    const workspaceRootPath = this.workspaceRootPath;
+    const previewRootPath = this.previewRootPath;
+    if (!previewRootPath) return;
+    const startedAt = performance.now();
+    this.setLowMemoryIndexStatus({ kind: "syncing", message: "Preparing sync index..." });
+    this.appendDeveloperLog({ kind: "info", source: "forward sync", message: `Low-memory sync: building index for generation ${generation}...` });
+    try {
+      const pdfHash = await invoke<string>("hash_cached_preview_file", { path: pdfPath });
+      const generationId = pdfHash;
+      const cached = await invoke<string | null>("load_low_memory_sync_index", { workspaceRootPath, previewRootPath });
+      if (cached && this.lowMemorySyncIndexController.install(JSON.parse(cached), { generationId, pdfHash })) {
+        this.setLowMemoryIndexStatus({ kind: "ready", message: "Sync index ready · cached" });
+        this.appendDeveloperLog({ kind: "info", source: "forward sync", message: "Low-memory sync: reused persistent index for the current PDF." });
+        return;
+      }
+      const index = await buildLowMemorySyncIndex({
+        createClient: workspaceRootPath => new TinymistLspClient(
+          () => workspaceRootPath,
+          () => {},
+          () => {},
+        ),
+        workspaceRootPath,
+        preparedRootPath,
+        generationId,
+        pdfHash,
+      });
+      // Indexing is asynchronous. A newer render may replace the cache PDF
+      // while Tinymist is still producing this index, so validate the PDF at
+      // the point where the index would become active.
+      const currentPdfHash = await invoke<string>("hash_cached_preview_file", { path: pdfPath });
+      if (currentPdfHash !== pdfHash) {
+        this.appendDeveloperLog({ kind: "info", source: "forward sync", message: "Low-memory sync: discarded an index because a newer PDF generation is active." });
+        return;
+      }
+      if (this.workspaceRootPath !== workspaceRootPath || !this.settingsController.value.preview.lowMemoryMode) {
+        this.appendDeveloperLog({ kind: "info", source: "forward sync", message: "Low-memory sync: discarded an index because its workspace is no longer active." });
+        return;
+      }
+      index.files = index.files.map(path => this.mapToOriginalPath(path));
+      await invoke("save_low_memory_sync_index", {
+        workspaceRootPath,
+        previewRootPath,
+        indexJson: JSON.stringify(index),
+      });
+      const installed = this.settingsController.value.preview.lowMemoryMode
+        && this.lowMemorySyncIndexController.install(index, { generationId, pdfHash });
+      if (!installed) {
+        this.setLowMemoryIndexStatus({ kind: "error", message: "Sync index failed — no usable source locations" });
+        return;
+      }
+      this.setLowMemoryIndexStatus({
+        kind: "ready",
+        message: `Sync index ready · ${index.anchors.length.toLocaleString()} locations`,
+      });
+      // Persist the PDF only after its matching index is active. A project
+      // reopened without edits can now restore this exact PDF/index pair and
+      // skip both compilation and one-shot indexing.
+      await invoke("persist_low_memory_preview_cache", {
+        workspaceRootPath,
+        previewRootPath,
+        pdfPath,
+        sourceSignature,
+      });
+      this.appendDeveloperLog({ kind: "info", source: "forward sync", message: `Low-memory sync: indexed ${index.anchors.length} source location(s) in ${(performance.now() - startedAt).toFixed(1)}ms; Tinymist indexing process will terminate.` });
+    } catch (error) {
+      const detail = previewErrorText(error).split(/\r?\n/u, 1)[0]?.trim() || "unknown error";
+      this.setLowMemoryIndexStatus({ kind: "error", message: `Sync index failed: ${detail}` });
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "forward sync",
+        message: `Low-memory sync index failed: ${previewErrorText(error)}`
+      });
+    } finally {
+      if (this.settingsController.value.preview.lowMemoryMode) this.setLspStatus({ kind: "stopped", message: "Low memory mode: compiler starts only while rendering" });
+    }
   }
 
   private handleTinymistConnected(): void {
@@ -2455,14 +2633,30 @@ export class TypsastraWorkspaceController {
   }
 
   private setLspStatus(status: LspStatus) {
-    this.lspStatus.dataset.state = status.kind;
-    this.lspStatusDot.setAttribute("aria-label", status.message);
-    this.lspStatusText.textContent = status.message;
-
     if (status.kind === "stopped" || status.kind === "error") {
       this.lspReady = false;
     }
+    if (this.settingsController.value.preview.lowMemoryMode) {
+      this.renderStatus(this.lowMemoryIndexStatus, "Index");
+    } else {
+      this.renderStatus(status, "LSP");
+    }
     this.updateManualForwardSyncAction();
+  }
+
+  private setLowMemoryIndexStatus(status: LspStatus): void {
+    this.lowMemoryIndexStatus = status;
+    if (this.settingsController.value.preview.lowMemoryMode) {
+      this.renderStatus(status, "Index");
+      this.updateManualForwardSyncAction();
+    }
+  }
+
+  private renderStatus(status: LspStatus, label: "LSP" | "Index"): void {
+    this.lspStatus.dataset.state = status.kind;
+    this.lspStatusDot.setAttribute("aria-label", status.message);
+    this.lspStatusLabel.textContent = label;
+    this.lspStatusText.textContent = status.message;
   }
 
   private handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number): Promise<void> {

@@ -3,6 +3,7 @@ import {
   decodeRustUnicodeEscapes,
   parsePreviewCompilerDiagnostic,
   parsePreviewCompilerFailure,
+  previewErrorText,
   relocatePreviewCompilerFailureMessage,
   relocatePreviewCompilerFailurePaths,
   typstPackageEntrypoint,
@@ -10,6 +11,13 @@ import {
 } from "../src/compiler/previewError";
 
 describe("preview compiler errors", () => {
+  test("preserves structured command failure details for developer logs", () => {
+    expect(previewErrorText({
+      message: "Low-memory query failed",
+      data: { reason: "unsupported export option" }
+    })).toBe(["Low-memory query failed", "", '{\n  "reason": "unsupported export option"\n}'].join("\n"));
+  });
+
   test("unwraps Tinymist export failures and identifies cached package locations", () => {
     const error = {
       message: String.raw`crates\tinymist\src\task\export.rs:606:17: ExportTask(2): document is not available for export: "error: expected path or string, found array\n    ┌─ C:\Users\Tester\AppData\Local\typst\packages\preview\cetz\0.3.2\src\canvas.typ:129:10\n    │\n129 │           ..vertices,\n    │           ^^^^^^^^^^\n"`
