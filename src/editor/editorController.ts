@@ -32,6 +32,7 @@ type ScrollMarkerTarget = {
 };
 
 export interface EditorControllerPort {
+  isLowMemoryMode(): boolean;
   performanceEnabled(): boolean;
   recordPerformance(metric: Omit<PerformanceMetric, "recordedAt">): void;
   logLayoutRefresh(reason: string): void;
@@ -483,6 +484,12 @@ export class EditorController {
     const generation = ++this.matchMarkerGeneration;
     if (this.matchMarkerFrame !== null) cancelAnimationFrame(this.matchMarkerFrame);
     this.matchMarkerFrame = null;
+
+    if (this.port.isLowMemoryMode()) {
+      this.matchMarkerTargets.clear();
+      this.updateDiagnosticMarkers();
+      return;
+    }
 
     const state = editor.state;
     const query = editorMatchQuery(state);

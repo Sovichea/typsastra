@@ -2714,6 +2714,16 @@
                                     >Document colors preserves the authored PDF. Dark preview reduces glare while retaining embedded images in their original colors. Inverted preview applies a full color inversion as a compatibility fallback.</small
                                 >
                             </div>
+                            <label class="settings-toggle">
+                                <input
+                                    id="settings-low-memory-mode"
+                                    type="checkbox"
+                                /><span
+                                    ><strong>Low memory mode (experimental)</strong><small
+                                        >For memory-constrained devices such as Raspberry Pi. Uses On save rendering and runs the compiler only for preview updates. Search-match highlighting and overview markers are disabled. Compiler errors and warnings still refresh after each compilation. PDF outline navigation remains available without Tinymist; completion, live LSP diagnostics, formatting, inverse sync, and continuous source sync are disabled.</small
+                                    ></span
+                                ></label
+                            >
                             <!-- TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability -->
                             <!--
                             <label class="settings-toggle"

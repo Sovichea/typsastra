@@ -15,6 +15,13 @@ export type PreviewPageStatus = {
   pageCount: number;
 };
 
+export type PreviewOutlineItem = {
+  title: string;
+  position?: { page_no: number; x: number; y: number };
+  bookmarkIndex?: number;
+  children: PreviewOutlineItem[];
+};
+
 export type PreviewSurface = "live" | "pdf";
 
 export type DraftPreviewImage = {
@@ -183,6 +190,7 @@ export class PreviewFrame {
   private previewLinkModifierHeld = false;
   private previewColorMode: PreviewColorMode = "document";
   private readonly pageImageCoordinates = new WeakMap<HTMLCanvasElement, readonly number[]>();
+  private pdfOutlineDestinations: unknown[] = [];
 
   constructor(
     private readonly pane: HTMLElement,
@@ -193,6 +201,7 @@ export class PreviewFrame {
     private readonly onPageChanged?: (status: PreviewPageStatus) => void,
     private readonly onDraftImageRequest?: (id: string) => Promise<DraftPreviewImageResult | null>,
     private readonly onScrollPositionChanged?: (scrollTop: number) => void,
+    private readonly onDocumentOutline?: (items: PreviewOutlineItem[]) => void,
     private readonly onLoadStage?: (
       stage: string,
       detail: Record<string, number | string | boolean>
@@ -499,6 +508,8 @@ export class PreviewFrame {
     this.hideDraftImagePopover();
     const startedAt = performance.now();
     const generation = ++this.pdfGeneration;
+    this.pdfOutlineDestinations = [];
+    if (surface === "live") this.onDocumentOutline?.([]);
     const obsoleteLoadingTask = this.pendingPdfLoadingTask;
     this.pendingPdfLoadingTask = null;
     if (obsoleteLoadingTask) void obsoleteLoadingTask.destroy().catch(() => {});
@@ -707,6 +718,17 @@ export class PreviewFrame {
       });
       if (restoringSavedPosition) this.pendingRestoredScrollTop = null;
       this.reportPageStatus(this.visiblePageNumber());
+      if (surface === "live" && this.onDocumentOutline) {
+        void this.readDocumentOutline(pdfDoc, generation).then(items => {
+          if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
+            this.onDocumentOutline?.(items);
+          }
+        }).catch(error => {
+          if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
+            console.warn("Failed to read PDF outline destinations:", error);
+          }
+        });
+      }
       void this.hydratePageDimensions(pdfDoc, generation).catch(error => {
         if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
           console.warn("Failed to finish PDF page geometry discovery:", error);
@@ -743,6 +765,31 @@ export class PreviewFrame {
       }
     }
     return pdfByteLength;
+  }
+
+  private async readDocumentOutline(pdfDoc: any, generation: number): Promise<PreviewOutlineItem[]> {
+    const outline = await pdfDoc.getOutline();
+    if (!Array.isArray(outline) || generation !== this.pdfGeneration) return [];
+    const destinations: unknown[] = [];
+
+    const convert = async (item: any): Promise<PreviewOutlineItem> => {
+      const bookmarkIndex = destinations.length;
+      destinations.push(item?.dest);
+      const children = Array.isArray(item?.items)
+        ? await Promise.all(item.items.map((child: unknown) => convert(child)))
+        : [];
+      return {
+        title: typeof item?.title === "string" ? item.title : "",
+        bookmarkIndex,
+        children,
+      };
+    };
+
+    const items = await Promise.all(outline.map((item: unknown) => convert(item)));
+    if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
+      this.pdfOutlineDestinations = destinations;
+    }
+    return items;
   }
 
   private async pdfJs(): Promise<PdfJsModule> {
@@ -1383,6 +1430,7 @@ export class PreviewFrame {
     }
     this.pageDimensions.clear();
     this.pageSlots = [];
+    this.pdfOutlineDestinations = [];
   }
 
   public scrollToPage(pageNo: number): void {
@@ -1393,6 +1441,30 @@ export class PreviewFrame {
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${normalizedPage}"]`);
     if (!slot) return;
     this.jumpToPreviewOffset(slot.offsetTop, normalizedPage);
+  }
+
+  public async scrollToOutlineBookmark(bookmarkIndex: number): Promise<boolean> {
+    const pdfDoc = this.pdfDoc;
+    const generation = this.pdfGeneration;
+    const rawDestination = this.pdfOutlineDestinations[bookmarkIndex];
+    if (!pdfDoc || rawDestination === undefined) return false;
+    try {
+      const destination = typeof rawDestination === "string"
+        ? await pdfDoc.getDestination(rawDestination)
+        : rawDestination;
+      if (generation !== this.pdfGeneration || this.pdfDoc !== pdfDoc) return false;
+      const pageReference = Array.isArray(destination) ? destination[0] : null;
+      if (pageReference === null || pageReference === undefined) return false;
+      const pageIndex = typeof pageReference === "number"
+        ? pageReference
+        : await pdfDoc.getPageIndex(pageReference);
+      if (generation !== this.pdfGeneration || this.pdfDoc !== pdfDoc) return false;
+      if (!Number.isInteger(pageIndex) || pageIndex < 0) return false;
+      this.scrollToPage(pageIndex + 1);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private schedulePdfResourceCleanup(

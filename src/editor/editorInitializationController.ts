@@ -81,7 +81,11 @@ export class EditorInitializationController {
         if (update.selectionSet) {
           deps.spellcheck.selectionChanged(update.docChanged);
           deps.syncSelectedSpellingLocation();
-          deps.documentOutline.setCursorPosition(update.state.selection.main.head, deps.activeFilePath());
+          deps.documentOutline.setCursorPosition(
+            update.state.selection.main.head,
+            deps.activeFilePath(),
+            true,
+          );
         } else if (update.docChanged) {
           deps.logConsole.setActiveSpellcheckLocation(null);
         }

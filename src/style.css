@@ -3474,6 +3474,15 @@ body.image-tools-active .image-tools-inspector:has(> .image-tool-inspector-empty
   box-shadow: none !important;
 }
 
+/* Low-memory mode keeps search navigation but avoids painting match layers. */
+.low-memory-mode .cm-editor .cm-selectionMatch,
+.low-memory-mode .cm-editor .cm-searchMatch,
+.low-memory-mode .cm-editor .cm-searchMatch-selected {
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .wysiwym-container {
   padding: 30px;
   height: 100%;

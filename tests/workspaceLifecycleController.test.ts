@@ -23,7 +23,16 @@ function lifecycleHarness(
     preparePinnedMainTypography: async () => null,
     prepareRenderProjectIfNeeded: async () => { calls.push("prepare-preview"); },
     restartTinymistSession: async () => { calls.push("restart-lsp"); },
+    stopTinymistSession: async () => { calls.push("stop-lsp"); },
     restoreActiveDocumentAfterTinymistRestart: async () => { calls.push("restore-document"); },
+    settingsController: {
+      value: {
+        preview: { renderMode: "on-type", lowMemoryMode: false },
+        editor: { globalTerminology: [], languageTerminology: {}, scopedIgnoredWords: {} },
+      },
+      setWorkspacePreviewRenderMode: () => {},
+      setProjectTerminology: () => {},
+    },
     appendDeveloperLog: () => {},
     closeEditorTab: async (path: string) => { calls.push(`close-tab:${path}`); },
     ...overrides,
@@ -86,6 +95,25 @@ describe("WorkspaceLifecycleController behavior", () => {
     await controller.startServices("C:/project");
 
     expect(calls).toEqual(["prepare-preview", "restart-lsp", "restore-document"]);
+  });
+
+  test("uses no persistent language server for low memory workspaces", async () => {
+    const { controller, calls } = lifecycleHarness({
+      lspClient: {} as WorkspaceLifecycleDependencies["lspClient"],
+      activeFilePath: "C:/project/main.typ",
+      settingsController: {
+        value: {
+          preview: { renderMode: "on-type", lowMemoryMode: true },
+          editor: { globalTerminology: [], languageTerminology: {}, scopedIgnoredWords: {} },
+        },
+        setWorkspacePreviewRenderMode: () => {},
+        setProjectTerminology: () => {},
+      },
+    });
+
+    await controller.startServices("C:/project");
+
+    expect(calls).toEqual(["prepare-preview", "stop-lsp"]);
   });
 
   test("closes every tab except the requested survivor in tab order", async () => {
@@ -172,7 +200,7 @@ describe("WorkspaceLifecycleController behavior", () => {
       imageToolsController: { setWorkspace: async () => {}, show: () => {} },
       settingsController: {
         value: {
-          preview: { renderMode: "on-save" },
+          preview: { renderMode: "on-save", lowMemoryMode: false },
           editor: { globalTerminology: [], languageTerminology: {}, scopedIgnoredWords: {} },
         },
         setWorkspacePreviewRenderMode: () => {},

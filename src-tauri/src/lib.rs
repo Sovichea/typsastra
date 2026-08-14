@@ -4155,6 +4155,93 @@ async fn stop_tinymist_lsp(state: tauri::State<'_, LspState>) -> Result<(), Stri
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OneShotCompileResult {
+    pdf_path: String,
+    diagnostics: String,
+}
+
+#[tauri::command]
+async fn compile_tinymist_pdf_once(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+    input_path: String,
+    output_path: String,
+) -> Result<OneShotCompileResult, String> {
+    let root = PathBuf::from(&workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let input = PathBuf::from(&input_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve prepared preview input: {error}"))?;
+    let cache_root = root.join(".typsastra").join("cache");
+    if !input.starts_with(cache_root.join("render")) || !input.is_file() {
+        return Err(
+            "Low-memory compilation input must be a prepared Typsastra render file.".into(),
+        );
+    }
+    let output = PathBuf::from(&output_path);
+    let output_parent = output
+        .parent()
+        .ok_or_else(|| "Low-memory preview output has no parent directory.".to_string())?;
+    tokio::fs::create_dir_all(output_parent)
+        .await
+        .map_err(|error| format!("Unable to create preview output directory: {error}"))?;
+    let output_parent = output_parent
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve preview output directory: {error}"))?;
+    if !output_parent.starts_with(&cache_root) {
+        return Err(
+            "Low-memory preview output must stay inside Typsastra's workspace cache.".into(),
+        );
+    }
+
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let executable = active_tinymist(&data_dir)
+        .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
+    let mut command = tokio::process::Command::new(executable);
+    command
+        .arg("compile")
+        .arg(&input)
+        .arg(&output)
+        .arg("--root")
+        .arg(&root)
+        .kill_on_drop(true);
+    let font_paths = compiler_font_directories(&app_handle, &data_dir, &root);
+    if !font_paths.is_empty() {
+        if let Ok(value) = std::env::join_paths(font_paths) {
+            command.env("TYPST_FONT_PATHS", value);
+        }
+    }
+    configure_background_compiler(&mut command);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let result = command
+        .output()
+        .await
+        .map_err(|error| format!("Failed to start one-shot Tinymist compiler: {error}"))?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("One-shot Tinymist compiler exited with {}.", result.status)
+        } else {
+            stderr
+        });
+    }
+    if !output.is_file() {
+        return Err("One-shot Tinymist compiler did not produce a PDF.".into());
+    }
+    Ok(OneShotCompileResult {
+        pdf_path: output.to_string_lossy().into_owned(),
+        diagnostics: String::from_utf8_lossy(&result.stderr).trim().to_string(),
+    })
+}
+
 #[tauri::command]
 async fn install_tinymist_toolchain(
     app_handle: tauri::AppHandle,
@@ -5109,6 +5196,7 @@ pub fn run() {
             install_tinymist_toolchain_with_progress,
             start_tinymist_lsp,
             stop_tinymist_lsp,
+            compile_tinymist_pdf_once,
             send_lsp_message,
             prepare_render_project,
             inspect_render_cache_storage,

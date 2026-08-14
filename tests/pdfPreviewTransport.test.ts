@@ -34,6 +34,45 @@ describe("compiled PDF transport", () => {
     expect(workspaceSource).toContain("excludeManagedWorkspacePaths(");
   });
 
+  test("uses an isolated one-shot compiler without starting the LSP in low memory mode", async () => {
+    const renderSource = await Bun.file(
+      new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
+    ).text();
+    const nativeSource = await Bun.file(
+      new URL("../src-tauri/src/lib.rs", import.meta.url),
+    ).text();
+    const lifecycleSource = await Bun.file(
+      new URL("../src/workspace/workspaceLifecycleController.ts", import.meta.url),
+    ).text();
+
+    expect(renderSource).toContain('invoke<OneShotCompileResult>("compile_tinymist_pdf_once"');
+    expect(renderSource).toContain("if (lowMemoryMode)");
+    expect(renderSource).toContain("result.diagnostics");
+    expect(renderSource).toContain("publishSuccessfulDiagnostics(oneShotDiagnostics)");
+    expect(nativeSource).toContain("async fn compile_tinymist_pdf_once(");
+    expect(nativeSource).toContain("diagnostics: String::from_utf8_lossy(&result.stderr)");
+    expect(nativeSource).toContain('.arg("compile")');
+    expect(nativeSource).toContain(".kill_on_drop(true)");
+    expect(nativeSource).toContain("input.starts_with(cache_root.join(\"render\"))");
+    expect(lifecycleSource).toContain(
+      'await app.stopTinymistSession("Low memory mode: using one-shot compiler on save")',
+    );
+  });
+
+  test("keeps compiler diagnostic markers without the persistent LSP", async () => {
+    const failureSource = await Bun.file(
+      new URL("../src/diagnostics/previewFailureController.ts", import.meta.url),
+    ).text();
+    const diagnosticsSource = await Bun.file(
+      new URL("../src/diagnostics/diagnosticsController.ts", import.meta.url),
+    ).text();
+
+    expect(failureSource).toContain("includePrimaryCompilerDiagnostic()");
+    expect(failureSource).toContain('severity: "error"');
+    expect(failureSource).toContain('severity = /^error:/i.test(block) ? "error" as const : "warning" as const');
+    expect(diagnosticsSource).toContain('severity: entry.severity ?? "related"');
+  });
+
   test("shares the staged PDF generation with the undocked preview", async () => {
     const source = await Bun.file(
       new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),

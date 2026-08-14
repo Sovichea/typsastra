@@ -20,6 +20,7 @@ export interface SettingsRuntimeDependencies {
   editor(): EditorView | null;
   currentEditorSettingsEffects(): readonly StateEffect<unknown>[];
   clearForwardSync(): void;
+  applyLowMemoryMode(enabled: boolean): void;
   updateSettings(update: (settings: AppSettings) => void): void;
 }
 
@@ -27,6 +28,7 @@ export class SettingsRuntimeController {
   private _forwardSyncDebounceMs = 120;
   private _lastKhmerRenderPrepState: boolean | undefined;
   private _lastPreviewRenderMode: PreviewRefreshStyle | undefined;
+  private _lastLowMemoryMode: boolean | undefined;
 
   constructor(private readonly deps: SettingsRuntimeDependencies) {}
 
@@ -68,6 +70,10 @@ export class SettingsRuntimeController {
     const previewRenderModeChanged = this._lastPreviewRenderMode !== undefined && this._lastPreviewRenderMode !== renderMode;
     this._lastPreviewRenderMode = renderMode;
     if (previewRenderModeChanged && renderMode !== "on-type") this.deps.cancelOnTypeSchedule();
+    if (this._lastLowMemoryMode !== preview.lowMemoryMode) {
+      this._lastLowMemoryMode = preview.lowMemoryMode;
+      this.deps.applyLowMemoryMode(preview.lowMemoryMode);
+    }
 
     const khmerPrepStatus = document.getElementById("khmer-prep-status");
     if (khmerPrepStatus) khmerPrepStatus.classList.toggle("hidden", !preview.khmerRenderPreparation);

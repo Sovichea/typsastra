@@ -271,9 +271,9 @@ export class DiagnosticsController {
       return {
         from,
         to: from,
-        severity: "related" as const,
+        severity: entry.severity ?? "related",
         message: entry.message,
-        gutterOnly: true,
+        gutterOnly: entry.severity !== "error",
       };
     });
   }

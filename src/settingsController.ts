@@ -265,6 +265,9 @@ export class SettingsController {
     onChange("settings-preview-color-mode", (settings, control) => {
       settings.preview.colorMode = control.value as PreviewColorMode;
     });
+    onChange("settings-low-memory-mode", (settings, control) => {
+      settings.preview.lowMemoryMode = (control as HTMLInputElement).checked;
+    });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-forward-sync-timeout", (settings, control) => {
       settings.preview.forwardSyncTimeoutMs = Number(control.value);
@@ -550,7 +553,9 @@ export class SettingsController {
     setValue("settings-code-font", editor.codeFont);
     setValue("settings-unicode-font", editor.unicodeFont);
     setValue("settings-tab-size", String(editor.tabSize));
-    const effectivePreviewRenderMode = this.workspacePreviewRenderMode ?? preview.renderMode;
+    const effectivePreviewRenderMode = preview.lowMemoryMode
+      ? "on-save"
+      : this.workspacePreviewRenderMode ?? preview.renderMode;
     setValue("settings-preview-render-mode", effectivePreviewRenderMode);
     setValue("settings-preview-color-mode", preview.colorMode);
     setValue("settings-sync-debounce", String(preview.syncDebounceMs));
@@ -577,6 +582,7 @@ export class SettingsController {
     }
     this.populatePrivateFontDirectories();
     setChecked("settings-cursor-sync", preview.cursorSync);
+    setChecked("settings-low-memory-mode", preview.lowMemoryMode);
     const cursorSync = document.getElementById("settings-cursor-sync") as HTMLInputElement | null;
     if (cursorSync) {
       cursorSync.disabled = true;
@@ -585,8 +591,10 @@ export class SettingsController {
     const previewRenderMode = document.getElementById("settings-preview-render-mode") as HTMLSelectElement | null;
     if (previewRenderMode) {
       previewRenderMode.value = effectivePreviewRenderMode;
-      previewRenderMode.disabled = this.workspacePreviewRenderMode === null;
-      previewRenderMode.title = this.workspacePreviewRenderMode === null
+      previewRenderMode.disabled = preview.lowMemoryMode || this.workspacePreviewRenderMode === null;
+      previewRenderMode.title = preview.lowMemoryMode
+        ? "Low memory mode limits preview rendering to explicit saves."
+        : this.workspacePreviewRenderMode === null
         ? "Open a project to configure its preview render mode."
         : effectivePreviewRenderMode === "on-type"
           ? "Update the PDF preview after typing pauses. This preference is stored in the current project."
@@ -595,7 +603,9 @@ export class SettingsController {
     const previewDebounce = document.getElementById("settings-sync-debounce") as HTMLInputElement | null;
     if (previewDebounce) {
       previewDebounce.disabled = effectivePreviewRenderMode !== "on-type";
-      previewDebounce.title = effectivePreviewRenderMode === "on-type"
+      previewDebounce.title = preview.lowMemoryMode
+        ? "Low memory mode disables on-type preview rendering."
+        : effectivePreviewRenderMode === "on-type"
         ? "Wait this long after the latest edit before updating the preview."
         : "Available when Render preview is set to On type.";
     }

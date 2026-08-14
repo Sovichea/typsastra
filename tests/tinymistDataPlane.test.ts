@@ -47,6 +47,27 @@ describe("Tinymist preview data plane", () => {
     expect(schedule).toContain("context.previewRunning");
     expect(schedule).toContain("this.dependencies.isReady()");
     expect(schedule).toContain("window.setTimeout(attempt, 250)");
+    expect(schedule).toContain("this.dependencies.isLowMemoryMode()");
+  });
+
+  test("does not warm a source-map task in low memory mode", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/previewSyncController.ts", import.meta.url),
+    ).text();
+    expect(source).toContain("if (this.dependencies.isLowMemoryMode()) return;");
+    expect(source).not.toContain("LOW_MEMORY_SOURCE_MAP_IDLE_MS");
+  });
+
+  test("keeps Tinymist stopped for inverse-sync clicks in low memory mode", async () => {
+    const appSource = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const navigationSource = await Bun.file(
+      new URL("../src/preview/previewSourceNavigationController.ts", import.meta.url),
+    ).text();
+
+    expect(navigationSource).toContain("if (this.deps.isLowMemoryMode())");
+    expect(navigationSource).toContain("use the document outline for preview navigation");
+    expect(appSource).not.toContain("Starting temporary inverse sync");
+    expect(appSource).not.toContain("temporary inverse sync released");
   });
 
   test("loads the prepared source identity before the first cache-backed forward sync", async () => {

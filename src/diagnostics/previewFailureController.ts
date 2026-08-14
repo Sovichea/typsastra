@@ -19,6 +19,7 @@ export interface PreviewFailureControllerPort {
   mapToOriginalPath(path: string): string;
   sourceForPath(path: string): Promise<string>;
   isRenderCachePath(path: string): boolean;
+  includePrimaryCompilerDiagnostic(): boolean;
   setCompilerRelatedDiagnostics(entries: PreviewCompilerRelatedDiagnostic[]): void;
 }
 
@@ -27,6 +28,7 @@ export type PreviewCompilerRelatedDiagnostic = {
   line: number;
   column: number;
   message: string;
+  severity?: "error" | "warning" | "related";
 };
 
 /** Resolves package dependency failures and publishes user-facing compiler problems. */
@@ -82,7 +84,18 @@ export class PreviewFailureController {
     this.logConsole.clearLogsBySource(["compiler call site"]);
     const diagnostic = parsePreviewCompilerDiagnostic(displayedMessage);
     const primary = diagnostic?.frames[0] ?? null;
-    const related = (diagnostic?.frames.slice(1) ?? [])
+    const primaryEntry: PreviewCompilerRelatedDiagnostic[] = primary
+      && this.port.includePrimaryCompilerDiagnostic()
+      && !this.port.isRenderCachePath(primary.filePath)
+      ? [{
+          filePath: primary.filePath,
+          line: primary.line,
+          column: primary.column,
+          message: diagnostic?.summary ?? failure.message,
+          severity: "error",
+        }]
+      : [];
+    const related: PreviewCompilerRelatedDiagnostic[] = (diagnostic?.frames.slice(1) ?? [])
       .filter(frame => !this.port.isRenderCachePath(frame.filePath))
       .filter(frame => !primary || frame.filePath !== primary.filePath
         || frame.line !== primary.line || frame.column !== primary.column)
@@ -93,8 +106,9 @@ export class PreviewFailureController {
         message: frame.label
           ? `Related compiler location: ${frame.label}`
           : "Related compiler call site",
+        severity: "related" as const,
       }));
-    this.port.setCompilerRelatedDiagnostics(related);
+    this.port.setCompilerRelatedDiagnostics([...primaryEntry, ...related]);
     for (const location of related) {
       this.logConsole.appendLog({
         kind: "error",
@@ -141,6 +155,41 @@ export class PreviewFailureController {
   clear(): void {
     this.port.setCompilerRelatedDiagnostics([]);
     this.logConsole.clearLogsBySource(["compiler call site"]);
+  }
+
+  publishSuccessfulDiagnostics(message: string): void {
+    this.logConsole.clearLogsBySource(["compiler", "compiler call site"]);
+    const blocks = message
+      .replace(/\u001b\[[0-9;]*m/g, "")
+      .split(/(?=^(?:warning|error):\s)/gim)
+      .map(block => block.trim())
+      .filter(Boolean);
+    const entries: PreviewCompilerRelatedDiagnostic[] = [];
+    for (const block of blocks) {
+      const diagnostic = parsePreviewCompilerDiagnostic(block);
+      const primary = diagnostic?.frames[0];
+      if (!diagnostic || !primary || this.port.isRenderCachePath(primary.filePath)) continue;
+      const severity = /^error:/i.test(block) ? "error" as const : "warning" as const;
+      entries.push({
+        filePath: primary.filePath,
+        line: primary.line,
+        column: primary.column,
+        message: diagnostic.summary,
+        severity,
+      });
+      this.logConsole.appendLog({
+        kind: severity,
+        source: "compiler",
+        message: diagnostic.summary,
+        channel: "lsp",
+        counted: true,
+        filePath: primary.filePath,
+        fileName: fileNameFromPath(primary.filePath),
+        line: primary.line,
+        column: primary.column,
+      });
+    }
+    this.port.setCompilerRelatedDiagnostics(entries);
   }
 
   private async packageDependencyChain(

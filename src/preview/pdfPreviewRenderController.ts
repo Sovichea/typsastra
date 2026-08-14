@@ -50,6 +50,11 @@ export type PdfUpdatePayload = {
   draftThumbnailGeneration?: number;
 };
 
+type OneShotCompileResult = {
+  pdfPath: string;
+  diagnostics: string;
+};
+
 export interface PdfPreviewRenderDependencies {
   previewFrame: PreviewFrame;
   preparation: PdfPreviewPreparationController;
@@ -69,6 +74,7 @@ export interface PdfPreviewRenderDependencies {
   getPreviewSessionKey(): string | null;
   getWorkspaceRootPath(): string | null;
   getPreviewRenderMode(): PreviewRenderMode;
+  isLowMemoryMode(): boolean;
   ensureLargePreviewApproved(rootPath: string | null): Promise<boolean>;
   isPdfBlocked(path: string): boolean;
   getCacheRootPath(): string | null;
@@ -244,7 +250,8 @@ export class PdfPreviewRenderController {
       );
       return;
     }
-    if (!this.deps.getActiveFilePath() || !this.deps.isLspReady() || !this.deps.getLspClient()) {
+    const lowMemoryMode = this.deps.isLowMemoryMode();
+    if (!this.deps.getActiveFilePath() || (!lowMemoryMode && (!this.deps.isLspReady() || !this.deps.getLspClient()))) {
       this.deps.log(
         "info",
         "preview scheduler",
@@ -326,7 +333,7 @@ export class PdfPreviewRenderController {
         ...preparedPreview.changedPaths,
         ...[...this.deps.preparation.generatedFiles.values()].map(file => file.generatedPath),
       ].map(nativeFilePath))];
-      if (preparedPaths.length > 0) {
+      if (!lowMemoryMode && preparedPaths.length > 0) {
         const closedPreparedDocuments = await this.deps.preparation.closePreparedDocuments();
         this.deps.preparation.ensureCurrent(preparationRevision);
         await this.deps.getLspClient()!.notifyWorkspaceFilesChanged(
@@ -339,7 +346,9 @@ export class PdfPreviewRenderController {
           `Render generation ${generation}: invalidated ${preparedPaths.length} disk-backed mirror file(s) and closed ${closedPreparedDocuments} legacy mirror document(s) before export.`,
         );
       }
-      const synchronizedPreparedDocuments = await this.deps.preparation.openPreparedDocumentsForExport(preparedPaths);
+      const synchronizedPreparedDocuments = lowMemoryMode
+        ? 0
+        : await this.deps.preparation.openPreparedDocumentsForExport(preparedPaths);
       const cacheRoot = this.deps.getCacheRootPath();
       if (!cacheRoot) throw new Error("No PDF preview cache is available.");
       const previewPdfName = fileNameFromPath(previewPath).replace(/\.typ$/i, ".pdf");
@@ -347,12 +356,28 @@ export class PdfPreviewRenderController {
       const anticipatedPdfPathKey = filePathKey(anticipatedPdfPath);
       this.managedPdfPathKeysValue.add(anticipatedPdfPathKey);
       let pdfPath: string;
+      let oneShotDiagnostics = "";
       try {
         this.deps.preparation.ensureCurrent(preparationRevision);
-        // Tinymist's watched-file invalidation can complete after its
-        // notification handler returns. Keep the exact prepared revision open
-        // only for this RPC so export cannot observe the previous disk cache.
-        pdfPath = await this.deps.getLspClient()!.exportPdfToFile(previewPath);
+        if (lowMemoryMode) {
+          const workspaceRootPath = this.deps.getWorkspaceRootPath();
+          if (!workspaceRootPath) throw new Error("No workspace is available for low-memory compilation.");
+          const result = await invoke<OneShotCompileResult>("compile_tinymist_pdf_once", {
+            workspaceRootPath,
+            inputPath: previewPath,
+            outputPath: anticipatedPdfPath,
+          });
+          pdfPath = result.pdfPath;
+          oneShotDiagnostics = relocatePreviewCompilerFailurePaths(
+            result.diagnostics,
+            path => this.deps.isRenderCachePath(path) ? this.deps.mapToOriginalPath(path) : path,
+          );
+        } else {
+          // Tinymist's watched-file invalidation can complete after its
+          // notification handler returns. Keep the exact prepared revision open
+          // only for this RPC so export cannot observe the previous disk cache.
+          pdfPath = await this.deps.getLspClient()!.exportPdfToFile(previewPath);
+        }
       } finally {
         const closedPreparedDocuments = await this.deps.preparation.closePreparedDocuments();
         this.deps.log(
@@ -371,7 +396,9 @@ export class PdfPreviewRenderController {
         }, 60_000);
       }
       this.deps.preparation.ensureCurrent(preparationRevision);
-      this.deps.log("info", "preview scheduler", `Render generation ${generation}: Tinymist PDF export complete.`);
+      this.deps.log("info", "preview scheduler", lowMemoryMode
+        ? `Render generation ${generation}: one-shot Tinymist compilation complete and compiler memory released.`
+        : `Render generation ${generation}: Tinymist PDF export complete.`);
       await this.deps.workspaceResume.waitForHorizontalResizeEnd();
       this.deps.preparation.ensureCurrent(preparationRevision);
       await this.deps.performance.logMemoryDiagnostics(
@@ -431,6 +458,9 @@ export class PdfPreviewRenderController {
       });
       this.deps.logConsole.clearLogsBySource(["compiler", "package compatibility"]);
       this.deps.previewFailure.clear();
+      if (lowMemoryMode && oneShotDiagnostics.trim()) {
+        this.deps.previewFailure.publishSuccessfulDiagnostics(oneShotDiagnostics);
+      }
       this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready" });
       this.deps.log("info", "preview scheduler", `Render generation ${generation}: PDF presentation complete.`);
       renderSucceeded = true;

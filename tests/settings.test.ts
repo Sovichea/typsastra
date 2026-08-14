@@ -22,6 +22,7 @@ describe("application settings", () => {
     expect(settings.editor.autoSaveIntervalSeconds).toBe(30);
     expect(settings.preview.renderMode).toBe("on-save");
     expect(settings.preview.colorMode).toBe("document");
+    expect(settings.preview.lowMemoryMode).toBe(false);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
     expect(settings.preview.forwardSyncTimeoutMs).toBe(5000);
     expect(settings.preview.khmerRenderPreparation).toBe(false);
@@ -139,6 +140,25 @@ describe("application settings", () => {
     expect(normalizeAppSettings({ preview: { colorMode: "document" } }).preview.colorMode).toBe("document");
     expect(normalizeAppSettings({ preview: { colorMode: "dark" } }).preview.colorMode).toBe("dark");
     expect(normalizeAppSettings({ preview: { colorMode: "inverted" } }).preview.colorMode).toBe("inverted");
+  });
+
+  test("keeps low memory mode opt-in", () => {
+    expect(normalizeAppSettings({ preview: { lowMemoryMode: true } }).preview.lowMemoryMode).toBe(true);
+    expect(normalizeAppSettings({ preview: { lowMemoryMode: "yes" } }).preview.lowMemoryMode).toBe(false);
+  });
+
+  test("exposes low memory mode as an experimental preview option", async () => {
+    const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
+    const controller = await Bun.file(new URL("../src/settingsController.ts", import.meta.url)).text();
+    const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+
+    expect(html).toContain('id="settings-low-memory-mode"');
+    expect(html).toContain("Low memory mode (experimental)");
+    expect(html).toContain("PDF outline navigation remains available");
+    expect(html).toContain("inverse sync, and continuous source sync are disabled");
+    expect(controller).toContain('onChange("settings-low-memory-mode"');
+    expect(app).toContain('if (this.settingsController.value.preview.lowMemoryMode) return "on-save"');
+    expect(app).toContain("shouldConnect && !this.settingsController.value.preview.lowMemoryMode");
   });
 
   test("keeps the Linux WebKit DMA-BUF compatibility override", () => {

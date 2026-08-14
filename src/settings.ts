@@ -64,6 +64,7 @@ export type AppSettings = {
   preview: {
     renderMode: PreviewRenderMode;
     colorMode: PreviewColorMode;
+    lowMemoryMode: boolean;
     cursorSync: boolean;
     syncDebounceMs: number;
     forwardSyncTimeoutMs: number;
@@ -125,6 +126,7 @@ export const defaultAppSettings: AppSettings = {
   preview: {
     renderMode: "on-save",
     colorMode: "document",
+    lowMemoryMode: false,
     // TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability
     // cursorSync: true,
     cursorSync: false,
@@ -303,6 +305,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     preview: {
       renderMode: previewRenderMode(preview.renderMode),
       colorMode: previewColorMode(preview.colorMode),
+      lowMemoryMode: booleanValue(preview.lowMemoryMode, defaultAppSettings.preview.lowMemoryMode),
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),
       syncDebounceMs: Math.round(boundedNumber(preview.syncDebounceMs, defaultAppSettings.preview.syncDebounceMs, 50, 2000)),
       forwardSyncTimeoutMs: Math.round(boundedNumber(

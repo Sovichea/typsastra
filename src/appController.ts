@@ -413,6 +413,7 @@ export class TypsastraWorkspaceController {
     editorUndoDepth: () => this.editorInstance?.state ? undoDepth(this.editorInstance.state) : 0,
   });
   private readonly editorController = new EditorController({
+    isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     performanceEnabled: () => this.isDeveloperLogEnabled("performance"),
     recordPerformance: metric => this.performanceController.record(metric),
     logLayoutRefresh: reason => this.appendDeveloperLog({
@@ -473,6 +474,27 @@ export class TypsastraWorkspaceController {
     editor: () => this.editorInstance ?? null,
     currentEditorSettingsEffects: () => this.currentEditorSettingsEffects(),
     clearForwardSync: () => this.previewSyncController.clearForward(),
+    applyLowMemoryMode: enabled => {
+      document.documentElement.classList.toggle("low-memory-mode", enabled);
+      this.previewSyncController.applyLowMemoryMode(enabled);
+      this.editorController.scheduleMatchMarkers();
+      if (enabled && this.documentSessionController.hasClient) {
+        void this.stopTinymistSession("Low memory mode: compiler starts only while rendering");
+      } else if (
+        !enabled
+        && this.workspaceRootPath
+        && this.documentSessionController.hasClient
+        && !this.documentSessionController.ready
+      ) {
+        void this.restartTinymistSession("Restoring Tinymist language services...")
+          .then(() => this.restoreActiveDocumentAfterTinymistRestart())
+          .catch(error => this.appendDeveloperLog({
+            kind: "error",
+            source: "lsp",
+            message: `Failed to restore Tinymist after leaving low memory mode: ${String(error)}`,
+          }));
+      }
+    },
     updateSettings: update => this.settingsController.update(update),
   });
   private get forwardSyncDebounceMs(): number { return this.settingsRuntimeController.forwardSyncDebounceMs; }
@@ -684,6 +706,7 @@ export class TypsastraWorkspaceController {
     },
     onPageChanged: status => this.updatePreviewPageStatus(status),
     loadDraftImage: id => this.draftPreviewController.loadImage(id),
+    onDocumentOutline: items => this.documentOutlineController.updatePreviewPositions(items),
     onScrollPositionChanged: scrollTop => {
       this.previewScrollTop = Math.max(0, scrollTop);
       const activeTab = this.getActiveTab();
@@ -719,6 +742,7 @@ export class TypsastraWorkspaceController {
     getPreviewRootPath: () => this.previewRootPath,
     getPreviewTaskId: () => this.previewTaskId,
     isReady: () => this.lspReady,
+    isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     // TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability
     // isEnabled: () => this.settingsController.value.preview.cursorSync,
     isEnabled: () => false,
@@ -802,6 +826,7 @@ export class TypsastraWorkspaceController {
         ?? await invoke<string>("read_workspace_file", { path }).catch(() => "");
     },
     isRenderCachePath: path => this.isRenderCachePath(path),
+    includePrimaryCompilerDiagnostic: () => this.settingsController.value.preview.lowMemoryMode,
     setCompilerRelatedDiagnostics: entries =>
       this.diagnosticsController.setCompilerRelatedDiagnostics(entries),
   });
@@ -949,7 +974,7 @@ export class TypsastraWorkspaceController {
     getPreviewMainPath: () => this.previewMainPath,
     isPreviewStandalone: () => this.previewStandalone,
     isLargePreviewBlocked: () => Boolean(this.blockedLargePreviewRoot),
-    hasLspClient: () => Boolean(this.lspClient),
+    hasLspClient: () => this.lspReady && this.documentSessionController.hasClient,
     restartTinymistSession: status => this.restartTinymistSession(status),
     restoreActiveDocumentAfterRestart: () => this.restoreActiveDocumentAfterTinymistRestart(),
     refreshActivePreviewRoot: force => this.refreshActivePreviewRoot(force),
@@ -1153,7 +1178,8 @@ export class TypsastraWorkspaceController {
   private readonly documentOutlineController = new DocumentOutlineController(
     document.getElementById("document-outline-tree")!,
     document.getElementById("document-outline-section")!,
-    heading => void this.navigateToOutlineHeading(heading)
+    heading => void this.navigateToOutlineHeading(heading),
+    heading => this.outlineNavigationController.revealInPreview(heading),
   );
   private readonly outlineNavigationController = new OutlineNavigationController({
     activeTab: () => this.getActiveTab(),
@@ -1330,6 +1356,7 @@ export class TypsastraWorkspaceController {
     getPreviewSessionKey: () => this.previewSessionKey,
     getWorkspaceRootPath: () => this.workspaceRootPath,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
+    isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     ensureLargePreviewApproved: rootPath => this.ensureLargePreviewApproved(rootPath),
     isPdfBlocked: path => this.blockedLargePdfPaths.has(filePathKey(path)),
     getCacheRootPath: () => this.getCacheRootPath(),
@@ -1396,7 +1423,9 @@ export class TypsastraWorkspaceController {
     previewMainPath: () => this.previewMainPath,
     setToolchainStatus: status => this.toolchainController.setStatus(status),
     clearPreview: () => this.previewFrame.clear(),
-    initializeLsp: shouldConnect => this.initLsp(shouldConnect),
+    initializeLsp: shouldConnect => this.initLsp(
+      shouldConnect && !this.settingsController.value.preview.lowMemoryMode,
+    ),
     reactivateFile: async path => {
       this.activeFilePath = null;
       await this.activateEditorTab(path, false);
@@ -1428,6 +1457,7 @@ export class TypsastraWorkspaceController {
     getCacheRootPath: () => this.getCacheRootPath(),
     utf8ByteOffsetToStringOffset: (text, byteOffset) => this.utf8ByteOffsetToStringOffset(text, byteOffset),
     isPreviewOnlyWindow: () => this.previewWindowController.isPreviewOnlyWindow(),
+    isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     setPreviewReadyStatus: message => this.setLspStatus({ kind: "preview-ready", message }),
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
@@ -1601,7 +1631,7 @@ export class TypsastraWorkspaceController {
     saveWorkspaceState: () => { void this.saveWorkspaceState(); },
     setWorkspaceServicesDeferred: deferred => { this.workspaceServicesDeferredForLargeFile = deferred; },
     setBlockedLargePreviewRoot: path => { this.blockedLargePreviewRoot = path; },
-    hasLspClient: () => this.documentSessionController.hasClient,
+    hasLspClient: () => this.lspReady && this.documentSessionController.hasClient,
     stopTinymistSession: message => this.stopTinymistSession(message),
     findOpenTab: path => this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path)),
     showLargeFileConfirmation: (tab, notice) => this.showLargeFileConfirmation(tab, notice),
@@ -1628,6 +1658,7 @@ export class TypsastraWorkspaceController {
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
 
   private get effectivePreviewRenderMode(): PreviewRenderMode {
+    if (this.settingsController.value.preview.lowMemoryMode) return "on-save";
     return this.workspaceMetadata?.workspace.previewRenderMode
       ?? this.settingsController.value.preview.renderMode;
   }
@@ -1715,7 +1746,9 @@ export class TypsastraWorkspaceController {
 
     this.toolchainController.setStatus(toolchain ?? { typstVersion: null, typstSource: null, tinymistVersion: null, tinymistSource: null, lspAvailable: false, message: "" });
     await this.releaseSummaryController.showIfNeeded();
-    await this.performanceController.timeStartup("initialize Tinymist LSP", () => this.initLsp(Boolean(toolchain?.lspAvailable)));
+    await this.performanceController.timeStartup("initialize Tinymist LSP", () => this.initLsp(
+      Boolean(toolchain?.lspAvailable) && !this.settingsController.value.preview.lowMemoryMode
+    ));
     await this.drainPendingProjectImports();
     this.performanceController.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
   }
@@ -2123,6 +2156,12 @@ export class TypsastraWorkspaceController {
 
   private async initLsp(shouldConnect = true) {
     await this.documentSessionController.initialize(shouldConnect);
+    if (!shouldConnect && this.settingsController.value.preview.lowMemoryMode) {
+      this.setLspStatus({
+        kind: "stopped",
+        message: "Low memory mode: compiler starts only while rendering",
+      });
+    }
   }
 
   private createTinymistClient(): TinymistLspClient {

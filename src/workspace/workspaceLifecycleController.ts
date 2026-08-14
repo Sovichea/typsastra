@@ -93,7 +93,7 @@ export interface WorkspaceLifecycleServices {
   };
   settingsController: {
     value: {
-      preview: { renderMode: PreviewRenderMode };
+      preview: { renderMode: PreviewRenderMode; lowMemoryMode: boolean };
       editor: {
         globalTerminology: TerminologyEntry[];
         languageTerminology: Record<string, TerminologyEntry[]>;
@@ -493,6 +493,10 @@ export class WorkspaceLifecycleController {
       }
       await app.prepareRenderProjectIfNeeded();
       if (app.workspaceRootPath !== selected) return;
+      if (app.settingsController.value.preview.lowMemoryMode) {
+        await app.stopTinymistSession("Low memory mode: using one-shot compiler on save");
+        return;
+      }
       if (app.lspClient) {
         try {
           await app.restartTinymistSession("Connecting to new project...");

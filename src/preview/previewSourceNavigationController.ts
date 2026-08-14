@@ -68,6 +68,7 @@ export interface PreviewSourceNavigationDependencies {
   getCacheRootPath(): string | null;
   utf8ByteOffsetToStringOffset(text: string, byteOffset: number): number;
   isPreviewOnlyWindow(): boolean;
+  isLowMemoryMode(): boolean;
   setPreviewReadyStatus(message: string): void;
   log(kind: "info" | "warning", source: string, message: string): void;
 }
@@ -264,6 +265,15 @@ export class PreviewSourceNavigationController {
         "info",
         "preview iframe",
         "Ignored source-sync click because the active preview is a direct PDF document.",
+      );
+      return;
+    }
+    if (this.deps.isLowMemoryMode()) {
+      this.deps.setPreviewReadyStatus("Low memory mode: use the document outline for preview navigation");
+      this.deps.log(
+        "info",
+        "inverse sync",
+        "Ignored preview click because low memory mode keeps Tinymist stopped.",
       );
       return;
     }
