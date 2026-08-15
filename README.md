@@ -103,10 +103,9 @@ PDF-click inverse sync without keeping the compiler resident. Live LSP
 diagnostics, Tinymist completion, formatting, and exact continuous sync remain
 available in normal mode instead.
 
-<!-- Replace this placeholder with the Low-Memory Mode demonstration video or screenshot URL. -->
-<p align="center">
-  <img src="./assets/feature-demo-placeholder.svg" alt="Placeholder for the Low-Memory Mode demonstration" width="800"/>
-</p>
+
+https://github.com/user-attachments/assets/563b6809-4003-4901-b5ee-4c56ed959d11
+
 
 Read the [Low-Memory Mode guide](./docs/tutorials/LOW_MEMORY_MODE.md) for setup,
 cache behavior, synchronization details, and current limitations.
