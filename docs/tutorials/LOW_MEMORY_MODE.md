@@ -10,10 +10,7 @@ than the computer can comfortably keep available. Normal mode remains the
 recommended default for projects that benefit from live diagnostics,
 completion, formatting, and exact source synchronization.
 
-<!-- Replace this placeholder with the Low-Memory Mode demonstration video or screenshot URL. -->
-<p align="center">
-  <img src="../../assets/feature-demo-placeholder.svg" alt="Placeholder for the Low-Memory Mode demonstration" width="800"/>
-</p>
+https://github.com/user-attachments/assets/563b6809-4003-4901-b5ee-4c56ed959d11
 
 ## How it works
 
