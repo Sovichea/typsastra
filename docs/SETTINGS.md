@@ -105,17 +105,20 @@ Use on-save for long or resource-intensive documents.
 as Raspberry Pi. While enabled, Typsastra forces the effective preview mode to
 On save without overwriting the project's stored preference and stops the
 persistent Tinymist language server. Each explicit save launches a one-shot
-`tinymist compile` process for the private preview mirror; that process exits
-and releases its compiler state after producing the PDF. Search-match
+Tinymist process for the private preview mirror; that process exits and
+releases its compiler state after producing the PDF and an approximate,
+persistent line-level synchronization index. An unchanged workspace can reuse
+its cached PDF and index after reopening without recompiling. Search-match
 highlighting and search-match overview markers are disabled so searches do not
 scan and decorate a long document. Compiler errors and warnings still refresh
 their editor and overview markers after every explicit-save compilation.
-Completion, live LSP diagnostics, Tinymist formatting, and continuous cursor
-synchronization are unavailable while this mode is enabled. Outline-to-preview
-navigation remains available by reading heading destinations from the compiled
-PDF without starting Tinymist. Preview-to-source inverse synchronization is
-unavailable. Turning the option off restarts Tinymist and restores the project's
-previous preview mode.
+Completion, live LSP diagnostics, Tinymist formatting, and continuous or exact
+cursor synchronization are unavailable while this mode is enabled. Manual
+**Reveal Cursor in Preview** and PDF-click inverse sync use the approximate
+index; document-outline navigation remains the fallback. Turning the option off
+restarts Tinymist and restores the project's previous preview mode. See the
+[Low-Memory Mode guide](tutorials/LOW_MEMORY_MODE.md) for the complete workflow,
+cache behavior, and limitations.
 
 The live-preview toolbar also offers **Normal** and **Draft** content modes.
 Normal Preview compiles the original images. Draft Preview replaces eligible

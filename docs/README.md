@@ -13,11 +13,12 @@ the reference documents when you need exact behavior or contributor contracts.
 5. [Document typography](tutorials/DOCUMENT_TYPOGRAPHY.md)
 6. [Installing language providers](tutorials/LANGUAGE_PROVIDER_INSTALLATION.md)
 7. [Long-document workflow](tutorials/LONG_DOCUMENT_WORKFLOW.md)
-8. [PDF preview and source synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md)
-9. [Markdown live preview](tutorials/MARKDOWN_PREVIEW.md)
-10. [Image Tools](tutorials/IMAGE_TOOLS.md)
-11. [Project import and export](tutorials/PROJECT_IMPORT_AND_EXPORT.md)
-12. [Troubleshooting guide](tutorials/TROUBLESHOOTING.md)
+8. [Low-Memory Mode](tutorials/LOW_MEMORY_MODE.md)
+9. [PDF preview and source synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md)
+10. [Markdown live preview](tutorials/MARKDOWN_PREVIEW.md)
+11. [Image Tools](tutorials/IMAGE_TOOLS.md)
+12. [Project import and export](tutorials/PROJECT_IMPORT_AND_EXPORT.md)
+13. [Troubleshooting guide](tutorials/TROUBLESHOOTING.md)
 
 ## User reference
 

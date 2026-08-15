@@ -93,6 +93,24 @@ the saved copy.
   <img src="./assets/feature-demo-placeholder.svg" alt="Placeholder for the Image Tools demonstration" width="800"/>
 </p>
 
+### Experimental Low-Memory Mode
+
+Low-Memory Mode is an opt-in workflow for very long documents and
+memory-constrained computers. Typsastra generates the PDF and an approximate
+line-level navigation index with a one-shot Tinymist process, then terminates
+Tinymist. The cached index supports manual source-to-preview navigation and
+PDF-click inverse sync without keeping the compiler resident. Live LSP
+diagnostics, Tinymist completion, formatting, and exact continuous sync remain
+available in normal mode instead.
+
+<!-- Replace this placeholder with the Low-Memory Mode demonstration video or screenshot URL. -->
+<p align="center">
+  <img src="./assets/feature-demo-placeholder.svg" alt="Placeholder for the Low-Memory Mode demonstration" width="800"/>
+</p>
+
+Read the [Low-Memory Mode guide](./docs/tutorials/LOW_MEMORY_MODE.md) for setup,
+cache behavior, synchronization details, and current limitations.
+
 ### Draft Preview
 
 Draft Preview replaces supported image calls in Typsastra’s private render mirror with lightweight, layout-preserving placeholders. Hover over a placeholder to inspect a cached thumbnail without adding the full image to the draft document. Normal Preview and exported PDFs continue to use the original images.
@@ -300,6 +318,7 @@ installation is not required for normal use.
 - [Multilingual spellcheck](./docs/tutorials/MULTILINGUAL_SPELLCHECK.md)
 - [Document typography](./docs/tutorials/DOCUMENT_TYPOGRAPHY.md)
 - [Long-document workflow](./docs/tutorials/LONG_DOCUMENT_WORKFLOW.md)
+- [Low-Memory Mode](./docs/tutorials/LOW_MEMORY_MODE.md)
 - [PDF preview and source synchronization](./docs/tutorials/PDF_PREVIEW_AND_SYNC.md)
 - [Markdown live preview](./docs/tutorials/MARKDOWN_PREVIEW.md)
 - [Image Tools](./docs/tutorials/IMAGE_TOOLS.md)

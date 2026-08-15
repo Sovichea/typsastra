@@ -7,6 +7,11 @@ compile after each edit. Language analysis and editor extensions are bounded or
 deferred where possible, but a 20,000-line active source still requires more
 work than an ordinary chapter.
 
+On a memory-constrained computer, the experimental
+[Low-Memory Mode](LOW_MEMORY_MODE.md) goes further by stopping persistent
+Tinymist and using a cached PDF plus an approximate line-level navigation index
+between explicit saves.
+
 Typsastra uses one coordinated guard rail for Typst authoring. If either the
 selected Typst source or its effective preview root is large, the file is not
 loaded into the code editor until you confirm it there. That same confirmation
