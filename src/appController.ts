@@ -145,6 +145,7 @@ export class TypsastraWorkspaceController {
     void this.lastPreviewRenderMode;
     void this.finishEditorTextPresentation;
     void this.restoreActiveNonTextPreview;
+    void this.restoreActiveLowMemoryPreview;
     const root = this;
     return new Proxy({} as WorkspaceLifecycleDependencies, {
       get(_target, property) {
@@ -159,6 +160,31 @@ export class TypsastraWorkspaceController {
 
   private async restoreActiveNonTextPreview(): Promise<void> {
     await this.refreshActivePreviewRoot(true);
+  }
+
+  /**
+   * Workspace restore deliberately activates tabs without touching preview
+   * state. Once low-memory services are ready, replay only the active Typst
+   * tab's preview activation so the editor and its restored viewport remain
+   * undisturbed.
+   */
+  private async restoreActiveLowMemoryPreview(): Promise<void> {
+    const tab = this.getActiveTab();
+    if (!tab?.contentLoaded || !isTypstDocumentPath(tab.path)) return;
+    const options = { skipPreviewActivation: false };
+    const context = await this.editorPreviewActivationController.prepare(
+      tab,
+      tab.path,
+      true,
+      options,
+    );
+    await this.editorPreviewActivationController.finish(
+      tab,
+      tab.path,
+      true,
+      context,
+      options,
+    );
   }
 
   private readonly startupStart = performance.now();
@@ -1687,6 +1713,7 @@ export class TypsastraWorkspaceController {
     saveWorkspaceState: () => { void this.saveWorkspaceState(); },
     setWorkspaceServicesDeferred: deferred => { this.workspaceServicesDeferredForLargeFile = deferred; },
     setBlockedLargePreviewRoot: path => { this.blockedLargePreviewRoot = path; },
+    isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     hasLspClient: () => this.lspReady && this.documentSessionController.hasClient,
     stopTinymistSession: message => this.stopTinymistSession(message),
     findOpenTab: path => this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path)),

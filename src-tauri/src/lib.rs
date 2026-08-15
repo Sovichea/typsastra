@@ -4171,6 +4171,142 @@ struct LowMemorySyncInstrumentation {
     anchor_count: usize,
 }
 
+fn low_memory_sync_line_is_markup(
+    root: &typst_syntax::LinkedNode<'_>,
+    first_content_byte: usize,
+) -> bool {
+    use typst_syntax::{Side, SyntaxKind};
+
+    let Some(leaf) = root.leaf_at(first_content_byte, Side::After) else {
+        return false;
+    };
+    let mut ancestor = Some(&leaf);
+    while let Some(node) = ancestor {
+        if matches!(
+            node.kind(),
+            SyntaxKind::Raw | SyntaxKind::Equation | SyntaxKind::Math
+        ) {
+            return false;
+        }
+        ancestor = node.parent();
+    }
+
+    // Markup text has distinct leaf kinds from code identifiers and values.
+    // Classifying the leaf is also correct after a completed multiline code
+    // expression, where the previous token's mode can still describe code.
+    matches!(
+        leaf.kind(),
+        SyntaxKind::Text
+            | SyntaxKind::HeadingMarker
+            | SyntaxKind::ListMarker
+            | SyntaxKind::EnumMarker
+            | SyntaxKind::TermMarker
+            | SyntaxKind::SmartQuote
+            | SyntaxKind::Escape
+            | SyntaxKind::Shorthand
+            | SyntaxKind::Link
+            | SyntaxKind::RefMarker
+    ) || matches!(
+        (leaf.kind(), leaf.parent_kind()),
+        (SyntaxKind::Star, Some(SyntaxKind::Strong))
+            | (SyntaxKind::Underscore, Some(SyntaxKind::Emph))
+    )
+}
+
+fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (String, usize) {
+    // The staged file is written with LF endings. Parse that exact normalized
+    // text as well so byte offsets remain correct for CRLF workspace files.
+    let normalized_source = source_text.replace("\r\n", "\n").replace('\r', "\n");
+    let syntax = typst_syntax::parse(&normalized_source);
+    let root = typst_syntax::LinkedNode::new(&syntax);
+    let mut output = String::with_capacity(normalized_source.len() + 256);
+    let mut anchor_count = 0usize;
+    let mut line_start = 0usize;
+
+    for (line, text) in normalized_source.lines().enumerate() {
+        let trimmed = text.trim_start();
+        let leading_bytes = text.len() - trimmed.len();
+        let first_content_byte = line_start + leading_bytes;
+
+        // Only visible markup boundaries are useful navigation anchors. The
+        // syntax-mode check prevents markup-form anchors from being injected
+        // into multiline code, arrays, dictionaries, math, and raw content.
+        // Missing lines intentionally fall back to the nearest safe anchor.
+        let visible_markup = !trimmed.is_empty()
+            && !trimmed.starts_with('#')
+            && !trimmed.starts_with("//")
+            && !trimmed.starts_with("/*")
+            && !trimmed.starts_with('`')
+            && !matches!(trimmed.chars().next(), Some(']') | Some('}') | Some(')'));
+        if visible_markup && low_memory_sync_line_is_markup(&root, first_content_byte) {
+            output.push_str(&format!(
+                "#context metadata((typsastra_sync: true, file: {file_id}, line: {line}, pos: here().position())) <typsastra-sync>\n"
+            ));
+            anchor_count += 1;
+        }
+        output.push_str(text);
+        output.push('\n');
+        line_start += text.len() + 1;
+    }
+
+    (output, anchor_count)
+}
+
+#[cfg(test)]
+mod low_memory_sync_instrumentation_tests {
+    use super::instrument_low_memory_sync_source;
+
+    const MARKER: &str = "#context metadata((typsastra_sync: true, file:";
+
+    #[test]
+    fn instruments_markup_but_skips_multiline_code_and_raw_content() {
+        let source = r#"= Visible heading
+Visible paragraph
+
+#let rows = (
+  [content stored in an array],
+  (name: "value"),
+)
+
+#let body = [
+  Visible content block paragraph
+]
+
+```typ
+Raw text is not an anchor
+```
+"#;
+
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 4);
+        assert_eq!(anchors, 3);
+        assert_eq!(instrumented.matches(MARKER).count(), 3);
+        assert!(instrumented.contains(&format!("{MARKER} 4, line: 0")));
+        assert!(instrumented.contains(&format!("{MARKER} 4, line: 1")));
+        assert!(instrumented.contains(&format!("{MARKER} 4, line: 9")));
+        assert!(!instrumented.contains(&format!("{MARKER} 4, line: 4")));
+        assert!(!instrumented.contains(&format!("{MARKER} 4, line: 14")));
+    }
+
+    #[test]
+    fn skips_code_lines_that_begin_with_text_or_content() {
+        let source = r#"#let configuration = (
+  family: "Example",
+  content: [Rendered value],
+  values: (
+    [First],
+    [Second],
+  ),
+)
+After the configuration.
+"#;
+
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 1);
+        assert_eq!(anchors, 1);
+        assert_eq!(instrumented.matches(MARKER).count(), 1);
+        assert!(instrumented.contains(&format!("{MARKER} 1, line: 8")));
+    }
+}
+
 fn copy_low_memory_sync_tree(
     source: &Path,
     target: &Path,
@@ -4192,31 +4328,9 @@ fn copy_low_memory_sync_tree(
                 .map_err(|error| format!("Unable to read prepared Typst file: {error}"))?;
             let file_id = files.len();
             files.push(path);
-            let mut output = String::with_capacity(source_text.len() + 256);
-            let mut in_raw_block = false;
-            for (line, text) in source_text.lines().enumerate() {
-                let trimmed = text.trim_start();
-                if trimmed.starts_with("```") {
-                    in_raw_block = !in_raw_block;
-                }
-                // Conservative first pass: only obvious markup paragraphs, headings and list items.
-                let safe = !in_raw_block
-                    && !trimmed.is_empty()
-                    && !trimmed.starts_with('#')
-                    && !trimmed.starts_with("//")
-                    && (trimmed.starts_with('=')
-                        || trimmed.starts_with("- ")
-                        || trimmed.starts_with("+ ")
-                        || trimmed.chars().next().is_some_and(|character| {
-                            character.is_alphabetic() || character == '['
-                        }));
-                if safe {
-                    output.push_str(&format!("#context metadata((typsastra_sync: true, file: {file_id}, line: {line}, pos: here().position())) <typsastra-sync>\n"));
-                    *anchors += 1;
-                }
-                output.push_str(text);
-                output.push('\n');
-            }
+            let (output, file_anchor_count) =
+                instrument_low_memory_sync_source(&source_text, file_id);
+            *anchors += file_anchor_count;
             std::fs::write(destination, output)
                 .map_err(|error| format!("Unable to write instrumented Typst file: {error}"))?;
         } else {

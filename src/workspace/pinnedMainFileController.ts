@@ -23,6 +23,7 @@ export interface PinnedMainFileDependencies {
   saveWorkspaceState(): void;
   setWorkspaceServicesDeferred(deferred: boolean): void;
   setBlockedLargePreviewRoot(path: string): void;
+  isLowMemoryMode(): boolean;
   hasLspClient(): boolean;
   stopTinymistSession(message: string): Promise<void>;
   findOpenTab(path: string): EditorTab | undefined;
@@ -93,14 +94,16 @@ export class PinnedMainFileController {
       return;
     }
 
-    if (mainChanged && deps.hasLspClient() && previewApproved) {
+    if (mainChanged && previewApproved) {
       deps.resetPdfForMainFileChange();
       try {
         await deps.prepareRenderProject();
-        await deps.restartTinymistSession("Restarting Tinymist for the new main file...");
+        if (deps.hasLspClient()) {
+          await deps.restartTinymistSession("Restarting Tinymist for the new main file...");
+        }
       } catch (error) {
         deps.setLspReady(false);
-        deps.logRestartFailure(`Failed to restart Tinymist after changing the main file: ${String(error)}`);
+        deps.logRestartFailure(`Failed to prepare the compiler after changing the main file: ${String(error)}`);
       }
     }
 
@@ -119,6 +122,11 @@ export class PinnedMainFileController {
       return;
     }
     if (path && !deps.activeTabContentLoaded()) return;
+
+    if (deps.isLowMemoryMode()) {
+      await deps.refreshActivePreviewRoot(true);
+      return;
+    }
 
     if (mainChanged && (!path || mainWasAlreadyActive)) {
       await deps.restoreActiveDocumentAfterRestart(mainWasAlreadyActive);

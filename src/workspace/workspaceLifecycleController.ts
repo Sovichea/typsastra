@@ -139,6 +139,7 @@ export interface WorkspaceLifecycleOperations {
   restartTinymistSession(message: string): Promise<void>;
   stopTinymistSession(message: string): Promise<void>;
   restoreActiveDocumentAfterTinymistRestart(): Promise<void>;
+  restoreActiveLowMemoryPreview(): Promise<void>;
   setPinnedMainFile(path: string | null): Promise<void>;
   closeEditorTab(path: string, skipDirtyCheck?: boolean): Promise<void>;
   updateWorkspaceViewportVisibility(): void;
@@ -495,6 +496,8 @@ export class WorkspaceLifecycleController {
       if (app.workspaceRootPath !== selected) return;
       if (app.settingsController.value.preview.lowMemoryMode) {
         await app.stopTinymistSession("Low memory mode: using one-shot compiler on save");
+        if (app.workspaceRootPath !== selected) return;
+        await app.restoreActiveLowMemoryPreview();
         return;
       }
       if (app.lspClient) {

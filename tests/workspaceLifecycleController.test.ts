@@ -25,6 +25,7 @@ function lifecycleHarness(
     restartTinymistSession: async () => { calls.push("restart-lsp"); },
     stopTinymistSession: async () => { calls.push("stop-lsp"); },
     restoreActiveDocumentAfterTinymistRestart: async () => { calls.push("restore-document"); },
+    restoreActiveLowMemoryPreview: async () => { calls.push("restore-low-memory-preview"); },
     settingsController: {
       value: {
         preview: { renderMode: "on-type", lowMemoryMode: false },
@@ -113,7 +114,11 @@ describe("WorkspaceLifecycleController behavior", () => {
 
     await controller.startServices("C:/project");
 
-    expect(calls).toEqual(["prepare-preview", "stop-lsp"]);
+    expect(calls).toEqual([
+      "prepare-preview",
+      "stop-lsp",
+      "restore-low-memory-preview",
+    ]);
   });
 
   test("closes every tab except the requested survivor in tab order", async () => {
