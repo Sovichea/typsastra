@@ -14,6 +14,7 @@ export const themeNames = [
 export type ThemeName = typeof themeNames[number];
 export type PreviewRenderMode = "on-type" | "on-save";
 export type PreviewColorMode = "document" | "dark" | "inverted";
+export type TypstCompletionMode = "on-type" | "on-demand";
 export type DeveloperLogCategory =
   | "preview"
   | "inverseSync"
@@ -51,6 +52,7 @@ export type AppSettings = {
     indentationGuides: boolean;
     spellcheck: boolean;
     wordCompletion: boolean;
+    typstCompletionMode: TypstCompletionMode;
     showZws: boolean;
     userDictionary: string[];
     ignoredWords: string[];
@@ -113,6 +115,7 @@ export const defaultAppSettings: AppSettings = {
     indentationGuides: true,
     spellcheck: true,
     wordCompletion: true,
+    typstCompletionMode: "on-type",
     showZws: true,
     userDictionary: [],
     ignoredWords: [],
@@ -283,6 +286,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides),
       spellcheck: booleanValue(editor.spellcheck, defaultAppSettings.editor.spellcheck),
       wordCompletion: booleanValue(editor.wordCompletion, defaultAppSettings.editor.wordCompletion),
+      typstCompletionMode: editor.typstCompletionMode === "on-demand" ? "on-demand" : "on-type",
       showZws: booleanValue(editor.showZws, defaultAppSettings.editor.showZws),
       userDictionary: Array.isArray(editor.userDictionary)
         ? [...new Set(editor.userDictionary.filter((word): word is string => typeof word === "string" && word.trim().length > 0).map(word => word.trim()))].sort()

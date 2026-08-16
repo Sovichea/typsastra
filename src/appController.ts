@@ -2162,7 +2162,9 @@ export class TypsastraWorkspaceController {
     if (!isTypstDocumentPath(path)) return [];
     const editor = this.settingsController.value.editor;
     return createTypstAutocomplete(
-      () => this.lspClient,
+      () => this.lspReady && this.documentSessionController.hasClient
+        ? this.lspClient
+        : undefined,
       () => this.getActiveLspUri(),
       () => this.flushPendingLspSync(),
       editor.wordCompletion,
@@ -2172,6 +2174,7 @@ export class TypsastraWorkspaceController {
       milliseconds => this.performanceController.record({ name: "language.completion", milliseconds }),
       message => this.appendDeveloperLog({ kind: "info", source: "lsp autocomplete", message }),
       () => this.settingsController.value.editor.userDictionary,
+      editor.typstCompletionMode,
     );
   }
 

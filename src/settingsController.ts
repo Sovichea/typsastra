@@ -243,6 +243,9 @@ export class SettingsController {
     onChange("settings-indent-guides", (settings, control) => { settings.editor.indentationGuides = (control as HTMLInputElement).checked; });
     onChange("settings-spellcheck", (settings, control) => { settings.editor.spellcheck = (control as HTMLInputElement).checked; });
     onChange("settings-word-completion", (settings, control) => { settings.editor.wordCompletion = (control as HTMLInputElement).checked; });
+    onChange("settings-typst-completion-mode", (settings, control) => {
+      settings.editor.typstCompletionMode = control.value === "on-demand" ? "on-demand" : "on-type";
+    });
     onChange("settings-show-zws", (settings, control) => { settings.editor.showZws = (control as HTMLInputElement).checked; });
     onChange("settings-format-on-save", (settings, control) => { settings.editor.formatOnSave = (control as HTMLInputElement).checked; });
     onChange("settings-auto-save", (settings, control) => { settings.editor.autoSave = (control as HTMLInputElement).checked; });
@@ -570,6 +573,7 @@ export class SettingsController {
     setChecked("settings-indent-guides", editor.indentationGuides);
     setChecked("settings-spellcheck", editor.spellcheck);
     setChecked("settings-word-completion", editor.wordCompletion);
+    setValue("settings-typst-completion-mode", editor.typstCompletionMode);
     setChecked("settings-show-zws", editor.showZws);
     setChecked("settings-format-on-save", editor.formatOnSave);
     setChecked("settings-auto-save", editor.autoSave);

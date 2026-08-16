@@ -14,6 +14,7 @@ describe("application settings", () => {
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
     expect(settings.editor.spellcheck).toBe(true);
     expect(settings.editor.wordCompletion).toBe(true);
+    expect(settings.editor.typstCompletionMode).toBe("on-type");
     expect(settings.editor.showZws).toBe(true);
     expect(settings.editor.userDictionary).toEqual([]);
     expect(settings.editor.ignoredWords).toEqual([]);
@@ -29,6 +30,15 @@ describe("application settings", () => {
     expect(settings.compatibility.disableWebkitDmabufRenderer).toBe(false);
     expect(settings.fonts.privateDirectories).toEqual([]);
     expect(settings.toolchain.tinymistVersion).toBeNull();
+  });
+
+  test("normalizes the Typst completion trigger policy", () => {
+    expect(normalizeAppSettings({ editor: { typstCompletionMode: "on-demand" } })
+      .editor.typstCompletionMode).toBe("on-demand");
+    expect(normalizeAppSettings({ editor: { typstCompletionMode: "on-type" } })
+      .editor.typstCompletionMode).toBe("on-type");
+    expect(normalizeAppSettings({ editor: { typstCompletionMode: "invalid" } })
+      .editor.typstCompletionMode).toBe("on-type");
   });
 
   test("rejects unsupported enums and clamps numeric values", () => {

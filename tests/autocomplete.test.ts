@@ -12,9 +12,11 @@ import {
   fontCompletionValueStart,
   isEmptyTypstFunctionCallAt,
   innermostTypstFunctionName,
+  innermostTypstArgumentFieldName,
   isDirectMemberCompletion,
   isInsideTypstFunctionArgumentsAt,
   isNamedArgumentCompletion,
+  isStaticTypstCompletionContextAt,
   isTypstMemberAccessAt,
   isTypstFunctionArgumentContextAt,
   isTypstRuleTargetAt,
@@ -39,6 +41,12 @@ import {
   typstMemberCompletionValidFor,
   typstCompletionValidFor
 } from "../src/editor/autocomplete";
+import {
+  staticTypstFieldCompletions,
+  staticTypstGlobalCompletions,
+  staticTypstMemberCompletions,
+  staticTypstValueCompletions,
+} from "../src/editor/typstCompletionCatalog";
 
 describe("language word completion context", () => {
   test("sends the personal dictionary to language completion", async () => {
@@ -92,6 +100,57 @@ describe("language word completion context", () => {
 });
 
 describe("LSP autocomplete edits", () => {
+  test("provides a runtime-free Typst syntax catalog", () => {
+    const globals = staticTypstGlobalCompletions();
+    expect(globals.find(item => item.label === "figure")?.insertText).toBe("figure(${1:})");
+    expect(globals.find(item => item.label === "figure.bracket")?.insertText).toBe("figure[${1:}]");
+    expect(globals.some(item => item.label === "set")).toBe(true);
+
+    const imageFields = staticTypstFieldCompletions("image");
+    expect(imageFields.find(item => item.label === "fit")?.insertText).toBe("fit: ");
+    expect(imageFields.every(item => isNamedArgumentCompletion(item))).toBe(true);
+    expect(staticTypstFieldCompletions("page").some(item => item.label === "margin")).toBe(true);
+
+    expect(staticTypstValueCompletions("fit").map(item => item.insertText)).toEqual([
+      '"contain"',
+      '"cover"',
+      '"stretch"',
+    ]);
+    expect(staticTypstValueCompletions("justify").map(item => item.insertText)).toEqual([
+      "true",
+      "false",
+    ]);
+    expect(staticTypstMemberCompletions().some(item => item.label === "len")).toBe(true);
+  });
+
+  test("limits the static catalog to Typst code contexts", () => {
+    const prose = Text.of(["A regular paragraph"]);
+    expect(isStaticTypstCompletionContextAt(prose, prose.length)).toBe(false);
+
+    const hashExpression = Text.of(["#fig"]);
+    expect(isStaticTypstCompletionContextAt(hashExpression, hashExpression.length)).toBe(true);
+
+    const argument = Text.of(["#image(fit: )"]);
+    expect(isStaticTypstCompletionContextAt(argument, argument.length - 1)).toBe(true);
+
+    const statement = Text.of(["#let preview = "]);
+    expect(isStaticTypstCompletionContextAt(statement, statement.length)).toBe(true);
+
+    const content = Text.of(["#emph[ordinary prose]"]);
+    expect(isStaticTypstCompletionContextAt(content, content.length - 1)).toBe(false);
+  });
+
+  test("identifies the active named argument for static value completion", () => {
+    const fit = Text.of(['#image(fit: "co")']);
+    expect(innermostTypstArgumentFieldName(fit, fit.length - 2)).toBe("fit");
+
+    const multiline = Text.of(["#set text(", '  lang: "k"', ")"]);
+    expect(innermostTypstArgumentFieldName(multiline, multiline.line(2).to - 1)).toBe("lang");
+
+    const unnamed = Text.of(['#image("asset.png")']);
+    expect(innermostTypstArgumentFieldName(unnamed, unnamed.length - 2)).toBeNull();
+  });
+
   test("adds editable defaults to named fields across Typst functions", () => {
     const direct = Text.of(["#par(", "  ", ")[Text]"]);
     const setRule = Text.of(["#set par(", "  ", ")"]);
