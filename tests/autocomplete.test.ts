@@ -105,11 +105,36 @@ describe("LSP autocomplete edits", () => {
     expect(globals.find(item => item.label === "figure")?.insertText).toBe("figure(${1:})");
     expect(globals.find(item => item.label === "figure.bracket")?.insertText).toBe("figure[${1:}]");
     expect(globals.some(item => item.label === "set")).toBe(true);
+    expect(globals.length).toBeGreaterThan(200);
+    for (const functionName of [
+      "pagebreak",
+      "colbreak",
+      "linebreak",
+      "bibliography",
+      "cite",
+      "footnote",
+      "query",
+      "counter",
+      "state",
+      "read",
+      "json",
+      "csv",
+      "yaml",
+      "toml",
+      "xml",
+      "cbor",
+      "eval",
+      "plugin",
+    ]) {
+      expect(globals.some(item => item.label === functionName)).toBe(true);
+    }
+    expect(globals.find(item => item.label === "pagebreak")?.insertText).toBe("pagebreak(${1:})");
 
     const imageFields = staticTypstFieldCompletions("image");
     expect(imageFields.find(item => item.label === "fit")?.insertText).toBe("fit: ");
     expect(imageFields.every(item => isNamedArgumentCompletion(item))).toBe(true);
     expect(staticTypstFieldCompletions("page").some(item => item.label === "margin")).toBe(true);
+    expect(staticTypstFieldCompletions("pagebreak").map(item => item.label)).toEqual(["to", "weak"]);
 
     expect(staticTypstValueCompletions("fit").map(item => item.insertText)).toEqual([
       '"contain"',

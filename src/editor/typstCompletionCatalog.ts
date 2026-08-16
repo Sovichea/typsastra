@@ -1,3 +1,5 @@
+import generatedCatalogJson from "./typstCompletionCatalog.generated.json";
+
 /**
  * Runtime-free Typst completion metadata used when Tinymist is unavailable.
  * Keep this catalog deterministic and serializable so it can later be
@@ -12,6 +14,26 @@ export type StaticTypstCompletionItem = {
   insertTextFormat?: number;
   sortText?: string;
 };
+
+type GeneratedCompletionItem = {
+  label: string;
+  kind?: number;
+  detail?: string;
+  documentation?: string | { value?: string };
+  insertText?: string;
+  insertTextFormat?: number;
+  sortText?: string;
+  textEdit?: { newText?: string };
+};
+
+type GeneratedCompletionCatalog = {
+  schemaVersion: number;
+  generatedBy?: { name?: string; version?: string };
+  globals: GeneratedCompletionItem[];
+  fields: Record<string, GeneratedCompletionItem[]>;
+};
+
+const GENERATED_CATALOG = generatedCatalogJson as GeneratedCompletionCatalog;
 
 type TypstFunctionEntry = {
   fields?: Readonly<Record<string, string>>;
@@ -122,21 +144,70 @@ function callableItem(name: string, entry: TypstFunctionEntry): StaticTypstCompl
   return items;
 }
 
+function generatedDocumentation(item: GeneratedCompletionItem): string | undefined {
+  return typeof item.documentation === "string"
+    ? item.documentation
+    : item.documentation?.value;
+}
+
+function generatedGlobalItem(item: GeneratedCompletionItem): StaticTypstCompletionItem {
+  const generatedInsertion = item.textEdit?.newText ?? item.insertText ?? item.label;
+  const isBracketVariant = item.label.endsWith(".bracket");
+  const isCallable = item.kind === 2 || item.kind === 3 || item.kind === 4
+    || /\)\s*=>/u.test(item.detail ?? "");
+  const insertText = isBracketVariant
+    ? generatedInsertion
+    : isCallable
+      ? `${item.label}(\${1:})`
+      : generatedInsertion;
+  return {
+    label: item.label,
+    kind: item.kind ?? 6,
+    ...(item.detail ? { detail: item.detail } : {}),
+    ...(generatedDocumentation(item) ? { documentation: generatedDocumentation(item) } : {}),
+    insertText,
+    ...(isCallable || item.insertTextFormat === 2 ? { insertTextFormat: 2 } : {}),
+    ...(item.sortText ? { sortText: item.sortText } : {}),
+  };
+}
+
+function generatedFieldItem(item: GeneratedCompletionItem): StaticTypstCompletionItem {
+  return {
+    label: item.label,
+    kind: item.kind ?? 5,
+    ...(item.detail ? { detail: item.detail } : {}),
+    ...(generatedDocumentation(item) ? { documentation: generatedDocumentation(item) } : {}),
+    insertText: item.insertText ?? item.textEdit?.newText ?? `${item.label}: `,
+    ...(item.sortText ? { sortText: item.sortText } : {}),
+  };
+}
+
 export function staticTypstGlobalCompletions(): StaticTypstCompletionItem[] {
-  return [
+  const items = [
     ...KEYWORDS.map((label, index) => ({ label, kind: 14, detail: "Typst syntax", sortText: `0-${index}` })),
+    ...GENERATED_CATALOG.globals.map(generatedGlobalItem),
+    // Retain the small curated set as a compatibility fallback when an older
+    // pinned toolchain does not expose a newer catalog entry.
     ...Object.entries(FUNCTIONS).flatMap(([name, entry]) => callableItem(name, entry)),
     ...CONSTANTS.map(label => ({ label, kind: 6, detail: "Typst constant" })),
   ];
+  const seen = new Set<string>();
+  return items.filter(item => {
+    if (seen.has(item.label)) return false;
+    seen.add(item.label);
+    return true;
+  });
 }
 
 export function staticTypstFieldCompletions(functionName: string | null): StaticTypstCompletionItem[] {
   if (!functionName) return [];
   const functionParts = functionName.split(".");
   const baseName = functionParts[functionParts.length - 1] ?? functionName;
-  const fields = FUNCTIONS[baseName]?.fields;
-  if (!fields) return [];
-  return Object.entries(fields).map(([label, detail]) => ({
+  const generatedFields = GENERATED_CATALOG.fields[baseName];
+  if (generatedFields?.length) return generatedFields.map(generatedFieldItem);
+  const curatedFields = FUNCTIONS[baseName]?.fields;
+  if (!curatedFields) return [];
+  return Object.entries(curatedFields).map(([label, detail]) => ({
     label,
     kind: 5,
     detail,

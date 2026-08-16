@@ -13,6 +13,7 @@
     "conform": "bun test tests/editingPolicies.test.ts tests/khmerReference.test.ts tests/laoReference.test.ts tests/languageSupport.test.ts",
     "benchmark:performance": "bun scripts/run-performance-benchmarks.ts",
     "validate:examples": "bun scripts/validate-examples.ts",
+    "generate:typst-completions": "bun scripts/generate-typst-completion-catalog.ts",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "tauri build",
     "dev:update": "bun run tauri:dev:update",
