@@ -1,12 +1,6 @@
 import type { EditorState } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
-
-const FORWARD_SYNC_CONTENT_NODES = new Set(["content", "heading", "term"]);
-
-function isContentPosition(state: EditorState, position: number, bias: -1 | 1): boolean {
-  const names = syntaxTree(state).resolveInner(position, bias).name.split(/[ _]+/u);
-  return names.some(name => FORWARD_SYNC_CONTENT_NODES.has(name));
-}
+import { isTypstProseSyntaxNode } from "./typstSyntax";
 
 /**
  * Tinymist's PDF source map resolves textual Typst content. A source expression
@@ -15,5 +9,7 @@ function isContentPosition(state: EditorState, position: number, bias: -1 | 1): 
  */
 export function isForwardSyncContentPosition(state: EditorState, position: number): boolean {
   if (position < 0 || position > state.doc.length) return false;
-  return isContentPosition(state, position, -1) || isContentPosition(state, position, 1);
+  const tree = syntaxTree(state);
+  return isTypstProseSyntaxNode(tree.resolveInner(position, -1))
+    || isTypstProseSyntaxNode(tree.resolveInner(position, 1));
 }

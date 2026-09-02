@@ -1,5 +1,6 @@
 import { StateEffect, StateField, type EditorState, type Extension, type Text } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
+import { isTypstProseSyntaxNode } from "./typstSyntax";
 import { Decoration, EditorView, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -186,11 +187,8 @@ export function isTypstProseRange(state: EditorState, from: number, to: number):
   if (from < 0 || to <= from || to > state.doc.length) return false;
   if (typeof (state as { field?: unknown }).field !== "function") return true;
   const tree = syntaxTree(state);
-  const proseToken = (position: number, bias: -1 | 1): boolean => {
-    const names = new Set(tree.resolveInner(position, bias).name.split(" "));
-    return names.has("content") || names.has("heading") || names.has("term");
-  };
-  return proseToken(from, 1) && proseToken(to, -1);
+  return isTypstProseSyntaxNode(tree.resolveInner(from, 1))
+    && isTypstProseSyntaxNode(tree.resolveInner(to, -1));
 }
 
 export class SpellcheckController {

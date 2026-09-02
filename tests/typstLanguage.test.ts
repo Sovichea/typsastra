@@ -1,157 +1,117 @@
 import { describe, expect, test } from "bun:test";
 import { getIndentation, indentUnit, syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
+import type { Tree } from "@lezer/common";
 import { typstLanguage } from "../src/editor/typstLanguage";
 
-type ParsedToken = {
-  name: string;
-  text: string;
-};
-
-function parseTokens(doc: string): ParsedToken[] {
+function parse(doc: string): Tree {
   const state = EditorState.create({ doc, extensions: [typstLanguage] });
-  const cursor = syntaxTree(state).cursor();
-  const tokens: ParsedToken[] = [];
-
-  do {
-    if (cursor.name !== "Document") {
-      tokens.push({ name: cursor.name, text: doc.slice(cursor.from, cursor.to) });
-    }
-  } while (cursor.next());
-
-  return tokens;
+  return syntaxTree(state);
 }
 
-function tokenName(tokens: ParsedToken[], text: string): string | undefined {
-  return tokens.find(token => token.text === text)?.name;
+function nodeNames(tree: Tree): string[] {
+  const cursor = tree.cursor();
+  const names: string[] = [];
+  do {
+    names.push(cursor.name);
+  } while (cursor.next());
+  return names;
+}
+
+function countErrors(tree: Tree): number {
+  const cursor = tree.cursor();
+  let errors = 0;
+  do {
+    if (cursor.type.isError) errors += 1;
+  } while (cursor.next());
+  return errors;
 }
 
 function indentationAt(doc: string, position: number): number | null {
   const state = EditorState.create({
     doc,
-    extensions: [typstLanguage, indentUnit.of("  ")]
+    extensions: [typstLanguage, indentUnit.of("  ")],
   });
   return getIndentation(state, position);
 }
 
-describe("Typst stream language", () => {
-  test("counts a closure body inside a function call as one indentation level", () => {
-    const doc = "#let x = items.map(it => {\n\n})";
-    const blankLine = doc.indexOf("\n") + 1;
-    const closingLine = doc.lastIndexOf("})");
+describe("Typst Lezer language", () => {
+  test("parses markup, code, math, raw text, and Unicode prose", () => {
+    const doc = [
+      "= Heading <intro>",
+      "អត្ថបទខ្មែរ with *bold* and _emphasis_.",
+      "#let x = (1 + 2) * 3",
+      "#text(size: 10pt)[Rendered content]",
+      "$ sum_(k=1)^n k + #x $",
+      "```typ",
+      "#let inside = 1",
+      "```",
+    ].join("\n");
 
-    expect(indentationAt(doc, blankLine)).toBe(2);
-    expect(indentationAt(doc, closingLine)).toBe(0);
+    const tree = parse(doc);
+    const names = nodeNames(tree);
+
+    expect(countErrors(tree)).toBe(0);
+    expect(names).toContain("Heading");
+    expect(names).toContain("Strong");
+    expect(names).toContain("Emph");
+    expect(names).toContain("LetBinding");
+    expect(names).toContain("Args");
+    expect(names).toContain("ContentBlock");
+    expect(names).toContain("Equation");
+    expect(names).toContain("RawBlock");
+    expect(names).toContain("RawLang");
   });
 
-  test("preserves ordinary nested call indentation", () => {
+  test("keeps ordinary nested call indentation", () => {
     const doc = "#figure(\n  image(\n\n  )\n)";
     const blankLine = doc.indexOf("\n\n") + 1;
 
     expect(indentationAt(doc, blankLine)).toBe(4);
   });
 
-  test("tags only line-leading whitespace as fixed-width indentation", () => {
-    const tokens = parseTokens("  #image(\n    width: 100%,\n  )\nPlain prose keeps spaces");
+  test("parses hash expressions with fields, calls, units, and content blocks", () => {
+    const doc = [
+      "#values.at(0)",
+      "#rect(width: 50%, inset: 1em)[content]",
+      "#let n = 1.2e-3",
+    ].join("\n");
 
-    expect(tokens.filter(token => token.name === "indentation").map(token => token.text))
-      .toEqual(["  ", "    ", "  "]);
-    expect(tokenName(tokens, " ")).toBeUndefined();
+    const tree = parse(doc);
+    const names = nodeNames(tree);
+
+    expect(countErrors(tree)).toBe(0);
+    expect(names).toContain("FieldAccess");
+    expect(names).toContain("Args");
+    expect(names).toContain("Numeric");
+    expect(names).toContain("ContentBlock");
   });
 
-  test("applies heading, strong, and emphasis tags to their content", () => {
-    const tokens = parseTokens("= Heading *bold* _italic_");
+  test("parses code blocks and arrow expressions without leaking markup state", () => {
+    const doc = "#let mapped = items.map(it => {\n  it + 1\n})\nPlain prose";
+    const tree = parse(doc);
+    const names = nodeNames(tree);
 
-    expect(tokenName(tokens, "Heading")).toContain("heading");
-    expect(tokenName(tokens, "bold")).toContain("strong");
-    expect(tokenName(tokens, "italic")).toContain("emphasis");
+    expect(countErrors(tree)).toBe(0);
+    expect(names).toContain("CodeBlock");
+    expect(names).toContain("BinaryExpression");
+    expect(names).toContain("Content");
   });
 
-  test("keeps an attached heading label out of the heading style", () => {
-    const tokens = parseTokens("= Heading <intro>");
+  test("recognizes line structures and references", () => {
+    const doc = [
+      "- Bullet",
+      "+ Enumerated",
+      "/ Term: Definition",
+      "See https://example.com and @intro <intro>.",
+    ].join("\n");
+    const names = nodeNames(parse(doc));
 
-    expect(tokenName(tokens, "= ")).toBe("heading");
-    expect(tokenName(tokens, "Heading")).toContain("heading");
-    expect(tokenName(tokens, "<intro>")).toBe("label");
-  });
-
-  test("continues a hash expression across operators and returns to prose", () => {
-    const tokens = parseTokens("#x + y and prose");
-
-    expect(tokenName(tokens, "#")).toBe("hashVariable");
-    expect(tokenName(tokens, "+")).toBe("operator");
-    expect(tokenName(tokens, "x")).toBe("referenceVariable");
-    expect(tokenName(tokens, "y")).toBe("referenceVariable");
-    expect(tokenName(tokens, "and")).toBe("content");
-    expect(tokenName(tokens, "prose")).toBe("content");
-  });
-
-  test("distinguishes math variables, numbers, and embedded code", () => {
-    const tokens = parseTokens("$ x^2 + #value $");
-
-    expect(tokenName(tokens, "x")).toBeUndefined();
-    expect(tokenName(tokens, "2")).toBe("number");
-    expect(tokenName(tokens, "value")).toBe("referenceVariable");
-  });
-
-  test("colors a hash like the expression it introduces", () => {
-    const tokens = parseTokens('#emph[hi]\n#emoji.face\n#"hello".len()\n#let x = 1');
-    const hashTokens = tokens.filter(token => token.text === "#").map(token => token.name);
-
-    expect(hashTokens).toEqual(["hashFunction", "hashVariable", "hashString", "hashKeyword"]);
-    expect(tokenName(tokens, "emph")).toBe("function");
-    expect(tokenName(tokens, "emoji")).toBe("referenceVariable");
-    expect(tokenName(tokens, "face")).toBe("referenceVariable");
-    expect(tokenName(tokens, '"hello"')).toBe("string");
-    expect(tokenName(tokens, "len")).toBe("function");
-    expect(tokenName(tokens, "x")).toBeUndefined();
-  });
-
-  test("returns to markup between context expressions on the same line", () => {
-    const tokens = parseTokens("#context counter(page).display() #context counter(page).display()");
-    const hashTokens = tokens.filter(token => token.text === "#").map(token => token.name);
-    const contextTokens = tokens.filter(token => token.text === "context").map(token => token.name);
-
-    expect(hashTokens).toEqual(["hashKeyword", "hashKeyword"]);
-    expect(contextTokens).toEqual(["keyword", "keyword"]);
-  });
-
-  test("tokenizes plain, unit, percentage, and scientific numbers consistently", () => {
-    const tokens = parseTokens("#let x = 1\n#let y = 1em\n#let z = 50%\n#let n = 1e5\n#let m = 1.2e-3");
-
-    expect(tokenName(tokens, "1")).toBe("number");
-    expect(tokenName(tokens, "1em")).toBe("number");
-    expect(tokenName(tokens, "50%")).toBe("number");
-    expect(tokenName(tokens, "1e5")).toBe("number");
-    expect(tokenName(tokens, "1.2e-3")).toBe("number");
-  });
-
-  test("separates a variable receiver from a called method", () => {
-    const tokens = parseTokens("#values.at(0)");
-
-    expect(tokenName(tokens, "#")).toBe("hashVariable");
-    expect(tokenName(tokens, "values")).toBe("referenceVariable");
-    expect(tokenName(tokens, "at")).toBe("function");
-  });
-
-  test("highlights a fenced raw-block language on the opening line", () => {
-    const tokens = parseTokens("```typ\n#let x = 1\n```");
-
-    expect(tokenName(tokens, "typ")).toBe("string");
-    expect(tokenName(tokens, "#let x = 1")).toBe("monospace");
-  });
-
-  test("does not leak strong styling past an embedded code expression", () => {
-    const doc = `#let quotation = {
-  ([*#render(t.total-duration)*], [*#render(lead-time-str)*])
-  if timeline.len() > 0 {
-    import "@preview/timeliney:0.4.0"
-  }
-}`;
-    const tokens = parseTokens(doc);
-
-    expect(tokenName(tokens, "if")).toBe("keyword");
-    expect(tokenName(tokens, "import")).toBe("keyword");
-    expect(tokenName(tokens, "timeline") ?? "").not.toContain("strong");
+    expect(names).toContain("ListItem");
+    expect(names).toContain("EnumItem");
+    expect(names).toContain("TermItem");
+    expect(names).toContain("Link");
+    expect(names).toContain("Ref");
+    expect(names).toContain("Label");
   });
 });

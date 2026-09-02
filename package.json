@@ -24,7 +24,9 @@
     "tauri:dev:pdf-full": "bun scripts/run-pdf-transport-experiment.ts full",
     "tauri:dev:pdf-range": "bun scripts/run-pdf-transport-experiment.ts range",
     "tauri:release:pdf-full": "bun scripts/run-pdf-transport-experiment.ts full release",
-    "tauri:release:pdf-range": "bun scripts/run-pdf-transport-experiment.ts range release"
+    "tauri:release:pdf-range": "bun scripts/run-pdf-transport-experiment.ts range release",
+    "generate:typst-parser": "lezer-generator src/editor/typst.grammar -o src/editor/typstParser.ts",
+    "benchmark:typst-lezer": "bun scripts/benchmark-typst-lezer.ts"
   },
   "dependencies": {
     "@babel/runtime": "^8.0.0",
@@ -36,6 +38,9 @@
     "@codemirror/state": "^6.4.1",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.27.0",
+    "@lezer/common": "^1.2.3",
+    "@lezer/highlight": "^1.2.1",
+    "@lezer/lr": "^1.4.2",
     "@replit/codemirror-indentation-markers": "^6.5.3",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
@@ -53,6 +58,7 @@
     "tinymist": "^0.12.16"
   },
   "devDependencies": {
+    "@lezer/generator": "^1.8.0",
     "@tauri-apps/cli": "^2.0.0",
     "bun-types": "^1.1.0",
     "typescript": "^5.4.0",

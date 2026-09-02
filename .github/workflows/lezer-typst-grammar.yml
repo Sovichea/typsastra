@@ -1,0 +1,49 @@
+name: Lezer Typst Grammar Validation
+
+on:
+  push:
+    branches:
+      - feat/lezer-typst-grammar
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/lezer-typst-grammar
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Generate Lezer parser
+        run: bun run generate:typst-parser
+
+      - name: Refresh npm lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Commit generated parser and lockfiles
+        run: |
+          if ! git diff --quiet -- src/editor/typstParser.ts bun.lock package-lock.json; then
+            git config user.name "Sovichea Tep"
+            git config user.email "sovichea.tep@gmail.com"
+            git add src/editor/typstParser.ts bun.lock package-lock.json
+            git commit -m "build: generate typst lezer parser"
+            git push
+          fi
+
+      - name: Run Typst parser tests
+        run: bun test tests/typstLanguage.test.ts tests/typstBracketMatching.test.ts tests/forwardSyncEligibility.test.ts tests/spellcheck.test.ts tests/typstLezerScale.test.ts
+
+      - name: Benchmark 20k-line Typst document
+        run: bun run benchmark:typst-lezer
+
+      - name: Build frontend
+        run: bun run build

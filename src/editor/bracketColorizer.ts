@@ -1,6 +1,7 @@
 import { RangeSetBuilder, StateEffect, type Text } from "@codemirror/state";
 import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import type { Tree } from "@lezer/common";
+import { isTypstDelimiterAt } from "./typstSyntax";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 
 const BRACKET_COLOR_COUNT = 5;
@@ -159,7 +160,7 @@ function isOpeningBracket(character: string): boolean {
 }
 
 function isTypstPunctuationBracket(tree: Tree, position: number): boolean {
-  return tree.resolveInner(position, 1).name === "punctuation";
+  return isTypstDelimiterAt(tree, position);
 }
 
 type VisibleBracketDecorations = {

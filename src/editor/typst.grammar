@@ -1,0 +1,333 @@
+@precedence {
+  mult @left,
+  add @left,
+  compare @left,
+  logic @left
+}
+
+@top Document { Markup }
+
+Markup { (MarkupLine Linebreak | Linebreak)* MarkupLine? }
+
+MarkupLine {
+  Heading |
+  ListItem |
+  EnumItem |
+  TermItem |
+  Paragraph
+}
+
+Heading { HeadingMarker InlineItem* }
+ListItem { Minus InlineItem* }
+EnumItem { Plus InlineItem* }
+TermItem { Slash InlineItem* }
+Paragraph { InlineItem+ }
+
+InlineItem {
+  Strong |
+  Emph |
+  Raw |
+  Link |
+  Label |
+  Ref |
+  Equation |
+  Code |
+  Escape |
+  Shorthand |
+  Content
+}
+
+Strong { Star StrongItem* Star }
+StrongItem {
+  Emph |
+  Raw |
+  Link |
+  Label |
+  Ref |
+  Equation |
+  Code |
+  Escape |
+  Shorthand |
+  Content
+}
+
+Emph { Underscore EmphItem* Underscore }
+EmphItem {
+  Strong |
+  Raw |
+  Link |
+  Label |
+  Ref |
+  Equation |
+  Code |
+  Escape |
+  Shorthand |
+  Content
+}
+
+Content { Text }
+
+Raw { RawBlock | RawInline }
+RawInline { Backtick RawInlineText? Backtick }
+RawBlock { RawFence RawLang? Linebreak RawBlockLine* RawFence }
+RawLang { Ident }
+RawBlockLine { RawBlockText? Linebreak }
+
+Link { Url }
+Label { LabelToken }
+Ref { RefToken }
+
+Equation { Dollar Math Dollar }
+Math { MathItem* }
+MathItem {
+  Code |
+  MathGroup |
+  Numeric |
+  Str |
+  Ident |
+  MathOperator
+}
+MathGroup {
+  LeftParen Math RightParen |
+  LeftBracket Math RightBracket |
+  LeftBrace Math RightBrace
+}
+MathOperator {
+  Hat |
+  Underscore |
+  Slash |
+  Eq |
+  EqEq |
+  ExclEq |
+  Lt |
+  LtEq |
+  Gt |
+  GtEq |
+  Plus |
+  Minus |
+  Star |
+  Arrow
+}
+
+Code { Hash CodeExpression }
+
+CodeExpression {
+  LetBinding |
+  SetRule |
+  ShowRule |
+  Contextual |
+  Conditional |
+  ForLoop |
+  WhileLoop |
+  ModuleImport |
+  ModuleInclude |
+  LoopBreak |
+  LoopContinue |
+  FuncReturn |
+  Expression
+}
+
+LetBinding { Let Ident (Eq Expression)? }
+SetRule { Set Expression }
+ShowRule { Show Expression (Colon Expression)? }
+Contextual { Context Expression }
+Conditional { If Expression CodeBlock (Else (Conditional | CodeBlock))? }
+ForLoop { For Ident In Expression CodeBlock }
+WhileLoop { While Expression CodeBlock }
+ModuleImport { Import Str }
+ModuleInclude { Include Str }
+LoopBreak { Break }
+LoopContinue { Continue }
+FuncReturn { Return Expression? }
+
+Expression {
+  PostfixExpression |
+  UnaryExpression |
+  BinaryExpression
+}
+
+BinaryExpression {
+  Expression !logic LogicOp Expression |
+  Expression !compare CompareOp Expression |
+  Expression !add AddOp Expression |
+  Expression !mult MultOp Expression
+}
+
+UnaryExpression { UnaryOp Expression }
+
+PostfixExpression { PrimaryExpression Postfix* }
+Postfix { FieldAccess | Args | ContentBlock }
+
+FieldAccess { Dot Ident }
+
+Args { LeftParen Linebreak* ArgumentList? Linebreak* RightParen }
+ArgumentList {
+  Argument (Linebreak* Comma Linebreak* Argument)* Linebreak* Comma?
+}
+Argument {
+  Named |
+  Spread |
+  Expression
+}
+Named { Ident Colon Expression }
+Spread { Dots Expression }
+
+ContentBlock { LeftBracket Markup RightBracket }
+
+PrimaryExpression {
+  Ident |
+  Numeric |
+  Str |
+  Bool |
+  None |
+  Auto |
+  Parenthesized |
+  CodeBlock
+}
+
+Parenthesized { LeftParen Expression? RightParen }
+
+CodeBlock { LeftBrace CodeBlockItem* RightBrace }
+CodeBlockItem {
+  CodeExpression (Semicolon | Linebreak)+ |
+  Linebreak
+}
+
+Bool { True | False }
+
+UnaryOp { Not | Plus | Minus }
+LogicOp { And | Or | Arrow }
+CompareOp { EqEq | ExclEq | Lt | LtEq | Gt | GtEq }
+AddOp { Plus | Minus }
+MultOp { Star | Slash }
+
+Let { kw<"let"> }
+Set { kw<"set"> }
+Show { kw<"show"> }
+Context { kw<"context"> }
+If { kw<"if"> }
+Else { kw<"else"> }
+For { kw<"for"> }
+In { kw<"in"> }
+While { kw<"while"> }
+Break { kw<"break"> }
+Continue { kw<"continue"> }
+Return { kw<"return"> }
+Import { kw<"import"> }
+Include { kw<"include"> }
+Not { kw<"not"> }
+And { kw<"and"> }
+Or { kw<"or"> }
+None { kw<"none"> }
+Auto { kw<"auto"> }
+True { kw<"true"> }
+False { kw<"false"> }
+
+kw<word> { @specialize<Ident, word> }
+
+@skip { HorizontalSpace | LineComment | BlockComment }
+
+@tokens {
+  @precedence {
+    RawFence,
+    Url,
+    LabelToken,
+    RefToken,
+    HeadingMarker,
+    Shorthand,
+    Plus,
+    Minus,
+    Slash,
+    Arrow,
+    EqEq,
+    ExclEq,
+    LtEq,
+    GtEq,
+    PlusEq,
+    HyphEq,
+    StarEq,
+    SlashEq,
+    Dots,
+    Numeric,
+    Ident,
+    Text
+  }
+
+  HorizontalSpace { $[ \t\f]+ }
+  Linebreak { "\r\n" | "\n" | "\r" }
+
+  LineComment { "//" $[^\n\r]* }
+  BlockComment { "/*" blockCommentBody "*/" }
+  blockCommentBody { ($[^*] | "*" $[^/])* }
+
+  HeadingMarker { "="+ }
+
+  RawFence { "```" }
+  Backtick { "`" }
+  RawInlineText { $[^`\n\r]+ }
+  RawBlockText { ($[^`\n\r] | "`" $[^`\n\r] | "``" $[^`\n\r])+ }
+
+  Escape { "\\" _ }
+  Shorthand { "---" | "--" | "~" }
+
+  Url { ("http://" | "https://") urlChar+ }
+  urlChar { idContinue | "." | "/" | ":" | "?" | "=" | "&" | "%" | "#" }
+
+  LabelToken { "<" labelChar+ ">" }
+  RefToken { "@" labelChar+ }
+  labelChar { idContinue | ":" }
+
+  Numeric { (hex | decimal) unit? }
+  hex { "0x" $[0-9a-fA-F]+ }
+  decimal { @digit+ ("." @digit+)? ($[eE] $[+\-]? @digit+)? }
+  unit { "%" | "pt" | "em" | "mm" | "cm" | "in" | "deg" | "rad" | "fr" }
+
+  Str { '"' ($[^"\\\n\r] | "\\" _)* '"' }
+
+  Ident { idStart idContinue* }
+  idStart { @asciiLetter | "_" | $[\u{80}-\u{10ffff}] }
+  idContinue { idStart | @digit | "-" }
+
+  Text { textChar+ }
+  textChar {
+    $[\u{21}-\u{22}\u{25}-\u{29}\u{2b}-\u{3b}\u{3d}-\u{3f}\u{41}-\u{5a}\u{5e}\u{61}-\u{10ffff}]
+  }
+
+  Hash { "#" }
+  Star { "*" }
+  Underscore { "_" }
+  Dollar { "$" }
+
+  LeftBrace { "{" }
+  RightBrace { "}" }
+  LeftBracket { "[" }
+  RightBracket { "]" }
+  LeftParen { "(" }
+  RightParen { ")" }
+
+  Comma { "," }
+  Semicolon { ";" }
+  Colon { ":" }
+  Dot { "." }
+
+  Plus { "+" }
+  Minus { "-" }
+  Slash { "/" }
+  Hat { "^" }
+
+  Eq { "=" }
+  EqEq { "==" }
+  ExclEq { "!=" }
+  Lt { "<" }
+  LtEq { "<=" }
+  Gt { ">" }
+  GtEq { ">=" }
+  PlusEq { "+=" }
+  HyphEq { "-=" }
+  StarEq { "*=" }
+  SlashEq { "/=" }
+  Dots { ".." }
+  Arrow { "=>" }
+}
+
+@detectDelim
