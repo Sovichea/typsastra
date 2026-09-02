@@ -50,6 +50,7 @@ describe("Typst Lezer language", () => {
 
     const tree = parse(doc);
     const names = nodeNames(tree);
+    if (countErrors(tree) > 0) console.info(tree.toString());
 
     expect(countErrors(tree)).toBe(0);
     expect(names).toContain("Heading");
