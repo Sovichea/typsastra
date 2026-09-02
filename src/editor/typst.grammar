@@ -193,7 +193,7 @@ Parenthesized { LeftParen Expression? RightParen }
 CodeBlock { LeftBrace CodeBlockLine* RightBrace }
 CodeBlockLine {
   Linebreak |
-  CodeExpression Semicolon Linebreak* |
+  CodeExpression Semicolon |
   CodeExpression Linebreak
 }
 
