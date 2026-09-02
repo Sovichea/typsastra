@@ -80,7 +80,7 @@ Ref { RefToken }
 Equation { Dollar Math Dollar }
 Math { MathItem* }
 MathItem {
-  Code |
+  MathCode |
   MathGroup |
   Numeric |
   Str |
@@ -92,6 +92,9 @@ MathGroup {
   LeftBracket Math RightBracket |
   LeftBrace Math RightBrace
 }
+MathCode { Hash MathCodeExpression }
+MathCodeExpression { Ident | Numeric | Str | Bool | None | Auto }
+
 MathOperator {
   Hat |
   Underscore |
@@ -127,7 +130,7 @@ CodeExpression {
   Expression
 }
 
-LetBinding { Let Ident (Eq Expression)? }
+LetBinding { Let Ident Eq Expression }
 SetRule { Set Expression }
 ShowRule { Show Expression (Colon Expression)? }
 Contextual { Context Expression }
@@ -160,9 +163,9 @@ Postfix { FieldAccess | Args | ContentBlock }
 
 FieldAccess { Dot Ident }
 
-Args { LeftParen Linebreak* ArgumentList? Linebreak* RightParen }
+Args { LeftParen Linebreak* ArgumentList? RightParen }
 ArgumentList {
-  Argument (Linebreak* Comma Linebreak* Argument)* Linebreak* Comma?
+  Argument (Comma Linebreak* Argument)* Comma? Linebreak*
 }
 Argument {
   Named |
@@ -187,10 +190,11 @@ PrimaryExpression {
 
 Parenthesized { LeftParen Expression? RightParen }
 
-CodeBlock { LeftBrace CodeBlockItem* RightBrace }
-CodeBlockItem {
-  CodeExpression (Semicolon | Linebreak)+ |
-  Linebreak
+CodeBlock { LeftBrace CodeBlockLine* RightBrace }
+CodeBlockLine {
+  Linebreak |
+  CodeExpression Semicolon Linebreak* |
+  CodeExpression Linebreak
 }
 
 Bool { True | False }
@@ -243,10 +247,6 @@ kw<word> { @specialize<Ident, word> }
     ExclEq,
     LtEq,
     GtEq,
-    PlusEq,
-    HyphEq,
-    StarEq,
-    SlashEq,
     Dots,
     Numeric,
     Ident,
@@ -322,10 +322,6 @@ kw<word> { @specialize<Ident, word> }
   LtEq { "<=" }
   Gt { ">" }
   GtEq { ">=" }
-  PlusEq { "+=" }
-  HyphEq { "-=" }
-  StarEq { "*=" }
-  SlashEq { "/=" }
   Dots { ".." }
   Arrow { "=>" }
 }
