@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - benchmark/production-kcc-render-gate-20260902
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
