@@ -1,0 +1,67 @@
+name: production kcc render gate
+
+on:
+  push:
+    branches:
+      - benchmark/production-kcc-render-gate-20260902
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install verifier dependency
+        run: python -m pip install --upgrade pillow
+
+      - name: Download exact Typsastra enhanced Unicode engine
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p gate_inputs/engine
+          curl -fL --connect-timeout 15 --max-time 300 --retry 4 --retry-delay 3             -o gate_inputs/engine.zip             'https://github.com/Sovichea/typsastra/releases/download/enhanced-unicode-v0.4.0/typsastra-enhanced-unicode-v0.4.0-x86_64-unknown-linux-gnu.zip'
+          echo '7b8abbced1ea873b8c96cfc82ecdd19aba23197fded19c9017d60be892078784  gate_inputs/engine.zip' | sha256sum -c -
+          test "$(stat -c%s gate_inputs/engine.zip)" = '23412159'
+          unzip -q gate_inputs/engine.zip -d gate_inputs/engine
+          chmod +x gate_inputs/engine/typst
+          gate_inputs/engine/typst --version
+
+      - name: Download exact all-Khmer-fonts archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --connect-timeout 15 --max-time 300 --retry 4 --retry-delay 3             -o gate_inputs/All-Khmer-Fonts-9-26-15.zip             'https://huggingface.co/Vibol/Hello/resolve/main/All-Khmer-Fonts-9-26-15.zip?download=true'
+          echo '11f4dbb0abf1c03193a58911f1a047b4dbda0a3918efff5d621ee4fd3a035153  gate_inputs/All-Khmer-Fonts-9-26-15.zip' | sha256sum -c -
+          ls -lh gate_inputs/All-Khmer-Fonts-9-26-15.zip
+
+      - name: Verify all production KCCs outside prior rule gate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python tools/kcc_gate/verify_production_kccs.py             --typst gate_inputs/engine/typst             --fonts gate_inputs/All-Khmer-Fonts-9-26-15.zip             --candidates-b64 tools/kcc_gate/production_unverified_khmer.txt.gz.b64             --out production_kcc_render_gate
+
+      - name: Pack result
+        if: always()
+        run: tar -czf production-kcc-render-gate.tar.gz production_kcc_render_gate || true
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-kcc-render-gate
+          path: |
+            production_kcc_render_gate
+            production-kcc-render-gate.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
