@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "engine": {
+    "name": "Typsastra Enhanced Unicode Engine",
+    "version": "0.4.1",
+    "typstVersion": "0.15.1",
+    "typstRepository": "Sovichea/typst",
+    "typstCommit": "e3a60d5aa897d718b465efc3de0031c7d74efb3b",
+    "krillaRepository": "Sovichea/krilla",
+    "krillaCommit": "bb0873416484587814b9ecb682e262056f8effe2",
+    "license": "Apache-2.0"
+  },
+  "release": {
+    "repository": "Sovichea/typsastra",
+    "tag": "enhanced-unicode-v0.4.1",
+    "notes": "docs/ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.1.md"
+  },
+  "targets": [
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "archive": "typsastra-enhanced-unicode-v0.4.1-x86_64-pc-windows-msvc.zip",
+      "executable": "typst.exe"
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "archive": "typsastra-enhanced-unicode-v0.4.1-x86_64-unknown-linux-gnu.zip",
+      "executable": "typst"
+    },
+    {
+      "target": "aarch64-unknown-linux-gnu",
+      "archive": "typsastra-enhanced-unicode-v0.4.1-aarch64-unknown-linux-gnu.zip",
+      "executable": "typst"
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "archive": "typsastra-enhanced-unicode-v0.4.1-x86_64-apple-darwin.zip",
+      "executable": "typst"
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "archive": "typsastra-enhanced-unicode-v0.4.1-aarch64-apple-darwin.zip",
+      "executable": "typst"
+    }
+  ]
+}
