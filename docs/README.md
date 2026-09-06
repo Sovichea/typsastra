@@ -41,6 +41,7 @@ the reference documents when you need exact behavior or contributor contracts.
 
 ## Releases and plans
 
+- [Enhanced Unicode Engine v0.4.1 release notes](ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.1.md)
 - [Enhanced Unicode Engine v0.4.0 release notes](ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.0.md)
 - [Enhanced Unicode Engine v0.3.0 benchmarks](ENHANCED_UNICODE_ENGINE_BENCHMARKS_V0.3.0.md)
 - [Roadmap](ROADMAP.md)

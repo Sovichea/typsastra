@@ -223,12 +223,12 @@ Conformance validation complements, rather than replaces, the viewer matrix:
 standards validators test the PDF's declared structure while manual viewer
 tests expose selection, search, clipboard, and geometry interoperability.
 
-## Engine release 0.4.0
+## Engine release 0.4.1
 
 The current reproducible engine packages are defined by
-[`release-v0.4.0.json`](../toolchains/enhanced-unicode/release-v0.4.0.json) and
+[`release-v0.4.1.json`](../toolchains/enhanced-unicode/release-v0.4.1.json) and
 published from this repository under the scoped tag
-`enhanced-unicode-v0.4.0`. Keeping the artifacts in the Typsastra repository
+`enhanced-unicode-v0.4.1`. Keeping the artifacts in the Typsastra repository
 avoids presenting the Typst fork as an unrelated or official upstream binary.
 
 The release workflow also compiles
@@ -239,5 +239,5 @@ exceed signed 16-bit TrueType component coordinates.
 The release remains explicitly opt-in and separate from Tinymist. It is used
 only for explicit PDF exports and never replaces live preview, LSP,
 autocomplete, diagnostics, or source synchronization. See the
-[v0.4.0 engine release notes](ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.0.md)
+[v0.4.1 engine release notes](ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.1.md)
 for pinned source revisions, supported packages, and current validation scope.

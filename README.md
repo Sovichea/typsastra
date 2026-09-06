@@ -316,6 +316,7 @@ installation is not required for normal use.
 - [Markdown live preview](./docs/tutorials/MARKDOWN_PREVIEW.md)
 - [Image Tools](./docs/tutorials/IMAGE_TOOLS.md)
 - [Enhanced Unicode Engine validation](./docs/ENHANCED_UNICODE_ENGINE_VALIDATION.md)
+- [Enhanced Unicode Engine v0.4.1 release notes](./docs/ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.1.md)
 - [Enhanced Unicode Engine v0.4.0 release notes](./docs/ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.0.md)
 - [Enhanced Unicode Engine v0.3.0 benchmarks](./docs/ENHANCED_UNICODE_ENGINE_BENCHMARKS_V0.3.0.md)
 - [Roadmap](./docs/ROADMAP.md)
