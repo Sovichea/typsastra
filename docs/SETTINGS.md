@@ -33,8 +33,7 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,` (`Cmd + 
     "cursorSync": true,
     "syncDebounceMs": 500,
     "forwardSyncTimeoutMs": 5000,
-    "highlightDurationMs": 2200,
-    "khmerRenderPreparation": false
+    "highlightDurationMs": 2200
   },
   "compatibility": {
     "disableWebkitDmabufRenderer": false
@@ -252,7 +251,6 @@ Khmer is currently **Deep · Experimental** (advertised as `Deep provider`). Bun
 
 Provider architecture is documented in [LANGUAGE_TOOLS.md](./LANGUAGE_TOOLS.md), and modern Khmer encoding policy is documented in [KHMER_SPELLCHECK.md](./KHMER_SPELLCHECK.md).
 
-Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
 
 ## WebView storage monitoring
 

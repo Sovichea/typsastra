@@ -13,14 +13,14 @@ ISO 15924 script:  Khmr
 Support:           Deep · Experimental
 Policy contract:   1
 Capability schema: 1
-Upstream commit:   031fc60bcf29dbdd117d9ab04c5b746032d6ab0a (v0.2.0-rc.3)
+Upstream commit:   d52f302fabadbde9107acd0e28362a8d40af10ed (v0.2.0)
 ```
 
 The gitlink at `third_party/khmer_segmenter` pins the code, curated language
-data, and normalization behavior. Typsastra rebuilds the KDIC and hyphenation
-binaries from that revision and stores only those compiled runtime artifacts
-under `src-tauri/resources/language-providers/khmer/`. RC3
-uses the segmenter's single-pass analysis API with `SpellingAccuracy::Visual`,
+data, and normalization behavior. Typsastra bundles the release's unified KDIC
+v2 artifact under `src-tauri/resources/language-providers/khmer/` for spellcheck,
+corrections, and typing suggestions. The provider uses the segmenter's
+single-pass analysis API with `SpellingAccuracy::Visual`,
 which treats the legacy COENG DA and COENG TA forms in words such as `ស្ដាប់`
 and `ស្តាប់` as equivalent correct spelling. Completion also queries the visual
 COENG alias of a typed prefix, so `ស្តាប` can offer the curated `ស្ដាប់` before
@@ -34,7 +34,8 @@ update and an explanation in the change review.
 Typsastra does not add semantic or LLM-generated boundary repairs after the
 segmenter. The pinned deterministic output remains the segmentation baseline;
 visual spelling equivalence is an explicit upstream accuracy policy rather than
-Typsastra post-processing.
+Typsastra post-processing. Typsastra does not integrate the segmenter's reserved
+layout APIs or transform preview and export source with generated word breaks.
 
 ## Reference architecture
 
@@ -97,7 +98,7 @@ The editing policy never performs dictionary lookup or IPC. The Rust provider ne
 | Completion | `complete_language_word` | Return provider ID, explicit UTF-16 replacement range, and bounded ranked options |
 | Current known word | Khmer provider | Put the exact current known word first before longer completions |
 | Corrections | pinned segmenter and capability contract | Return ranked corrections for upstream intended-word spans |
-| Hyphenation metadata | pinned hyphenation dictionary | Retained in token metadata; not used to insert SHY into editor source |
+
 
 ### Settings and user state
 
@@ -109,7 +110,6 @@ The editing policy never performs dictionary lookup or IPC. The Rust provider ne
 | `editor.userDictionary` | Treats exact personal words as known in frontend issue filtering |
 | `editor.ignoredWords` | Keeps an informational underline/log entry but excludes the word from problem counts |
 | `editor.showZws` | Controls visibility of invisible markers, including temporary composition geometry |
-| `preview.khmerRenderPreparation` | Separate experimental rendering pipeline; not part of editor language analysis |
 
 ### Native commands
 
@@ -169,7 +169,7 @@ Word completion remains controlled by the **Typing word suggestions** setting. D
 - Corrections remain lexical and confidence-filtered; they do not infer sentence meaning.
 - Completion ranking is dictionary/frequency based and does not model sentence meaning.
 - The editing policy owns the main Khmer block `[U+1780, U+1800)`; it does not claim unrelated scripts or generic invisible characters.
-- Experimental Khmer render preparation is a separate preview/export transformation and must not be interpreted as spellcheck segmentation.
+- Typsastra does not integrate the segmenter's layout-oriented word-break APIs or transform preview/export source; the dependency is limited to language assistance.
 - A normalization mapping changes lookup text only. Typsastra never silently normalizes or rewrites saved source.
 
 ## Validation

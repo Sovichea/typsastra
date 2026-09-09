@@ -479,7 +479,6 @@ export class TypsastraWorkspaceController {
     isPreviewOnlyWindow: () => this.previewWindowController.isPreviewOnlyWindow(),
     effectivePreviewRenderMode: () => this.effectivePreviewRenderMode,
     cancelOnTypeSchedule: () => this.pdfPreviewRenderController.cancelOnTypeSchedule(),
-    prepareRenderProject: () => this.prepareRenderProjectIfNeeded(),
     refreshActivePreviewRoot: () => this.refreshActivePreviewRoot(),
     editor: () => this.editorInstance ?? null,
     currentEditorSettingsEffects: () => this.currentEditorSettingsEffects(),
@@ -552,7 +551,6 @@ export class TypsastraWorkspaceController {
     getCacheRootPath: () => this.getCacheRootPath(),
     mapToOriginalPath: path => this.mapToOriginalPath(path),
     getOpenTabs: () => this.openTabs,
-    isKhmerRenderPreparationEnabled: () => this.settingsController.value.preview.khmerRenderPreparation,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     getPreparationRevision: () => this.pdfPreparationRevision,
     getLspClient: () => this.lspClient,
@@ -1249,7 +1247,6 @@ export class TypsastraWorkspaceController {
     cacheRootPath: () => this.getCacheRootPath(),
     mapToOriginalPath: path => this.mapToOriginalPath(path),
     openTabs: () => this.openTabs,
-    khmerRenderPreparationEnabled: () => this.settingsController.value.preview.khmerRenderPreparation,
     enhancedUnicodeEnginePath: () => {
       const settings = this.settingsController.value;
       return settings.developerMode && settings.toolchain.enhancedUnicodeEngineEnabled

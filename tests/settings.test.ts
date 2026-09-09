@@ -24,12 +24,17 @@ describe("application settings", () => {
     expect(settings.preview.colorMode).toBe("document");
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
     expect(settings.preview.forwardSyncTimeoutMs).toBe(5000);
-    expect(settings.preview.khmerRenderPreparation).toBe(false);
     expect(settings.compatibility.disableWebkitDmabufRenderer).toBe(false);
     expect(settings.fonts.privateDirectories).toEqual([]);
     expect(settings.toolchain.tinymistVersion).toBeNull();
     expect(settings.toolchain.enhancedUnicodeEngineEnabled).toBe(false);
     expect(settings.toolchain.enhancedUnicodeEnginePath).toBeNull();
+  });
+
+  test("drops the retired Khmer render-preparation setting", () => {
+    const settings = normalizeAppSettings({ preview: { khmerRenderPreparation: true } });
+
+    expect("khmerRenderPreparation" in settings.preview).toBe(false);
   });
 
   test("rejects unsupported enums and clamps numeric values", () => {

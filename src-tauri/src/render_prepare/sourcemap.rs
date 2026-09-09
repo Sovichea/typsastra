@@ -1,12 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-pub const SOURCE_MAP_VERSION: u32 = 5;
+pub const SOURCE_MAP_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MappingKind {
     Original,
-    InsertedZws,
     GeneratedWrapper,
 }
 
@@ -78,7 +77,6 @@ impl SourceMap {
                         let offset_in_mapping = generated_offset - m.generated_start;
                         Some(m.source_start + offset_in_mapping)
                     }
-                    MappingKind::InsertedZws => Some(m.source_start),
                     MappingKind::GeneratedWrapper => Some(m.source_start),
                 }
             }
@@ -137,28 +135,17 @@ mod tests {
     fn test_sourcemap_lookups() {
         let mut map = SourceMap::new("src.typ".into(), "dest.typ".into());
 
-        // Mappings representing "ក\u{200b}ខ"
-        // Original "ក" at source 0..3 (length 3), gen 0..3
         map.add_mapping(0, 3, 0, 3, MappingKind::Original);
-        // Inserted ZWS at gen 3..6, source 3..3
-        map.add_mapping(3, 6, 3, 3, MappingKind::InsertedZws);
-        // Original "ខ" at source 3..6 (length 3), gen 6..9
-        map.add_mapping(6, 9, 3, 6, MappingKind::Original);
+        map.add_mapping(3, 10, 3, 8, MappingKind::GeneratedWrapper);
+        map.add_mapping(10, 13, 8, 11, MappingKind::Original);
 
-        // generated_to_source lookups:
-        // Inside "ក": e.g. gen 1 -> source 1
         assert_eq!(map.generated_to_source(1), Some(1));
-        // Inside ZWS: e.g. gen 4 -> source 3 (end of previous word)
-        assert_eq!(map.generated_to_source(4), Some(3));
-        // Inside "ខ": e.g. gen 7 -> source 4
-        assert_eq!(map.generated_to_source(7), Some(4));
+        assert_eq!(map.generated_to_source(5), Some(3));
+        assert_eq!(map.generated_to_source(11), Some(9));
 
-        // source_to_generated lookups:
-        // Inside "ក": e.g. source 1 -> gen 1
         assert_eq!(map.source_to_generated(1), Some(1));
-        // Inside "ខ": e.g. source 4 -> gen 7
-        assert_eq!(map.source_to_generated(4), Some(7));
-        // End boundary: e.g. source 6 -> gen 9
-        assert_eq!(map.source_to_generated(6), Some(9));
+        assert_eq!(map.source_to_generated(3), Some(3));
+        assert_eq!(map.source_to_generated(9), Some(11));
+        assert_eq!(map.source_to_generated(11), Some(13));
     }
 }

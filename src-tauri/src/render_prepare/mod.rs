@@ -4,7 +4,6 @@ pub mod draft;
 pub mod draft_thumbnail;
 pub mod mirror;
 pub mod scanner;
-pub mod segment;
 pub mod sourcemap;
 
 pub use draft::{DraftImageAsset, DraftImageDiagnostic, PreviewContentMode};
@@ -17,7 +16,6 @@ pub use mirror::{
     workspace_render_cache_root, RenderCacheStorageReport, RenderPrepareOptions,
     RenderPrepareResult, RenderPrepareWarning, WorkspaceRenderCacheStorageEntry,
 };
-pub use segment::KhmerTextSegmenter;
 pub use sourcemap::SourceMap;
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -40,12 +38,7 @@ pub async fn prepare_render_project(
         let _preparation_guard = RENDER_PREPARATION_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let segmenter = if options.enable_khmer_zws {
-            Some(KhmerTextSegmenter::new()?)
-        } else {
-            None
-        };
-        mirror_project_cancellable(&options, segmenter.as_ref(), || {
+        mirror_project_cancellable(&options, || {
             RENDER_PREPARATION_EPOCH.load(Ordering::Acquire) != epoch
         })
     })
@@ -77,14 +70,8 @@ pub async fn prepare_render_file(
         if RENDER_PREPARATION_EPOCH.load(Ordering::Acquire) != epoch {
             return Err("Render preparation cancelled.".to_string());
         }
-        let segmenter = if options.enable_khmer_zws {
-            Some(KhmerTextSegmenter::new()?)
-        } else {
-            None
-        };
         let path = std::path::Path::new(&file_path);
-        let prepared =
-            prepare_single_in_memory_file(&options, segmenter.as_ref(), path, &source_code)?;
+        let prepared = prepare_single_in_memory_file(&options, path, &source_code)?;
         if RENDER_PREPARATION_EPOCH.load(Ordering::Acquire) != epoch {
             return Err("Render preparation cancelled.".to_string());
         }

@@ -406,14 +406,14 @@ mod tests {
     }
 
     #[test]
-    fn khmer_segmentation_comparison_example_exists() {
+    fn khmer_justification_comparison_example_exists() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let example_path = manifest_dir.join(
-            "resources/examples/03-language-providers/02-khmer-segmentation-comparison/main.typ",
+            "resources/examples/03-language-providers/02-khmer-justification-comparison/main.typ",
         );
         assert!(
             example_path.is_file(),
-            "03-language-providers/02-khmer-segmentation-comparison/main.typ must exist in the resources directory"
+            "03-language-providers/02-khmer-justification-comparison/main.typ must exist in the resources directory"
         );
     }
 

@@ -287,7 +287,7 @@ work is complete.
 - Native settings panel and versioned `settings.json`.
 - Modular local language tools with Khmer and English providers.
 - Dynamic language catalog onboarding with download integrity validation, capabilities metadata, and clean uninstallation.
-- Experimental Khmer render preparation for preview/export input.
+- Experimental Khmer render preparation for preview/export input (subsequently retired).
 - Interactive document outline.
 - Writable Unicode-focused example workspace.
 - GitHub Actions workflow for automated builds.

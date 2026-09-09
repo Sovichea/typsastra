@@ -75,7 +75,6 @@ export interface PdfPreviewPreparationDependencies {
   getCacheRootPath(): string | null;
   mapToOriginalPath(path: string): string;
   getOpenTabs(): readonly EditorTab[];
-  isKhmerRenderPreparationEnabled(): boolean;
   getPreviewRenderMode(): PreviewRenderMode;
   getPreparationRevision(): number;
   getLspClient(): TinymistLspClient | null;
@@ -131,7 +130,6 @@ export class PdfPreviewPreparationController {
 
     try {
       await prepareRenderProjectWithCopyGuard({
-        enableKhmerZws: this.deps.isKhmerRenderPreparationEnabled(),
         projectRoot: workspaceRootPath,
         entryFile,
         cacheRoot,
@@ -169,7 +167,6 @@ export class PdfPreviewPreparationController {
     const originalRootPath = this.deps.mapToOriginalPath(rootPath);
     const originalActivePath = this.deps.mapToOriginalPath(activeFilePath);
     const options = {
-      enableKhmerZws: this.deps.isKhmerRenderPreparationEnabled(),
       projectRoot: workspaceRootPath,
       entryFile: originalRootPath,
       cacheRoot,

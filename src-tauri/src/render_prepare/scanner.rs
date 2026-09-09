@@ -9,103 +9,7 @@ pub enum ScanState {
     BlockComment,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScopeState {
-    pub par_justify: bool,
-    pub render_prep_disabled: bool,
-}
-
-impl Default for ScopeState {
-    fn default() -> Self {
-        Self {
-            par_justify: false,
-            render_prep_disabled: false,
-        }
-    }
-}
-
-fn parse_set_rule_args(args_str: &str, scope: &mut ScopeState, is_text: bool) {
-    let clean: String = args_str.chars().filter(|c| !c.is_whitespace()).collect();
-    if !is_text {
-        if clean.contains("justify:true") {
-            scope.par_justify = true;
-        } else if clean.contains("justify:false") {
-            scope.par_justify = false;
-        }
-    }
-}
-
-fn parse_line_comment_directive(comment: &str, scope: &mut ScopeState) {
-    if comment.contains("@disable-render-prep") {
-        scope.render_prep_disabled = true;
-    }
-}
-
-fn match_set_rule(chars: &[(usize, char)], start_idx: usize) -> Option<(bool, String)> {
-    if start_idx + 3 >= chars.len() {
-        return None;
-    }
-    if chars[start_idx].1 != 's' || chars[start_idx + 1].1 != 'e' || chars[start_idx + 2].1 != 't' {
-        return None;
-    }
-
-    let mut idx = start_idx + 3;
-    if idx >= chars.len() || !chars[idx].1.is_whitespace() {
-        return None;
-    }
-    while idx < chars.len() && chars[idx].1.is_whitespace() {
-        idx += 1;
-    }
-
-    let is_text;
-    if idx + 4 < chars.len()
-        && chars[idx].1 == 't'
-        && chars[idx + 1].1 == 'e'
-        && chars[idx + 2].1 == 'x'
-        && chars[idx + 3].1 == 't'
-    {
-        is_text = true;
-        idx += 4;
-    } else if idx + 3 < chars.len()
-        && chars[idx].1 == 'p'
-        && chars[idx + 1].1 == 'a'
-        && chars[idx + 2].1 == 'r'
-    {
-        is_text = false;
-        idx += 3;
-    } else {
-        return None;
-    }
-
-    while idx < chars.len() && chars[idx].1.is_whitespace() {
-        idx += 1;
-    }
-    if idx >= chars.len() || chars[idx].1 != '(' {
-        return None;
-    }
-    idx += 1;
-
-    let mut bracket_count = 1;
-    let mut args_str = String::new();
-    while idx < chars.len() {
-        let c = chars[idx].1;
-        if c == '(' {
-            bracket_count += 1;
-        } else if c == ')' {
-            bracket_count -= 1;
-            if bracket_count == 0 {
-                break;
-            }
-        }
-        args_str.push(c);
-        idx += 1;
-    }
-
-    Some((is_text, args_str))
-}
-
-pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeState)> {
+pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ())> {
     let chars: Vec<(usize, char)> = content.char_indices().collect();
     let mut chunks = Vec::new();
     let mut i = 0;
@@ -113,52 +17,21 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
     let mut chunk_start = 0;
 
     let mut bracket_stack = Vec::new();
-    let mut scopes = vec![ScopeState::default()];
     let mut in_string = false;
 
     while i < chars.len() {
         let (pos, c) = chars[i];
 
-        let check_idx = if c == '#' { i + 1 } else { i };
-        if let Some((is_text, args_str)) = match_set_rule(&chars, check_idx) {
-            if pos > chunk_start {
-                chunks.push((
-                    current_state,
-                    chunk_start,
-                    pos,
-                    scopes.last().cloned().unwrap_or_default(),
-                ));
-            }
-            chunk_start = pos;
-            if let Some(current_scope) = scopes.last_mut() {
-                parse_set_rule_args(&args_str, current_scope, is_text);
-            }
-        }
-
         match current_state {
             ScanState::MarkupText => {
                 if c == '[' {
                     if pos > chunk_start {
-                        chunks.push((
-                            ScanState::MarkupText,
-                            chunk_start,
-                            pos,
-                            scopes.last().cloned().unwrap_or_default(),
-                        ));
+                        chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                     }
-                    scopes.push(scopes.last().cloned().unwrap_or_default());
                     chunk_start = pos;
                 } else if c == ']' {
                     if pos > chunk_start {
-                        chunks.push((
-                            ScanState::MarkupText,
-                            chunk_start,
-                            pos,
-                            scopes.last().cloned().unwrap_or_default(),
-                        ));
-                    }
-                    if scopes.len() > 1 {
-                        scopes.pop();
+                        chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                     }
                     chunk_start = pos;
 
@@ -172,12 +45,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
 
                 if c == '/' && i + 1 < chars.len() && chars[i + 1].1 == '*' {
                     if pos > chunk_start {
-                        chunks.push((
-                            ScanState::MarkupText,
-                            chunk_start,
-                            pos,
-                            scopes.last().cloned().unwrap_or_default(),
-                        ));
+                        chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                     }
                     current_state = ScanState::BlockComment;
                     chunk_start = pos;
@@ -188,12 +56,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                     let preceded_by_colon = if i > 0 { chars[i - 1].1 == ':' } else { false };
                     if !preceded_by_colon {
                         if pos > chunk_start {
-                            chunks.push((
-                                ScanState::MarkupText,
-                                chunk_start,
-                                pos,
-                                scopes.last().cloned().unwrap_or_default(),
-                            ));
+                            chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                         }
                         current_state = ScanState::LineComment;
                         chunk_start = pos;
@@ -204,12 +67,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                 if c == '`' && i + 2 < chars.len() && chars[i + 1].1 == '`' && chars[i + 2].1 == '`'
                 {
                     if pos > chunk_start {
-                        chunks.push((
-                            ScanState::MarkupText,
-                            chunk_start,
-                            pos,
-                            scopes.last().cloned().unwrap_or_default(),
-                        ));
+                        chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                     }
                     current_state = ScanState::RawBlock;
                     chunk_start = pos;
@@ -218,12 +76,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                 }
                 if c == '`' {
                     if pos > chunk_start {
-                        chunks.push((
-                            ScanState::MarkupText,
-                            chunk_start,
-                            pos,
-                            scopes.last().cloned().unwrap_or_default(),
-                        ));
+                        chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                     }
                     current_state = ScanState::RawInline;
                     chunk_start = pos;
@@ -232,12 +85,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                 }
                 if c == '$' {
                     if pos > chunk_start {
-                        chunks.push((
-                            ScanState::MarkupText,
-                            chunk_start,
-                            pos,
-                            scopes.last().cloned().unwrap_or_default(),
-                        ));
+                        chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                     }
                     current_state = ScanState::Math;
                     chunk_start = pos;
@@ -253,12 +101,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                     };
                     if is_valid_start {
                         if pos > chunk_start {
-                            chunks.push((
-                                ScanState::MarkupText,
-                                chunk_start,
-                                pos,
-                                scopes.last().cloned().unwrap_or_default(),
-                            ));
+                            chunks.push((ScanState::MarkupText, chunk_start, pos, ()));
                         }
                         current_state = ScanState::CodeExpression;
                         chunk_start = pos;
@@ -273,15 +116,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
             ScanState::LineComment => {
                 if c == '\n' {
                     let end_pos = pos + c.len_utf8();
-                    if let Some(current_scope) = scopes.last_mut() {
-                        parse_line_comment_directive(&content[chunk_start..end_pos], current_scope);
-                    }
-                    chunks.push((
-                        ScanState::LineComment,
-                        chunk_start,
-                        end_pos,
-                        scopes.last().cloned().unwrap_or_default(),
-                    ));
+                    chunks.push((ScanState::LineComment, chunk_start, end_pos, ()));
                     current_state = ScanState::MarkupText;
                     chunk_start = end_pos;
                 }
@@ -290,12 +125,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
             ScanState::BlockComment => {
                 if c == '*' && i + 1 < chars.len() && chars[i + 1].1 == '/' {
                     let end_pos = chars[i + 1].0 + 1;
-                    chunks.push((
-                        ScanState::BlockComment,
-                        chunk_start,
-                        end_pos,
-                        scopes.last().cloned().unwrap_or_default(),
-                    ));
+                    chunks.push((ScanState::BlockComment, chunk_start, end_pos, ()));
                     current_state = ScanState::MarkupText;
                     chunk_start = end_pos;
                     i += 2;
@@ -307,12 +137,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                 if c == '`' && i + 2 < chars.len() && chars[i + 1].1 == '`' && chars[i + 2].1 == '`'
                 {
                     let end_pos = chars[i + 2].0 + 1;
-                    chunks.push((
-                        ScanState::RawBlock,
-                        chunk_start,
-                        end_pos,
-                        scopes.last().cloned().unwrap_or_default(),
-                    ));
+                    chunks.push((ScanState::RawBlock, chunk_start, end_pos, ()));
                     current_state = ScanState::MarkupText;
                     chunk_start = end_pos;
                     i += 3;
@@ -323,12 +148,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
             ScanState::RawInline => {
                 if c == '`' {
                     let end_pos = pos + 1;
-                    chunks.push((
-                        ScanState::RawInline,
-                        chunk_start,
-                        end_pos,
-                        scopes.last().cloned().unwrap_or_default(),
-                    ));
+                    chunks.push((ScanState::RawInline, chunk_start, end_pos, ()));
                     current_state = ScanState::MarkupText;
                     chunk_start = end_pos;
                     i += 1;
@@ -339,12 +159,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
             ScanState::Math => {
                 if c == '$' {
                     let end_pos = pos + 1;
-                    chunks.push((
-                        ScanState::Math,
-                        chunk_start,
-                        end_pos,
-                        scopes.last().cloned().unwrap_or_default(),
-                    ));
+                    chunks.push((ScanState::Math, chunk_start, end_pos, ()));
                     current_state = ScanState::MarkupText;
                     chunk_start = end_pos;
                     i += 1;
@@ -385,21 +200,13 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
 
                 if c == '(' {
                     bracket_stack.push(')');
-                    scopes.push(scopes.last().cloned().unwrap_or_default());
                 } else if c == '{' {
                     bracket_stack.push('}');
-                    scopes.push(scopes.last().cloned().unwrap_or_default());
                 } else if c == '[' {
                     if pos > chunk_start {
-                        chunks.push((
-                            ScanState::CodeExpression,
-                            chunk_start,
-                            pos,
-                            scopes.last().cloned().unwrap_or_default(),
-                        ));
+                        chunks.push((ScanState::CodeExpression, chunk_start, pos, ()));
                     }
                     bracket_stack.push(']');
-                    scopes.push(scopes.last().cloned().unwrap_or_default());
                     current_state = ScanState::MarkupText;
                     chunk_start = pos;
                     i += 1;
@@ -407,9 +214,6 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                 } else if c == ')' || c == '}' {
                     if bracket_stack.last() == Some(&c) {
                         bracket_stack.pop();
-                        if scopes.len() > 1 {
-                            scopes.pop();
-                        }
                     }
                 }
 
@@ -450,12 +254,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
                         };
 
                         if !continues {
-                            chunks.push((
-                                ScanState::CodeExpression,
-                                chunk_start,
-                                pos,
-                                scopes.last().cloned().unwrap_or_default(),
-                            ));
+                            chunks.push((ScanState::CodeExpression, chunk_start, pos, ()));
                             current_state = ScanState::MarkupText;
                             chunk_start = pos;
                         }
@@ -468,17 +267,7 @@ pub fn scan_typst_content(content: &str) -> Vec<(ScanState, usize, usize, ScopeS
 
     let end_pos = content.len();
     if end_pos > chunk_start {
-        if current_state == ScanState::LineComment {
-            if let Some(current_scope) = scopes.last_mut() {
-                parse_line_comment_directive(&content[chunk_start..end_pos], current_scope);
-            }
-        }
-        chunks.push((
-            current_state,
-            chunk_start,
-            end_pos,
-            scopes.last().cloned().unwrap_or_default(),
-        ));
+        chunks.push((current_state, chunk_start, end_pos, ()));
     }
 
     chunks
@@ -493,15 +282,7 @@ mod tests {
         let content = "Hello World! នេះជាភាសាខ្មែរ";
         let chunks = scan_typst_content(content);
         assert_eq!(chunks.len(), 1);
-        assert_eq!(
-            chunks[0],
-            (
-                ScanState::MarkupText,
-                0,
-                content.len(),
-                ScopeState::default()
-            )
-        );
+        assert_eq!(chunks[0], (ScanState::MarkupText, 0, content.len(), ()));
     }
 
     #[test]
@@ -563,88 +344,5 @@ mod tests {
 
         assert_eq!(chunks[4].0, ScanState::MarkupText);
         assert_eq!(&content[chunks[4].1..chunks[4].2], " trailing text.");
-    }
-
-    #[test]
-    fn test_scan_scope_aware_set_rules() {
-        let content = r#"
-        #set par(justify: true)
-        Text 1
-        [
-            Text 2
-        ]
-        Text 3
-        "#;
-        let chunks = scan_typst_content(content);
-
-        let mut text_1_found = false;
-        let mut text_2_found = false;
-        let mut text_3_found = false;
-
-        for chunk in &chunks {
-            let chunk_text = &content[chunk.1..chunk.2];
-            if chunk_text.contains("Text 1") {
-                assert!(chunk.3.par_justify);
-                assert!(!chunk.3.render_prep_disabled);
-                text_1_found = true;
-            } else if chunk_text.contains("Text 2") {
-                assert!(chunk.3.par_justify);
-                assert!(!chunk.3.render_prep_disabled);
-                text_2_found = true;
-            } else if chunk_text.contains("Text 3") {
-                assert!(chunk.3.par_justify);
-                assert!(!chunk.3.render_prep_disabled);
-                text_3_found = true;
-            }
-        }
-
-        assert!(text_1_found);
-        assert!(text_2_found);
-        assert!(text_3_found);
-    }
-
-    #[test]
-    fn test_scan_ignores_text_rules_for_khmer_render_preparation() {
-        let content = r#"
-        #set text(lang: "en")
-        #set par(justify: true)
-        Text
-        "#;
-        let chunks = scan_typst_content(content);
-
-        let text_chunk = chunks
-            .iter()
-            .find(|chunk| content[chunk.1..chunk.2].contains("Text"))
-            .expect("expected text chunk");
-
-        assert!(text_chunk.3.par_justify);
-        assert!(!text_chunk.3.render_prep_disabled);
-    }
-
-    #[test]
-    fn test_disable_render_prep_directive_is_scope_aware() {
-        let content = r#"
-        #set par(justify: true)
-        [
-            // @disable-render-prep
-            Disabled text
-        ]
-        Enabled text
-        "#;
-        let chunks = scan_typst_content(content);
-
-        let disabled_chunk = chunks
-            .iter()
-            .find(|chunk| content[chunk.1..chunk.2].contains("Disabled text"))
-            .expect("expected disabled text chunk");
-        let enabled_chunk = chunks
-            .iter()
-            .find(|chunk| content[chunk.1..chunk.2].contains("Enabled text"))
-            .expect("expected enabled text chunk");
-
-        assert!(disabled_chunk.3.par_justify);
-        assert!(disabled_chunk.3.render_prep_disabled);
-        assert!(enabled_chunk.3.par_justify);
-        assert!(!enabled_chunk.3.render_prep_disabled);
     }
 }

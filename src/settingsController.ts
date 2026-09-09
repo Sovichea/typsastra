@@ -200,7 +200,6 @@ export class SettingsController {
     const overlay = document.getElementById("settings-overlay");
     if (!overlay) return;
     this.populateFontOptions();
-    document.getElementById("settings-khmer-prep-field")?.classList.toggle("hidden", !import.meta.env.DEV);
 
     const activatePanel = (name: string) => {
       document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
@@ -284,7 +283,6 @@ export class SettingsController {
       settings.preview.forwardSyncTimeoutMs = Number(control.value);
     });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
-    onChange("settings-khmer-prep", (settings, control) => { settings.preview.khmerRenderPreparation = (control as HTMLInputElement).checked; });
     onChange("settings-disable-webkit-dmabuf", (settings, control) => {
       settings.compatibility.disableWebkitDmabufRenderer = (control as HTMLInputElement).checked;
     });
@@ -632,7 +630,6 @@ export class SettingsController {
         ? "Wait this long after the latest edit before updating the preview."
         : "Available when Render preview is set to On type.";
     }
-    setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
     setChecked("settings-disable-webkit-dmabuf", this.settings.compatibility.disableWebkitDmabufRenderer);
     setChecked("settings-developer-mode", this.settings.developerMode);
     setChecked("settings-enhanced-unicode-engine", this.settings.toolchain.enhancedUnicodeEngineEnabled);

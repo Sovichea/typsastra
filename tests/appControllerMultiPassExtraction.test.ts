@@ -36,7 +36,7 @@ describe("appController multi-pass extraction", () => {
   test("moves state with the owning workflows", () => {
     expect(extracted[1]).toContain("private isComposing = false");
     expect(extracted[5]).toContain("private _forwardSyncDebounceMs = 120");
-    expect(extracted[5]).toContain("private _lastKhmerRenderPrepState");
     expect(extracted[5]).toContain("private _lastPreviewRenderMode");
+    expect(extracted[5]).not.toContain("private _lastKhmerRenderPrepState");
   });
 });

@@ -6,7 +6,7 @@ Typsastra uses Tinymist for compilation, diagnostics, and source-map positions, 
 
 The docked preview path is:
 
-1. Mirror the active workspace file into Typsastra's render cache when render preparation is active.
+1. Prepare a revision-bound preview root in Typsastra's private render cache, applying Draft Preview substitutions when requested.
 2. Ask Tinymist/Typst to compile the selected preview root to PDF.
 3. Render the PDF with `pdfjs-dist` in a virtualized iframe.
 4. Keep only nearby pages rendered; pages outside the viewport are released.
@@ -45,7 +45,7 @@ request preview scrolling.
 - Windows and Linux: `Alt+Enter`
 - macOS: `Option+Enter`
 
-1. Typsastra maps the editor cursor to the source file that Tinymist sees. If Khmer render preparation is active, this may be a generated cache file.
+1. Typsastra maps the editor cursor to the revision-bound preview file that Tinymist sees.
 2. Typsastra sends a `panelScrollTo` request to a Tinymist source-map preview task.
    It chooses one likely rendered Unicode code-point column, including at line
    and prose-run starts. It never speculatively queues nearby candidates because

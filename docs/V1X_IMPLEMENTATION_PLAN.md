@@ -125,48 +125,45 @@ Git-aware AI may summarize a user-selected diff or draft text, but it cannot sta
 
 ---
 
-## Cross-cutting v1.x workstream: Khmer workflow and render-preparation reassessment
+## Cross-cutting v1.x workstream: Khmer workflow and native layout integration
 
-Khmer remains Typsastra's proof-of-depth. Revisit the complete research-writing workflow and experimental render preparation without assuming the feature should become production-default.
+Khmer remains Typsastra's proof-of-depth. Revisit the complete research-writing workflow while keeping language assistance and document rendering separate.
 
-Canonical source remains unchanged. Preparation occurs only in a revision-bound preview/export snapshot and never silently inserts generated ZWSP into source.
+Typsastra restricts `khmer_segmenter` to typing suggestions and spellcheck. It does not call the dependency's reserved layout APIs, insert generated word-break controls, or rewrite preview/export source. Any future Khmer line-breaking improvement must be implemented natively in the layout engine.
 
 ### Baseline constraints
 
-- Use `U+200B` ZWSP only at validated lexical boundaries.
-- Do not reintroduce Khmer soft-hyphen insertion.
+- Preserve ordinary Typst source through preview and export.
 - Never split consonants, COENG sequences, dependent vowels, register shifters, or combining marks into unreadable fragments.
-- Compare against ordinary Typst justification/tracking limits, which may remain recommended.
-- Use reproducible provider output and locked fixtures, not undocumented heuristic or AI repairs.
-- Keep render preparation experimental and default-off until every promotion gate passes.
+- Compare native layout behavior against ordinary Typst justification and tracking limits.
+- Use licensed, reproducible fixtures and native-speaker review, not undocumented heuristic or AI repairs.
+- Do not couple editor lexical boundaries to layout behavior.
 
 ### Checklist
 
 - [ ] **V1X-K.1 Audit the end-to-end Khmer workflow.** Cover projects, fonts, IME, navigation/deletion, completion, spellcheck, multi-file editing, bibliography, preview, sync, export, interchange, and recovery.
 - [ ] **V1X-K.2 Build a licensed representative corpus.** Include folklore, technical/research prose, tables, figures, raw content, mixed Latin, punctuation, non-canonical input, and long unspaced paragraphs.
-- [ ] **V1X-K.3 Establish rendering baselines.** Compare plain Typst, tuned tracking/justification, and ZWSP preparation with identical font, width, and compiler.
-- [ ] **V1X-K.4 Define lexical safety invariants.** Prevent isolated tails, broken COENG/subscript pairs, split combining sequences, and boundaries inside locked known words.
-- [ ] **V1X-K.5 Reassess segmentation strategy.** Evaluate a rendering-oriented mode without changing reproducible suggestion behavior; require fixtures, maintenance, and upstream review before modifying segmentation data.
-- [ ] **V1X-K.6 Preserve exact source mapping.** Generated boundaries map exactly to original UTF-16/byte positions for diagnostics, source sync, selection, and correction.
-- [ ] **V1X-K.7 Keep preparation scope-aware.** Respect `// @disable-render-prep` and exclude raw/code, labels, URLs, paths, and unsafe syntax.
-- [ ] **V1X-K.8 Harden snapshot lifecycle.** Mirrors are revision-consistent, disposable, hidden, excluded from source ZIP, and cannot race LSP or overwrite source.
-- [ ] **V1X-K.9 Revisit Khmer typography.** Validate fallback fonts, local scaled fonts, raw behavior, templates, PDF embedding, and cross-platform availability without redistributing font binaries or using `show regex(...)` rewriting.
-- [ ] **V1X-K.10 Improve language-tool workflow.** Review completion relevance/cancellation, unknown boundaries, ignored words, dictionary additions, logs, and mixed-script ownership while preserving reproducibility.
-- [ ] **V1X-K.11 Add Khmer-compatible project presets.** Extend generic report, thesis, and book templates rather than create a separate architecture.
-- [ ] **V1X-K.12 Run native-speaker review on real research and technical documents.**
-- [ ] **V1X-K.13 Record a promotion decision.** Promote, retain, redesign, or remove render preparation based on evidence.
+- [ ] **V1X-K.3 Establish rendering baselines.** Compare plain Typst and tuned tracking/justification with identical font, width, and compiler.
+- [ ] **V1X-K.4 Define native layout safety invariants.** Prevent isolated tails, broken COENG/subscript pairs, split combining sequences, and unsafe breaks inside lexical units.
+- [ ] **V1X-K.5 Coordinate native layout-engine integration.** Evaluate the reserved layout APIs only within the layout engine, without changing reproducible suggestion or spellcheck behavior.
+- [ ] **V1X-K.6 Preserve source fidelity.** Preview, export, diagnostics, and source navigation operate on ordinary Typst source without editor-generated word-break controls.
+- [ ] **V1X-K.7 Revisit Khmer typography.** Validate fallback fonts, local scaled fonts, raw behavior, templates, PDF embedding, and cross-platform availability without redistributing font binaries or using `show regex(...)` rewriting.
+- [ ] **V1X-K.8 Improve language-tool workflow.** Review completion relevance/cancellation, unknown boundaries, ignored words, dictionary additions, logs, and mixed-script ownership while preserving reproducibility.
+- [ ] **V1X-K.9 Add Khmer-compatible project presets.** Extend generic report, thesis, and book templates rather than create a separate architecture.
+- [ ] **V1X-K.10 Run native-speaker review on real research and technical documents.**
+- [ ] **V1X-K.11 Record the native layout integration decision and evidence.**
 
-### Promotion gates
+### Integration gates
 
-- [ ] Prepared output improves spacing/line-breaking over tuned Typst across the corpus, not only selected examples.
+- [ ] Native layout output improves spacing and line breaking over tuned Typst across the corpus, not only selected examples.
 - [ ] No known fixture introduces an unsafe or unreadable break.
-- [ ] Preview and PDF export use equivalent boundaries for the same revision/toolchain.
-- [ ] Diagnostics and source navigation remain exact around render-only characters.
-- [ ] Long-document preparation meets v1.x latency and memory budgets.
-- [ ] Disabling preparation returns exactly to ordinary Typst behavior with no residue.
-- [ ] Settings state tested limits and experimental/stable status honestly.
+- [ ] Preview and PDF export produce equivalent native layout for the same revision and toolchain.
+- [ ] Diagnostics and source navigation remain exact because source text is not rewritten.
+- [ ] Long-document layout meets v1.x latency and memory budgets.
+- [ ] Language-assistance segmentation remains reproducible and independent from layout behavior.
+- [ ] Native-speaker review confirms the result on representative documents.
 
-The technical transformation contract remains in the [Khmer render-preparation plan](./TYPSASTRA_KHMER_RENDER_PREPARATION_IMPLEMENTATION_PLAN.md).
+The removed editor-side transformation is preserved only as historical context in the [retired Khmer render-preparation plan](./TYPSASTRA_KHMER_RENDER_PREPARATION_IMPLEMENTATION_PLAN.md).
 
 ---
 

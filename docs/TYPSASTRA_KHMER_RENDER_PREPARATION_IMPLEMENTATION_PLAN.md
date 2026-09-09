@@ -1,6 +1,8 @@
-Below is a concrete implementation plan for **Typsastra non-destructive Khmer render preparation**.
+# Historical: Typsastra Khmer Render Preparation Implementation Plan
 
-Goal:
+> **Retired:** This document records a removed experimental design. Typsastra no longer rewrites Khmer preview/export input or inserts word-break controls. With `khmer_segmenter` v0.2.0, the dependency is restricted to typing suggestions and spellcheck; its layout-oriented APIs are reserved for native layout-engine integration and are not called by Typsastra. The details below are retained only as historical context.
+
+The original goal was:
 
 ```text
 User source files stay clean.
@@ -11,13 +13,9 @@ Editor, diagnostics, and reverse sync map back to original files.
 
 ---
 
-# Typsastra Khmer Render Preparation Implementation Plan
+## Retirement status (2026-09-09)
 
-## Current status (2026-07-04)
-
-Khmer render preparation is implemented as an experimental path, defaults to off, and the Settings row is shown only in dev builds. The current renderer inserts `U+200B` zero-width spaces only; Khmer `U+00AD` soft hyphen insertion was intentionally removed because it creates poor non-lexical break behavior. Normal users should first rely on Typst justification/tracking limits. Keep this pipeline for controlled experiments, preview/export comparison, and future segmentation tuning.
-
-The v1.x reassessment, end-to-end Khmer workflow audit, promotion gates, and native-speaker evaluation are tracked as `V1X-K` in the [v1.x implementation plan](./V1X_IMPLEMENTATION_PLAN.md). This document remains the single technical contract for the transformation pipeline; update it alongside any v1.x implementation change.
+The experimental render-preparation pipeline, setting, source directive, generated ZWSP mapping, and KHYP data have been removed. Typsastra now sends ordinary source to Typst, apart from unrelated preview-cache features such as Draft Preview. Future Khmer line-breaking work must be integrated natively with the layout engine rather than by an editor-side source transformation.
 
 The implemented settings shape is:
 

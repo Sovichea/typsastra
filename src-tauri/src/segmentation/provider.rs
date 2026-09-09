@@ -25,7 +25,6 @@ pub struct SegmentToken {
     pub to: usize,
     pub known: bool,
     pub known_prefix: bool,
-    pub hyphenated: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -73,7 +72,6 @@ pub struct EditorToken {
     pub normalized_text: String,
     pub known: bool,
     pub known_prefix: bool,
-    pub hyphenated: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

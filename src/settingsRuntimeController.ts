@@ -15,7 +15,6 @@ export interface SettingsRuntimeDependencies {
   isPreviewOnlyWindow(): boolean;
   effectivePreviewRenderMode(): PreviewRefreshStyle;
   cancelOnTypeSchedule(): void;
-  prepareRenderProject(): Promise<void>;
   refreshActivePreviewRoot(): Promise<void>;
   editor(): EditorView | null;
   currentEditorSettingsEffects(): readonly StateEffect<unknown>[];
@@ -25,7 +24,6 @@ export interface SettingsRuntimeDependencies {
 
 export class SettingsRuntimeController {
   private _forwardSyncDebounceMs = 120;
-  private _lastKhmerRenderPrepState: boolean | undefined;
   private _lastPreviewRenderMode: PreviewRefreshStyle | undefined;
 
   constructor(private readonly deps: SettingsRuntimeDependencies) {}
@@ -61,22 +59,11 @@ export class SettingsRuntimeController {
       }).catch(() => {});
     }
 
-    const khmerPrepChanged = this._lastKhmerRenderPrepState !== undefined
-      && this._lastKhmerRenderPrepState !== preview.khmerRenderPreparation;
-    this._lastKhmerRenderPrepState = preview.khmerRenderPreparation;
     const renderMode = this.deps.effectivePreviewRenderMode();
     const previewRenderModeChanged = this._lastPreviewRenderMode !== undefined && this._lastPreviewRenderMode !== renderMode;
     this._lastPreviewRenderMode = renderMode;
     if (previewRenderModeChanged && renderMode !== "on-type") this.deps.cancelOnTypeSchedule();
-
-    const khmerPrepStatus = document.getElementById("khmer-prep-status");
-    if (khmerPrepStatus) khmerPrepStatus.classList.toggle("hidden", !preview.khmerRenderPreparation);
-
-    if (khmerPrepChanged) {
-      void this.deps.prepareRenderProject().then(() => this.deps.refreshActivePreviewRoot());
-    } else if (previewRenderModeChanged) {
-      void this.deps.refreshActivePreviewRoot();
-    }
+    if (previewRenderModeChanged) void this.deps.refreshActivePreviewRoot();
 
     const editorView = this.deps.editor();
     if (editorView) {

@@ -230,7 +230,6 @@ impl LanguageSegmenter for TemplateProvider {
                     to: text.len(),
                     known: false,       // TODO: look up in dictionary
                     known_prefix: false, // TODO: check if any known word starts with this
-                    hyphenated: None,
                 },
             ],
         })

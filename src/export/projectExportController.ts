@@ -34,7 +34,6 @@ type ProjectExportDependencies = {
   cacheRootPath: () => string | null;
   mapToOriginalPath: (path: string) => string;
   openTabs: () => readonly ExportableEditorTab[];
-  khmerRenderPreparationEnabled: () => boolean;
   enhancedUnicodeEnginePath: () => string | null;
   setLspStatus: (status: LspStatus) => void;
   log: (kind: "info" | "warning" | "error", message: string) => void;
@@ -146,7 +145,6 @@ export class ProjectExportController {
         const originalRootPath = this.deps.mapToOriginalPath(rootPath);
         const originalActivePath = this.deps.mapToOriginalPath(activeFilePath);
         const options = {
-          enableKhmerZws: this.deps.khmerRenderPreparationEnabled(),
           projectRoot: workspaceRootPath,
           entryFile: originalRootPath,
           cacheRoot,

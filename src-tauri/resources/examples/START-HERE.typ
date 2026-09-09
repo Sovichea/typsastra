@@ -40,7 +40,7 @@ English and Khmer are bundled. Optional providers are installed from Settings
 (`Ctrl+,` on Windows/Linux or `Cmd+,` on macOS).
 
 - `01-khmer-deep-support`: Khmer editing, spellcheck, and completion.
-- `02-khmer-segmentation-comparison`: ordinary and prepared Khmer layout.
+- `02-khmer-justification-comparison`: native Typst Khmer paragraph layouts.
 - `03-lao-enhanced-support`: Lao segmentation with optional spellcheck.
 - `04-optional-dictionaries`: installation and unavailable-provider recovery.
 

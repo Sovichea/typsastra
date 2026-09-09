@@ -1,7 +1,7 @@
 #set page(width: 20cm, height: 17cm, margin: (x: 1.2cm, top: 1cm, bottom: 1cm))
 
 #set document(
-  title: "Khmer Justification and Segmentation Comparison",
+  title: "Khmer Justification Comparison",
   author: "Typsastra Examples",
 )
 
@@ -18,13 +18,13 @@
 
 #align(center)[
   #text(size: 14pt, weight: "bold", fill: rgb("#1d3557"))[
-    Khmer Justification and Segmentation Comparison
+    Khmer Justification Comparison
   ]
 ]
 
 #v(0.3em)
 
-This example compares the same Khmer paragraph under three Typst settings. The recommended default is Typst justification with tuned `justification-limits`. Typsastra's native Khmer render preparation is experimental and off by default; enable it in Settings only when you want to compare inserted Zero Width Space boundaries.
+This example compares the same Khmer paragraph using three native Typst paragraph settings. Typsastra passes the source through unchanged; its Khmer language provider is used only for typing suggestions and spellcheck.
 
 #v(0.8em)
 
@@ -40,11 +40,10 @@ This example compares the same Khmer paragraph under three Typst settings. The r
       stroke: rgb("#cbd5e1"),
       width: 100%,
       [
-        #align(center)[#strong[1. justify only]]
+        #align(center)[#strong[1. ragged]]
         #v(0.35em)
         #set text(size: 8.8pt)
-        #set par(justify: true)
-        // @disable-render-prep
+        #set par(justify: false)
 
         ភាសាខ្មែរគឺជាភាសាផ្លូវការរបស់ប្រទេសកម្ពុជា។ ប្រជាជនខ្មែរប្រើប្រាស់ភាសានេះក្នុងជីវិតប្រចាំថ្ងៃ ទាំងក្នុងវិស័យអប់រំ សេដ្ឋកិច្ច និងវប្បធម៌។ ការអភិវឌ្ឍប្រព័ន្ធបច្ចេកវិទ្យាព័ត៌មានវិទ្យាដែលគាំទ្រភាសាខ្មែរ ជាអាទិភាពដ៏សំខាន់ក្នុងការអភិវឌ្ឍប្រទេស។ និស្សិតសិក្សានៅសាកលវិទ្យាល័យភូមិន្ទភ្នំពេញតែងខិតខំប្រឹងប្រែង។
       ],
@@ -58,7 +57,7 @@ This example compares the same Khmer paragraph under three Typst settings. The r
       stroke: rgb("#86efac"),
       width: 100%,
       [
-        #align(center)[#strong[2. experimental ZWSP prep]]
+        #align(center)[#strong[2. default justify]]
         #v(0.35em)
         #set text(size: 8.8pt)
         #set par(justify: true)
@@ -75,7 +74,7 @@ This example compares the same Khmer paragraph under three Typst settings. The r
       stroke: rgb("#93c5fd"),
       width: 100%,
       [
-        #align(center)[#strong[3. recommended tracking limit]]
+        #align(center)[#strong[3. tuned justify]]
         #v(0.35em)
         #set text(size: 8.8pt)
         #set par(
@@ -85,7 +84,6 @@ This example compares the same Khmer paragraph under three Typst settings. The r
             tracking: (min: -0.8pt, max: 0pt),
           ),
         )
-        // @disable-render-prep
 
         ភាសាខ្មែរគឺជាភាសាផ្លូវការរបស់ប្រទេសកម្ពុជា។ ប្រជាជនខ្មែរប្រើប្រាស់ភាសានេះក្នុងជីវិតប្រចាំថ្ងៃ ទាំងក្នុងវិស័យអប់រំ សេដ្ឋកិច្ច និងវប្បធម៌។ ការអភិវឌ្ឍប្រព័ន្ធបច្ចេកវិទ្យាព័ត៌មានវិទ្យាដែលគាំទ្រភាសាខ្មែរ ជាអាទិភាពដ៏សំខាន់ក្នុងការអភិវឌ្ឍប្រទេស។ និស្សិតសិក្សានៅសាកលវិទ្យាល័យភូមិន្ទភ្នំពេញតែងខិតខំប្រឹងប្រែង។
       ],
@@ -102,8 +100,8 @@ This example compares the same Khmer paragraph under three Typst settings. The r
   width: 100%,
   [
     #set text(size: 8.5pt)
-    - *Column 1*: `// @disable-render-prep` keeps Typsastra from inserting Khmer layout controls, so this shows Typst's original justified output.
-    - *Column 2*: Shows experimental Typsastra Zero Width Space insertion only when `Khmer render preparation (experimental)` is enabled in Settings.
-    - *Column 3*: Recommended default: no render preparation, with bounded spacing and slight negative tracking through `justification-limits`.
+    - *Column 1*: Leaves the right edge ragged with `justify: false`.
+    - *Column 2*: Uses Typst's default justified paragraph behavior.
+    - *Column 3*: Bounds spacing and allows slight negative tracking through `justification-limits`.
   ],
 )

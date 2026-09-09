@@ -68,7 +68,6 @@ export type AppSettings = {
     syncDebounceMs: number;
     forwardSyncTimeoutMs: number;
     highlightDurationMs: number;
-    khmerRenderPreparation: boolean;
   };
   compatibility: {
     disableWebkitDmabufRenderer: boolean;
@@ -132,8 +131,7 @@ export const defaultAppSettings: AppSettings = {
     cursorSync: false,
     syncDebounceMs: 500,
     forwardSyncTimeoutMs: 5000,
-    highlightDurationMs: 2200,
-    khmerRenderPreparation: false
+    highlightDurationMs: 2200
   },
   compatibility: {
     disableWebkitDmabufRenderer: false
@@ -321,8 +319,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
         1000,
         30000
       )),
-      highlightDurationMs: Math.round(boundedNumber(preview.highlightDurationMs, defaultAppSettings.preview.highlightDurationMs, 500, 10000)),
-      khmerRenderPreparation: booleanValue(preview.khmerRenderPreparation, defaultAppSettings.preview.khmerRenderPreparation)
+      highlightDurationMs: Math.round(boundedNumber(preview.highlightDurationMs, defaultAppSettings.preview.highlightDurationMs, 500, 10000))
     },
     compatibility: {
       disableWebkitDmabufRenderer: booleanValue(

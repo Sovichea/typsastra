@@ -9,11 +9,9 @@ use super::draft::{
     prepare_draft_images, DraftImageAsset, DraftImageDiagnostic, DraftPreparation,
     PreviewContentMode,
 };
-use super::scanner::{scan_typst_content, ScanState, ScopeState};
-use super::segment::{prepare_khmer_text_for_rendering, KhmerTextSegmenter};
 use super::sourcemap::{MappingKind, SourceMap, SOURCE_MAP_VERSION};
 
-const RENDER_CACHE_LAYOUT_VERSION: &str = "3-flat-preview-output";
+const RENDER_CACHE_LAYOUT_VERSION: &str = "4-original-source-render";
 const RENDER_CACHE_OWNER_SCHEMA_VERSION: u32 = 1;
 const RENDER_CACHE_OWNER_FILE: &str = "workspace-owner.json";
 const DRAFT_PREPARATION_CACHE_VERSION: u32 = 2;
@@ -140,7 +138,6 @@ pub struct RenderPrepareWarning {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderPrepareOptions {
-    pub enable_khmer_zws: bool,
     pub project_root: PathBuf,
     pub entry_file: PathBuf,
     pub cache_root: PathBuf,
@@ -181,7 +178,6 @@ pub struct RenderPrepareTimings {
 
 pub fn mirror_project_cancellable(
     options: &RenderPrepareOptions,
-    segmenter: Option<&KhmerTextSegmenter>,
     is_cancelled: impl Fn() -> bool,
 ) -> Result<RenderPrepareResult, String> {
     let total_started_at = Instant::now();
@@ -265,9 +261,7 @@ pub fn mirror_project_cancellable(
             if rel_path.extension().and_then(|s| s.to_str()) == Some("typ") {
                 typ_files += 1;
                 let typ_started_at = Instant::now();
-                let result = process_typ_file(
-                    &src_path, &dest_path, &rel_path, &maps_dir, options, segmenter,
-                );
+                let result = process_typ_file(&src_path, &dest_path, &rel_path, &maps_dir, options);
                 typ_processing_ms += typ_started_at.elapsed().as_secs_f64() * 1_000.0;
                 match result {
                     Ok(processed) => {
@@ -680,7 +674,6 @@ fn walk_for_stale(
 
 pub fn prepare_single_in_memory_file(
     options: &RenderPrepareOptions,
-    segmenter: Option<&KhmerTextSegmenter>,
     file_path: &Path,
     source_code: &str,
 ) -> Result<PreparedInMemoryFile, String> {
@@ -730,8 +723,7 @@ pub fn prepare_single_in_memory_file(
     sourcemap.source_digest = source_digest(source_code);
     sourcemap.preview_content_mode = content_mode_key(options.preview_content_mode).into();
     let draft = draft_preparation(options, file_path, &dest_path, source_code);
-    let generated_content =
-        prepare_source_content(source_code, options, segmenter, &draft, &mut sourcemap)?;
+    let generated_content = prepare_source_content(source_code, &draft, &mut sourcemap);
 
     fs::write(&dest_path, &generated_content).map_err(|e| e.to_string())?;
 
@@ -1131,7 +1123,6 @@ fn process_typ_file(
     rel_path: &Path,
     maps_dir: &Path,
     options: &RenderPrepareOptions,
-    segmenter: Option<&KhmerTextSegmenter>,
 ) -> Result<ProcessedTypFile, String> {
     let source_content = fs::read_to_string(src).map_err(|e| e.to_string())?;
     let current_source_digest = source_digest(&source_content);
@@ -1195,8 +1186,7 @@ fn process_typ_file(
     sourcemap.source_digest = current_source_digest;
     sourcemap.preview_content_mode = content_mode_key(options.preview_content_mode).into();
     let draft = draft_preparation(options, src, dest, &source_content);
-    let generated_content =
-        prepare_source_content(&source_content, options, segmenter, &draft, &mut sourcemap)?;
+    let generated_content = prepare_source_content(&source_content, &draft, &mut sourcemap);
 
     fs::write(dest, &generated_content).map_err(|e| e.to_string())?;
 
@@ -1245,100 +1235,34 @@ fn draft_preparation(
 
 fn prepare_source_content(
     source: &str,
-    options: &RenderPrepareOptions,
-    segmenter: Option<&KhmerTextSegmenter>,
     draft: &DraftPreparation,
     sourcemap: &mut SourceMap,
-) -> Result<String, String> {
+) -> String {
     let mut generated = String::new();
-    let mut replacement_index = 0usize;
-    let mut replaced_until = 0usize;
-    for (state, start, end, scope) in scan_typst_content(source) {
-        while replacement_index < draft.replacements.len()
-            && draft.replacements[replacement_index].end <= replaced_until.max(start)
-        {
-            replacement_index += 1;
-        }
-        let mut cursor = start.max(replaced_until);
-        while replacement_index < draft.replacements.len() {
-            let replacement = &draft.replacements[replacement_index];
-            if replacement.start >= end {
-                break;
-            }
-            if replacement.end <= cursor {
-                replacement_index += 1;
-                continue;
-            }
-            append_prepared_original(
-                &mut generated,
-                sourcemap,
-                source,
-                cursor,
-                replacement.start,
-                state,
-                scope,
-                options,
-                segmenter,
-            )?;
-            let generated_start = generated.len();
-            generated.push_str(&replacement.generated);
-            sourcemap.add_mapping(
-                generated_start,
-                generated.len(),
-                replacement.start,
-                replacement.end,
-                MappingKind::GeneratedWrapper,
-            );
-            cursor = replacement.end;
-            replaced_until = replacement.end;
-            replacement_index += 1;
-        }
-        append_prepared_original(
-            &mut generated,
-            sourcemap,
-            source,
-            cursor,
-            end,
-            state,
-            scope,
-            options,
-            segmenter,
-        )?;
-    }
-    Ok(generated)
-}
+    let mut cursor = 0usize;
 
-#[allow(clippy::too_many_arguments)]
-fn append_prepared_original(
-    generated: &mut String,
-    sourcemap: &mut SourceMap,
-    source: &str,
-    start: usize,
-    end: usize,
-    state: ScanState,
-    scope: ScopeState,
-    options: &RenderPrepareOptions,
-    segmenter: Option<&KhmerTextSegmenter>,
-) -> Result<(), String> {
-    if start >= end {
-        return Ok(());
-    }
-    let chunk = &source[start..end];
-    if options.enable_khmer_zws && state == ScanState::MarkupText {
-        let segmenter = segmenter.ok_or_else(|| "Khmer segmenter is unavailable.".to_string())?;
-        generated.push_str(&prepare_khmer_text_for_rendering(
-            chunk,
-            &segmenter.segmenter,
-            &segmenter.hyphenation,
-            start,
+    for replacement in &draft.replacements {
+        if replacement.start < cursor
+            || replacement.start > replacement.end
+            || replacement.end > source.len()
+        {
+            continue;
+        }
+        append_original(&mut generated, sourcemap, source, cursor, replacement.start);
+        let generated_start = generated.len();
+        generated.push_str(&replacement.generated);
+        sourcemap.add_mapping(
+            generated_start,
             generated.len(),
-            sourcemap,
-            scope,
-        ));
-    } else {
-        append_original(generated, sourcemap, source, start, end);
+            replacement.start,
+            replacement.end,
+            MappingKind::GeneratedWrapper,
+        );
+        cursor = replacement.end;
     }
-    Ok(())
+
+    append_original(&mut generated, sourcemap, source, cursor, source.len());
+    generated
 }
 
 fn append_original(
@@ -1468,7 +1392,6 @@ mod tests {
         )
         .unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.clone(),
             entry_file: main,
             cache_root: workspace.join(".typsastra/cache"),
@@ -1477,7 +1400,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        let error = mirror_project_cancellable(&options, None, || false).unwrap_err();
+        let error = mirror_project_cancellable(&options, || false).unwrap_err();
 
         assert!(error.contains("outside the current workspace"));
         assert!(error.contains("main_file.typ"));
@@ -1497,7 +1420,6 @@ mod tests {
         fs::write(&chapter, "= Chapter").unwrap();
         fs::write(&main, "#include \"../Author/Folder/SubFolder 1/file1.typ\"").unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.path().to_path_buf(),
             entry_file: main,
             cache_root: cache_root.clone(),
@@ -1506,7 +1428,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        let prepared = mirror_project_cancellable(&options, None, || false).unwrap();
+        let prepared = mirror_project_cancellable(&options, || false).unwrap();
 
         assert_eq!(
             prepared.generated_entry_file,
@@ -1535,7 +1457,6 @@ mod tests {
         fs::write(&main, "= Main").unwrap();
         fs::write(&external, "= External").unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace,
             entry_file: main.clone(),
             cache_root: cache_root.clone(),
@@ -1544,13 +1465,9 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        let error = prepare_single_in_memory_file(
-            &options,
-            None,
-            &main,
-            "#include \"../Author/file1.typ\"",
-        )
-        .unwrap_err();
+        let error =
+            prepare_single_in_memory_file(&options, &main, "#include \"../Author/file1.typ\"")
+                .unwrap_err();
 
         assert!(error.contains("outside the current workspace"));
         assert!(!cache_root.exists());
@@ -1777,7 +1694,6 @@ mod tests {
         fs::create_dir_all(render.parent().unwrap()).unwrap();
         fs::write(&source, "= Current chapter").unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.path().to_path_buf(),
             entry_file: source.clone(),
             cache_root,
@@ -1786,7 +1702,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        process_typ_file(&source, &render, relative, &maps, &options, None).unwrap();
+        process_typ_file(&source, &render, relative, &maps, &options).unwrap();
         let map_path = derived_metadata_path(&maps, relative, "map");
         let mut stale_map: SourceMap =
             serde_json::from_str(&fs::read_to_string(&map_path).unwrap()).unwrap();
@@ -1797,7 +1713,7 @@ mod tests {
             .to_string();
         fs::write(&map_path, serde_json::to_string_pretty(&stale_map).unwrap()).unwrap();
 
-        let result = process_typ_file(&source, &render, relative, &maps, &options, None).unwrap();
+        let result = process_typ_file(&source, &render, relative, &maps, &options).unwrap();
         assert!(result.changed);
         let refreshed: SourceMap =
             serde_json::from_str(&fs::read_to_string(map_path).unwrap()).unwrap();
@@ -1818,7 +1734,6 @@ mod tests {
         fs::write(&image, png).unwrap();
         fs::write(&main, "#image(\"photo.png\", width: 50%)").unwrap();
         let mut options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.path().to_path_buf(),
             entry_file: main,
             cache_root: cache_root.clone(),
@@ -1827,9 +1742,9 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        mirror_project_cancellable(&options, None, || false).unwrap();
+        mirror_project_cancellable(&options, || false).unwrap();
         options.preview_content_mode = PreviewContentMode::Draft;
-        let first_draft = mirror_project_cancellable(&options, None, || false).unwrap();
+        let first_draft = mirror_project_cancellable(&options, || false).unwrap();
         assert_eq!(first_draft.draft_assets.len(), 1);
         let draft_source = fs::read_to_string(cache_root.join("render/main.typ")).unwrap();
         assert!(
@@ -1840,13 +1755,13 @@ mod tests {
         assert!(!draft_source.contains("#raw("));
 
         options.preview_content_mode = PreviewContentMode::Normal;
-        mirror_project_cancellable(&options, None, || false).unwrap();
+        mirror_project_cancellable(&options, || false).unwrap();
         assert!(!fs::read_to_string(cache_root.join("render/main.typ"))
             .unwrap()
             .contains("draft-preview.typsastra.invalid"));
 
         options.preview_content_mode = PreviewContentMode::Draft;
-        let restored_draft = mirror_project_cancellable(&options, None, || false).unwrap();
+        let restored_draft = mirror_project_cancellable(&options, || false).unwrap();
         assert_eq!(restored_draft.draft_cache_hits, 1);
         assert_eq!(restored_draft.changed_files.len(), 1);
         let draft_source = fs::read_to_string(cache_root.join("render/main.typ")).unwrap();
@@ -1868,7 +1783,6 @@ mod tests {
         fs::write(&image, &png).unwrap();
         fs::write(&main, "#image(\"photo.png\", width: 100%)").unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.path().to_path_buf(),
             entry_file: main.clone(),
             cache_root: cache_root.clone(),
@@ -1877,7 +1791,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        let first = mirror_project_cancellable(&options, None, || false).unwrap();
+        let first = mirror_project_cancellable(&options, || false).unwrap();
         assert_eq!(first.draft_assets.len(), 1);
         assert_eq!(first.draft_cache_hits, 0);
         assert!(cache_root.join("maps/main.typ.draft.json").is_file());
@@ -1887,7 +1801,7 @@ mod tests {
         // authority for Draft manifest reuse.
         std::thread::sleep(std::time::Duration::from_millis(20));
         fs::write(&main, "#image(\"photo.png\", width: 100%)").unwrap();
-        let second = mirror_project_cancellable(&options, None, || false).unwrap();
+        let second = mirror_project_cancellable(&options, || false).unwrap();
         assert_eq!(second.draft_assets, first.draft_assets);
         assert_eq!(second.draft_cache_hits, 1);
         assert!(
@@ -1898,7 +1812,7 @@ mod tests {
         png[16..20].copy_from_slice(&1024u32.to_be_bytes());
         png.push(0);
         fs::write(&image, png).unwrap();
-        let changed = mirror_project_cancellable(&options, None, || false).unwrap();
+        let changed = mirror_project_cancellable(&options, || false).unwrap();
         assert_eq!(changed.draft_assets[0].width, 1024);
         assert_eq!(changed.draft_cache_hits, 0);
         assert!(
@@ -1932,7 +1846,6 @@ mod tests {
         fs::write(&included_image, png(800)).unwrap();
         fs::write(&unrelated_image, png(1200)).unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.path().to_path_buf(),
             entry_file: main.clone(),
             cache_root,
@@ -1941,7 +1854,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        let prepared = mirror_project_cancellable(&options, None, || false).unwrap();
+        let prepared = mirror_project_cancellable(&options, || false).unwrap();
 
         assert_eq!(prepared.draft_assets.len(), 1);
         assert_eq!(
@@ -1980,7 +1893,6 @@ mod tests {
         )
         .unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.path().to_path_buf(),
             entry_file: main,
             cache_root: cache_root.clone(),
@@ -1989,7 +1901,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        let prepared = mirror_project_cancellable(&options, None, || false).unwrap();
+        let prepared = mirror_project_cancellable(&options, || false).unwrap();
         assert_eq!(prepared.draft_assets.len(), 1);
         let draft_source = fs::read_to_string(cache_root.join("render/main.typ")).unwrap();
         assert!(draft_source.contains("width: 100%"));
@@ -2068,7 +1980,6 @@ mod tests {
 "##;
         fs::write(&main, source).unwrap();
         let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
             project_root: workspace.path().to_path_buf(),
             entry_file: main,
             cache_root: cache_root.clone(),
@@ -2077,7 +1988,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        let prepared = mirror_project_cancellable(&options, None, || false).unwrap();
+        let prepared = mirror_project_cancellable(&options, || false).unwrap();
         assert_eq!(prepared.draft_assets.len(), 1);
         assert_eq!(prepared.draft_assets[0].references.len(), 2);
         let draft_source = fs::read_to_string(cache_root.join("render/main.typ")).unwrap();
@@ -2091,89 +2002,22 @@ mod tests {
     }
 
     #[test]
-    fn applies_replacement_across_scanner_chunk_boundary() {
-        let workspace = tempfile::tempdir().unwrap();
-        let source = "#let value = [Hello]\nVisible text";
-        let chunks = scan_typst_content(source);
-        let boundary = chunks
-            .windows(2)
-            .find_map(|pair| {
-                let end = pair[0].2;
-                (end == pair[1].1 && end > 0 && end < source.len()).then_some(end)
-            })
-            .expect("fixture must contain adjacent scanner chunks");
+    fn preserves_original_source_around_draft_replacements() {
+        let source = "before TARGET after";
         let draft = DraftPreparation {
             replacements: vec![crate::render_prepare::draft::DraftReplacement {
-                start: boundary - 1,
-                end: boundary + 1,
+                start: 7,
+                end: 13,
                 generated: "REPLACED".into(),
             }],
             ..DraftPreparation::default()
         };
-        let options = RenderPrepareOptions {
-            enable_khmer_zws: false,
-            project_root: workspace.path().to_path_buf(),
-            entry_file: workspace.path().join("main.typ"),
-            cache_root: workspace.path().join(".typsastra/cache"),
-            generate_source_map: true,
-            preview_content_mode: PreviewContentMode::Draft,
-            allow_large_copy_fallback: false,
-        };
-        let mut sourcemap = SourceMap::new("main.typ".into(), "render/main.typ".into());
+        let mut sourcemap = SourceMap::new("src.typ".into(), "dest.typ".into());
 
-        let generated =
-            prepare_source_content(source, &options, None, &draft, &mut sourcemap).unwrap();
-        assert_eq!(
-            generated,
-            format!(
-                "{}REPLACED{}",
-                &source[..boundary - 1],
-                &source[boundary + 1..]
-            )
-        );
-        assert_eq!(generated.matches("REPLACED").count(), 1);
-    }
+        let generated = prepare_source_content(source, &draft, &mut sourcemap);
 
-    #[test]
-    fn prepares_khmer_hyphenation_boundaries_as_zws_only() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let project_root = manifest_dir
-            .join("resources")
-            .join("examples")
-            .join("03-language-providers")
-            .join("02-khmer-segmentation-comparison");
-        let source_path = project_root.join("main.typ");
-        let source = fs::read_to_string(&source_path).unwrap();
-        let segmenter = KhmerTextSegmenter::new().unwrap();
-        let cache_root = std::env::temp_dir().join("typsastra-khmer-prepare-scope-test");
-        let _ = fs::remove_dir_all(&cache_root);
-        let options = RenderPrepareOptions {
-            enable_khmer_zws: true,
-            project_root: project_root.clone(),
-            entry_file: source_path.clone(),
-            cache_root: cache_root.clone(),
-            generate_source_map: true,
-            preview_content_mode: PreviewContentMode::Normal,
-            allow_large_copy_fallback: false,
-        };
-
-        let prepared_file =
-            prepare_single_in_memory_file(&options, Some(&segmenter), &source_path, &source)
-                .unwrap();
-        let prepared = fs::read_to_string(prepared_file.path).unwrap();
-        let _ = fs::remove_dir_all(&cache_root);
-
-        assert!(
-            prepared.contains('\u{200b}'),
-            "prepared example should contain ZWSP layout breaks"
-        );
-        assert!(
-            !prepared.contains('\u{00ad}'),
-            "Khmer render preparation should not insert SHY"
-        );
-        assert!(
-            !prepared.contains("\u{1780}\u{17d2}\u{1793}\u{17bb}\u{200b}\u{1784}"),
-            "prepared example must not split ក្នុង with ZWSP"
-        );
+        assert_eq!(generated, "before REPLACED after");
+        assert_eq!(sourcemap.generated_to_source(2), Some(2));
+        assert_eq!(sourcemap.generated_to_source(18), Some(16));
     }
 }

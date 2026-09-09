@@ -12,6 +12,7 @@ describe("PDF preview preparation controller", () => {
       "prepareRenderProjectWithCopyGuard<RenderPreparationResult>(options)",
     );
     expect(source).toContain('invoke<RenderPreparationFileResult>("prepare_render_file"');
+    expect(source).not.toContain("enableKhmerZws");
     expect(source).toContain("public ensureCurrent(revision: number): void");
     expect(source).not.toContain(": any");
     expect(source).not.toContain("host: object");

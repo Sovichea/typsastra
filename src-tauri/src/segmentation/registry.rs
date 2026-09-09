@@ -6,7 +6,7 @@ use super::provider::{
 };
 use crate::render_prepare::scanner::{scan_typst_content, ScanState};
 use icu_segmenter::{options::WordBreakInvariantOptions, WordSegmenter, WordSegmenterBorrowed};
-use khmer_segmenter::kdict::{coeng_da_ta_variants, KHypDict};
+use khmer_segmenter::kdict::coeng_da_ta_variants;
 use khmer_segmenter::{KhmerSegmenter, SegmenterConfig, SpellcheckProfile, SpellingAccuracy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -19,8 +19,6 @@ use tauri::Manager;
 
 const KHMER_DICTIONARY: &[u8] =
     include_bytes!("../../resources/language-providers/khmer/khmer_dictionary.kdict");
-const KHMER_HYPHENATION: &[u8] =
-    include_bytes!("../../resources/language-providers/khmer/khmer_hyphenation.kdict");
 const EN_US_AFF: &str = include_str!("../../resources/dictionaries/hunspell/en_US/en_US.aff");
 const EN_US_DIC: &str = include_str!("../../resources/dictionaries/hunspell/en_US/en_US.dic");
 const LIBREOFFICE_RAW_BASE: &str =
@@ -371,7 +369,6 @@ const HUNSPELL_CATALOG: &[HunspellCatalogSpec] = &[
 
 struct KhmerProvider {
     segmenter: KhmerSegmenter,
-    hyphenation: KHypDict,
 }
 
 impl KhmerProvider {
@@ -379,12 +376,7 @@ impl KhmerProvider {
         let segmenter =
             KhmerSegmenter::from_bytes(KHMER_DICTIONARY.to_vec(), SegmenterConfig::default())
                 .map_err(|error| format!("Failed to load Khmer dictionary: {error}"))?;
-        let hyphenation = KHypDict::from_bytes(KHMER_HYPHENATION.to_vec())
-            .map_err(|error| format!("Failed to load Khmer hyphenation dictionary: {error}"))?;
-        Ok(Self {
-            segmenter,
-            hyphenation,
-        })
+        Ok(Self { segmenter })
     }
 
     fn visual_completions(&self, prefix: &str, limit: usize) -> Vec<String> {
@@ -436,11 +428,11 @@ impl LanguageSegmenter for KhmerProvider {
     }
 
     fn version(&self) -> &'static str {
-        "0.2.0-rc.3"
+        "0.2.0"
     }
 
     fn license(&self) -> &'static str {
-        "MIT; lexical data retains upstream source terms"
+        "MIT AND LicenseRef-Khmer-Dictionary-NC"
     }
 
     fn stability(&self) -> &'static str {
@@ -525,7 +517,6 @@ impl LanguageSegmenter for KhmerProvider {
                 to: byte_to_utf16[diagnostic.source_range.end],
                 known: false,
                 known_prefix: false,
-                hyphenated: None,
             });
         }
 
@@ -541,17 +532,12 @@ impl LanguageSegmenter for KhmerProvider {
                     .segmenter
                     .is_spelling_valid_with_accuracy(token, SpellingAccuracy::Visual);
             let known_prefix = known || !self.visual_completions(token, 1).is_empty();
-            let hyphenated = self
-                .hyphenation
-                .lookup(token)
-                .map(|value| value.replace('\u{200b}', "\u{00ad}"));
             tokens.push(SegmentToken {
                 text: token.to_owned(),
                 from: byte_to_utf16[segment.source_range.start],
                 to: byte_to_utf16[segment.source_range.end],
                 known,
                 known_prefix,
-                hyphenated,
             });
         }
         tokens.sort_by_key(|token| (token.from, token.to));
@@ -804,7 +790,6 @@ impl GenericHunspellProvider {
             to: to_utf16,
             known,
             known_prefix: known || self.has_prefix(&normalized),
-            hyphenated: None,
         });
     }
 
@@ -1243,7 +1228,6 @@ impl EnglishHunspellProvider {
             to: to_utf16 - trim_end_utf16,
             known,
             known_prefix: known || self.has_prefix(&normalized),
-            hyphenated: None,
         });
     }
 }
@@ -1382,8 +1366,8 @@ fn khmer_provider_capabilities() -> ProviderCapabilities {
         supports_custom_dictionary: true,
         has_editing_policy: true,
         provider_type: "deep".to_string(),
-        version: "0.2.0-rc.3".to_string(),
-        license: "MIT; lexical data retains upstream source terms".to_string(),
+        version: "0.2.0".to_string(),
+        license: "MIT AND LicenseRef-Khmer-Dictionary-NC".to_string(),
     }
 }
 
@@ -1939,7 +1923,6 @@ impl SegmentationRegistry {
                                 normalized_text: token.text,
                                 known: token.known,
                                 known_prefix: token.known_prefix,
-                                hyphenated: token.hyphenated,
                             },
                         });
                     }
@@ -2004,7 +1987,6 @@ fn apply_khmer_user_dictionary(
             to,
             known: true,
             known_prefix: true,
-            hyphenated: None,
         });
     }
     tokens.sort_by_key(|token| (token.from, token.to));
@@ -2502,7 +2484,6 @@ mod tests {
                 to: "សេច".encode_utf16().count(),
                 known: false,
                 known_prefix: false,
-                hyphenated: None,
             },
             SegmentToken {
                 text: "ក្តី".to_string(),
@@ -2510,7 +2491,6 @@ mod tests {
                 to: word.encode_utf16().count(),
                 known: false,
                 known_prefix: false,
-                hyphenated: None,
             },
         ];
 
@@ -2646,7 +2626,7 @@ mod tests {
 
     #[test]
     fn khmer_reference_provider_fixtures_are_locked() {
-        const PINNED_UPSTREAM: &str = "031fc60bcf29dbdd117d9ab04c5b746032d6ab0a";
+        const PINNED_UPSTREAM: &str = "d52f302fabadbde9107acd0e28362a8d40af10ed";
         let fixture: KhmerReferenceFixture =
             serde_json::from_str(include_str!("../../../tests/fixtures/khmer/provider.json"))
                 .expect("Khmer provider reference fixture");
@@ -2984,7 +2964,6 @@ mod tests {
                             to: current_utf16,
                             known: word == "hello" || word == "world",
                             known_prefix: false,
-                            hyphenated: None,
                         });
                         start = None;
                     }
@@ -3000,7 +2979,6 @@ mod tests {
                     to: current_utf16,
                     known: word == "hello" || word == "world",
                     known_prefix: false,
-                    hyphenated: None,
                 });
             }
             Ok(TextAnalysis {
@@ -3056,7 +3034,6 @@ mod tests {
                             to: utf16,
                             known: false,
                             known_prefix: false,
-                            hyphenated: None,
                         });
                         start = None;
                     }
@@ -3071,7 +3048,6 @@ mod tests {
                     to: utf16,
                     known: false,
                     known_prefix: false,
-                    hyphenated: None,
                 });
             }
             Ok(TextAnalysis {
@@ -3103,26 +3079,6 @@ mod tests {
         fn suggestions(&self, _word: &str, _limit: usize) -> Vec<String> {
             Vec::new()
         }
-    }
-
-    #[test]
-    fn test_khmer_hyphenation_lookup() {
-        let provider = KhmerProvider::new().unwrap();
-        let analysis = provider.analyze("សាលារៀន").unwrap();
-        assert!(!analysis.tokens.is_empty());
-
-        let words_with_hyphens: Vec<_> = analysis
-            .tokens
-            .iter()
-            .filter(|t| t.hyphenated.is_some())
-            .collect();
-
-        // Let's assert that at least one token has hyphenated representation
-        assert!(
-            !words_with_hyphens.is_empty(),
-            "No hyphenated tokens found! Words analyzed: {:?}",
-            analysis.tokens
-        );
     }
 
     #[test]
@@ -3432,7 +3388,7 @@ mod tests {
             .find(|provider| provider.id == "khmer-segmenter")
             .expect("Khmer capabilities");
         assert_eq!(khmer.support_level, "deep");
-        assert_eq!(khmer.version, "0.2.0-rc.3");
+        assert_eq!(khmer.version, "0.2.0");
         assert_eq!(khmer.stability, "experimental");
         assert!(khmer.supports_spellcheck);
         assert!(khmer.supports_completion);
