@@ -4282,6 +4282,7 @@ button.welcome-item:disabled {
   text-decoration-style: wavy;
   text-decoration-color: #e05252;
   text-decoration-thickness: 1.2px;
+  text-decoration-skip-ink: none;
   text-underline-offset: 3px;
 }
 
@@ -4326,6 +4327,7 @@ button.welcome-item:disabled {
   text-decoration-style: wavy;
   text-decoration-color: var(--ui-accent-color);
   text-decoration-thickness: 1.2px;
+  text-decoration-skip-ink: none;
   text-underline-offset: 3px;
 }
 

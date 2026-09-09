@@ -153,6 +153,23 @@ async function startAnalysis(controller: { schedule(): void }): Promise<Invocati
   return request;
 }
 
+describe("spellcheck decoration", () => {
+  test("keeps complex-script squiggles continuous across the decorated word", async () => {
+    const css = await Bun.file(new URL("../src/style.css", import.meta.url)).text();
+    const unknownRule = css.slice(
+      css.indexOf(".cm-spelling-unknown"),
+      css.indexOf("}", css.indexOf(".cm-spelling-unknown")),
+    );
+    const ignoredRule = css.slice(
+      css.indexOf(".cm-spelling-ignored"),
+      css.indexOf("}", css.indexOf(".cm-spelling-ignored")),
+    );
+
+    expect(unknownRule).toContain("text-decoration-skip-ink: none");
+    expect(ignoredRule).toContain("text-decoration-skip-ink: none");
+  });
+});
+
 describe("spellcheck request safety", () => {
   afterEach(() => {
     if (activeController) {
