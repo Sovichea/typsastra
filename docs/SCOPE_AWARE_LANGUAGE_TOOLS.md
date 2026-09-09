@@ -34,6 +34,15 @@ Installed providers determine whether its selected language is ready. A saved
 selection that is not installed remains visible and is never silently replaced
 or discarded.
 
+Script detection follows Unicode script properties. Greek (`Grek`), Cyrillic
+(`Cyrl`), Han (`Hani`), Hiragana (`Hira`), Katakana (`Kana`), Bopomofo (`Bopo`),
+and Hangul (`Hang`) remain distinct. Kana is strong evidence of Japanese,
+Bopomofo of a Chinese usage context, and Hangul of Korean, but a Han ideograph
+alone does not encode whether its language is Japanese, Simplified Chinese,
+Traditional Chinese, or Korean. Typsastra may identify Han near kana, Hangul, or
+Bopomofo from that neighboring Unicode evidence, but reports pure Han as Han.
+It does not inspect or trust user-authored Typst `lang` settings for detection.
+
 ## Routing contract
 
 - An explicit project assignment wins for its script.

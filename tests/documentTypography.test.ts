@@ -282,4 +282,12 @@ describe("document typography", () => {
     expect(detectTypographyScripts("ខ្មែរ ខ្មែរ English").map(script => script.id))
       .toEqual(["khmer", "latin"]);
   });
+
+  test("distinguishes Unicode scripts without inferring CJK languages", () => {
+    const detected = detectTypographyScripts("Ελληνικά Русский 漢字 ひらがな カタカナ ㄅㄆㄇ 한글");
+    const codes = new Set(detected.map(script => script.iso15924));
+
+    expect(codes).toEqual(new Set(["Grek", "Cyrl", "Hani", "Hira", "Kana", "Bopo", "Hang"]));
+    expect(detected.find(script => script.iso15924 === "Hani")?.label).toBe("Han");
+  });
 });

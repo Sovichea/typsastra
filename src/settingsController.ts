@@ -102,6 +102,7 @@ export class SettingsController {
   private rendererCompatibility: LinuxRendererCompatibility | null = null;
   private rendererCompatibilityError: string | null = null;
   private languageCatalogQuery = "";
+  private languageCatalogInitialized = false;
   private languageProviderOperationInProgress = false;
   private updateProjectTerminology: (entries: TerminologyEntry[]) => void = () => {};
   private workspacePreviewRenderMode: PreviewRenderMode | null = null;
@@ -209,6 +210,7 @@ export class SettingsController {
         panel.classList.toggle("active", panel.dataset.settingsPanelContent === name);
       });
       if (name === "storage") void this.refreshScaledFontCache();
+      if (name === "editor") void this.ensureLanguageCatalogPopulated();
     };
     const openSettings = (panel?: string) => {
       this.populatePanel();
@@ -235,7 +237,9 @@ export class SettingsController {
     document.addEventListener("typsastra:system-fonts-changed", () => void this.refreshSystemFonts());
     document.addEventListener("typsastra:language-providers-changed", () => {
       const catalog = document.getElementById("settings-language-catalog");
-      if (catalog && !catalog.classList.contains("hidden")) void this.populateLanguageCatalog();
+      if (this.languageCatalogInitialized && catalog && !catalog.classList.contains("hidden")) {
+        void this.populateLanguageCatalog();
+      }
     });
 
     const onChange = (id: string, update: (settings: AppSettings, control: HTMLInputElement | HTMLSelectElement) => void) => {
@@ -1086,15 +1090,26 @@ export class SettingsController {
   private async toggleLanguageCatalog(): Promise<void> {
     const catalog = document.getElementById("settings-language-catalog");
     if (!catalog) return;
-    if (!catalog.classList.contains("hidden")) {
-      catalog.classList.add("hidden");
-      return;
-    }
-    this.languageCatalogQuery = "";
-    catalog.classList.remove("hidden");
-    catalog.textContent = "Loading language catalog...";
-    await this.populateLanguageCatalog();
+    const visible = catalog.classList.contains("hidden");
+    this.setLanguageCatalogVisibility(catalog, visible);
+    if (!visible) return;
+    await this.ensureLanguageCatalogPopulated();
     catalog.querySelector<HTMLInputElement>(".settings-language-catalog-search")?.focus();
+  }
+
+  private setLanguageCatalogVisibility(catalog: HTMLElement, visible: boolean): void {
+    catalog.classList.toggle("hidden", !visible);
+    const button = document.getElementById("settings-add-language");
+    button?.setAttribute("aria-expanded", String(visible));
+    if (button) button.textContent = visible ? "Hide languages" : "Show languages";
+  }
+
+  private async ensureLanguageCatalogPopulated(): Promise<void> {
+    if (this.languageCatalogInitialized) return;
+    this.languageCatalogInitialized = true;
+    const catalog = document.getElementById("settings-language-catalog");
+    if (catalog) catalog.textContent = "Loading language catalog...";
+    await this.populateLanguageCatalog();
   }
 
   public get isLanguageProviderOperationInProgress(): boolean {

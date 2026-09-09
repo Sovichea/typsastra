@@ -74,6 +74,8 @@ export const latinDocumentScript: DocumentScript = {
 };
 
 export const documentScripts: readonly DocumentScript[] = [
+  { id: "greek", label: "Greek", unicodeProperty: "Greek", iso15924: "Grek", pattern: /\p{Script=Greek}/gu, preferredFamilies: ["Noto Sans Greek", "Noto Sans"] },
+  { id: "cyrillic", label: "Cyrillic", unicodeProperty: "Cyrillic", iso15924: "Cyrl", pattern: /\p{Script=Cyrillic}/gu, preferredFamilies: ["Noto Sans", "PT Sans"] },
   { id: "khmer", label: "Khmer", unicodeProperty: "Khmer", iso15924: "Khmr", pattern: /[\u1780-\u17ff\u19e0-\u19ff]/gu, preferredFamilies: ["MiSans Khmer", "Noto Sans Khmer"] },
   { id: "arabic", label: "Arabic", unicodeProperty: "Arabic", iso15924: "Arab", pattern: /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/gu, preferredFamilies: ["MiSans Arabic", "Noto Sans Arabic"] },
   { id: "thai", label: "Thai", unicodeProperty: "Thai", iso15924: "Thai", pattern: /[\u0e00-\u0e7f]/gu, preferredFamilies: ["MiSans Thai", "Noto Sans Thai"] },
@@ -93,9 +95,11 @@ export const documentScripts: readonly DocumentScript[] = [
   { id: "armenian", label: "Armenian", unicodeProperty: "Armenian", iso15924: "Armn", pattern: /[\u0530-\u058f]/gu, preferredFamilies: ["Noto Sans Armenian"] },
   { id: "georgian", label: "Georgian", unicodeProperty: "Georgian", iso15924: "Geor", pattern: /[\u10a0-\u10ff\u1c90-\u1cbf]/gu, preferredFamilies: ["Noto Sans Georgian"] },
   { id: "ethiopic", label: "Ethiopic", unicodeProperty: "Ethiopic", iso15924: "Ethi", pattern: /[\u1200-\u137f]/gu, preferredFamilies: ["Noto Sans Ethiopic"] },
-  { id: "han", label: "Han", unicodeProperty: "Han", iso15924: "Hani", pattern: /[\u3400-\u4dbf\u4e00-\u9fff]/gu, preferredFamilies: ["Noto Sans SC", "Noto Sans CJK SC"] },
-  { id: "hiragana", label: "Japanese", unicodeProperty: "Hiragana", iso15924: "Jpan", pattern: /[\u3040-\u30ff]/gu, preferredFamilies: ["Noto Sans JP"] },
-  { id: "hangul", label: "Korean", unicodeProperty: "Hangul", iso15924: "Kore", pattern: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/gu, preferredFamilies: ["Noto Sans KR"] }
+  { id: "han", label: "Han", unicodeProperty: "Han", iso15924: "Hani", pattern: /\p{Script=Han}/gu, preferredFamilies: ["Noto Sans CJK", "Noto Sans"] },
+  { id: "hiragana", label: "Hiragana", unicodeProperty: "Hiragana", iso15924: "Hira", pattern: /\p{Script=Hiragana}/gu, preferredFamilies: ["Noto Sans JP"] },
+  { id: "katakana", label: "Katakana", unicodeProperty: "Katakana", iso15924: "Kana", pattern: /\p{Script=Katakana}/gu, preferredFamilies: ["Noto Sans JP"] },
+  { id: "bopomofo", label: "Bopomofo", unicodeProperty: "Bopomofo", iso15924: "Bopo", pattern: /\p{Script=Bopomofo}/gu, preferredFamilies: ["Noto Sans TC", "Noto Sans CJK TC"] },
+  { id: "hangul", label: "Hangul", unicodeProperty: "Hangul", iso15924: "Hang", pattern: /\p{Script=Hangul}/gu, preferredFamilies: ["Noto Sans KR"] }
 ];
 
 export const typographyScripts: readonly DocumentScript[] = [latinDocumentScript, ...documentScripts];

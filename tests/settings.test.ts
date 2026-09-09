@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { cloneDefaultAppSettings, defaultAppSettings, normalizeAppSettings } from "../src/settings";
+
+const settingsHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const settingsController = readFileSync(new URL("../src/settingsController.ts", import.meta.url), "utf8");
+const settingsStyles = readFileSync(new URL("../src/style.css", import.meta.url), "utf8");
 
 describe("application settings", () => {
   test("fills missing values from defaults", () => {
@@ -210,5 +215,37 @@ describe("application settings", () => {
       editor: { ignoredWords: [" ខ្មេ ", "ខ្មេ", "", 42] }
     });
     expect(settings.editor.ignoredWords).toEqual(["ខ្មេ"]);
+  });
+});
+
+describe("editor settings presentation", () => {
+  test("collapses per-script editor fallbacks by default", () => {
+    expect(settingsHtml).toContain('<details class="settings-field settings-unicode-fonts-field settings-disclosure">');
+    expect(settingsHtml).toContain("<summary>Per-script editor fallbacks</summary>");
+    expect(settingsHtml).not.toContain('<details open class="settings-field settings-unicode-fonts-field settings-disclosure">');
+  });
+
+  test("shows and lazily populates the language provider catalog by default", () => {
+    const catalogStart = settingsHtml.indexOf('id="settings-language-catalog"');
+    const catalogEnd = settingsHtml.indexOf(">", catalogStart);
+    const catalogMarkup = settingsHtml.slice(catalogStart, catalogEnd);
+    const ensureStart = settingsController.indexOf("private async ensureLanguageCatalogPopulated");
+    const ensureEnd = settingsController.indexOf("\n  }", ensureStart) + 4;
+    const ensureMethod = settingsController.slice(ensureStart, ensureEnd);
+
+    expect(catalogMarkup).toContain('class="settings-language-catalog"');
+    expect(catalogMarkup).not.toContain("hidden");
+    expect(settingsHtml).toContain('aria-expanded="true"');
+    expect(settingsController).toContain('if (name === "editor") void this.ensureLanguageCatalogPopulated();');
+    expect(ensureMethod).toContain("await this.populateLanguageCatalog();");
+    expect(ensureMethod).not.toContain(".focus()");
+    expect(settingsController).toContain('button.textContent = visible ? "Hide languages" : "Show languages"');
+  });
+
+  test("gives the provider catalog wider, consistently inset rows", () => {
+    expect(settingsStyles).toContain("max-width: 520px");
+    expect(settingsStyles).toContain("padding: 0 12px 8px");
+    expect(settingsStyles).toContain("scrollbar-gutter: stable");
+    expect(settingsStyles).toContain("padding: 12px 2px");
   });
 });

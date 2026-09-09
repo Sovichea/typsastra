@@ -81,9 +81,13 @@ export class DocumentLanguageStatusController {
     const text = selection ? this.selectionLabel(selection) : "No language context";
     label.textContent = text;
     button.dataset.state = selection?.state ?? "none";
-    button.title = selection
-      ? `${selection.script.label} script · ${text}. Used for spellcheck and word completion.`
-      : "Move the caret into text to see its spellcheck and word-completion language.";
+    button.title = selection?.state === "detected"
+      ? selection.automatic
+        ? `${text} identified from Unicode script context. No Typst language setting or provider was used.`
+        : `${text} selected for ${selection.script.label} text. No language provider is available.`
+      : selection
+        ? `${selection.script.label} script · ${text}. Used for spellcheck and word completion.`
+        : "Move the caret into text to see its spellcheck and word-completion language.";
     button.setAttribute("aria-label", `Document language: ${text}`);
     if (!this.overlay()?.classList.contains("hidden")) this.renderModal();
   }
@@ -92,7 +96,9 @@ export class DocumentLanguageStatusController {
     if (selection.state === "unavailable") return `${selection.script.label} — unavailable`;
     if (selection.state === "unconfigured") return `${selection.script.label} — select language`;
     if (!selection.languageTag) return selection.script.label;
-    const language = displayLanguageTag(selection.languageTag, selection.displayName ?? selection.script.label);
+    const language = selection.displayName && ["Hani", "Bopo"].includes(selection.script.iso15924)
+      ? selection.displayName
+      : displayLanguageTag(selection.languageTag, selection.displayName ?? selection.script.label);
     return selection.state === "missing" ? `${language} — not installed` : language;
   }
 
@@ -135,7 +141,10 @@ export class DocumentLanguageStatusController {
       select.append(prompt, ...options.map(option => {
         const item = document.createElement("option");
         item.value = option.languageTag;
-        item.textContent = `${displayLanguageTag(option.languageTag, option.displayName)}${option.installed ? "" : " · not installed"}`;
+        const label = ["Hani", "Bopo"].includes(script.iso15924)
+          ? option.displayName
+          : displayLanguageTag(option.languageTag, option.displayName);
+        item.textContent = `${label}${option.installed ? "" : " · no provider"}`;
         return item;
       }));
       const assigned = current.find(entry => entry.script.toLowerCase() === script.iso15924.toLowerCase())?.languageTag ?? "";

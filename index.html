@@ -2546,11 +2546,11 @@
                                     matching MiSans family.</small
                                 >
                             </div>
-                            <div class="settings-field settings-unicode-fonts-field">
-                                <label>Per-script editor fallbacks</label>
+                            <details class="settings-field settings-unicode-fonts-field settings-disclosure">
+                                <summary>Per-script editor fallbacks</summary>
                                 <div id="settings-unicode-fonts" class="settings-unicode-fonts"></div>
                                 <small>Automatic choices are resolved independently for every script detected in the document.</small>
-                            </div>
+                            </details>
                             <label class="settings-toggle"
                                 ><input
                                     id="settings-word-wrap"
@@ -2674,14 +2674,16 @@
                                         id="settings-add-language"
                                         class="settings-secondary-button"
                                         type="button"
+                                        aria-controls="settings-language-catalog"
+                                        aria-expanded="true"
                                     >
-                                        Add language...
+                                        Hide languages
                                     </button>
                                     <div
                                         id="settings-language-catalog"
-                                        class="settings-language-catalog hidden"
+                                        class="settings-language-catalog"
                                         aria-live="polite"
-                                    ></div>
+                                    >Loading language catalog...</div>
                                 </div>
                                 <small
                                     >Install providers here, then choose document

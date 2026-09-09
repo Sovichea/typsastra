@@ -23,7 +23,7 @@ export type CaretLanguageSelection = {
   languageTag: string | null;
   displayName: string | null;
   provider: LanguageProviderCapabilities | null;
-  state: "ready" | "unconfigured" | "missing" | "unavailable";
+  state: "ready" | "unconfigured" | "missing" | "unavailable" | "detected";
   automatic: boolean;
 };
 
@@ -93,6 +93,15 @@ export class DocumentLanguageService {
     const script = scriptByCode(scriptCode);
     if (!script) return [];
     const byTag = new Map<string, ScriptLanguageOption>();
+    for (const candidate of identificationOptionsForScript(scriptCode)) {
+      byTag.set(normalizeTag(candidate.languageTag), {
+        script,
+        languageTag: candidate.languageTag,
+        displayName: candidate.displayName,
+        installed: this.installed.some((provider) => sameLanguage(provider.languageTag, candidate.languageTag)
+          && provider.scripts.some((value) => sameScript(value, scriptCode))),
+      });
+    }
     for (const candidate of [...this.catalog, ...this.installed]) {
       if (!candidate.scripts.some((value) => sameScript(value, scriptCode))) continue;
       const key = normalizeTag(candidate.languageTag);
@@ -129,21 +138,33 @@ export class DocumentLanguageService {
     const script = scriptAtCaret(doc, position);
     if (!script) return null;
     const options = this.optionsForScript(script.iso15924);
-    if (options.length === 0) {
+    const explicit = this.assignments.find((entry) => sameScript(entry.script, script.iso15924));
+    if (options.length === 0 && !explicit) {
+      const detected = detectedLanguageAtCaret(doc, position, script.iso15924);
       return {
         script,
-        languageTag: null,
-        displayName: null,
+        languageTag: detected,
+        displayName: detected,
         provider: null,
-        state: "unavailable",
-        automatic: false,
+        state: detected ? "detected" : "unavailable",
+        automatic: Boolean(detected),
       };
     }
-    const explicit = this.assignments.find((entry) => sameScript(entry.script, script.iso15924));
     const automatic = !explicit && options.length === 1;
     const languageTag = explicit?.languageTag ?? (automatic ? options[0]!.languageTag : null);
     if (!languageTag) {
-      return {
+      const detected = detectedLanguageAtCaret(doc, position, script.iso15924);
+      const detectedOption = detected
+        ? options.find((candidate) => sameLanguage(candidate.languageTag, detected))
+        : null;
+      return detected ? {
+        script,
+        languageTag: detected,
+        displayName: detectedOption?.displayName ?? detected,
+        provider: null,
+        state: "detected",
+        automatic: true,
+      } : {
         script,
         languageTag: null,
         displayName: null,
@@ -156,12 +177,15 @@ export class DocumentLanguageService {
     const provider = this.installed.find((candidate) =>
       candidate.scripts.some((value) => sameScript(value, script.iso15924))
       && sameLanguage(candidate.languageTag, languageTag)) ?? null;
+    const advertisedProvider = [...this.catalog, ...this.installed].some((candidate) =>
+      candidate.scripts.some((value) => sameScript(value, script.iso15924))
+      && sameLanguage(candidate.languageTag, languageTag));
     return {
       script,
       languageTag,
       displayName: option?.displayName ?? languageTag,
       provider,
-      state: provider ? "ready" : "missing",
+      state: provider ? "ready" : advertisedProvider ? "missing" : "detected",
       automatic,
     };
   }
@@ -196,6 +220,63 @@ export function sameLanguage(left: string, right: string): boolean {
   const rightLocale = localeParts(right);
   if (!leftLocale || !rightLocale || leftLocale.language !== rightLocale.language) return false;
   return !rightLocale.region || !leftLocale.region || leftLocale.region === rightLocale.region;
+}
+
+export function detectedLanguageAtCaret(
+  doc: Text,
+  position: number,
+  scriptCode = scriptAtCaret(doc, position)?.iso15924 ?? "",
+): string | null {
+  if (sameScript(scriptCode, "Hira") || sameScript(scriptCode, "Kana")) return "ja";
+  if (sameScript(scriptCode, "Hang")) return "ko";
+  if (sameScript(scriptCode, "Bopo")) return "zh-TW";
+  if (!sameScript(scriptCode, "Hani")) return null;
+  const bounded = Math.max(0, Math.min(position, doc.length));
+  const source = doc.sliceString(0, doc.length);
+  const paragraphStart = Math.max(0, source.lastIndexOf("\n\n", bounded - 1) + 2, bounded - 512);
+  const nextBreak = source.indexOf("\n\n", bounded);
+  const paragraphEnd = Math.min(nextBreak < 0 ? source.length : nextBreak, bounded + 512);
+  const before = source.slice(paragraphStart, bounded);
+  const after = source.slice(bounded, paragraphEnd);
+  const left = nearestLanguageEvidence([...before].reverse());
+  const right = nearestLanguageEvidence([...after]);
+  if (!left) return right?.languageTag ?? null;
+  if (!right) return left.languageTag;
+  return left.distance <= right.distance ? left.languageTag : right.languageTag;
+}
+
+function identificationOptionsForScript(scriptCode: string): Array<{ languageTag: string; displayName: string }> {
+  if (sameScript(scriptCode, "Hira") || sameScript(scriptCode, "Kana")) {
+    return [{ languageTag: "ja", displayName: "Japanese" }];
+  }
+  if (sameScript(scriptCode, "Hang")) {
+    return [{ languageTag: "ko", displayName: "Korean" }];
+  }
+  if (sameScript(scriptCode, "Bopo")) {
+    return [{ languageTag: "zh-TW", displayName: "Chinese — Traditional (Taiwan)" }];
+  }
+  if (sameScript(scriptCode, "Hani")) {
+    return [
+      { languageTag: "ja", displayName: "Japanese" },
+      { languageTag: "zh-CN", displayName: "Chinese — Simplified" },
+      { languageTag: "zh-TW", displayName: "Chinese — Traditional (Taiwan)" },
+      { languageTag: "zh-HK", displayName: "Chinese — Traditional (Hong Kong)" },
+      { languageTag: "ko", displayName: "Korean" },
+      { languageTag: "nan-TW", displayName: "Taiwanese Hokkien" },
+    ];
+  }
+  return [];
+}
+
+function nearestLanguageEvidence(characters: readonly string[]): { languageTag: string; distance: number } | null {
+  let distance = 0;
+  for (const character of characters) {
+    if (/\p{Script=Hiragana}|\p{Script=Katakana}/u.test(character)) return { languageTag: "ja", distance };
+    if (/\p{Script=Hangul}/u.test(character)) return { languageTag: "ko", distance };
+    if (/\p{Script=Bopomofo}/u.test(character)) return { languageTag: "zh-TW", distance };
+    distance += character.length;
+  }
+  return null;
 }
 
 export function scriptAtCaret(doc: Text, position: number, radius = 64): DocumentScript | null {
