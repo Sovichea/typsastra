@@ -1,24 +1,45 @@
-# Document-script language tools
+# Document language tools
 
-Typsastra uses one explicit document setting for both typography and language
-tools:
+Typsastra keeps document language tools independent from document typography.
+Fonts, visual scale, fallback order, and prepared font roles remain in Typst
+source. Spellcheck and typing word-completion languages are portable project
+metadata in `.typsastra/config.json`:
 
-```typst
-// typsastra:document-scripts [{"family":"MiSans Latin","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+```json
+{
+  "scriptLanguages": [
+    { "script": "Latn", "languageTag": "en-US" },
+    { "script": "Arab", "languageTag": "ar" }
+  ]
+}
 ```
 
-Each entry assigns a font and optional scale to a Unicode script. Its optional
-`language` selects the spellcheck and word-completion provider for that script.
-The Typography toolbar writes this directive.
+Assignments use ISO 15924 script codes and BCP 47 language tags. They apply to
+the configured document/project rather than to a font or Typst style scope.
+
+## Status-bar workflow
+
+The language item in the status bar shows the script-language pair nearest the
+caret. For example, Latin text configured as United States English displays
+**English — United States**. Khmer text displays **Khmer**.
+
+Select the item to open **Document Languages**. The dialog lists only ambiguous
+scripts that can represent more than one available language, such as Latin or
+Arabic. A script with exactly one catalog language resolves automatically, so
+Khmer does not appear in the dialog even though its resolved language appears
+in the status bar.
+
+The complete provider catalog determines whether a script is ambiguous.
+Installed providers determine whether its selected language is ready. A saved
+selection that is not installed remains visible and is never silently replaced
+or discarded.
 
 ## Routing contract
 
-- A script with a configured language uses exactly one matching installed
-  provider.
-- A script without `language` receives no Typsastra spellcheck or word
-  completion.
-- A configured language whose provider is not installed also receives no
-  analysis. The Typography toolbar identifies the unavailable provider.
+- An explicit project assignment wins for its script.
+- A script with exactly one catalog language resolves automatically.
+- A script with multiple possible languages requires an explicit assignment.
+- An unavailable selected provider receives no analysis or completion.
 - Typsastra never substitutes another same-script dictionary. French does not
   fall through to English merely because both use Latin.
 - Typst `lang` scopes and the operating-system keyboard layout do not select
@@ -26,39 +47,32 @@ The Typography toolbar writes this directive.
 - IME candidates remain owned by the operating system and are independent of
   Typsastra word completion.
 
-The configured main file owns this project-level setting. Typsastra inherits it
-across the main document's local dependency graph, including included chapters,
-imported templates, and imported local libraries. Authors do not copy the
-directive into those files, and a dependency-local directive does not override
-the main document's language routing.
-
-Files outside that dependency graph do not inherit the main setting. An
-unrelated file can opt in with its own `document-scripts` directive; otherwise
-Typsastra leaves its spellcheck and word completion disabled. When a workspace
-has no configured main file, the active standalone document owns its setting.
-
-## Why this model is deliberately simple
-
-Script detection is deterministic, whereas keyboard-layout detection varies by
-platform and static analysis of Typst style scopes cannot evaluate every
-dynamic program. The document directive therefore gives authors one visible,
-portable source of truth and fails closed when it is incomplete.
+Typsastra first detects matching language text in proven Typst prose. It then
+sends an explicit provider ID to the native language registry. Dictionaries and
+segmenters are loaded lazily only for detected, resolved languages; Typst syntax
+such as `#set` does not load a Latin provider in an otherwise Khmer document.
 
 One script can select one language at a time. A document that mixes English,
-French, and Spanish cannot spellcheck all three simultaneously under this
-model because all three use Latin. Choose the document's principal Latin
-language, then change it from the Typography toolbar when reviewing another
-language. Typst `#set text(lang: ...)` remains useful for Typst's own shaping,
-hyphenation, and localization behavior; it simply does not reroute Typsastra's
-dictionary.
+French, and Spanish cannot spellcheck all three simultaneously because all
+three use Latin. Choose the document's principal Latin language and change the
+project assignment when reviewing another language. Typst `#set text(lang: ...)`
+continues to control Typst shaping, hyphenation, and localization, but it does
+not reroute Typsastra's dictionary.
+
+## Migration
+
+Older `typsastra:document-scripts` and `typsastra:script-fonts` comments may
+contain a `language` field. If a project has no `scriptLanguages` metadata,
+Typsastra reads those fields once as migration input and saves the assignments
+to `.typsastra/config.json`. Opening an older document does not rewrite its
+Typst source. New typography writes omit language fields.
 
 ## Provider installation and terminology
 
 Provider binaries and dictionaries are installed globally under Settings.
-Installation makes a provider available; it does not activate it for every
-project. The main file's `document-scripts` directive activates it for that
-document and its local dependencies.
+Installation makes a provider available but does not activate it for every
+project. Use **Document Languages** from the status bar for ambiguous scripts.
 
-Global and project terminology continue to recognize accepted names. Language-
-family terminology is applied only when its matching configured provider owns
-the script being checked.
+Global and project terminology continue to recognize accepted names.
+Language-family terminology is applied only when its matching resolved provider
+owns the text being checked.

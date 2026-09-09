@@ -115,7 +115,7 @@ https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db
 
 ### Document typography and language tools
 
-Assign fonts and language providers by writing script from one document-focused interface. Spellcheck and word completion are enabled through Document Typography, allowing different files in the same project to use different language tools while keeping the resulting Typst source explicit.
+Configure fonts, visual scale, fallback order, and prepared roles through Document Typography. Language tools are independent: the status bar shows the script-language pair under the caret and opens a project-wide Document Languages dialog for ambiguous scripts. Portable assignments live in `.typsastra/config.json`; single-language scripts such as Khmer resolve automatically.
 
 
 
@@ -225,7 +225,7 @@ Typsastra also treats a document as a project rather than an isolated file. A re
 - Lao language support with ICU4X word segmentation and optional `lo_LA` Hunspell dictionary.
 - English spellcheck bundled by default, with optional Hunspell-compatible dictionaries for additional languages.
 - Independent controls for script-aware editing, spellcheck, and typing suggestions.
-- Document-script language routing: each configured script can select one spellcheck and word-completion provider, with no keyboard or same-script guessing.
+- Project language routing: the status bar reports the caret's script-language pair, ambiguous scripts use portable project assignments, and native providers load only for detected prose.
 - Tinymist diagnostics with validated system or managed toolchain selection.
 - Hardware-accelerated, virtualized PDF preview designed for responsive long-document scrolling and constrained memory use.
 - Persistent document-color, dark, and experimental inverted preview modes for

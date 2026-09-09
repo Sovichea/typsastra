@@ -1,10 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { LanguageCatalogCapabilities } from "../languageSupport";
 import type { DocumentOutlineController } from "../outline/documentOutline";
 import { filePathKey } from "../platform/paths";
-import { documentScriptsForPreviewContext } from "../preview/previewPolicy";
-import { parseDocumentScripts, type DocumentTypography } from "./documentTypography";
+import {
+  parseLegacyDocumentLanguages,
+  type DocumentTypography,
+} from "./documentTypography";
 import type { EditorTab } from "./editorTab";
-import type { DocumentLanguageService } from "./languageScopes";
+import type {
+  DocumentLanguageService,
+  ScriptLanguageAssignment,
+} from "./languageScopes";
 import type { SpellcheckController } from "./spellcheck";
 
 export interface DocumentLanguageDependencies {
@@ -19,11 +25,16 @@ export interface DocumentLanguageDependencies {
   workspaceRootPath(): string | null;
   activeTab(): EditorTab | null;
   editorCursorPosition(): number;
+  scriptLanguages(): readonly ScriptLanguageAssignment[];
+  migrateLegacyLanguages(assignments: readonly ScriptLanguageAssignment[]): void;
 }
 
-/** Owns document-script language scope and debounced outline updates. */
+/** Owns project language-tool routing and debounced outline updates. */
 export class DocumentLanguageController {
+  // Retained while typography lifecycle ownership is being simplified. This
+  // value no longer participates in language routing.
   private mainDocumentScriptsValue: DocumentTypography["fonts"] = [];
+  private languageCatalogValue: LanguageCatalogCapabilities[] = [];
   private outlineUpdateTimer: number | null = null;
   private outlineUpdateGeneration = 0;
 
@@ -37,22 +48,28 @@ export class DocumentLanguageController {
     this.mainDocumentScriptsValue = value;
   }
 
+  get languageCatalog(): readonly LanguageCatalogCapabilities[] {
+    return this.languageCatalogValue;
+  }
+
+  setLanguageCatalog(catalog: readonly LanguageCatalogCapabilities[]): void {
+    this.languageCatalogValue = catalog.map((entry) => ({ ...entry, scripts: [...entry.scripts] }));
+    this.applyConfiguration();
+  }
+
   configure(text: string): void {
-    const activeEntries = parseDocumentScripts(text);
-    const pinnedMainFilePath = this.deps.pinnedMainFilePath();
-    const activeFilePath = this.deps.activeFilePath();
-    const activeOwnsDocumentConfiguration = !pinnedMainFilePath
-      || (activeFilePath !== null && this.deps.isPinnedMainFile(activeFilePath));
-    if (activeOwnsDocumentConfiguration) this.mainDocumentScriptsValue = activeEntries;
-    const entries = documentScriptsForPreviewContext(
-      activeFilePath,
-      pinnedMainFilePath,
-      this.deps.previewImported(),
-      activeEntries,
-      this.mainDocumentScriptsValue,
-    );
-    this.deps.languageService().configure(entries);
-    this.deps.spellcheck().setDocumentScripts(entries);
+    if (this.deps.scriptLanguages().length === 0) {
+      const activePath = this.deps.activeFilePath();
+      const mainPath = this.deps.pinnedMainFilePath();
+      const ownsConfiguration = !mainPath || (activePath !== null && this.deps.isPinnedMainFile(activePath));
+      const legacy = ownsConfiguration ? parseLegacyDocumentLanguages(text) : [];
+      if (legacy.length > 0) this.deps.migrateLegacyLanguages(legacy);
+    }
+    this.applyConfiguration();
+  }
+
+  refresh(): void {
+    this.applyConfiguration();
   }
 
   activate(path: string | null): void {
@@ -61,9 +78,7 @@ export class DocumentLanguageController {
   }
 
   scheduleOutlineUpdate(path: string, delay = 180): void {
-    if (this.outlineUpdateTimer !== null) {
-      window.clearTimeout(this.outlineUpdateTimer);
-    }
+    if (this.outlineUpdateTimer !== null) window.clearTimeout(this.outlineUpdateTimer);
     const generation = ++this.outlineUpdateGeneration;
     this.outlineUpdateTimer = window.setTimeout(() => {
       this.outlineUpdateTimer = null;
@@ -81,7 +96,6 @@ export class DocumentLanguageController {
       );
     }, delay);
   }
-
 
   updateOutlineNow(path: string, contents: string): void {
     void this.deps.outline().update(
@@ -109,6 +123,12 @@ export class DocumentLanguageController {
     }
   }
 
+  private applyConfiguration(): void {
+    const assignments = this.deps.scriptLanguages();
+    const providers = this.deps.spellcheck().getAllProviders();
+    this.deps.languageService().configure(assignments, this.languageCatalogValue, providers);
+    this.deps.spellcheck().setLanguageConfiguration(assignments, this.languageCatalogValue);
+  }
 
   private async readWorkspaceFile(path: string): Promise<string | null> {
     try {

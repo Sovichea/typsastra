@@ -53,7 +53,7 @@ describe("template typography", () => {
       updated.replace("size: 11pt", "size: 13pt")
     )).toEqual({
       baseSizePt: 13,
-      fonts: [{ family: "Main Latin", script: "latin", scale: 1, language: "en" }]
+      fonts: [{ family: "Main Latin", script: "latin", scale: 1 }]
     });
   });
 

@@ -1,7 +1,7 @@
 #import "template.typ": project
 #import "import.typ" as imp
 
-// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"}]
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1},{"family":"MiSans Khmer","script":"khmer","scale":1}]
 
 #show: project.with(
   title: imp.project-name + " README Documentation",

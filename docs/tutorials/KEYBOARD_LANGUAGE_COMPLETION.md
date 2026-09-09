@@ -1,13 +1,18 @@
-# Document-script word completion
+# Document-language word completion
 
-Typsastra word completion no longer follows the operating-system keyboard
-layout. Keyboard detection was unreliable across platforms and could conflict
-with users who type several languages through one layout.
+Typsastra word completion does not follow the operating-system keyboard layout.
+Keyboard detection is unreliable across platforms and can conflict with users
+who type several languages through one layout.
 
-Completion now follows the language assigned to the matching script in the
-`typsastra:document-scripts` directive. Open the `Aa` Typography toolbar,
-select a language for the script, and enable **Typing word suggestions** in
-Settings. No assignment means no Typsastra completion for that script.
+Completion follows the project language resolved for the script being typed.
+Select the language item in the status bar to configure ambiguous scripts, then
+enable **Typing word suggestions** in Settings. Scripts with one available
+language, including Khmer, resolve automatically.
+
+Assignments are stored in `.typsastra/config.json`, independently from fonts
+and Typst `lang`. A language with an unavailable provider receives no completion
+and never falls through to another same-script dictionary. The native provider
+is loaded lazily only when matching prose is detected.
 
 IME candidate windows remain independent and always take priority while text
 composition is active.

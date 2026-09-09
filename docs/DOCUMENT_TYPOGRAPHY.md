@@ -29,7 +29,7 @@ the same meaning it has in a handwritten Typst document:
 
 ```typst
 // typsastra:typography:start
-// typsastra:document-scripts [{"family":"MiSans Khmer","script":"khmer","scale":0.95,"language":"km"},{"family":"MiSans Latin","script":"latin","scale":1.1,"language":"en-US"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+// typsastra:document-scripts [{"family":"MiSans Khmer","script":"khmer","scale":0.95},{"family":"MiSans Latin","script":"latin","scale":1.1},{"family":"MiSans Arabic","script":"arabic","scale":1}]
 #set text(
   font: (
     "MiSans Khmer",
@@ -64,11 +64,13 @@ The Document Typography dialog lets authors drag script rows into the desired
 priority order. A focused drag handle also supports Up and Down Arrow for
 keyboard reordering. This is the actual Typst fallback order.
 
-The metadata comment is ignored by Typst. Typsastra uses it to restore the
-toolbar configuration, prepare private cached font variants, and select one
-optional language-tools provider per script. Older typography metadata is
-migrated when Typsastra reads and reapplies the configuration. Retired
-shared-mark metadata is ignored and removed the next time the rule is applied.
+The metadata comment is ignored by Typst. Typsastra uses it only to restore the
+typography configuration and prepare private cached font variants. Language
+tools are configured independently from the status bar and stored in portable
+`.typsastra/config.json` project metadata. Older typography `language` fields
+may seed that project metadata once, but new typography writes omit them.
+Retired shared-mark metadata is ignored and removed the next time the rule is
+applied.
 
 ## Additional scaled fonts
 
@@ -88,10 +90,10 @@ prepared at a different scale:
 ```
 
 The family keeps its normal name, so the prepared variant can be used anywhere
-Typst accepts a font family. A prepared-only row does not own language tools;
-spellcheck and completion remain attached to the script's default text row.
-The generated variant is machine-local, just like other non-unit typography
-scales, so recipients need the same font and Typsastra configuration.
+Typst accepts a font family. Default and prepared-only font roles do not own
+language tools; spellcheck and completion use the independent project language
+assignment. The generated variant is machine-local, just like other non-unit
+typography scales, so recipients need the same font and Typsastra configuration.
 
 ## Private local font directories
 

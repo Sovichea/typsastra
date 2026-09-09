@@ -2019,6 +2019,18 @@
                     <span class="status-label">Ln 1, Col 1</span>
                 </div>
                 <button
+                    id="document-language-status"
+                    class="status-button"
+                    type="button"
+                    hidden
+                    aria-haspopup="dialog"
+                    aria-controls="document-language-overlay"
+                    aria-expanded="false"
+                    aria-live="off"
+                >
+                    <span class="status-label">No language context</span>
+                </button>
+                <button
                     id="zws-toggle"
                     class="status-button"
                     type="button"
@@ -2079,7 +2091,7 @@
                     <div>
                         <h2 id="document-typography-title">Document Typography</h2>
                         <p id="document-typography-description">
-                            Assign fonts, visual scale, and language tools by script.
+                            Assign fonts and visual scale by script.
                         </p>
                     </div>
                     <button
@@ -2121,8 +2133,6 @@
                             <span>Order / Script</span>
                             <span>Font</span>
                             <span>Scale</span>
-                            <span>Language tools</span>
-                            <span>Status</span>
                             <span></span>
                         </div>
                         <div id="toolbar-document-scripts" class="toolbar-font-fallbacks"></div>
@@ -2170,6 +2180,80 @@
                     <div class="document-typography-footer-actions">
                         <button id="toolbar-typography-apply-template" type="button">Apply as template</button>
                         <button id="toolbar-typography-apply" class="settings-primary" type="button">Apply to document</button>
+                    </div>
+                </footer>
+            </section>
+        </div>
+
+        <div id="document-language-overlay" class="settings-overlay hidden" role="presentation">
+            <section
+                class="settings-dialog document-language-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="document-language-title"
+                aria-describedby="document-language-description"
+            >
+                <header class="settings-header">
+                    <div>
+                        <h2 id="document-language-title">Document Languages</h2>
+                        <p id="document-language-description">
+                            Choose languages for spellcheck and typing suggestions. This does not change fonts, source text, or rendering.
+                        </p>
+                    </div>
+                    <button
+                        id="document-language-close"
+                        class="settings-icon-button"
+                        type="button"
+                        aria-label="Close document languages"
+                        title="Close"
+                    >&times;</button>
+                </header>
+                <div class="document-language-content">
+                    <div class="document-language-feature-toggles" role="group" aria-label="Language tools">
+                        <button
+                            id="document-language-spellcheck"
+                            class="document-language-feature-toggle"
+                            type="button"
+                            aria-pressed="false"
+                            title="Spellcheck: Off"
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="m4 16 4-11 4 11" />
+                                <path d="M5.5 12h5" />
+                                <path d="m14 15 2.5 2.5L21 13" />
+                            </svg>
+                            <span>Spellcheck</span>
+                        </button>
+                        <button
+                            id="document-language-completion"
+                            class="document-language-feature-toggle"
+                            type="button"
+                            aria-pressed="false"
+                            title="Word autocomplete: Off"
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M4 6h10" />
+                                <path d="M4 12h7" />
+                                <path d="M4 18h5" />
+                                <path d="m15 15 3 3 3-3" />
+                                <path d="M18 18V7" />
+                            </svg>
+                            <span>Word autocomplete</span>
+                        </button>
+                    </div>
+                    <div id="document-language-assignments" class="document-language-assignments"></div>
+                    <p id="document-language-empty" class="settings-empty-state" hidden>
+                        Every available script has one unambiguous language and is configured automatically.
+                    </p>
+                    <p class="document-language-note">
+                        Scripts with one available language, such as Khmer, are resolved automatically and are not listed here.
+                    </p>
+                </div>
+                <footer class="settings-footer">
+                    <button id="document-language-manage" type="button">Manage providers</button>
+                    <div class="document-typography-footer-actions">
+                        <button id="document-language-cancel" type="button">Cancel</button>
+                        <button id="document-language-apply" class="settings-primary" type="button">Apply</button>
                     </div>
                 </footer>
             </section>
@@ -2600,10 +2684,10 @@
                                     ></div>
                                 </div>
                                 <small
-                                    >Install providers here, then assign one to
-                                    a script from the document Typography
-                                    toolbar. Unassigned scripts receive no
-                                    spellcheck or word completion.</small
+                                    >Install providers here, then choose document
+                                    languages from the language item in the status
+                                    bar. Scripts with one available language are
+                                    configured automatically.</small
                                 >
                             </div>
                             <div class="settings-field">

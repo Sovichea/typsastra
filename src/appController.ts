@@ -107,7 +107,8 @@ import {
   type SpellcheckDebugEvent,
   type SpellingIssue,
 } from "./editor/spellcheck";
-import { DocumentLanguageService } from "./editor/languageScopes";
+import { DocumentLanguageService, type ScriptLanguageAssignment } from "./editor/languageScopes";
+import { DocumentLanguageStatusController } from "./editor/documentLanguageStatusController";
 import type { ImportedTypsastraProject } from "./projectArchive";
 import { AppUpdateController } from "./appUpdateController";
 import { WebviewStorageController } from "./webviewStorageController";
@@ -219,6 +220,27 @@ export class TypsastraWorkspaceController {
     workspaceRootPath: () => this.workspaceRootPath,
     activeTab: () => this.getActiveTab(),
     editorCursorPosition: () => this.editorInstance.state.selection.main.head,
+    scriptLanguages: () => this.workspaceMetadata?.project.scriptLanguages ?? [],
+    migrateLegacyLanguages: assignments => this.migrateLegacyDocumentLanguages(assignments),
+  });
+  private readonly documentLanguageStatusController = new DocumentLanguageStatusController({
+    editor: () => this.editorInstance,
+    activeFilePath: () => this.activeFilePath,
+    languageService: () => this.documentLanguageService,
+    assignments: () => this.workspaceMetadata?.project.scriptLanguages ?? [],
+    applyAssignments: assignments => this.applyDocumentLanguageAssignments(assignments),
+    catalogChanged: catalog => {
+      this.documentLanguageController.setLanguageCatalog(catalog);
+      this.documentLanguageStatusController.update();
+    },
+    spellcheckEnabled: () => this.settingsController.value.editor.spellcheck,
+    wordCompletionEnabled: () => this.settingsController.value.editor.wordCompletion,
+    setSpellcheckEnabled: enabled => this.settingsController.update(settings => {
+      settings.editor.spellcheck = enabled;
+    }),
+    setWordCompletionEnabled: enabled => this.settingsController.update(settings => {
+      settings.editor.wordCompletion = enabled;
+    }),
   });
   private readonly editorTabPresentationController = new EditorTabPresentationController({
     editor: () => this.editorInstance,
@@ -1532,6 +1554,7 @@ export class TypsastraWorkspaceController {
     markActiveTabDirty: () => this.markActiveTabDirty(),
     scheduleEditorContentMutation: doc => this.scheduleEditorContentMutation(doc),
     syncSelectedSpellingLocation: () => this.syncSelectedSpellingLocation(),
+    updateDocumentLanguageStatus: () => this.documentLanguageStatusController.update(),
     forwardSyncDebounceMs: () => this.forwardSyncDebounceMs,
     isDeveloperPerformanceLogEnabled: () => this.isDeveloperLogEnabled("performance"),
     insertExplorerImage: (path, position, view) => this.fileDropController.insertExplorerImage(path, position, view),
@@ -1734,6 +1757,8 @@ export class TypsastraWorkspaceController {
     this.performanceController.timeStartupSync("initialize word wrap label", () => this.initWordWrap());
     this.performanceController.timeStartupSync("initialize invisibles toggle", () => this.initZwsToggle());
     this.performanceController.timeStartupSync("initialize settings panel", () => this.settingsController.initializePanel());
+    await this.performanceController.timeStartup("initialize language providers", () => this.spellcheckController.initialize());
+    await this.performanceController.timeStartup("initialize document languages", () => this.documentLanguageStatusController.initialize());
     this.performanceController.timeStartupSync("initialize toolchain UI", () => this.toolchainController.initialize());
     this.performanceController.timeStartupSync("initialize context menu", () => this.contextMenuController.initialize());
     this.performanceController.timeStartupSync("initialize log console", () => this.logConsoleController.initialize());
@@ -1927,6 +1952,8 @@ export class TypsastraWorkspaceController {
 
   private handleLanguageProvidersChanged(providers: Parameters<SpellcheckController["setProviders"]>[0]): void {
     this.spellcheckController.setProviders(providers);
+    this.documentLanguageController.refresh();
+    this.documentLanguageStatusController.update();
     document.dispatchEvent(new CustomEvent("typsastra:language-providers-changed"));
     if (!this.editorInstance) return;
     this.editorInstance.dispatch({
@@ -1998,10 +2025,29 @@ export class TypsastraWorkspaceController {
 
   private activateSpellcheckDocument(path: string | null): void {
     this.documentLanguageController.activate(path);
+    this.documentLanguageStatusController.update(path);
   }
 
   private configureDocumentLanguageTools(text: string): void {
     this.documentLanguageController.configure(text);
+    this.documentLanguageStatusController.update();
+  }
+
+  private migrateLegacyDocumentLanguages(assignments: readonly ScriptLanguageAssignment[]): void {
+    if (!this.workspaceMetadata || this.workspaceMetadata.project.scriptLanguages.length > 0) return;
+    this.workspaceMetadata.project.scriptLanguages = assignments.map(entry => ({ ...entry }));
+    void this.saveWorkspaceState();
+  }
+
+  private applyDocumentLanguageAssignments(assignments: readonly ScriptLanguageAssignment[]): void {
+    if (!this.workspaceMetadata) return;
+    this.workspaceMetadata.project.scriptLanguages = assignments.map(entry => ({ ...entry }));
+    this.documentLanguageController.refresh();
+    this.documentLanguageStatusController.update();
+    this.editorInstance.dispatch({
+      effects: completionCompartment.reconfigure(this.editorCompletionForPath(this.activeFilePath ?? "")),
+    });
+    void this.saveWorkspaceState();
   }
 
   private scheduleDocumentOutlineUpdate(path: string, delay = 180): void {

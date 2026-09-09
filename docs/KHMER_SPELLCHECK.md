@@ -106,7 +106,7 @@ The editing policy never performs dictionary lookup or IPC. The Rust provider ne
 |:--|:--|
 | `editor.spellcheck` | Enables unknown-word analysis for all enabled providers |
 | `editor.wordCompletion` | Enables provider-advertised typing suggestions independently from spellcheck |
-| `typsastra:document-scripts` | Assigns the Khmer provider to Khmer text for the configured main document and its local dependencies; the Khmer editing policy remains independent |
+| `.typsastra/config.json` document languages | Khmer resolves automatically because `Khmr` has one available language; the Khmer editing policy remains independent |
 | `editor.userDictionary` | Treats exact personal words as known in frontend issue filtering |
 | `editor.ignoredWords` | Keeps an informational underline/log entry but excludes the word from problem counts |
 | `editor.showZws` | Controls visibility of invisible markers, including temporary composition geometry |
@@ -131,7 +131,7 @@ Personal dictionary entries are normalized, deduplicated, and stored in the `edi
 ## Analysis pipeline
 
 1. CodeMirror invalidates the active document revision immediately after an edit, tab change, close, workspace close, or spellcheck setting change.
-2. After the debounce, the editor sends only the edited text ranges (expanded to containing logical lines/runs for boundary stability) in an `analyze_language_ranges` request.
+2. After the debounce, the editor detects resolved languages only in proven Typst prose and sends edited text ranges only to their explicit providers. The native registry loads the Khmer segmenter lazily when Khmer prose is first analyzed.
 3. The Khmer segmenter normalizes and segments the submitted text while retaining original source byte spans.
 4. Typsastra maps these byte boundaries to CodeMirror UTF-16 offsets using a single-pass linear lookup vector ($O(N + T)$) built once per chunk.
 5. The frontend applies results only when the document key, revision, and CodeMirror document identity still match.

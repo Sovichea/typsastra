@@ -35,6 +35,7 @@ export interface EditorInitializationDependencies {
   markActiveTabDirty(): void;
   scheduleEditorContentMutation(doc: Text): void;
   syncSelectedSpellingLocation(): void;
+  updateDocumentLanguageStatus(): void;
   forwardSyncDebounceMs(): number;
   isDeveloperPerformanceLogEnabled(): boolean;
   insertExplorerImage(path: string, position: number, view: EditorView): void;
@@ -96,6 +97,7 @@ export class EditorInitializationController {
         }
         if (update.selectionSet || update.docChanged) {
           deps.editorController.updateCursorStatus();
+          deps.updateDocumentLanguageStatus();
           deps.editorController.updateCaretMarker();
         }
         if (update.viewportChanged) {

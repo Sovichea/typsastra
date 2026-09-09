@@ -103,11 +103,7 @@ export function findTemplateFunctionName(text: string): string | null {
 
 
 export function renderTemplateTypographyBlock(config: DocumentTypography): string {
-  const typographyOnly: DocumentTypography = {
-    ...config,
-    fonts: config.fonts.map(font => ({ ...font, language: null }))
-  };
-  return renderTypographyBlock(typographyOnly)
+  return renderTypographyBlock(config)
     .replace("// typsastra:document-scripts ", "// typsastra:script-fonts ")
     .trimEnd()
     .split("\n")

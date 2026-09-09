@@ -16,7 +16,6 @@ export type DocumentScriptFont = {
   script: string;
   family: string;
   scale: number;
-  language: string | null;
   /** False prepares the scaled family without adding it to the default text fallback stack. */
   defaultText?: boolean;
 };
@@ -262,7 +261,6 @@ function documentScriptMetadata(fonts: readonly DocumentScriptFont[]) {
     family: font.family,
     script: font.script,
     scale: Math.max(0.5, Math.min(2, font.scale)),
-    ...(font.language && font.defaultText !== false ? { language: font.language } : {}),
     ...(font.defaultText === false ? { defaultText: false } : {}),
   }));
 }
@@ -290,16 +288,36 @@ export function parseDocumentScripts(text: string): DocumentScriptFont[] {
       if (!item || typeof item !== "object") return [];
       const candidate = item as Partial<DocumentScriptFont>;
       if (typeof candidate.family !== "string" || !validScript(candidate.script)) return [];
-      const language = normalizeLanguageTag(candidate.language);
       return [{
         family: candidate.family,
         script: candidate.script,
         scale: typeof candidate.scale === "number" && Number.isFinite(candidate.scale)
           ? Math.max(0.5, Math.min(2, candidate.scale))
           : 1,
-        language: candidate.defaultText === false ? null : language,
         ...(candidate.defaultText === false ? { defaultText: false } : {}),
       }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function parseLegacyDocumentLanguages(text: string): Array<{ script: string; languageTag: string }> {
+  const current = /\/\/ typsastra:document-scripts (\[[^\r\n]+\])/.exec(text);
+  const legacy = /\/\/ typsastra:script-fonts (\[[^\r\n]+\])/.exec(text);
+  const raw = current?.[1] ?? legacy?.[1];
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const candidate = item as { script?: unknown; language?: unknown; defaultText?: unknown };
+      const script = typographyScripts.find((entry) => entry.id === candidate.script);
+      const languageTag = normalizeLanguageTag(candidate.language);
+      return script && languageTag && candidate.defaultText !== false
+        ? [{ script: script.iso15924, languageTag }]
+        : [];
     });
   } catch {
     return [];
@@ -322,14 +340,12 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
     if (!item || typeof item !== "object") return [];
     const candidate = item as Partial<DocumentScriptFont>;
     if (typeof candidate.family !== "string" || !validScript(candidate.script)) return [];
-    const language = normalizeLanguageTag(candidate.language);
     return [{
       family: candidate.family,
       script: candidate.script,
       scale: typeof candidate.scale === "number" && Number.isFinite(candidate.scale)
         ? Math.max(0.5, Math.min(2, candidate.scale))
         : 1,
-      language: candidate.defaultText === false ? null : language,
       ...(candidate.defaultText === false ? { defaultText: false } : {}),
     }];
   });
@@ -342,7 +358,7 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
       if (roles.primary && typeof roles.primary === "object") {
         const candidate = roles.primary as Partial<DocumentScriptFont>;
         if (typeof candidate.family === "string" && validScript(candidate.script)) {
-          fonts.push({ family: candidate.family, script: candidate.script, scale: 1, language: null });
+          fonts.push({ family: candidate.family, script: candidate.script, scale: 1 });
         }
       }
       fonts.push(...parseFonts(roles.embedded));
@@ -364,19 +380,18 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
   const stackFonts = managedFontFamilies(block);
   if (!documentScriptMetadata && !scriptFontMetadata && !roleMetadata && fonts.length > 0 && stackFonts[0]
     && !fonts.some(font => font.family === stackFonts[0])) {
-    fonts.unshift({ family: stackFonts[0], script: "latin", scale: 1, language: null });
+    fonts.unshift({ family: stackFonts[0], script: "latin", scale: 1 });
   }
   const legacyAdjustment = legacyComplex
     ? Number(legacyComplex[4]) * (legacyComplex[3] === "-" ? -1 : 1)
     : 0;
   if (fonts.length === 0 && legacyComplex && legacyScript) {
     const firstFont = stackFonts[0] ?? null;
-    if (firstFont) fonts.push({ family: firstFont, script: "latin", scale: 1, language: null });
+    if (firstFont) fonts.push({ family: firstFont, script: "latin", scale: 1 });
     fonts.push({
       family: unescapeTypstString(legacyComplex[2]),
       script: legacyScript.id,
-      scale: Math.max(0.5, Math.min(2, (baseSizePt + legacyAdjustment) / baseSizePt)),
-      language: null
+      scale: Math.max(0.5, Math.min(2, (baseSizePt + legacyAdjustment) / baseSizePt))
     });
   }
   if (fonts.length === 0) {
@@ -386,8 +401,7 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
     fonts = orderedFamilies.map((family, index) => ({
       family,
       script: index === 0 ? "latin" : documentScripts[Math.min(index - 1, documentScripts.length - 1)].id,
-      scale: 1,
-      language: null
+      scale: 1
     }));
   }
   const fallbackIndexes = fonts.flatMap((font, index) => font.defaultText === false ? [] : [index]);

@@ -1,7 +1,7 @@
 #set document(title: "Optional Language Providers")
 #set page(margin: 24mm)
 // typsastra:typography:start
-// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"fr-FR"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1},{"family":"MiSans Arabic","script":"arabic","scale":1}]
 #set text(
   font: (
     "New Computer Modern",

@@ -1,6 +1,6 @@
 #import "template.typ": multilingual-article
 
-// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1},{"family":"MiSans Khmer","script":"khmer","scale":1},{"family":"MiSans Arabic","script":"arabic","scale":1}]
 
 #show: multilingual-article.with(
   title: "A Multilingual Article",

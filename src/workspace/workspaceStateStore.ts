@@ -17,12 +17,18 @@ export type StoredWorkspaceTab = {
   foldRanges?: unknown[] | null;
 };
 
+export type StoredScriptLanguageAssignment = {
+  script: string;
+  languageTag: string;
+};
+
 export type StoredProjectState = {
   schemaVersion: 2;
   projectId: string;
   mainFile: string | null;
   recommendedToolchain: StoredWorkspaceToolchain | null;
   terminology: TerminologyEntry[];
+  scriptLanguages: StoredScriptLanguageAssignment[];
 };
 
 export type StoredWorkspaceState = {
@@ -118,7 +124,8 @@ export function normalizeWorkspaceMetadata(
         : createProjectId(),
       mainFile: safeRelativeWorkspacePath(project.mainFile),
       recommendedToolchain: toolchainOrNull(project.recommendedToolchain),
-      terminology: normalizeProjectTerminology(project.terminology)
+      terminology: normalizeProjectTerminology(project.terminology),
+      scriptLanguages: normalizeScriptLanguages(project.scriptLanguages)
     },
     workspace: {
       schemaVersion: 2,
@@ -226,6 +233,25 @@ function toolchainOrNull(value: unknown): StoredWorkspaceToolchain | null {
   return typeof toolchain.tinymistVersion === "string" && typeof toolchain.typstVersion === "string"
     ? { tinymistVersion: toolchain.tinymistVersion, typstVersion: toolchain.typstVersion }
     : null;
+}
+
+function normalizeScriptLanguages(value: unknown): StoredScriptLanguageAssignment[] {
+  if (!Array.isArray(value)) return [];
+  const assignments = new Map<string, StoredScriptLanguageAssignment>();
+  for (let index = value.length - 1; index >= 0 && assignments.size < 256; index -= 1) {
+    const record = objectValue(value[index]);
+    if (typeof record.script !== "string" || !/^[A-Z][a-z]{3}$/.test(record.script)) continue;
+    if (assignments.has(record.script) || typeof record.languageTag !== "string") continue;
+    const languageTag = /^([A-Za-z]{2,3})(?:-([A-Za-z]{2}|[0-9]{3}))?$/.exec(record.languageTag);
+    if (!languageTag) continue;
+    assignments.set(record.script, {
+      script: record.script,
+      languageTag: languageTag[2]
+        ? `${languageTag[1].toLowerCase()}-${languageTag[2].toUpperCase()}`
+        : languageTag[1].toLowerCase()
+    });
+  }
+  return [...assignments.values()].reverse();
 }
 
 function normalizeProjectTerminology(value: unknown): TerminologyEntry[] {

@@ -1,6 +1,6 @@
 #import "template.typ": lao_document
 
-// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"},{"family":"Noto Sans Lao","script":"lao","scale":1,"language":"lo-LA"}]
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1},{"family":"Noto Sans Lao","script":"lao","scale":1}]
 
 #set document(
   title: "ເອກະສານລາວ - Lao Document",

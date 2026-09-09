@@ -34,7 +34,8 @@ describe("workspace state store", () => {
         projectId: "project-1",
         mainFile: "chapters/main.typ",
         recommendedToolchain: null,
-        terminology: []
+        terminology: [],
+        scriptLanguages: []
       },
       workspace: {
         schemaVersion: 2,
@@ -62,6 +63,26 @@ describe("workspace state store", () => {
         previewScrollTop: 0
       }
     });
+  });
+
+  test("normalizes portable script-language assignments", () => {
+    const metadata = normalizeWorkspaceMetadata({
+      project: {
+        scriptLanguages: [
+          { script: "Latn", languageTag: "EN_us" },
+          { script: "Khmr", languageTag: "KM" },
+          { script: "Latn", languageTag: "fr-fr" },
+          { script: "latin", languageTag: "en-US" },
+          { script: "Arab", languageTag: "invalid-tag-extra" },
+        ],
+      },
+      workspace: null,
+    });
+
+    expect(metadata.project.scriptLanguages).toEqual([
+      { script: "Khmr", languageTag: "km" },
+      { script: "Latn", languageTag: "fr-FR" },
+    ]);
   });
 
   test("rejects absolute and traversing metadata paths", () => {

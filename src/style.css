@@ -975,7 +975,8 @@ html.native-app-menu #app-menus {
 }
 
 .document-typography-dialog select,
-.document-typography-dialog input {
+.document-typography-dialog input,
+.document-language-dialog select {
   height: 28px;
   box-sizing: border-box;
   border: 1px solid var(--ui-border);
@@ -985,7 +986,8 @@ html.native-app-menu #app-menus {
   font: 11px var(--ui-font), sans-serif;
 }
 
-.document-typography-dialog select {
+.document-typography-dialog select,
+.document-language-dialog select {
   width: 100%;
   padding: 0 7px;
 }
@@ -2398,8 +2400,7 @@ body.typsastra-resizing #input-container-wrapper::after {
 }
 
 #toolbar-add-script-font:hover,
-.toolbar-remove-fallback:hover,
-.document-typography-status button:hover {
+.toolbar-remove-fallback:hover {
   background: var(--ui-hover);
 }
 
@@ -2410,7 +2411,7 @@ body.typsastra-resizing #input-container-wrapper::after {
 
 .toolbar-font-fallback-row {
   display: grid;
-  grid-template-columns: minmax(105px, 0.8fr) minmax(150px, 1.35fr) 70px minmax(150px, 1.2fr) minmax(95px, 0.7fr) 30px;
+  grid-template-columns: minmax(105px, 0.8fr) minmax(150px, 1.35fr) 70px 64px;
   align-items: start;
   gap: 8px;
   padding: 9px 0;
@@ -2479,8 +2480,78 @@ body.typsastra-resizing #input-container-wrapper::after {
 }
 
 .document-typography-dialog {
-  width: min(880px, 100%);
+  width: min(760px, 100%);
   height: min(620px, calc(100vh - 48px));
+}
+
+.document-language-dialog {
+  width: min(540px, 100%);
+  height: auto;
+  max-height: min(520px, calc(100vh - 48px));
+}
+
+.document-language-content {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(360px, calc(100vh - 190px));
+  overflow-y: auto;
+  padding: 16px 18px;
+}
+
+.document-language-feature-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.document-language-feature-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: 5px;
+  color: var(--ui-header-text);
+  background: transparent;
+  font: 11px var(--ui-font), sans-serif;
+  cursor: default;
+}
+
+.document-language-feature-toggle:hover {
+  color: var(--ui-text);
+  background: var(--ui-hover);
+}
+
+.document-language-feature-toggle[aria-pressed="true"] {
+  border-color: var(--ui-accent-color);
+  color: var(--ui-accent-color);
+  background: var(--ui-select);
+}
+
+.document-language-assignments {
+  display: grid;
+  gap: 10px;
+}
+
+.document-language-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.55fr) minmax(220px, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.document-language-script {
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+.document-language-note {
+  margin: 16px 0 0;
+  color: var(--ui-header-text);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .document-typography-content {
@@ -2562,7 +2633,7 @@ body.typsastra-resizing #input-container-wrapper::after {
 
 .document-typography-table-header {
   display: grid;
-  grid-template-columns: minmax(105px, 0.8fr) minmax(150px, 1.35fr) 70px minmax(150px, 1.2fr) minmax(95px, 0.7fr) 30px;
+  grid-template-columns: minmax(105px, 0.8fr) minmax(150px, 1.35fr) 70px 64px;
   gap: 8px;
   margin-top: 12px;
   padding: 7px 0;
@@ -2623,32 +2694,6 @@ body.typsastra-resizing #input-container-wrapper::after {
   display: none;
 }
 
-.document-typography-status {
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--ui-header-text);
-  font-size: 10px;
-}
-
-.document-typography-status[data-state="ready"] > span {
-  color: var(--ui-accent-color);
-}
-
-.document-typography-status[data-state="missing"] > span {
-  color: var(--ui-warning-text, #b7791f);
-}
-
-.document-typography-status button {
-  padding: 2px 5px;
-  border: 1px solid var(--ui-border);
-  border-radius: 3px;
-  color: var(--ui-text);
-  background: transparent;
-  font: 9px var(--ui-font), sans-serif;
-  cursor: default;
-}
 
 .document-typography-about {
   margin-top: 18px;

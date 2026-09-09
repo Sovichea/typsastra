@@ -1,7 +1,7 @@
 #set document(title: "Font-free Project Export")
 #set page(margin: 24mm)
 // typsastra:typography:start
-// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"}]
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1}]
 #set text(
   font: ("New Computer Modern",),
   size: 11pt,

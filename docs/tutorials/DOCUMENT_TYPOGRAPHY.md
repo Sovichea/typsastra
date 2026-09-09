@@ -23,10 +23,9 @@ content.
 2. Set the shared document size.
 3. Add each script used by the document.
 4. Choose its installed font and adjust its scale if necessary.
-5. Optionally assign the language provider used for spellcheck and completion.
-6. Drag the script rows into priority order. With the drag handle focused, Up
+5. Drag the script rows into priority order. With the drag handle focused, Up
    and Down Arrow provide the same operation from the keyboard.
-7. Choose **Apply to document**, or **Apply as template** for shared project
+6. Choose **Apply to document**, or **Apply as template** for shared project
    typography.
 
 To prepare another font for the same script, choose **Add font**, select that
@@ -39,8 +38,9 @@ the default fallback stack. You can call it directly anywhere in the document:
 #show heading.where(level: 1): it => text(font: "Moul")[it]
 ```
 
-Only one row per script owns default text and language tools. Prepared-only
-fonts can each use their own scale.
+Only one row per script owns default text. Prepared-only fonts can each use
+their own scale. Language tools are configured independently from the language
+item in the status bar.
 
 For example:
 
@@ -125,9 +125,9 @@ Script assignments do not change:
 - Typst `lang` or `dir`;
 - Typst's `lang` or `dir` behavior.
 
-The optional language field does select Typsastra spellcheck and word
-completion for that script. Leave it off when the script should receive no
-language analysis.
+Typography does not select spellcheck or word completion. Use **Document
+Languages** from the status bar; its portable project assignments are stored in
+`.typsastra/config.json`.
 
 For implementation details and limitations, see
 [Document typography](../DOCUMENT_TYPOGRAPHY.md). Try

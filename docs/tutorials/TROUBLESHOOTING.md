@@ -7,9 +7,10 @@ cannot provide native filesystem, process, dialog, or managed-toolchain APIs.
 
 ## A script has no spelling marks
 
-Open the `Aa` Typography toolbar and check that the script has a language
-selected and its provider is installed. A script with Language tools off is
-intentionally ignored. Enable the Spellcheck and document scripts developer
+Move the caret into the word and inspect the language item in the status bar.
+For an ambiguous script, open **Document Languages** and check its project
+assignment; then confirm the selected provider is installed. Single-language
+scripts such as Khmer resolve automatically. Enable the Spellcheck developer
 log, then inspect routing and analysis events.
 
 ## Completion does not appear

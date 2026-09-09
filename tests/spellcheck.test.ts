@@ -135,10 +135,10 @@ async function controllerFor(text: string) {
     issues => visibleIssueSnapshots.push([...issues])
   );
   await controller.initialize();
-  controller.setDocumentScripts([
-    { script: "latin", family: "Test Latin", scale: 1, language: "en-US" },
-    { script: "khmer", family: "Test Khmer", scale: 1, language: "km" },
-  ]);
+  controller.setLanguageConfiguration([
+    { script: "Latn", languageTag: "en-US" },
+    { script: "Khmr", languageTag: "km" },
+  ], []);
   controller.activateDocument("a.typ");
   activeController = controller;
   return { controller, state, visibleIssueSnapshots, get replacementCount() { return replacementCount; } };
@@ -448,7 +448,7 @@ describe("spellcheck request safety", () => {
   });
 
   test("classifies Typst prose separately from syntax and quoted paths", async () => {
-    const { isTypstProseRange } = await import("../src/editor/spellcheck");
+    const { hasTypstProseMatch, isTypstProseRange } = await import("../src/editor/spellcheck");
     const doc = '#let syntaxName = typo\n#include "wrong-file.typ"\nThis paragraf is visible\n#text[Content misspel]';
     const state = EditorState.create({ doc, extensions: [typstLanguage] });
     const range = (word: string) => {
@@ -460,6 +460,21 @@ describe("spellcheck request safety", () => {
     expect(range("wrong-file")).toBe(false);
     expect(range("paragraf")).toBe(true);
     expect(range("misspel")).toBe(true);
+    expect(hasTypstProseMatch(state, 0, doc.length, "syntaxName|wrong-file")).toBe(false);
+    expect(hasTypstProseMatch(state, 0, doc.length, "paragraf|misspel")).toBe(true);
+  });
+
+  test("routes analysis only to providers whose language is detected", async () => {
+    const fixture = await controllerFor("អត្ថបទខ្មែរ");
+    const request = await startAnalysis(fixture.controller);
+
+    expect(request.args.request.chunks).toEqual([{
+      text: "អត្ថបទខ្មែរ",
+      startUtf16: 0,
+      provider: "khmer-segmenter",
+      contentMode: "typstSource",
+    }]);
+    request.resolve({ tokens: [], failures: [] });
   });
 
   test("turns rejected native analysis into controlled state", async () => {

@@ -1,7 +1,7 @@
 #set document(title: "Diacritic-Aware Search")
 #set page(margin: 22mm)
 // typsastra:typography:start
-// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"},{"family":"Khmer OS Content","script":"khmer","scale":1,"language":"km"}]
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1},{"family":"Khmer OS Content","script":"khmer","scale":1}]
 #set text(
   font: ("New Computer Modern", "Khmer OS Content"),
   size: 11pt,

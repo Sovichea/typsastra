@@ -15,8 +15,8 @@ than leaving a stale compiler target.
 
 Typsastra stores portable state under `.typsastra`:
 
-- `config.json`: project ID, relative main file, recommended toolchain, and
-  accepted project terminology;
+- `config.json`: project ID, relative main file, recommended toolchain,
+  document script-language assignments, and accepted project terminology;
 - `workspace.json`: open tabs, active file, cursor/scroll/fold state, expanded
   directories, pane layout, and selected toolchain.
 

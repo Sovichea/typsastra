@@ -4,12 +4,15 @@ import { Decoration, EditorView, type DecorationSet, type ViewUpdate } from "@co
 import { invoke } from "@tauri-apps/api/core";
 import {
   parseLanguageProviderCapabilitiesList,
+  type LanguageCatalogCapabilities,
   type LanguageProviderCapabilities
 } from "../languageSupport";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
 import type { PerformanceMetric } from "../performance/diagnostics";
-import { type DocumentScriptFont } from "./documentTypography";
-import { selectDocumentLanguageProvider } from "./languageScopes/documentLanguage";
+import {
+  DocumentLanguageService,
+  type ScriptLanguageAssignment,
+} from "./languageScopes/documentLanguage";
 import type { LanguageTerminologyEntry, ScopedIgnoredWord, TerminologyEntry } from "../settings";
 
 export type EditorToken = {
@@ -192,6 +195,23 @@ export function isTypstProseRange(state: EditorState, from: number, to: number):
   return proseToken(from, 1) && proseToken(to, -1);
 }
 
+export function hasTypstProseMatch(
+  state: EditorState,
+  from: number,
+  to: number,
+  pattern: string,
+): boolean {
+  const source = state.doc.sliceString(from, to);
+  const matches = new RegExp(pattern, "gu");
+  for (let match = matches.exec(source); match; match = matches.exec(source)) {
+    const matchFrom = from + match.index;
+    const matchTo = matchFrom + match[0].length;
+    if (matchTo > matchFrom && isTypstProseRange(state, matchFrom, matchTo)) return true;
+    if (match[0].length === 0) matches.lastIndex += 1;
+  }
+  return false;
+}
+
 export class SpellcheckController {
   private enabled = true;
   private timer: number | null = null;
@@ -212,7 +232,9 @@ export class SpellcheckController {
   public issues: SpellingIssue[] = [];
   private suggestionCache = new Map<string, string[]>();
   private providers: ProviderCapabilities[] = [];
-  private documentScriptFonts: DocumentScriptFont[] = [];
+  private scriptLanguages: ScriptLanguageAssignment[] = [];
+  private languageCatalog: LanguageCatalogCapabilities[] = [];
+  private readonly languageRouting = new DocumentLanguageService();
   private providerCatalogReady = false;
   
   private pendingRanges: { from: number; to: number }[] = [];
@@ -238,6 +260,7 @@ export class SpellcheckController {
     } else {
       console.error("Failed to fetch provider capabilities:", providers[0].reason);
     }
+    this.languageRouting.configure(this.scriptLanguages, this.languageCatalog, this.providers);
     this.providerCatalogReady = true;
     this.onPerformance?.({
       name: "startup.provider-catalog",
@@ -256,10 +279,11 @@ export class SpellcheckController {
 
   public setProviders(providers: unknown): void {
     this.providers = parseLanguageProviderCapabilitiesList(providers);
+    this.languageRouting.configure(this.scriptLanguages, this.languageCatalog, this.providers);
     this.providerCatalogReady = true;
     this.trace("providers-updated", {
       installedProviders: this.providers.map((provider) => provider.id),
-      configuredScripts: this.documentScriptFonts.map((entry) => `${entry.script}:${entry.language ?? "off"}`),
+      configuredScripts: this.scriptLanguages.map((entry) => `${entry.script}:${entry.languageTag}`),
     });
     this.invalidate(true);
     const doc = this.getEditor()?.state.doc;
@@ -279,18 +303,22 @@ export class SpellcheckController {
     return spellingField;
   }
 
-  public setDocumentScripts(entries: readonly DocumentScriptFont[]): void {
-    const next = entries.map((entry) => ({ ...entry }));
-    if (JSON.stringify(next) === JSON.stringify(this.documentScriptFonts)) return;
-    this.documentScriptFonts = next;
+  public setLanguageConfiguration(
+    assignments: readonly ScriptLanguageAssignment[],
+    catalog: readonly LanguageCatalogCapabilities[],
+  ): void {
+    const nextAssignments = assignments.map((entry) => ({ ...entry }));
+    const nextCatalog = catalog.map((entry) => ({ ...entry, scripts: [...entry.scripts] }));
+    if (JSON.stringify(nextAssignments) === JSON.stringify(this.scriptLanguages)
+      && JSON.stringify(nextCatalog) === JSON.stringify(this.languageCatalog)) return;
+    this.scriptLanguages = nextAssignments;
+    this.languageCatalog = nextCatalog;
+    this.languageRouting.configure(this.scriptLanguages, this.languageCatalog, this.providers);
     this.invalidateAndAnalyzeAll();
   }
 
   private configuredProviders(): ProviderCapabilities[] {
-    return this.documentScriptFonts.flatMap((entry) => {
-      const provider = selectDocumentLanguageProvider(this.providers, entry);
-      return provider ? [provider] : [];
-    }).filter((provider, index, all) => all.findIndex((candidate) => candidate.id === provider.id) === index);
+    return this.languageRouting.configuredProviders();
   }
 
   public setEnabled(enabled: boolean): void {
@@ -576,7 +604,7 @@ export class SpellcheckController {
     this.activeRequest = { documentKey, revision, docIdentity };
 
     const routingStartedAt = performance.now();
-    const chunks = this.buildAnalysisChunks(rangesToAnalyze, docIdentity);
+    const chunks = this.buildAnalysisChunks(rangesToAnalyze, editor.state);
     this.trace("analysis-routed", {
       pendingRanges: rangesToAnalyze,
       chunks: chunks.slice(0, 128).map((chunk) => ({
@@ -638,12 +666,15 @@ export class SpellcheckController {
     }
   }
 
-  private buildAnalysisChunks(ranges: readonly { from: number; to: number }[], doc: Text): RoutedAnalyzeChunk[] {
+  private buildAnalysisChunks(ranges: readonly { from: number; to: number }[], state: EditorState): RoutedAnalyzeChunk[] {
     const chunks = new Map<string, RoutedAnalyzeChunk>();
     for (const pending of ranges) {
-      const text = doc.sliceString(pending.from, pending.to);
+      const text = state.doc.sliceString(pending.from, pending.to);
       for (const provider of this.configuredProviders()) {
-        if (provider.supportsSpellcheck === false || !new RegExp(provider.pattern, "u").test(text)) continue;
+        if (
+          provider.supportsSpellcheck === false
+          || !hasTypstProseMatch(state, pending.from, pending.to, provider.pattern)
+        ) continue;
         const key = `${provider.id}:${pending.from}:${pending.to}`;
         chunks.set(key, {
           text,

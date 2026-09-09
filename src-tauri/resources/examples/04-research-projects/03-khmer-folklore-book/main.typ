@@ -1,6 +1,6 @@
 #import "template.typ": khmer_folklore_book
 
-// typsastra:document-scripts [{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"},{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"}]
+// typsastra:document-scripts [{"family":"MiSans Khmer","script":"khmer","scale":1},{"family":"New Computer Modern","script":"latin","scale":1}]
 
 #set document(
   title: "រឿងព្រេងនិទានខ្មែរ",
