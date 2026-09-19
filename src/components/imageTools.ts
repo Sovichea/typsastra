@@ -39,6 +39,31 @@ type ImageToolPreviewResult = {
 
 export type ImageToolFilter = "all" | "current" | "referenced" | "unused" | "recommended";
 
+export type ImageToolCrop = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type ImageToolCropOverlay = {
+  show(
+    rect: ImageToolCrop,
+    source: { width: number; height: number },
+    onInput: (rect: ImageToolCrop) => void,
+    options?: { interactive?: boolean },
+  ): boolean;
+  clear(): void;
+};
+
+export function clampCrop(crop: ImageToolCrop, image: Pick<ProjectImageAsset, "width" | "height">): ImageToolCrop {
+  const width = Math.max(1, Math.min(Math.round(crop.width) || 1, image.width));
+  const height = Math.max(1, Math.min(Math.round(crop.height) || 1, image.height));
+  const x = Math.max(0, Math.min(Math.round(crop.x) || 0, image.width - width));
+  const y = Math.max(0, Math.min(Math.round(crop.y) || 0, image.height - height));
+  return { x, y, width, height };
+}
+
 const decodedWarningBytes = 64 * 1024 * 1024;
 const sourceWarningBytes = 8 * 1024 * 1024;
 
@@ -91,6 +116,8 @@ export class ImageToolsController {
   private imageExpandedPaths: string[] = [];
   private imageKnownDirectoryPaths: string[] = [];
   private imageExpansionInitialized = false;
+  private crop: ImageToolCrop | null = null;
+  private cropMode = false;
 
   public constructor(
     private readonly sidebar: HTMLElement,
@@ -99,6 +126,7 @@ export class ImageToolsController {
     private readonly openReference: (reference: ProjectImageReference) => void,
     private readonly showImagePreview: (source: string | null, imagePath?: string) => void,
     private readonly workspaceFilesWritten: (paths: readonly string[], phase: "before" | "after") => Promise<void>,
+    private readonly cropOverlay: ImageToolCropOverlay,
   ) {}
 
   public async setWorkspace(workspaceRoot: string | null, mainPath: string | null): Promise<void> {
@@ -204,6 +232,7 @@ export class ImageToolsController {
   }
 
   public hide(): void {
+    this.exitCropMode();
     this.sidebar.classList.add("hidden");
     this.inspector.classList.add("hidden");
     this.comparison.classList.add("hidden");
@@ -396,6 +425,8 @@ export class ImageToolsController {
     this.committed = image;
     this.generatedPreview = null;
     this.originalProxy = null;
+    this.crop = null;
+    this.exitCropMode();
     this.imageExplorer?.setActiveFile(image.path);
     await this.imageExplorer?.revealPath(image.path);
     this.renderInspector(image);
@@ -403,9 +434,53 @@ export class ImageToolsController {
   }
 
   private renderEmptyInspector(): void {
+    this.exitCropMode();
     this.inspector.innerHTML = `<div class="preview-disabled-placeholder image-tool-inspector-empty"><div class="guardrail-placeholder-content"><div class="preview-disabled-title preview-accent-title">Image Tools</div><div class="preview-disabled-msg">Select an image in the sidebar to inspect and optimize it.</div></div></div>`;
     this.comparison.replaceChildren();
     this.showImagePreview(null);
+  }
+
+  private fullCrop(image: ProjectImageAsset): ImageToolCrop {
+    return { x: 0, y: 0, width: image.width, height: image.height };
+  }
+
+  /** Returns the crop to apply, or null when the whole image is used. */
+  private effectiveCrop(image: ProjectImageAsset): ImageToolCrop | null {
+    const crop = this.crop;
+    if (!crop) return null;
+    const full = this.fullCrop(image);
+    return crop.x === full.x && crop.y === full.y && crop.width === full.width && crop.height === full.height
+      ? null
+      : crop;
+  }
+
+  private exitCropMode(): void {
+    this.cropMode = false;
+    this.cropOverlay.clear();
+    const toggle = this.inspector.querySelector<HTMLButtonElement>('[data-action="crop-toggle"]');
+    if (toggle) {
+      toggle.textContent = "Select Region";
+      toggle.classList.remove("active");
+      toggle.setAttribute("aria-pressed", "false");
+    }
+  }
+
+  private syncCropFields(image: ProjectImageAsset): void {
+    const crop = this.crop ?? this.fullCrop(image);
+    const set = (field: string, value: number) => {
+      const input = this.inspector.querySelector<HTMLInputElement>(`[data-field="${field}"]`);
+      if (input) input.value = String(value);
+    };
+    set("crop-x", crop.x);
+    set("crop-y", crop.y);
+    set("crop-w", crop.width);
+    set("crop-h", crop.height);
+    const summary = this.inspector.querySelector<HTMLElement>(".image-tool-crop-summary");
+    if (summary) {
+      summary.textContent = this.effectiveCrop(image)
+        ? `Crop ${crop.width.toLocaleString()} × ${crop.height.toLocaleString()} px from (${crop.x.toLocaleString()}, ${crop.y.toLocaleString()})`
+        : "Whole image";
+    }
   }
 
   private renderInspector(image: ProjectImageAsset): void {
@@ -445,6 +520,20 @@ export class ImageToolsController {
           <label class="image-tool-lock"><input data-field="lock" type="checkbox" checked /> Preserve aspect ratio</label>
           <label>Format <select data-field="format"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></label>
           <label>Quality (JPEG) <input data-field="quality" type="range" min="1" max="100" value="85" /><output>85</output></label>
+          <div class="image-tool-crop">
+            <div class="image-tool-crop-header">
+              <span>Crop region</span>
+              <button type="button" data-action="crop-toggle" aria-pressed="false">Select Region</button>
+              <button type="button" data-action="crop-reset">Full image</button>
+            </div>
+            <div class="image-tool-crop-fields">
+              <label>X <input data-field="crop-x" type="number" min="0" max="${Math.max(0, image.width - 1)}" value="0" /></label>
+              <label>Y <input data-field="crop-y" type="number" min="0" max="${Math.max(0, image.height - 1)}" value="0" /></label>
+              <label>W <input data-field="crop-w" type="number" min="1" max="${image.width}" value="${image.width}" /></label>
+              <label>H <input data-field="crop-h" type="number" min="1" max="${image.height}" value="${image.height}" /></label>
+            </div>
+            <div class="image-tool-crop-summary" aria-live="polite">Whole image</div>
+          </div>
           <label class="image-tool-lock"><input data-field="update-references" type="checkbox" ${image.references.length === 0 ? "disabled" : ""} /> Replace static image paths with the optimized copy</label>
         </div><div class="image-tool-actions"><button type="button" data-action="preview" class="primary">Preview Changes</button><button type="button" data-action="save" disabled>Save Optimized Copy</button></div><div class="image-tool-output" aria-live="polite"></div>` : `<div class="image-tool-notice">Animated GIF optimization is not supported. The image remains available for inspection.</div>`}
       </section>`;
@@ -467,6 +556,7 @@ export class ImageToolsController {
         void this.replaceImagePath(image, event.currentTarget as HTMLButtonElement);
       });
     if (transformSupported) this.bindOptimizer(image);
+    this.syncCropFields(image);
   }
 
   private async replaceImagePath(image: ProjectImageAsset, button: HTMLButtonElement): Promise<void> {
@@ -556,8 +646,81 @@ export class ImageToolsController {
       this.invalidateGeneratedPreview(saveCopy);
     });
     quality.addEventListener("input", () => { output.textContent = quality.value; this.invalidateGeneratedPreview(saveCopy); });
+
+    const cropX = this.inspector.querySelector<HTMLInputElement>('[data-field="crop-x"]')!;
+    const cropY = this.inspector.querySelector<HTMLInputElement>('[data-field="crop-y"]')!;
+    const cropW = this.inspector.querySelector<HTMLInputElement>('[data-field="crop-w"]')!;
+    const cropH = this.inspector.querySelector<HTMLInputElement>('[data-field="crop-h"]')!;
+    const cropToggle = this.inspector.querySelector<HTMLButtonElement>('[data-action="crop-toggle"]')!;
+    const cropReset = this.inspector.querySelector<HTMLButtonElement>('[data-action="crop-reset"]')!;
+    const setCrop = (next: ImageToolCrop, refreshOverlay: boolean) => {
+      this.crop = clampCrop(next, image);
+      this.syncCropFields(image);
+      this.invalidateGeneratedPreview(saveCopy);
+      if (lock.checked) {
+        width.value = String(this.crop.width);
+        height.value = String(this.crop.height);
+      }
+      if (refreshOverlay) {
+        const source = { width: image.width, height: image.height };
+        if (this.cropMode) {
+          this.cropOverlay.show(
+            this.crop ?? this.fullCrop(image),
+            source,
+            rect => setCrop(rect, false),
+            { interactive: true },
+          );
+        } else if (this.effectiveCrop(image)) {
+          // After Done the selection stays as a non-interactive guide.
+          this.cropOverlay.show(this.crop!, source, () => {}, { interactive: false });
+        } else {
+          this.cropOverlay.clear();
+        }
+      }
+    };
+    for (const input of [cropX, cropY, cropW, cropH]) {
+      input.addEventListener("change", () => setCrop({
+        x: Number(cropX.value),
+        y: Number(cropY.value),
+        width: Number(cropW.value),
+        height: Number(cropH.value),
+      }, true));
+    }
+    cropReset.addEventListener("click", () => setCrop(this.fullCrop(image), true));
+    cropToggle.addEventListener("click", () => {
+      if (this.cropMode) {
+        this.cropMode = false;
+        cropToggle.textContent = "Select Region";
+        cropToggle.classList.remove("active");
+        cropToggle.setAttribute("aria-pressed", "false");
+        const source = { width: image.width, height: image.height };
+        if (this.effectiveCrop(image)) {
+          // Keep the selection visible but no longer adjustable.
+          this.cropOverlay.show(this.crop!, source, () => {}, { interactive: false });
+        } else {
+          this.cropOverlay.clear();
+        }
+        return;
+      }
+      const started = this.cropOverlay.show(
+        this.crop ?? this.fullCrop(image),
+        { width: image.width, height: image.height },
+        rect => setCrop(rect, false),
+        { interactive: true },
+      );
+      if (!started) {
+        output.textContent = "Wait for the image preview to load before selecting a crop region.";
+        return;
+      }
+      this.cropMode = true;
+      cropToggle.textContent = "Done";
+      cropToggle.classList.add("active");
+      cropToggle.setAttribute("aria-pressed", "true");
+    });
+
     preview.addEventListener("click", () => void this.generateOptimizationPreview(image, {
       width: Number(width.value), height: Number(height.value), format: format.value, quality: Number(quality.value),
+      crop: this.effectiveCrop(image),
     }, preview, saveCopy));
     saveCopy.addEventListener("click", (event) => {
       event.preventDefault();
@@ -585,11 +748,12 @@ export class ImageToolsController {
 
   private async generateOptimizationPreview(
     image: ProjectImageAsset,
-    options: { width: number; height: number; format: string; quality: number },
+    options: { width: number; height: number; format: string; quality: number; crop: ImageToolCrop | null },
     button: HTMLButtonElement,
     saveButton: HTMLButtonElement,
   ): Promise<void> {
     if (!this.workspaceRoot || !Number.isFinite(options.width) || !Number.isFinite(options.height)) return;
+    this.exitCropMode();
     button.disabled = true;
     button.textContent = "Preparing…";
     const output = this.inspector.querySelector<HTMLElement>(".image-tool-output")!;

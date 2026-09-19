@@ -732,6 +732,10 @@ export class TypsastraWorkspaceController {
     reference => void this.navigateToImageReference(reference),
     (source, imagePath) => this.renderImageToolPreview(source, imagePath),
     (paths, phase) => this.handleImageToolFilesWritten(paths, phase),
+    {
+      show: (rect, source, onInput, options) => this.imagePreviewController.showCropOverlay(rect, source, onInput, options),
+      clear: () => this.imagePreviewController.clearCropOverlay(),
+    },
   );
   private readonly sidebarController = new SidebarController({
     hasWorkspace: () => !!this.workspaceRootPath,
