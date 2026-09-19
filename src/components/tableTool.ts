@@ -217,15 +217,15 @@ export class TableToolController {
     return this.tables.find(table => table.id === this.selectedId) ?? null;
   }
 
-  private emitChange(): void {
+  private emitChange(options: { preview?: boolean } = {}): void {
     if (!this.applyingHistory) this.recordHistoryBurst();
-    this.notifyChange();
+    this.notifyChange(options);
   }
 
-  private notifyChange(): void {
+  private notifyChange(options: { preview?: boolean } = {}): void {
     this.deps.tablesChanged?.(this.tables);
     this.schedulePersist();
-    this.schedulePreview();
+    if (options.preview !== false) this.schedulePreview();
   }
 
   private recordHistoryBurst(): void {
@@ -632,7 +632,8 @@ export class TableToolController {
         input.addEventListener("input", () => {
           cell.text = input.value;
           this.updateCode(table);
-          this.emitChange();
+          // The content is not final while editing; defer the render to commit.
+          this.emitChange({ preview: false });
         });
         input.addEventListener("focus", () => {
           if (this.editingCell) return;
@@ -794,6 +795,12 @@ export class TableToolController {
     this.editStartValue = cell.text;
     this.selectionAnchor = origin;
     this.selectionFocus = origin;
+    // Any pending render belongs to the committed content; hold renders until
+    // the edit commits.
+    if (this.previewTimer !== null) {
+      window.clearTimeout(this.previewTimer);
+      this.previewTimer = null;
+    }
     if (typedCharacter !== undefined) cell.text = typedCharacter;
     input.readOnly = false;
     input.value = cell.text;
@@ -805,7 +812,7 @@ export class TableToolController {
     this.syncSelectionSummary();
     if (typedCharacter !== undefined) {
       this.updateCode(table);
-      this.emitChange();
+      this.emitChange({ preview: false });
     }
   }
 
@@ -818,6 +825,8 @@ export class TableToolController {
       input.readOnly = true;
       input.classList.remove("is-editing");
     }
+    // The content is final now, so the deferred render can run.
+    this.schedulePreview();
   }
 
   private cancelEdit(table: StoredTable, input: HTMLInputElement): void {
@@ -838,7 +847,8 @@ export class TableToolController {
     const selected = this.selected();
     this.lastState = selected ? cloneTable(selected) : null;
     this.updateCode(table);
-    this.notifyChange();
+    // The content returned to its committed value; no render is needed.
+    this.notifyChange({ preview: false });
   }
 
   private syncSelectionHighlight(): void {
