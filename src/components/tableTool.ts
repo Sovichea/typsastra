@@ -796,13 +796,7 @@ export class TableToolController {
     };
     const origin = tableCellOrigin(table, moves[key].row, moves[key].column);
     if (!origin) return;
-    if (extend && this.selectionAnchor) {
-      this.selectionFocus = origin;
-      this.syncSelectionHighlight();
-      this.syncSelectionSummary();
-      return;
-    }
-    this.selectionAnchor = origin;
+    if (!extend || !this.selectionAnchor) this.selectionAnchor = origin;
     this.selectionFocus = origin;
     this.syncSelectionHighlight();
     this.syncAlignSelects(table);
