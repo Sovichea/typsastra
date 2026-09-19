@@ -293,8 +293,12 @@ describe("table typst generation", () => {
     expect(source).toContain('data-menu="table"');
     expect(source).toContain('data-field="table-style"');
     expect(source).toContain("private applyTableStyle(");
-    expect(source).toContain('data-field="cell-emphasis"');
+    expect(source).toContain('data-emphasis="bold"');
+    expect(source).toContain('data-emphasis="italic"');
+    expect(source).toContain('data-emphasis="regular"');
     expect(source).toContain("private applyEmphasis(");
+    expect(source).toContain('createAppIcon("chevronDown"');
+    expect(source).toContain('createAppIcon("copy"');
     expect(source).toContain("private openTableMenu(");
     expect(source).toContain('"Merge cells"');
     expect(source).toContain("this.draggingSelection = true");

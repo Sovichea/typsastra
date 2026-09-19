@@ -3052,6 +3052,9 @@ body.table-tools-active #code-render-pane {
   margin: 6px 0;
 }
 .table-tool-menubar > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   min-height: 26px;
   padding: 0 9px;
   border: 1px solid var(--ui-border);
@@ -3062,6 +3065,34 @@ body.table-tools-active #code-render-pane {
   cursor: pointer;
 }
 .table-tool-menubar > button:hover { background: var(--ui-hover); }
+.table-tool-menu-caret { opacity: 0.65; }
+.table-tool-format-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.table-tool-format-group button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ui-header-text);
+  background: transparent;
+  cursor: pointer;
+}
+.table-tool-format-group button:hover:not(:disabled) { background: var(--ui-hover); color: var(--ui-text); }
+.table-tool-format-group button.active {
+  border-color: var(--ui-accent-color);
+  color: var(--ui-accent-color);
+  background: var(--ui-select);
+}
+.table-tool-format-group button:disabled { opacity: 0.45; cursor: default; }
+.table-tool-menu-icon { flex: none; color: var(--ui-header-text); }
+.table-tool-menu-label { flex: 1; }
 .table-tool-inline {
   display: flex;
   align-items: center;
@@ -3452,7 +3483,7 @@ body.table-tools-active #code-render-pane {
 .image-crop-overlay-locked .image-crop-frame { cursor: default; }
 .image-crop-overlay-locked .image-crop-handle { display: none; }
 .image-tool-actions { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 7px; }
-.image-tool-actions button { min-height: 28px; padding: 0 10px; border: 1px solid var(--ui-border); border-radius: 0; color: var(--ui-text); background: var(--ui-bg); font: 12px var(--font-family-sans); cursor: pointer; }
+.image-tool-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px; border: 1px solid var(--ui-border); border-radius: 0; color: var(--ui-text); background: var(--ui-bg); font: 12px var(--font-family-sans); cursor: pointer; }
 .image-tool-actions button.primary { border-color: var(--ui-accent-color); }
 .image-tool-actions button:hover:not(:disabled) { background: var(--ui-hover); }
 .image-tool-actions button:disabled { opacity: .5; cursor: default; }

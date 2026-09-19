@@ -1,5 +1,5 @@
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { createAppIcon } from "../ui/icons";
+import { createAppIcon, type AppIconName } from "../ui/icons";
 import type {
   StoredTable,
   StoredTableBorderSide,
@@ -434,20 +434,24 @@ export class TableToolController {
       `<section class="image-tool-section"><h3>Structure</h3>` +
       `<label class="table-tool-name">Name <input data-field="table-name" type="text" maxlength="80" /></label>` +
       `<div class="table-tool-menubar">` +
-      `<button type="button" data-menu="rows">Rows ▾</button>` +
-      `<button type="button" data-menu="columns">Columns ▾</button>` +
-      `<button type="button" data-menu="cells">Cells ▾</button>` +
-      `<button type="button" data-menu="borders">Borders ▾</button>` +
-      `<button type="button" data-menu="table">Table ▾</button>` +
+      `<button type="button" data-menu="rows">Rows</button>` +
+      `<button type="button" data-menu="columns">Columns</button>` +
+      `<button type="button" data-menu="cells">Cells</button>` +
+      `<button type="button" data-menu="borders">Borders</button>` +
+      `<button type="button" data-menu="table">Table</button>` +
       `<label class="table-tool-inline">Style <select data-field="table-style"><option value="default">Default</option><option value="banded-rows">Banded rows</option><option value="banded-columns">Banded columns</option><option value="booktabs">Booktabs</option></select></label>` +
       `<label class="table-tool-inline">Align <select data-field="cell-align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>` +
       `<label class="table-tool-inline">Vertical <select data-field="cell-vertical-align"><option value="">Default</option><option value="top">Top</option><option value="center">Middle</option><option value="bottom">Bottom</option></select></label>` +
-      `<label class="table-tool-inline">Format <select data-field="cell-emphasis"><option value="">Default</option><option value="regular">Regular</option><option value="bold">Bold</option><option value="italic">Italic</option></select></label>` +
+      `<span class="table-tool-format-group" role="group" aria-label="Cell format">` +
+      `<button type="button" data-emphasis="bold" title="Bold" aria-label="Bold"></button>` +
+      `<button type="button" data-emphasis="italic" title="Italic" aria-label="Italic"></button>` +
+      `<button type="button" data-emphasis="regular" title="Regular" aria-label="Regular"></button>` +
+      `</span>` +
       `</div>` +
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
       `<div class="table-tool-grid-host"></div></section>` +
       `<section class="image-tool-section"><h3>Generated Typst</h3>` +
-      `<div class="image-tool-actions"><button type="button" data-action="copy" class="primary">Copy code</button></div>` +
+      `<div class="image-tool-actions"><button type="button" data-action="copy" class="primary"><span data-field="copy-label">Copy code</span></button></div>` +
       `<pre class="table-tool-code" data-field="code"></pre></section>`;
 
     const heading = this.inspector.querySelector<HTMLElement>('[data-field="table-heading"]')!;
@@ -473,11 +477,7 @@ export class TableToolController {
       table,
       (verticalAlign.value || null) as StoredTableVerticalAlignment | null,
     ));
-    const emphasis = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-emphasis"]')!;
-    emphasis.addEventListener("change", () => this.applyEmphasis(
-      table,
-      (emphasis.value || null) as StoredTableEmphasis | null,
-    ));
+    this.renderMenubarIcons(table);
 
     const menu = (name: string, build: (menuElement: HTMLElement) => void) => {
       this.inspector.querySelector<HTMLButtonElement>(`[data-menu="${name}"]`)
@@ -487,15 +487,15 @@ export class TableToolController {
         });
     };
     menu("rows", menuElement => {
-      this.appendMenuItem(menuElement, "Move row up", () => this.moveRow(table, -1));
-      this.appendMenuItem(menuElement, "Move row down", () => this.moveRow(table, 1));
+      this.appendMenuItem(menuElement, "Move row up", () => this.moveRow(table, -1), { icon: "arrowUp" });
+      this.appendMenuItem(menuElement, "Move row down", () => this.moveRow(table, 1), { icon: "arrowDown" });
       this.appendMenuSeparator(menuElement);
       this.appendMenuItem(menuElement, "Add row", () => {
         if (table.rows.length >= MAX_ROWS) return;
         table.rows.push(emptyRow(table.columns));
         this.refreshGrid(table);
         this.emitChange();
-      });
+      }, { icon: "plus" });
       this.appendMenuItem(menuElement, "Remove row", () => {
         if (table.rows.length <= 1) return;
         if (tableHasSpans(table)) {
@@ -506,11 +506,11 @@ export class TableToolController {
         this.resetSelection();
         this.refreshGrid(table);
         this.emitChange();
-      });
+      }, { icon: "minus" });
     });
     menu("columns", menuElement => {
-      this.appendMenuItem(menuElement, "Move column left", () => this.moveColumn(table, -1));
-      this.appendMenuItem(menuElement, "Move column right", () => this.moveColumn(table, 1));
+      this.appendMenuItem(menuElement, "Move column left", () => this.moveColumn(table, -1), { icon: "chevronLeft" });
+      this.appendMenuItem(menuElement, "Move column right", () => this.moveColumn(table, 1), { icon: "chevronRight" });
       this.appendMenuSeparator(menuElement);
       this.appendMenuItem(menuElement, "Add column", () => {
         if (table.columns >= MAX_COLUMNS) return;
@@ -518,7 +518,7 @@ export class TableToolController {
         for (const row of table.rows) row.push(emptyCell());
         this.refreshGrid(table);
         this.emitChange();
-      });
+      }, { icon: "plus" });
       this.appendMenuItem(menuElement, "Remove column", () => {
         if (table.columns <= 1) return;
         if (tableHasSpans(table)) {
@@ -530,7 +530,7 @@ export class TableToolController {
         this.resetSelection();
         this.refreshGrid(table);
         this.emitChange();
-      });
+      }, { icon: "minus" });
     });
     menu("cells", menuElement => {
       this.appendMenuItem(menuElement, "Merge cells", () => this.mergeSelection(table));
@@ -601,15 +601,16 @@ export class TableToolController {
         this.renderSidebar();
         this.renderInspector();
         this.emitChange();
-      });
+      }, { icon: "x" });
     });
 
     const copy = this.inspector.querySelector<HTMLButtonElement>('[data-action="copy"]')!;
+    const copyLabel = this.inspector.querySelector<HTMLElement>('[data-field="copy-label"]')!;
     copy.addEventListener("click", () => {
       void writeText(generateTableTypst(table))
         .then(() => {
-          copy.textContent = "Copied";
-          window.setTimeout(() => { copy.textContent = "Copy code"; }, 1200);
+          copyLabel.textContent = "Copied";
+          window.setTimeout(() => { copyLabel.textContent = "Copy code"; }, 1200);
         })
         .catch(error => this.deps.log?.("warning", `Could not copy table code: ${String(error)}`));
     });
@@ -1201,17 +1202,49 @@ export class TableToolController {
     build(menu);
   }
 
+  /** Reuses the editor toolbar's icon set for the builder controls. */
+  private renderMenubarIcons(table: StoredTable): void {
+    this.inspector.querySelectorAll<HTMLButtonElement>(".table-tool-menubar > button")
+      .forEach(button => {
+        button.appendChild(createAppIcon("chevronDown", { size: 12, className: "table-tool-menu-caret" }));
+      });
+    const emphasisIcons: Record<StoredTableEmphasis, AppIconName> = {
+      bold: "bold",
+      italic: "italic",
+      regular: "caseSensitive",
+    };
+    this.inspector.querySelectorAll<HTMLButtonElement>("[data-emphasis]")
+      .forEach(button => {
+        const emphasis = button.dataset.emphasis as StoredTableEmphasis;
+        button.appendChild(createAppIcon(emphasisIcons[emphasis], { size: 14 }));
+        button.addEventListener("click", () => {
+          const focus = this.selectionFocus;
+          const current = focus ? table.rows[focus.row]?.[focus.column]?.emphasis ?? null : null;
+          this.applyEmphasis(table, current === emphasis ? null : emphasis);
+          this.syncCellSelects(table);
+        });
+      });
+    this.inspector.querySelector<HTMLButtonElement>('[data-action="copy"]')
+      ?.prepend(createAppIcon("copy", { size: 13 }));
+  }
+
   private appendMenuItem(
     menu: HTMLElement,
     label: string,
     onSelect: () => void,
-    options: { disabled?: boolean; checked?: boolean } = {},
+    options: { disabled?: boolean; checked?: boolean; icon?: AppIconName } = {},
   ): void {
     const item = document.createElement("div");
     item.className = "dropdown-item";
     if (options.disabled) item.classList.add("dropdown-item-disabled");
     item.setAttribute("role", "menuitem");
-    item.textContent = options.checked ? `✓ ${label}` : label;
+    if (options.icon) {
+      item.appendChild(createAppIcon(options.icon, { size: 14, className: "table-tool-menu-icon" }));
+    }
+    const text = document.createElement("span");
+    text.className = "table-tool-menu-label";
+    text.textContent = options.checked ? `✓ ${label}` : label;
+    item.appendChild(text);
     if (!options.disabled) {
       // Menus stay open after a selection; an outside click or the owning
       // button closes them.
@@ -1283,11 +1316,11 @@ export class TableToolController {
       verticalAlign.value = cell?.verticalAlign ?? "";
       verticalAlign.disabled = !focus;
     }
-    const emphasis = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-emphasis"]');
-    if (emphasis) {
-      emphasis.value = cell?.emphasis ?? "";
-      emphasis.disabled = !focus;
-    }
+    const emphasis = cell?.emphasis ?? null;
+    this.inspector.querySelectorAll<HTMLButtonElement>("[data-emphasis]").forEach(button => {
+      button.classList.toggle("active", button.dataset.emphasis === emphasis);
+      button.disabled = !focus;
+    });
   }
 
   private updateCode(table: StoredTable): void {
