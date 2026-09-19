@@ -88,6 +88,8 @@ describe("editor image drag and drop", () => {
 
     expect(explorer).toContain('label.addEventListener("pointerdown"');
     expect(explorer).toContain("this.onImageDragStart?.(node.path, event, label)");
+    // Only an explorer with a drag handler (the project explorer) is draggable.
+    expect(explorer).toContain("if (this.onImageDragStart && isSupportedImageReferencePath(node.path))");
     expect(extensions).toContain("event.dataTransfer?.types.includes(EXPLORER_IMAGE_DRAG_TYPE)");
     expect(extensions).toContain("const files = clipboardImageFiles(event.clipboardData)");
     expect(extensions).toContain("if (files.length === 0 || !onClipboardImagePaste) return false");

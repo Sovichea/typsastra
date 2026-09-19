@@ -397,7 +397,10 @@ export class WorkspaceExplorer {
       label.appendChild(textContainer);
 
       if (!node.isDirectory) {
-        if (isSupportedImageReferencePath(node.path)) {
+        // Only the project explorer supports dragging images into the editor.
+        // The Image Tools explorer installs no drag handler and must not show
+        // the grab cursor.
+        if (this.onImageDragStart && isSupportedImageReferencePath(node.path)) {
           label.classList.add("image-drag-source");
           label.addEventListener("pointerdown", event => {
             if (event.button === 0) this.onImageDragStart?.(node.path, event, label);
