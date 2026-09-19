@@ -69,7 +69,7 @@ export class WorkspaceExplorer {
   private workspaceRootPath: string | null = null;
   private activeFilePath: string | null = null;
   private visibleFilePaths: string[] | null = null;
-  private onImageDragStart: ((path: string, event: PointerEvent) => void) | null = null;
+  private onImageDragStart: ((path: string, event: PointerEvent, source: HTMLElement) => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -92,7 +92,7 @@ export class WorkspaceExplorer {
     this.container.addEventListener("keydown", event => void this.handleKeyboardNavigation(event));
   }
 
-  public setImageDragStartHandler(handler: (path: string, event: PointerEvent) => void): void {
+  public setImageDragStartHandler(handler: (path: string, event: PointerEvent, source: HTMLElement) => void): void {
     this.onImageDragStart = handler;
   }
 
@@ -400,7 +400,7 @@ export class WorkspaceExplorer {
         if (isSupportedImageReferencePath(node.path)) {
           label.classList.add("image-drag-source");
           label.addEventListener("pointerdown", event => {
-            if (event.button === 0) this.onImageDragStart?.(node.path, event);
+            if (event.button === 0) this.onImageDragStart?.(node.path, event, label);
           });
         }
         label.addEventListener("click", () => {

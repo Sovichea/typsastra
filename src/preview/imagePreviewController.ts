@@ -73,7 +73,7 @@ export class ImagePreviewController {
       `<div class="preview-loading-spinner" aria-hidden="true"></div>` +
       `<div class="preview-loading-message">Preparing image preview…</div>` +
       `</div>` +
-      `<img id="interactive-image-el" alt="Image preview" draggable="false" style="max-width:none;max-height:none;position:absolute;cursor: default;user-select:none;will-change:transform;visibility:hidden;" />` +
+      `<img id="interactive-image-el" alt="Image preview" draggable="false" style="max-width:none;max-height:none;position:absolute;cursor:grab;user-select:none;will-change:transform;visibility:hidden;" />` +
       `</div>`,
     );
 

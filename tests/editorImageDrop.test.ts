@@ -87,15 +87,20 @@ describe("editor image drag and drop", () => {
     const controller = await read("../src/workspace/fileDropController.ts");
 
     expect(explorer).toContain('label.addEventListener("pointerdown"');
-    expect(explorer).toContain("this.onImageDragStart?.(node.path, event)");
+    expect(explorer).toContain("this.onImageDragStart?.(node.path, event, label)");
     expect(extensions).toContain("event.dataTransfer?.types.includes(EXPLORER_IMAGE_DRAG_TYPE)");
     expect(extensions).toContain("const files = clipboardImageFiles(event.clipboardData)");
     expect(extensions).toContain("if (files.length === 0 || !onClipboardImagePaste) return false");
     expect(extensions).toContain("if (view.state.doc !== document) return");
     expect(extensions).toContain("moveImageDropCaret(view, { x: event.clientX, y: event.clientY })");
-    expect(controller).toContain("startExplorerImageDrag(path: string, event: PointerEvent)");
+    expect(controller).toContain("startExplorerImageDrag(path: string, event: PointerEvent, source: HTMLElement)");
     expect(controller).toContain("handleExplorerPointerMove(event: PointerEvent)");
     expect(controller).toContain("handleExplorerPointerUp(event: PointerEvent)");
+    expect(controller).toContain("createExplorerDragGhost(drag)");
+    expect(controller).toContain('icon.className = "explorer-image-drag-ghost-icon"');
+    expect(controller).toContain('label.textContent = drag.label');
+    expect(controller).toContain('image-drop-forbidden');
+    expect(controller).toContain("isExplorerImageDropAllowed(target)");
     expect(controller).toContain("onDragDropEvent");
     expect(controller).toContain("moveImageDropCaret(this.deps.editor(), point)");
     expect(controller).toContain('destinationRelativeDirectory: "images"');

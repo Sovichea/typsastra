@@ -584,7 +584,7 @@ const preventEscapedBracketAutoClose = EditorView.inputHandler.of((view, from, t
 });
 
 const ctrlClickForceUpdateEffect = StateEffect.define<null>();
-const linkDecoration = Decoration.mark({ class: "cm-ctrl-link", attributes: { style: "text-decoration: underline; cursor: default;" } });
+const linkDecoration = Decoration.mark({ class: "cm-ctrl-link", attributes: { style: "text-decoration: underline; cursor: pointer;" } });
 
 export function typstImportPathRange(state: EditorState, position: number): { from: number; to: number } | null {
   const line = state.doc.lineAt(position);

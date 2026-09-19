@@ -29,6 +29,9 @@ type ExplorerPointerDrag = {
   pointerId: number;
   start: DropPoint;
   active: boolean;
+  ghost: HTMLElement | null;
+  iconHtml: string;
+  label: string;
 };
 
 export class FileDropController {
@@ -66,12 +69,17 @@ export class FileDropController {
     void this.saveAndInsertClipboardImages(images, selection, view);
   }
 
-  public startExplorerImageDrag(path: string, event: PointerEvent): void {
+  public startExplorerImageDrag(path: string, event: PointerEvent, source: HTMLElement): void {
+    const icon = source.querySelector<HTMLElement>(".tree-icon");
+    const text = source.querySelector<HTMLElement>(".tree-text");
     this.explorerPointerDrag = {
       path,
       pointerId: event.pointerId,
       start: { x: event.clientX, y: event.clientY },
       active: false,
+      ghost: null,
+      iconHtml: icon?.innerHTML ?? "",
+      label: text?.textContent?.trim() || fileNameFromPath(path),
     };
   }
 
@@ -83,20 +91,24 @@ export class FileDropController {
       if (distance < 5) return;
       drag.active = true;
       document.body.classList.add("explorer-image-dragging");
+      drag.ghost = this.createExplorerDragGhost(drag);
     }
     event.preventDefault();
-    this.showDropTarget(document.elementFromPoint(event.clientX, event.clientY), {
-      x: event.clientX,
-      y: event.clientY,
-    }, true);
+    const point = { x: event.clientX, y: event.clientY };
+    const target = document.elementFromPoint(point.x, point.y);
+    // Show a forbidden cursor everywhere the image cannot be placed.
+    document.body.classList.toggle("image-drop-forbidden", !this.isExplorerImageDropAllowed(target));
+    if (drag.ghost) {
+      drag.ghost.style.left = `${point.x}px`;
+      drag.ghost.style.top = `${point.y}px`;
+    }
+    this.showDropTarget(target, point, true);
   }
 
   private handleExplorerPointerUp(event: PointerEvent): void {
     const drag = this.explorerPointerDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
-    this.explorerPointerDrag = null;
-    document.body.classList.remove("explorer-image-dragging");
-    this.clearDropTarget();
+    this.endExplorerPointerDrag(drag);
     if (!drag.active) return;
 
     event.preventDefault();
@@ -110,10 +122,41 @@ export class FileDropController {
   }
 
   private cancelExplorerPointerDrag(pointerId: number): void {
-    if (this.explorerPointerDrag?.pointerId !== pointerId) return;
-    this.explorerPointerDrag = null;
-    document.body.classList.remove("explorer-image-dragging");
+    const drag = this.explorerPointerDrag;
+    if (!drag || drag.pointerId !== pointerId) return;
+    this.endExplorerPointerDrag(drag);
+  }
+
+  private endExplorerPointerDrag(drag: ExplorerPointerDrag): void {
+    if (this.explorerPointerDrag === drag) this.explorerPointerDrag = null;
+    drag.ghost?.remove();
+    drag.ghost = null;
+    document.body.classList.remove("explorer-image-dragging", "image-drop-forbidden");
     this.clearDropTarget();
+  }
+
+  private createExplorerDragGhost(drag: ExplorerPointerDrag): HTMLElement {
+    const ghost = document.createElement("div");
+    ghost.className = "explorer-image-drag-ghost";
+    const icon = document.createElement("span");
+    icon.className = "explorer-image-drag-ghost-icon";
+    icon.innerHTML = drag.iconHtml;
+    const label = document.createElement("span");
+    label.className = "explorer-image-drag-ghost-label";
+    label.textContent = drag.label;
+    ghost.append(icon, label);
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+
+  private isExplorerImageDropAllowed(target: Element | null): boolean {
+    if (!target) return false;
+    if (target.closest(".cm-editor")) {
+      const activeFilePath = this.deps.activeFilePath();
+      return Boolean(activeFilePath && isTypstDocumentPath(activeFilePath));
+    }
+    return target.closest("#workspace-explorer-tree") !== null
+      && this.deps.workspaceRootPath() !== null;
   }
 
   private async handleNativeDragDrop(event: DragDropEvent): Promise<void> {

@@ -2090,8 +2090,8 @@ export class TypsastraWorkspaceController {
       (path: string) => this.isPinnedMainFile(path),
       document.getElementById("workspace-explorer-title")!
     );
-    this.explorer.setImageDragStartHandler((path, event) => {
-      this.fileDropController.startExplorerImageDrag(path, event);
+    this.explorer.setImageDragStartHandler((path, event, source) => {
+      this.fileDropController.startExplorerImageDrag(path, event, source);
     });
   }
 
