@@ -38,14 +38,14 @@ describe("table typst generation", () => {
       "  columns: 2,",
       '  stroke: 0.5pt + rgb("#000000"),',
       "  table.header([Name], [Value]),",
-      "  [Alpha], #align(right)[1\\*2],",
+      "  [Alpha], table.cell(align: right)[1\\*2],",
       ")",
     ].join("\n"));
   });
 
   test("marks each row's first cell for a header column", () => {
     expect(generateTableTypst({ ...table, headerColumn: true, headerRow: false })).toContain(
-      "  table.header([Alpha]), #align(right)[1\\*2],",
+      "  table.header([Alpha]), table.cell(align: right)[1\\*2],",
     );
   });
 

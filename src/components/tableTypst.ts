@@ -62,10 +62,12 @@ function sideSource(table: StoredTable, cell: StoredTableCell, side: keyof Store
 
 function cellSource(table: StoredTable, cell: StoredTableCell): string {
   const text = escapeTableText(cell.text);
-  const content = cell.align ? `#align(${cell.align})[${text}]` : `[${text}]`;
   const argumentsList: string[] = [];
   if (cell.colspan > 1) argumentsList.push(`colspan: ${cell.colspan}`);
   if (cell.rowspan > 1) argumentsList.push(`rowspan: ${cell.rowspan}`);
+  // Use table.cell's own align parameter; a `#align(...)` wrapper after a
+  // `table.cell(...)` code expression is invalid Typst.
+  if (cell.align) argumentsList.push(`align: ${cell.align}`);
   if (cell.borders) {
     const dict = CELL_BORDER_SIDES
       .map(side => `${side}: ${sideSource(table, cell, side)}`)
@@ -73,8 +75,8 @@ function cellSource(table: StoredTable, cell: StoredTableCell): string {
     argumentsList.push(`stroke: (${dict})`);
   }
   return argumentsList.length > 0
-    ? `table.cell(${argumentsList.join(", ")})${content}`
-    : content;
+    ? `table.cell(${argumentsList.join(", ")})[${text}]`
+    : `[${text}]`;
 }
 
 /** Generates the managed Typst `table` call for a project table. */
