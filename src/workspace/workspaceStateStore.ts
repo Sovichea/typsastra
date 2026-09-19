@@ -24,10 +24,26 @@ export type StoredScriptLanguageAssignment = {
 
 export type StoredTableAlignment = "left" | "center" | "right";
 
+export type StoredTableCellBorders = {
+  top: boolean;
+  right: boolean;
+  bottom: boolean;
+  left: boolean;
+};
+
 export type StoredTableCell = {
   text: string;
   align: StoredTableAlignment | null;
+  /** Grid span of the origin cell; covered slots inherit it. */
+  colspan: number;
+  rowspan: number;
+  /** True for slots covered by another cell's span; they hold no content. */
+  covered: boolean;
+  /** Explicit side overrides; null inherits the table stroke. */
+  borders: StoredTableCellBorders | null;
 };
+
+export type StoredTableStroke = "none" | "solid";
 
 /**
  * A project-owned table reference. Tables are internal assignments: they live
@@ -39,6 +55,7 @@ export type StoredTable = {
   columns: number;
   headerRow: boolean;
   headerColumn: boolean;
+  stroke: StoredTableStroke;
   rows: StoredTableCell[][];
 };
 
@@ -284,6 +301,38 @@ function normalizeTableAlignment(value: unknown): StoredTableAlignment | null {
   return value === "left" || value === "center" || value === "right" ? value : null;
 }
 
+function tableSpanOverlaps(
+  occupied: boolean[][],
+  row: number,
+  column: number,
+  colspan: number,
+  rowspan: number,
+): boolean {
+  for (let r = row; r < row + rowspan; r += 1) {
+    for (let c = column; c < column + colspan; c += 1) {
+      if (r === row && c === column) continue;
+      if (occupied[r]?.[c]) return true;
+    }
+  }
+  return false;
+}
+
+function normalizeCellBorders(value: unknown): StoredTableCellBorders | null {
+  const record = objectValue(value);
+  if (typeof record.top !== "boolean"
+    && typeof record.right !== "boolean"
+    && typeof record.bottom !== "boolean"
+    && typeof record.left !== "boolean") {
+    return null;
+  }
+  return {
+    top: record.top === true,
+    right: record.right === true,
+    bottom: record.bottom === true,
+    left: record.left === true,
+  };
+}
+
 function normalizeTables(value: unknown): StoredTable[] {
   if (!Array.isArray(value)) return [];
   const byId = new Map<string, StoredTable>();
@@ -293,16 +342,38 @@ function normalizeTables(value: unknown): StoredTable[] {
     if (!id || byId.has(id)) continue;
     const columns = Math.max(1, Math.min(Math.round(numberOr(record.columns, 1)), 32));
     const rawRows = Array.isArray(record.rows) ? record.rows.slice(0, 500) : [];
-    const rows: StoredTableCell[][] = rawRows.map(rawRow => {
-      const cells = Array.isArray(rawRow) ? rawRow : [];
-      return Array.from({ length: columns }, (_unused, index) => {
-        const cell = objectValue(cells[index]);
-        const text = typeof cell.text === "string" ? cell.text.slice(0, 2_000) : "";
-        return { text, align: normalizeTableAlignment(cell.align) };
-      });
-    });
-    if (rows.length === 0) {
-      rows.push(Array.from({ length: columns }, () => ({ text: "", align: null })));
+    const rowCount = Math.max(1, rawRows.length);
+    const occupied: boolean[][] = Array.from({ length: rowCount }, () =>
+      Array.from({ length: columns }, () => false));
+    const rows: StoredTableCell[][] = [];
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const rawRow = Array.isArray(rawRows[rowIndex]) ? rawRows[rowIndex] as unknown[] : [];
+      const row: StoredTableCell[] = [];
+      for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+        if (occupied[rowIndex][columnIndex]) {
+          row.push({ text: "", align: null, colspan: 1, rowspan: 1, covered: true, borders: null });
+          continue;
+        }
+        const cell = objectValue(rawRow[columnIndex]);
+        let colspan = Math.max(1, Math.min(Math.round(numberOr(cell.colspan, 1)), columns - columnIndex));
+        let rowspan = Math.max(1, Math.min(Math.round(numberOr(cell.rowspan, 1)), rowCount - rowIndex));
+        while ((colspan > 1 || rowspan > 1) && tableSpanOverlaps(occupied, rowIndex, columnIndex, colspan, rowspan)) {
+          if (colspan > 1) colspan -= 1;
+          else rowspan -= 1;
+        }
+        for (let r = rowIndex; r < rowIndex + rowspan; r += 1) {
+          for (let c = columnIndex; c < columnIndex + colspan; c += 1) occupied[r][c] = true;
+        }
+        row.push({
+          text: typeof cell.text === "string" ? cell.text.slice(0, 2_000) : "",
+          align: normalizeTableAlignment(cell.align),
+          colspan,
+          rowspan,
+          covered: false,
+          borders: normalizeCellBorders(cell.borders),
+        });
+      }
+      rows.push(row);
     }
     const name = typeof record.name === "string" && record.name.trim()
       ? record.name.trim().slice(0, 80)
@@ -313,6 +384,7 @@ function normalizeTables(value: unknown): StoredTable[] {
       columns,
       headerRow: record.headerRow !== false,
       headerColumn: record.headerColumn === true,
+      stroke: record.stroke === "none" ? "none" : "solid",
       rows,
     });
   }

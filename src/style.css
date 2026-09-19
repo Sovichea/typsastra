@@ -3071,13 +3071,15 @@ body.table-tools-active #code-render-pane {
   font-size: 11px;
 }
 .table-tool-grid-host { overflow-x: auto; padding: 8px 0; }
-.table-tool-grid { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
-.table-tool-row {
+.table-tool-grid {
   display: grid;
   grid-template-columns: repeat(var(--table-columns, 2), minmax(80px, 1fr));
   gap: 2px;
+  min-width: max-content;
 }
+.table-tool-cell-wrap { position: relative; display: flex; }
 .table-tool-cell {
+  width: 100%;
   min-width: 80px;
   height: 26px;
   padding: 0 6px;
@@ -3088,13 +3090,32 @@ body.table-tools-active #code-render-pane {
   font: 12px var(--font-family-sans);
 }
 .table-tool-cell:focus { outline: 1px solid var(--ui-accent-color); outline-offset: -1px; }
-.table-tool-cell.is-header-row,
-.table-tool-cell.is-header-column {
+.table-tool-cell-wrap.is-header-row .table-tool-cell,
+.table-tool-cell-wrap.is-header-column .table-tool-cell {
   font-weight: 600;
   background: color-mix(in srgb, var(--ui-bg) 88%, var(--ui-hover));
 }
+.table-tool-cell-wrap.selected .table-tool-cell {
+  box-shadow: inset 0 0 0 1px var(--ui-accent-color);
+  background: color-mix(in srgb, var(--ui-bg) 82%, var(--ui-accent-color));
+}
 .table-tool-cell.align-center { text-align: center; }
 .table-tool-cell.align-right { text-align: right; }
+.table-tool-selection { margin: 4px 0 0; color: var(--ui-header-text); font-size: 11px; }
+.table-tool-edge {
+  position: absolute;
+  display: none;
+  z-index: 2;
+  background: transparent;
+  cursor: pointer;
+}
+.table-tool-cell-wrap.borders-visible .table-tool-edge { display: block; }
+.table-tool-edge:hover { background: color-mix(in srgb, var(--ui-accent-color) 55%, transparent); }
+.table-tool-edge.on { background: color-mix(in srgb, var(--ui-accent-color) 38%, transparent); }
+.table-tool-edge-top { top: -3px; left: 0; right: 0; height: 6px; }
+.table-tool-edge-bottom { bottom: -3px; left: 0; right: 0; height: 6px; }
+.table-tool-edge-left { left: -3px; top: 0; bottom: 0; width: 6px; }
+.table-tool-edge-right { right: -3px; top: 0; bottom: 0; width: 6px; }
 .table-tool-code {
   margin: 6px 0 0;
   padding: 10px;

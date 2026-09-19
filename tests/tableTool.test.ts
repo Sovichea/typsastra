@@ -4,7 +4,17 @@ import {
   generateTableTypst,
   tableDirectiveBlock,
 } from "../src/components/tableTypst";
-import { normalizeWorkspaceMetadata, type StoredTable } from "../src/workspace/workspaceStateStore";
+import { tableCellOrigin } from "../src/components/tableTool";
+import {
+  normalizeWorkspaceMetadata,
+  type StoredTable,
+  type StoredTableCell,
+  type StoredTableAlignment,
+} from "../src/workspace/workspaceStateStore";
+
+function cell(text: string, align: StoredTableAlignment | null = null): StoredTableCell {
+  return { text, align, colspan: 1, rowspan: 1, covered: false, borders: null };
+}
 
 const table: StoredTable = {
   id: "table_1",
@@ -12,9 +22,10 @@ const table: StoredTable = {
   columns: 2,
   headerRow: true,
   headerColumn: false,
+  stroke: "solid",
   rows: [
-    [{ text: "Name", align: null }, { text: "Value", align: null }],
-    [{ text: "Alpha", align: null }, { text: "1*2", align: "right" }],
+    [cell("Name"), cell("Value")],
+    [cell("Alpha"), cell("1*2", "right")],
   ],
 };
 
@@ -23,6 +34,7 @@ describe("table typst generation", () => {
     expect(generateTableTypst(table)).toBe([
       "#table(",
       "  columns: 2,",
+      "  stroke: 0.5pt,",
       "  table.header([Name], [Value]),",
       "  [Alpha], #align(right)[1\\*2],",
       ")",
@@ -39,9 +51,75 @@ describe("table typst generation", () => {
     const generated = generateTableTypst({
       ...table,
       headerRow: false,
-      rows: [[{ text: "a[b]#c$d_e", align: null }, { text: "plain", align: null }]],
+      rows: [[cell("a[b]#c$d_e"), cell("plain")]],
     });
     expect(generated).toContain("[a\\[b\\]\\#c\\$d\\_e], [plain],");
+  });
+
+  test("emits merged cells and per-cell stroke overrides", () => {
+    const generated = generateTableTypst({
+      ...table,
+      stroke: "none",
+      rows: [
+        [{ ...cell("Header"), colspan: 2 }, { ...cell(""), covered: true }],
+        [
+          { ...cell("A"), borders: { top: true, right: false, bottom: true, left: true } },
+          cell("B"),
+        ],
+      ],
+    });
+
+    expect(generated).toContain("  stroke: none,");
+    expect(generated).toContain("table.header(table.cell(colspan: 2)[Header])");
+    expect(generated).toContain(
+      "table.cell(stroke: (top: 0.5pt, right: none, bottom: 0.5pt, left: 0.5pt))[A]",
+    );
+  });
+
+  test("maps covered slots to their merged origin", () => {
+    const merged: StoredTable = {
+      ...table,
+      rows: [
+        [{ ...cell("A"), colspan: 2 }, { ...cell(""), covered: true }],
+        [cell("B"), cell("C")],
+      ],
+    };
+
+    expect(tableCellOrigin(merged, 0, 1)).toEqual({ row: 0, column: 0 });
+    expect(tableCellOrigin(merged, 0, 0)).toEqual({ row: 0, column: 0 });
+    expect(tableCellOrigin(merged, 1, 1)).toEqual({ row: 1, column: 1 });
+    expect(tableCellOrigin(merged, 5, 0)).toBeNull();
+  });
+
+  test("emits rowspans for vertical merges", () => {
+    const spanned: StoredTable = {
+      ...table,
+      headerRow: false,
+      rows: [
+        [{ ...cell("A"), rowspan: 2 }, cell("B")],
+        [{ ...cell(""), covered: true }, cell("C")],
+      ],
+    };
+
+    const generated = generateTableTypst(spanned);
+    expect(generated).toContain("  table.cell(rowspan: 2)[A], [B],");
+    expect(generated).toContain("  [C],");
+  });
+
+  test("wires selection, merge, reorder, and border interactions", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("ArrowRight: { row, column: column + cell.colspan }");
+    expect(source).toContain("event.shiftKey && this.selectionAnchor");
+    expect(source).toContain('data-action="merge"');
+    expect(source).toContain('data-action="split"');
+    expect(source).toContain('data-action="move-row-up"');
+    expect(source).toContain('data-action="move-column-left"');
+    expect(source).toContain('data-action="borders"');
+    expect(source).toContain("table-tool-edge-${side}");
+    expect(source).toContain("OPPOSITE_SIDE[side]");
   });
 
   test("builds and finds the managed directive block", () => {
@@ -107,8 +185,46 @@ describe("stored table normalization", () => {
     expect(first.name).toBe("Summary");
     expect(first.headerRow).toBe(true);
     expect(first.headerColumn).toBe(true);
-    expect(first.rows[0].map(cell => cell.align)).toEqual(["left", null, null]);
+    expect(first.stroke).toBe("solid");
+    expect(first.rows[0].map(entry => entry.align)).toEqual(["left", null, null]);
+    expect(first.rows[0][0]).toMatchObject({
+      colspan: 1,
+      rowspan: 1,
+      covered: false,
+      borders: null,
+    });
     expect(second.columns).toBe(1);
-    expect(second.rows).toEqual([[{ text: "", align: null }]]);
+    expect(second.rows).toEqual([[{
+      text: "",
+      align: null,
+      colspan: 1,
+      rowspan: 1,
+      covered: false,
+      borders: null,
+    }]]);
+  });
+
+  test("repairs overlapping spans into a consistent grid", () => {
+    const metadata = normalizeWorkspaceMetadata({
+      project: {
+        tables: [{
+          id: "table_1",
+          columns: 2,
+          stroke: "none",
+          rows: [
+            [{ text: "a", colspan: 2 }, { text: "b" }],
+            [{ text: "c" }, { text: "d" }],
+          ],
+        }],
+      },
+      workspace: null,
+    }, () => "pid");
+
+    const normalized = metadata.project.tables[0];
+    expect(normalized.stroke).toBe("none");
+    expect(normalized.rows[0][0].colspan).toBe(2);
+    expect(normalized.rows[0][1].covered).toBe(true);
+    expect(normalized.rows[0][1].text).toBe("");
+    expect(normalized.rows[1][0].text).toBe("c");
   });
 });

@@ -1,4 +1,8 @@
-import type { StoredTable, StoredTableCell } from "../workspace/workspaceStateStore";
+import type {
+  StoredTable,
+  StoredTableCell,
+  StoredTableCellBorders,
+} from "../workspace/workspaceStateStore";
 
 export const TABLE_DIRECTIVE_PREFIX = "//@table:";
 export const TABLE_MANAGED_START = "//@generated-table-start";
@@ -8,22 +12,50 @@ export function escapeTableText(text: string): string {
   return text.replace(/([\\[\]#$*_`@])/gu, "\\$1");
 }
 
-function cellSource(cell: StoredTableCell): string {
+const CELL_BORDER_SIDES: Array<keyof StoredTableCellBorders> = ["top", "right", "bottom", "left"];
+
+function effectiveBorder(table: StoredTable, cell: StoredTableCell, side: keyof StoredTableCellBorders): boolean {
+  const override = cell.borders?.[side];
+  if (typeof override === "boolean") return override;
+  return table.stroke === "solid";
+}
+
+function cellSource(table: StoredTable, cell: StoredTableCell): string {
   const text = escapeTableText(cell.text);
-  return cell.align ? `#align(${cell.align})[${text}]` : `[${text}]`;
+  const content = cell.align ? `#align(${cell.align})[${text}]` : `[${text}]`;
+  const argumentsList: string[] = [];
+  if (cell.colspan > 1) argumentsList.push(`colspan: ${cell.colspan}`);
+  if (cell.rowspan > 1) argumentsList.push(`rowspan: ${cell.rowspan}`);
+  if (cell.borders) {
+    const dict = CELL_BORDER_SIDES
+      .map(side => `${side}: ${effectiveBorder(table, cell, side) ? "0.5pt" : "none"}`)
+      .join(", ");
+    argumentsList.push(`stroke: (${dict})`);
+  }
+  return argumentsList.length > 0
+    ? `table.cell(${argumentsList.join(", ")})${content}`
+    : content;
 }
 
 /** Generates the managed Typst `table` call for a project table. */
 export function generateTableTypst(table: StoredTable): string {
-  const lines: string[] = ["#table(", `  columns: ${table.columns},`];
+  const lines: string[] = [
+    "#table(",
+    `  columns: ${table.columns},`,
+    `  stroke: ${table.stroke === "none" ? "none" : "0.5pt"},`,
+  ];
   table.rows.forEach((row, rowIndex) => {
     const isHeaderRow = table.headerRow && rowIndex === 0;
-    const cells = row.map((cell, columnIndex) => {
-      const source = cellSource(cell);
-      return table.headerColumn && !isHeaderRow && columnIndex === 0
-        ? `table.header(${source})`
-        : source;
-    });
+    const cells = row
+      .map((cell, columnIndex) => ({ cell, columnIndex }))
+      .filter(({ cell }) => !cell.covered)
+      .map(({ cell, columnIndex }) => {
+        const source = cellSource(table, cell);
+        return table.headerColumn && !isHeaderRow && columnIndex === 0
+          ? `table.header(${source})`
+          : source;
+      });
+    if (cells.length === 0) return;
     const body = cells.join(", ");
     lines.push(isHeaderRow ? `  table.header(${body}),` : `  ${body},`);
   });
