@@ -120,6 +120,7 @@ import { WorkspaceResumeController } from "./platform/workspaceResumeController"
 import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativeAppMenu";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
+import { generateTableTypst } from "./components/tableTypst";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
 import { DocumentFormattingController } from "./editor/documentFormattingController";
@@ -750,6 +751,19 @@ export class TypsastraWorkspaceController {
         }));
         void this.saveWorkspaceState();
       },
+      compilePreview: async table => {
+        const workspaceRootPath = this.workspaceRootPath;
+        const cacheRootPath = this.getCacheRootPath();
+        if (!workspaceRootPath || !cacheRootPath) return [];
+        return invoke<string[]>("compile_typst_snippet_svg", {
+          workspaceRootPath,
+          cacheRootPath,
+          name: table.id,
+          sourceCode: generateTableTypst(table),
+        });
+      },
+      showPreview: pages => this.showTablePreview(pages),
+      showPreviewMessage: message => this.showTablePreviewMessage(message),
       log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
     },
   );
@@ -3069,6 +3083,31 @@ export class TypsastraWorkspaceController {
 
   private renderImageToolPreview(source: string | null, imagePath?: string): void {
     this.previewContentController.renderImageToolPreview(source, imagePath);
+  }
+
+  private showTablePreview(pages: readonly string[]): void {
+    if (pages.length === 0) {
+      this.showTablePreviewMessage("Create or select a table to preview it.");
+      return;
+    }
+    const html = pages
+      .map(svg => `<div class="table-tool-preview-page">${svg}</div>`)
+      .join("");
+    this.previewFrame.setMessage(`<div class="table-tool-preview">${html}</div>`);
+  }
+
+  private showTablePreviewMessage(message: string): void {
+    const escaped = message.replace(/[&<>"]/gu, character => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+    }[character] ?? character));
+    this.previewFrame.setMessage(
+      `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
+      `<div class="preview-disabled-title preview-accent-title">Table Preview</div>` +
+      `<div class="preview-disabled-msg">${escaped}</div></div></div>`,
+    );
   }
 
   private renderInteractiveImageViewer(

@@ -12,6 +12,12 @@ export type TableToolDependencies = {
   persist(tables: readonly StoredTable[]): void;
   /** Called after any change so managed directive blocks can be refreshed. */
   tablesChanged?(tables: readonly StoredTable[]): void;
+  /** Compiles the generated Typst into SVG pages with the active toolchain. */
+  compilePreview?(table: StoredTable): Promise<string[]>;
+  /** Shows compiled SVG pages in the preview pane. */
+  showPreview?(pages: readonly string[]): void;
+  /** Shows a plain-text status in the preview pane. */
+  showPreviewMessage?(message: string): void;
   log?(kind: "info" | "warning", message: string): void;
 };
 
@@ -44,6 +50,10 @@ export class TableToolController {
   private selectedId: string | null = null;
   private focusedCell: { row: number; column: number } | null = null;
   private persistTimer: number | null = null;
+  private previewTimer: number | null = null;
+  private previewGeneration = 0;
+  private previewCompiling = false;
+  private previewDirty = false;
 
   public constructor(
     private readonly list: HTMLElement,
@@ -65,10 +75,16 @@ export class TableToolController {
   public show(): void {
     this.renderSidebar();
     this.renderInspector();
+    this.schedulePreview();
   }
 
   public hide(): void {
     this.flushPersist();
+    if (this.previewTimer !== null) {
+      window.clearTimeout(this.previewTimer);
+      this.previewTimer = null;
+    }
+    this.previewGeneration += 1;
   }
 
   /** Table identities for the `//@table:` completion source. */
@@ -100,6 +116,7 @@ export class TableToolController {
     this.focusedCell = null;
     this.renderSidebar();
     this.renderInspector();
+    this.schedulePreview();
   }
 
   private nextTableId(): string {
@@ -115,6 +132,48 @@ export class TableToolController {
   private emitChange(): void {
     this.deps.tablesChanged?.(this.tables);
     this.schedulePersist();
+    this.schedulePreview();
+  }
+
+  private schedulePreview(): void {
+    if (!this.deps.compilePreview) return;
+    if (this.previewTimer !== null) window.clearTimeout(this.previewTimer);
+    this.previewTimer = window.setTimeout(() => {
+      this.previewTimer = null;
+      void this.refreshPreview();
+    }, 500);
+  }
+
+  private async refreshPreview(): Promise<void> {
+    const compile = this.deps.compilePreview;
+    const table = this.selected();
+    if (!compile || !table) {
+      this.deps.showPreviewMessage?.("Create or select a table to preview it.");
+      return;
+    }
+    if (this.previewCompiling) {
+      this.previewDirty = true;
+      return;
+    }
+    this.previewCompiling = true;
+    const generation = ++this.previewGeneration;
+    const snapshot = cloneTable(table);
+    try {
+      const pages = await compile(snapshot);
+      if (generation === this.previewGeneration) {
+        this.deps.showPreview?.(pages);
+      }
+    } catch (error) {
+      if (generation === this.previewGeneration) {
+        this.deps.showPreviewMessage?.(`Table preview failed: ${String(error)}`);
+      }
+    } finally {
+      this.previewCompiling = false;
+      if (this.previewDirty) {
+        this.previewDirty = false;
+        this.schedulePreview();
+      }
+    }
   }
 
   private schedulePersist(): void {

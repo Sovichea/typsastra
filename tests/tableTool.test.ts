@@ -61,6 +61,27 @@ describe("table typst generation", () => {
   });
 });
 
+describe("table preview compilation", () => {
+  test("compiles the generated snippet and renders it in the preview pane", async () => {
+    const controller = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+    const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const native = await Bun.file(new URL("../src-tauri/src/lib.rs", import.meta.url)).text();
+
+    expect(controller).toContain("compilePreview?(table: StoredTable): Promise<string[]>");
+    expect(controller).toContain("private schedulePreview(): void");
+    expect(controller).toContain("await compile(snapshot)");
+    expect(app).toContain('invoke<string[]>("compile_typst_snippet_svg"');
+    expect(app).toContain("sourceCode: generateTableTypst(table)");
+    expect(app).toContain("table-tool-preview");
+    expect(native).toContain("async fn compile_typst_snippet_svg(");
+    expect(native).toContain('"page-{p}.svg"');
+    expect(native).toContain('"#set page(width: auto, height: auto, margin: 12pt)');
+    expect(native).toContain("compile_typst_snippet_svg,");
+  });
+});
+
 describe("stored table normalization", () => {
   test("normalizes tables from the portable project config", () => {
     const metadata = normalizeWorkspaceMetadata({

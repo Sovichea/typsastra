@@ -3115,6 +3115,21 @@ body.table-tools-active #code-render-pane {
   text-align: left;
 }
 .table-tool-list-meta { margin-left: auto; color: var(--ui-muted-text); font-size: 10px; }
+.table-tool-preview {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior-y: none;
+  background: var(--ui-bg);
+}
+.table-tool-preview-page { display: flex; justify-content: center; padding: 18px; }
+.table-tool-preview-page + .table-tool-preview-page { border-top: 1px solid var(--ui-border); }
+.table-tool-preview-page svg {
+  max-width: 100%;
+  height: auto;
+  background: #fff;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
+}
 .image-tool-inspector-header h2 { margin: 0; color: var(--ui-text); font-size: 17px; font-weight: 500; }
 .image-tool-path { margin-top: 3px; overflow-wrap: anywhere; color: var(--ui-header-text); font: 11px/1.4 var(--editor-code-font); }
 .image-tool-status {
