@@ -92,7 +92,7 @@ export interface WorkspaceLifecycleServices {
   };
   sidebarController: {
     activeTool: string;
-    restore(state: { visible: boolean; activeTool: "explorer" | "images" }): void;
+    restore(state: { visible: boolean; activeTool: "explorer" | "images" | "tables" }): void;
     reset(): void;
   };
   workspaceController: {

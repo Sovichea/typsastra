@@ -22,6 +22,26 @@ export type StoredScriptLanguageAssignment = {
   languageTag: string;
 };
 
+export type StoredTableAlignment = "left" | "center" | "right";
+
+export type StoredTableCell = {
+  text: string;
+  align: StoredTableAlignment | null;
+};
+
+/**
+ * A project-owned table reference. Tables are internal assignments: they live
+ * in the portable project config and never create their own `.typ` files.
+ */
+export type StoredTable = {
+  id: string;
+  name: string;
+  columns: number;
+  headerRow: boolean;
+  headerColumn: boolean;
+  rows: StoredTableCell[][];
+};
+
 export type StoredProjectState = {
   schemaVersion: 2;
   projectId: string;
@@ -29,6 +49,7 @@ export type StoredProjectState = {
   recommendedToolchain: StoredWorkspaceToolchain | null;
   terminology: TerminologyEntry[];
   scriptLanguages: StoredScriptLanguageAssignment[];
+  tables: StoredTable[];
 };
 
 export type StoredWorkspaceState = {
@@ -40,7 +61,7 @@ export type StoredWorkspaceState = {
     inputContainerWidthPct: number;
     explorerSidebarWidthPx: number;
     sidebarVisible: boolean;
-    activeSidebarTool: "explorer" | "images";
+    activeSidebarTool: "explorer" | "images" | "tables";
   };
   selectedToolchain: StoredWorkspaceToolchain | null;
   previewContentMode: "normal" | "draft";
@@ -125,7 +146,8 @@ export function normalizeWorkspaceMetadata(
       mainFile: safeRelativeWorkspacePath(project.mainFile),
       recommendedToolchain: toolchainOrNull(project.recommendedToolchain),
       terminology: normalizeProjectTerminology(project.terminology),
-      scriptLanguages: normalizeScriptLanguages(project.scriptLanguages)
+      scriptLanguages: normalizeScriptLanguages(project.scriptLanguages),
+      tables: normalizeTables(project.tables)
     },
     workspace: {
       schemaVersion: 2,
@@ -138,7 +160,9 @@ export function normalizeWorkspaceMetadata(
         inputContainerWidthPct: numberOr(layout.inputContainerWidthPct, 50),
         explorerSidebarWidthPx: numberOr(layout.explorerSidebarWidthPx, 250),
         sidebarVisible: typeof layout.sidebarVisible === "boolean" ? layout.sidebarVisible : true,
-        activeSidebarTool: layout.activeSidebarTool === "images" ? "images" : "explorer"
+        activeSidebarTool: layout.activeSidebarTool === "images"
+          ? "images"
+          : layout.activeSidebarTool === "tables" ? "tables" : "explorer"
       },
       selectedToolchain: toolchainOrNull(workspace.selectedToolchain),
       previewContentMode: workspace.previewContentMode === "draft" ? "draft" : "normal",
@@ -252,6 +276,47 @@ function normalizeScriptLanguages(value: unknown): StoredScriptLanguageAssignmen
     });
   }
   return [...assignments.values()].reverse();
+}
+
+export const TABLE_ID_PATTERN = /^table_[0-9]+$/u;
+
+function normalizeTableAlignment(value: unknown): StoredTableAlignment | null {
+  return value === "left" || value === "center" || value === "right" ? value : null;
+}
+
+function normalizeTables(value: unknown): StoredTable[] {
+  if (!Array.isArray(value)) return [];
+  const byId = new Map<string, StoredTable>();
+  for (const item of value.slice(0, 200)) {
+    const record = objectValue(item);
+    const id = typeof record.id === "string" && TABLE_ID_PATTERN.test(record.id) ? record.id : null;
+    if (!id || byId.has(id)) continue;
+    const columns = Math.max(1, Math.min(Math.round(numberOr(record.columns, 1)), 32));
+    const rawRows = Array.isArray(record.rows) ? record.rows.slice(0, 500) : [];
+    const rows: StoredTableCell[][] = rawRows.map(rawRow => {
+      const cells = Array.isArray(rawRow) ? rawRow : [];
+      return Array.from({ length: columns }, (_unused, index) => {
+        const cell = objectValue(cells[index]);
+        const text = typeof cell.text === "string" ? cell.text.slice(0, 2_000) : "";
+        return { text, align: normalizeTableAlignment(cell.align) };
+      });
+    });
+    if (rows.length === 0) {
+      rows.push(Array.from({ length: columns }, () => ({ text: "", align: null })));
+    }
+    const name = typeof record.name === "string" && record.name.trim()
+      ? record.name.trim().slice(0, 80)
+      : id;
+    byId.set(id, {
+      id,
+      name,
+      columns,
+      headerRow: record.headerRow !== false,
+      headerColumn: record.headerColumn === true,
+      rows,
+    });
+  }
+  return [...byId.values()];
 }
 
 function normalizeProjectTerminology(value: unknown): TerminologyEntry[] {
