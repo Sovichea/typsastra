@@ -119,6 +119,7 @@ import { SystemResumeMonitor } from "./platform/systemResume";
 import { WorkspaceResumeController } from "./platform/workspaceResumeController";
 import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativeAppMenu";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
+import { TableToolController } from "./components/tableTool";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
 import { DocumentFormattingController } from "./editor/documentFormattingController";
@@ -737,6 +738,21 @@ export class TypsastraWorkspaceController {
       clear: () => this.imagePreviewController.clearCropOverlay(),
     },
   );
+  private readonly tableToolController = new TableToolController(
+    document.getElementById("tables-sidebar-list")!,
+    document.getElementById("table-tool-inspector")!,
+    {
+      persist: tables => {
+        if (!this.workspaceMetadata) return;
+        this.workspaceMetadata.project.tables = tables.map(table => ({
+          ...table,
+          rows: table.rows.map(row => row.map(cell => ({ ...cell }))),
+        }));
+        void this.saveWorkspaceState();
+      },
+      log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
+    },
+  );
   private readonly sidebarController = new SidebarController({
     hasWorkspace: () => !!this.workspaceRootPath,
     isWorkspaceLoading: () => this.workspaceLoading,
@@ -754,6 +770,8 @@ export class TypsastraWorkspaceController {
       this.imageToolsController.show();
     },
     hideImageTools: () => this.imageToolsController.hide(),
+    showTableTools: () => this.tableToolController.show(),
+    hideTableTools: () => this.tableToolController.hide(),
     showRestoringPreview: () => this.previewFrame.setMessage(
       `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
       `<div class="preview-disabled-title preview-accent-title">Restoring Preview</div>` +

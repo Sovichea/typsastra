@@ -62,7 +62,7 @@ export interface AppEventActions {
   foldCurrentFile: () => void;
   unfoldCurrentFile: () => void;
   toggleSidebar: () => void;
-  setSidebarTool: (tool: "explorer" | "images") => void;
+  setSidebarTool: (tool: "explorer" | "images" | "tables") => void;
   restoreDefaultLayout: () => void;
   toggleEditorToolbar: () => void;
   toggleLogConsole: () => void;
@@ -382,6 +382,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("sidebar-toggle-button")?.addEventListener("click", actions.toggleSidebar);
   document.getElementById("sidebar-explorer-button")?.addEventListener("click", () => actions.setSidebarTool("explorer"));
   document.getElementById("sidebar-images-button")?.addEventListener("click", () => actions.setSidebarTool("images"));
+  document.getElementById("sidebar-tables-button")?.addEventListener("click", () => actions.setSidebarTool("tables"));
   document.getElementById("action-restore-default-layout")?.addEventListener("click", actions.restoreDefaultLayout);
   document.getElementById("action-toggle-editor-toolbar")?.addEventListener("click", actions.toggleEditorToolbar);
   document.getElementById("action-clear-logs")?.addEventListener("click", actions.clearLogs);
