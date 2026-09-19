@@ -103,7 +103,7 @@ export interface WorkspaceLifecycleServices {
   };
   settingsController: {
     value: {
-      preview: { renderMode: PreviewRenderMode };
+      preview: { renderMode: PreviewRenderMode; lowMemoryMode: boolean };
       editor: {
         globalTerminology: TerminologyEntry[];
         languageTerminology: Record<string, TerminologyEntry[]>;
@@ -150,6 +150,7 @@ export interface WorkspaceLifecycleOperations {
   restartTinymistSession(message: string): Promise<void>;
   stopTinymistSession(message: string): Promise<void>;
   restoreActiveDocumentAfterTinymistRestart(): Promise<void>;
+  restoreActiveLowMemoryPreview(): Promise<void>;
   setPinnedMainFile(path: string | null): Promise<void>;
   closeEditorTab(path: string, skipDirtyCheck?: boolean): Promise<void>;
   updateWorkspaceViewportVisibility(): void;
@@ -527,6 +528,12 @@ export class WorkspaceLifecycleController {
       }
       await app.prepareRenderProjectIfNeeded();
       if (app.workspaceRootPath !== selected) return;
+      if (app.settingsController.value.preview.lowMemoryMode) {
+        await app.stopTinymistSession("Low memory mode: using one-shot compiler on save");
+        if (app.workspaceRootPath !== selected) return;
+        await app.restoreActiveLowMemoryPreview();
+        return;
+      }
       if (app.lspClient) {
         try {
           // A restored include tab can resolve its main-document preview while

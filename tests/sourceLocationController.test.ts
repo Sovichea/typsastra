@@ -101,4 +101,25 @@ describe("source location cache mapping", () => {
       `${workspaceRoot}/03_sources/lib.typ`,
     );
   });
+
+  test("maps Windows extended-length cache paths back to the workspace", () => {
+    const workspaceRoot = "C:\\Users\\Sovichea\\Documents\\Typsastra Stress Test";
+    const cacheRoot = "C:\\Users\\Sovichea\\AppData\\Local\\com.typsastra.editor\\workspace-cache\\0123456789abcdef";
+    const controller = new SourceLocationController({
+      workspaceRootPath: () => workspaceRoot,
+      cacheRootPath: () => cacheRoot,
+      activeFilePath: () => null,
+      editor: () => { throw new Error("unused"); },
+      lspClient: () => undefined,
+      loadFile: async () => {},
+      activeTabContentLoaded: () => false,
+      generatedPreviewText: async () => "",
+    });
+    const extendedCachePath = String.raw`\\?\C:\Users\Sovichea\AppData\Local\com.typsastra.editor\workspace-cache\0123456789abcdef\render\long_documents\typsastra_sync_stress_1500_pages.typ`;
+
+    expect(controller.isRenderCachePath(extendedCachePath)).toBe(true);
+    expect(controller.mapToOriginalPath(extendedCachePath)).toBe(
+      `${workspaceRoot}/long_documents/typsastra_sync_stress_1500_pages.typ`,
+    );
+  });
 });

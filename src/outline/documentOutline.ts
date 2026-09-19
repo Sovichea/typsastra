@@ -1,4 +1,11 @@
-import type { PreviewDocumentPosition, TinymistDocumentOutlineItem } from "../compiler/lsp";
+import type { PreviewDocumentPosition } from "../compiler/lsp";
+
+type RenderedOutlineItem = {
+  title: string;
+  position?: PreviewDocumentPosition;
+  bookmarkIndex?: number;
+  children: RenderedOutlineItem[];
+};
 import { createAppIcon } from "../ui/icons";
 import type { PdfiumDestination, PdfiumOutlineItem } from "../preview/pdfiumDocument";
 
@@ -12,6 +19,7 @@ export type DocumentHeading = {
   to: number;
   line: number;
   previewPosition?: PreviewDocumentPosition;
+  previewBookmarkIndex?: number;
   children: DocumentHeading[];
 };
 
@@ -159,7 +167,7 @@ function flattenHeadings(headings: readonly DocumentHeading[]): DocumentHeading[
   return headings.flatMap(heading => [heading, ...flattenHeadings(heading.children)]);
 }
 
-function flattenRenderedOutline(items: readonly TinymistDocumentOutlineItem[]): TinymistDocumentOutlineItem[] {
+function flattenRenderedOutline(items: readonly RenderedOutlineItem[]): RenderedOutlineItem[] {
   return items.flatMap(item => [item, ...flattenRenderedOutline(item.children)]);
 }
 
@@ -199,12 +207,14 @@ export class DocumentOutlineController {
   private selectedHeadingId: string | null = null;
   private pdfOutline: StandalonePdfOutlineItem[] | null = null;
   private flatPdfOutline: StandalonePdfOutlineItem[] = [];
+  private pendingPreviewSyncHeadingKey: string | null = null;
 
   constructor(
     private readonly container: HTMLElement,
     private readonly section: HTMLElement,
     private readonly onNavigate: (heading: DocumentHeading) => void,
     private readonly onNavigatePdf?: (destination: PdfiumDestination) => void,
+    private readonly onActiveHeadingChanged?: (heading: DocumentHeading) => void,
   ) {}
 
   public initialize(): void {
@@ -245,11 +255,16 @@ export class DocumentOutlineController {
     this.selectedHeadingId = null;
     this.pdfOutline = null;
     this.flatPdfOutline = [];
+    this.pendingPreviewSyncHeadingKey = null;
     this.collapsed.clear();
     this.render();
   }
 
-  public setCursorPosition(cursor: number, activePath: string | null = this.activePath): void {
+  public setCursorPosition(
+    cursor: number,
+    activePath: string | null = this.activePath,
+    syncPreview = false,
+  ): void {
     if (this.pdfOutline !== null) return;
     this.cursor = cursor;
     this.activePath = activePath;
@@ -261,7 +276,10 @@ export class DocumentOutlineController {
       }
     }
     const activeKey = active ? `${active.filePath}\0${active.id}` : null;
-    if (activeKey === this.activeHeadingKey) return;
+    if (activeKey === this.activeHeadingKey) {
+      if (active && syncPreview) this.requestPreviewSync(active, activeKey!);
+      return;
+    }
     this.activeHeadingKey = activeKey;
     this.container.querySelectorAll<HTMLElement>(".outline-item.active").forEach(item => {
       item.classList.remove("active");
@@ -271,6 +289,7 @@ export class DocumentOutlineController {
         .find(item => item.dataset.outlineId === active.id);
       row?.classList.add("active");
       row?.scrollIntoView({ block: "nearest" });
+      if (syncPreview) this.requestPreviewSync(active, activeKey!);
     }
   }
 
@@ -289,19 +308,50 @@ export class DocumentOutlineController {
     return position;
   }
 
-  public updatePreviewPositions(items: readonly TinymistDocumentOutlineItem[]): void {
+  public updatePreviewPositions(items: readonly RenderedOutlineItem[]): void {
+    for (const heading of this.flatHeadings) {
+      heading.previewPosition = undefined;
+      heading.previewBookmarkIndex = undefined;
+    }
     const rendered = flattenRenderedOutline(items);
     const claimed = new Set<number>();
+    const renderedTitles = rendered.map(item => comparableTitle(item.title));
+    const exactMatches = new Map<string, number[]>();
+    rendered.forEach((item, index) => {
+      if (item.position === undefined && item.bookmarkIndex === undefined) return;
+      const title = renderedTitles[index];
+      const indexes = exactMatches.get(title) ?? [];
+      indexes.push(index);
+      exactMatches.set(title, indexes);
+    });
     for (const heading of this.flatHeadings) {
       const title = comparableTitle(heading.title);
-      const renderedIndex = rendered.findIndex((item, index) => {
-        if (claimed.has(index)) return false;
-        const renderedTitle = comparableTitle(item.title);
-        return renderedTitle === title || renderedTitle.endsWith(title);
-      });
+      const exact = exactMatches.get(title);
+      let renderedIndex = exact?.shift() ?? -1;
+      while (renderedIndex !== -1 && claimed.has(renderedIndex)) {
+        renderedIndex = exact?.shift() ?? -1;
+      }
+      if (renderedIndex === -1) {
+        renderedIndex = rendered.findIndex((item, index) => {
+          if (
+            claimed.has(index)
+            || (item.position === undefined && item.bookmarkIndex === undefined)
+          ) return false;
+          return renderedTitles[index].endsWith(title);
+        });
+      }
       if (renderedIndex === -1) continue;
       claimed.add(renderedIndex);
       heading.previewPosition = rendered[renderedIndex].position;
+      heading.previewBookmarkIndex = rendered[renderedIndex].bookmarkIndex;
+      const headingKey = `${heading.filePath}\0${heading.id}`;
+      if (
+        this.pendingPreviewSyncHeadingKey === headingKey
+        && (heading.previewPosition !== undefined || heading.previewBookmarkIndex !== undefined)
+      ) {
+        this.pendingPreviewSyncHeadingKey = null;
+        this.onActiveHeadingChanged?.(heading);
+      }
     }
   }
 
@@ -321,6 +371,13 @@ export class DocumentOutlineController {
     this.selectedHeadingId = null;
     this.render();
     this.setCursorPosition(this.cursor);
+  }
+
+  private requestPreviewSync(heading: DocumentHeading, headingKey: string): void {
+    const hasDestination = heading.previewPosition !== undefined
+      || heading.previewBookmarkIndex !== undefined;
+    this.pendingPreviewSyncHeadingKey = hasDestination ? null : headingKey;
+    this.onActiveHeadingChanged?.(heading);
   }
 
   private render(): void {

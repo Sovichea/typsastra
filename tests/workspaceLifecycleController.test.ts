@@ -24,7 +24,17 @@ function lifecycleHarness(
     prepareRenderProjectIfNeeded: async () => { calls.push("prepare-preview"); },
     invalidatePreviewWork: () => { calls.push("invalidate-preview"); },
     restartTinymistSession: async () => { calls.push("restart-lsp"); },
+    stopTinymistSession: async () => { calls.push("stop-lsp"); },
     restoreActiveDocumentAfterTinymistRestart: async () => { calls.push("restore-document"); },
+    restoreActiveLowMemoryPreview: async () => { calls.push("restore-low-memory-preview"); },
+    settingsController: {
+      value: {
+        preview: { renderMode: "on-type", lowMemoryMode: false },
+        editor: { globalTerminology: [], languageTerminology: {}, scopedIgnoredWords: {} },
+      },
+      setWorkspacePreviewRenderMode: () => {},
+      setProjectTerminology: () => {},
+    },
     appendDeveloperLog: () => {},
     closeEditorTab: async (path: string) => { calls.push(`close-tab:${path}`); },
     ...overrides,
@@ -91,6 +101,29 @@ describe("WorkspaceLifecycleController behavior", () => {
       "invalidate-preview",
       "restart-lsp",
       "restore-document",
+    ]);
+  });
+
+  test("uses no persistent language server for low memory workspaces", async () => {
+    const { controller, calls } = lifecycleHarness({
+      lspClient: {} as WorkspaceLifecycleDependencies["lspClient"],
+      activeFilePath: "C:/project/main.typ",
+      settingsController: {
+        value: {
+          preview: { renderMode: "on-type", lowMemoryMode: true },
+          editor: { globalTerminology: [], languageTerminology: {}, scopedIgnoredWords: {} },
+        },
+        setWorkspacePreviewRenderMode: () => {},
+        setProjectTerminology: () => {},
+      },
+    });
+
+    await controller.startServices("C:/project");
+
+    expect(calls).toEqual([
+      "prepare-preview",
+      "stop-lsp",
+      "restore-low-memory-preview",
     ]);
   });
 
@@ -178,7 +211,7 @@ describe("WorkspaceLifecycleController behavior", () => {
       imageToolsController: { setWorkspace: async () => {}, show: () => {} },
       settingsController: {
         value: {
-          preview: { renderMode: "on-save" },
+          preview: { renderMode: "on-save", lowMemoryMode: false },
           editor: { globalTerminology: [], languageTerminology: {}, scopedIgnoredWords: {} },
         },
         setWorkspacePreviewRenderMode: () => {},

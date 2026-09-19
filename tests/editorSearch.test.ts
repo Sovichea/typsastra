@@ -14,6 +14,17 @@ import {
 import { collapseSearchSelection, TypsastraSearchQuery } from "../src/editor/search";
 
 describe("editor search navigation", () => {
+  test("disables match paint and full-document markers in low memory mode", async () => {
+    const controllerSource = await Bun.file(
+      new URL("../src/editor/editorController.ts", import.meta.url),
+    ).text();
+    const css = await Bun.file(new URL("../src/style.css", import.meta.url)).text();
+
+    expect(controllerSource).toContain("if (this.port.isLowMemoryMode())");
+    expect(controllerSource).toContain("this.matchMarkerTargets.clear()");
+    expect(css).toContain(".low-memory-mode .cm-editor .cm-searchMatch");
+  });
+
   test("uses a case-insensitive literal query for selected text", () => {
     const state = EditorState.create({
       doc: "Typsastra typsastra TYPSASTRA Typ-sastra",

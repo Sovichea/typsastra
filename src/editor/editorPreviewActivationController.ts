@@ -22,6 +22,7 @@ export interface EditorPreviewActivationDependencies {
   previewFrame(): PreviewFrame;
   workspaceRootPath(): string | null;
   pinnedMainFilePath(): string | null;
+  isLowMemoryMode(): boolean;
   lspAvailable(): boolean;
   currentVersion(): number;
   resolveLspDocument(path: string, text: string): Promise<LspDocumentResolution>;
@@ -30,6 +31,7 @@ export interface EditorPreviewActivationDependencies {
   noMainFileMessage(): string;
   disabledPreviewMessage(): string;
   renderPdfPreview(contents: string): void;
+  logPreview(message: string): void;
 }
 
 /** Owns compiler-preview session selection and LSP activation for an editor tab. */
@@ -46,6 +48,7 @@ export class EditorPreviewActivationController {
     let guarded = false;
     let target: PreviewTarget | null = null;
 
+    this.deps.logPreview(`Tab preview prepare: tab=${path}; typst=${isTypstDocument}; lowMemory=${this.deps.isLowMemoryMode()}; skip=${options.skipPreviewActivation === true}; pinned=${this.deps.pinnedMainFilePath() ?? "none"}.`);
     if (options.skipPreviewActivation) {
       return { target, guarded, presentationReused };
     }
@@ -71,6 +74,7 @@ export class EditorPreviewActivationController {
       pinnedMainPath: this.deps.pinnedMainFilePath(),
     });
     target = resolvedTarget;
+    this.deps.logPreview(`Tab preview target resolved: tab=${path}; root=${resolvedTarget.rootPath ?? "none"}; main=${resolvedTarget.mainPath ?? "none"}; imported=${resolvedTarget.imported}; disabled=${resolvedTarget.disabled}.`);
     if (resolvedTarget.disabled) {
       this.deps.previewSession.applyTargetToTab(tab, resolvedTarget);
       this.deps.invalidatePreviewWork(`${path} does not participate in the configured main preview`);
@@ -78,23 +82,31 @@ export class EditorPreviewActivationController {
     }
 
     target = await this.deps.previewSession.prepareTemplateAware(resolvedTarget, path, tab.content);
-    guarded = !(await this.deps.ensureLargePreviewApproved(target.rootPath));
+    const approved = await this.deps.ensureLargePreviewApproved(target.rootPath);
+    guarded = !approved;
+    this.deps.logPreview(`Tab preview approval: tab=${path}; root=${target.rootPath ?? "none"}; approved=${approved}; guarded=${guarded}; session=${this.deps.previewSession.sessionKey ?? "none"}.`);
     if (guarded) {
       this.deps.previewSession.applyTargetToTab(tab, target);
       return { target, guarded, presentationReused };
     }
 
+    // A dependency tab belongs to the same logical preview as its configured
+    // main file. Reuse that mounted PDF directly instead of treating the
+    // dependency as a new preview root (which would needlessly recompile and
+    // rebuild the low-memory sync index on every tab switch).
     const existingMainSession = this.deps.previewSession.captureCurrentMainSessionForImportedTarget(target);
     if (existingMainSession) {
       this.deps.previewSession.applySessionToTab(tab, existingMainSession);
       if (existingMainSession.previewSessionKey) {
         presentationReused = this.deps.previewFrame().activateSession(existingMainSession.previewSessionKey);
       }
+      if (presentationReused) return { target, guarded, presentationReused };
     } else {
       this.deps.previewSession.applyTargetToTab(tab, target);
       if (tab.previewSessionKey) {
         presentationReused = this.deps.previewFrame().activateSession(tab.previewSessionKey);
       }
+      if (presentationReused) return { target, guarded, presentationReused };
     }
     return { target, guarded, presentationReused };
   }
@@ -107,6 +119,32 @@ export class EditorPreviewActivationController {
     options: EditorPreviewActivationOptions,
   ): Promise<void> {
     if (options.skipPreviewActivation || !isTypstDocument) return;
+
+    // Low-memory preview deliberately compiles in one-shot processes rather
+    // than through the persistent LSP. The LSP can still be momentarily
+    // available while the deferred workspace services settle; do not let that
+    // transient state route the first confirmed render through the LSP path.
+    if (this.deps.isLowMemoryMode()) {
+      // `prepare` may have performed its approval check before the user
+      // confirmed a guarded large document. Check again here: this is the
+      // confirmed activation path and it must not preserve the stale guarded
+      // result that originally displayed the confirmation UI.
+      const approved = await this.deps.ensureLargePreviewApproved(this.deps.previewSession.rootPath);
+      this.deps.logPreview(`Low-memory preview finish: tab=${path}; root=${this.deps.previewSession.rootPath ?? "none"}; approved=${approved}; guarded=${context.guarded}; reused=${context.presentationReused}; disabled=${this.deps.previewSession.disabled}; preserve=${Boolean(options.preservePreviewSession)}.`);
+      if (
+        approved
+        && !options.preservePreviewSession
+        && this.deps.previewSession.rootPath
+        && !this.deps.previewSession.disabled
+        && !context.presentationReused
+      ) {
+        this.deps.logPreview(`Low-memory preview render requested from tab: tab=${path}; root=${this.deps.previewSession.rootPath}; session=${this.deps.previewSession.sessionKey ?? "none"}.`);
+        this.deps.renderPdfPreview(tab.content);
+      } else {
+        this.deps.logPreview(`Low-memory preview render skipped after tab activation: tab=${path}; root=${this.deps.previewSession.rootPath ?? "none"}.`);
+      }
+      return;
+    }
 
     if (this.deps.lspAvailable()) {
       const lspRes = await this.deps.resolveLspDocument(path, tab.content);

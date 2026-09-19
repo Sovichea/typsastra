@@ -36,8 +36,9 @@ describe("theme-aware application accents", () => {
       /#status-bar\.welcome-screen-active > #settings-status-button\s*\{[^}]*display:\s*inline-flex;[^}]*\}/s
     );
     expect(settingsController).toContain(
-      "previewRenderMode.disabled = this.workspacePreviewRenderMode === null"
+      "previewRenderMode.disabled = preview.lowMemoryMode || this.workspacePreviewRenderMode === null"
     );
+    expect(settingsController).toContain("Low memory mode limits preview rendering to explicit saves.");
     expect(settingsController).toContain(
       "Open a project to configure its preview render mode."
     );

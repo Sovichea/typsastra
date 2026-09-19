@@ -1,0 +1,4197 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": {
+    "name": "tinymist",
+    "version": "0.15.2"
+  },
+  "globals": [
+    {
+      "label": "align",
+      "kind": 3,
+      "detail": "(alignment, content) => align",
+      "insertTextFormat": 2,
+      "sortText": "000",
+      "textEdit": {
+        "newText": "align(${1:})"
+      }
+    },
+    {
+      "label": "alignment",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "001",
+      "textEdit": {
+        "newText": "alignment"
+      }
+    },
+    {
+      "label": "angle",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "002",
+      "textEdit": {
+        "newText": "angle"
+      }
+    },
+    {
+      "label": "aqua",
+      "kind": 6,
+      "detail": "rgb(\"#7fdbff\")",
+      "insertTextFormat": 2,
+      "sortText": "003",
+      "textEdit": {
+        "newText": "aqua"
+      }
+    },
+    {
+      "label": "arguments",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "004",
+      "textEdit": {
+        "newText": "arguments(${1:})"
+      }
+    },
+    {
+      "label": "array",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "005",
+      "textEdit": {
+        "newText": "array"
+      }
+    },
+    {
+      "label": "array literal",
+      "kind": 15,
+      "detail": "Creates a sequence of values.",
+      "insertTextFormat": 2,
+      "sortText": "006",
+      "textEdit": {
+        "newText": "(${1:1, 2, 3})"
+      }
+    },
+    {
+      "label": "array.paren",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "007",
+      "textEdit": {
+        "newText": "array(${1:})"
+      }
+    },
+    {
+      "label": "assert",
+      "kind": 3,
+      "detail": "(bool, message: str) => none",
+      "insertTextFormat": 2,
+      "sortText": "008",
+      "textEdit": {
+        "newText": "assert(${1:})"
+      }
+    },
+    {
+      "label": "bibliography",
+      "kind": 3,
+      "detail": "([bib] | array, full: bool, group: auto | none | str, style: \"alphanumeric\" | \"american-anthropological-association\" | \"american-chemical-society\" | \"american-geophysical-union\" | \"american-institute-of-aeronautics-and-astronautics\" | \"american-institute-of-physics\" | \"american-medical-association\" | \"american-meteorological-society\" | \"american-physics-society\" | \"american-physiological-society\" | \"american-political-science-association\" | \"american-psychological-association\" | \"american-society-for-microbiology\" | \"american-society-of-civil-engineers\" | \"american-society-of-mechanical-engineers\" | \"american-sociological-association\" | \"angewandte-chemie\" | \"annual-reviews\" | \"annual-reviews-author-date\" | \"apa\" | \"associacao-brasileira-de-normas-tecnicas\" | \"association-for-computing-machinery\" | \"biomed-central\" | \"bmj\" | \"bristol-university-press\" | \"british-medical-journal\" | \"cell\" | \"chicago-author-date\" | \"chicago-fullnotes\" | \"chicago-notes\" | \"chicago-shortened-notes\" | \"copernicus\" | \"council-of-science-editors\" | \"council-of-science-editors-author-date\" | \"cse-citation-sequence-brackets-8th-edition\" | \"cse-name-year\" | \"current-opinion\" | \"deutsche-gesellschaft-für-psychologie\" | \"deutsche-sprache\" | \"elsevier-harvard\" | \"elsevier-vancouver\" | \"elsevier-with-titles\" | \"frontiers\" | \"future-medicine\" | \"future-science\" | \"gb-7714-2005-numeric\" | \"gb-7714-2015-author-date\" | \"gb-7714-2015-note\" | \"gb-7714-2015-numeric\" | \"gost-r-705-2008-numeric\" | \"harvard-cite-them-right\" | \"ieee\" | \"institute-of-electrical-and-electronics-engineers\" | \"institute-of-physics-numeric\" | \"iso-690-author-date\" | \"iso-690-numeric\" | \"karger\" | \"mary-ann-liebert-vancouver\" | \"mla\" | \"mla-8\" | \"modern-humanities-research-association\" | \"modern-humanities-research-association-notes\" | \"modern-language-association\" | \"modern-language-association-8\" | \"multidisciplinary-digital-publishing-institute\" | \"nature\" | \"nlm-citation-sequence\" | \"nlm-citation-sequence-superscript\" | \"pensoft\" | \"plos\" | \"public-library-of-science\" | \"royal-society-of-chemistry\" | \"sage-vancouver\" | \"sist02\" | \"spie\" | \"springer-basic\" | \"springer-basic-author-date\" | \"springer-fachzeitschriften-medizin-psychologie\" | \"springer-humanities-author-date\" | \"springer-lecture-notes-in-computer-science\" | \"springer-mathphys\" | \"springer-socpsych-author-date\" | \"springer-vancouver\" | \"taylor-and-francis-chicago-author-date\" | \"taylor-and-francis-national-library-of-medicine\" | \"the-institution-of-engineering-and-technology\" | \"the-lancet\" | \"thieme\" | \"trends\" | \"turabian-author-date\" | \"turabian-fullnote-8\" | \"vancouver\" | \"vancouver-superscript\" | [csl] | bytes | path | str, target: auto | function | label | location | selector, title: auto | content | none) => bibliography",
+      "insertTextFormat": 2,
+      "sortText": "009",
+      "textEdit": {
+        "newText": "bibliography(${1:})"
+      }
+    },
+    {
+      "label": "black",
+      "kind": 6,
+      "detail": "luma(0%)",
+      "insertTextFormat": 2,
+      "sortText": "010",
+      "textEdit": {
+        "newText": "black"
+      }
+    },
+    {
+      "label": "block",
+      "kind": 3,
+      "detail": "(content | none, above: auto | fraction | relative, below: auto | fraction | relative, breakable: bool, clip: bool, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, radius: radius, spacing: auto | fraction | relative, sticky: bool, stroke: stroke, width: auto | relative) => block",
+      "insertTextFormat": 2,
+      "sortText": "011",
+      "textEdit": {
+        "newText": "block(${1:})"
+      }
+    },
+    {
+      "label": "block.bracket",
+      "kind": 3,
+      "detail": "(content | none, above: auto | fraction | relative, below: auto | fraction | relative, breakable: bool, clip: bool, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, radius: radius, spacing: auto | fraction | relative, sticky: bool, stroke: stroke, width: auto | relative) => block",
+      "insertTextFormat": 2,
+      "sortText": "012",
+      "textEdit": {
+        "newText": "block[${1:}]"
+      }
+    },
+    {
+      "label": "blue",
+      "kind": 6,
+      "detail": "rgb(\"#0074d9\")",
+      "insertTextFormat": 2,
+      "sortText": "013",
+      "textEdit": {
+        "newText": "blue"
+      }
+    },
+    {
+      "label": "bool",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "014",
+      "textEdit": {
+        "newText": "bool"
+      }
+    },
+    {
+      "label": "bottom",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "015",
+      "textEdit": {
+        "newText": "bottom"
+      }
+    },
+    {
+      "label": "box",
+      "kind": 3,
+      "detail": "(content | none, baseline: alignment | auto | dictionary | relative, clip: bool, fill: color, height: auto | relative, inset: inset, outset: outset, radius: radius, stroke: stroke, width: auto | fraction | relative) => box",
+      "insertTextFormat": 2,
+      "sortText": "016",
+      "textEdit": {
+        "newText": "box(${1:})"
+      }
+    },
+    {
+      "label": "box.bracket",
+      "kind": 3,
+      "detail": "(content | none, baseline: alignment | auto | dictionary | relative, clip: bool, fill: color, height: auto | relative, inset: inset, outset: outset, radius: radius, stroke: stroke, width: auto | fraction | relative) => box",
+      "insertTextFormat": 2,
+      "sortText": "017",
+      "textEdit": {
+        "newText": "box[${1:}]"
+      }
+    },
+    {
+      "label": "break",
+      "kind": 15,
+      "detail": "Exits early from a loop.",
+      "insertTextFormat": 2,
+      "sortText": "018",
+      "textEdit": {
+        "newText": "break"
+      }
+    },
+    {
+      "label": "btt",
+      "kind": 6,
+      "detail": "direction",
+      "insertTextFormat": 2,
+      "sortText": "019",
+      "textEdit": {
+        "newText": "btt"
+      }
+    },
+    {
+      "label": "bytes",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "020",
+      "textEdit": {
+        "newText": "bytes(${1:})"
+      }
+    },
+    {
+      "label": "calc",
+      "kind": 9,
+      "detail": "module(\"calc\")",
+      "insertTextFormat": 2,
+      "sortText": "021",
+      "textEdit": {
+        "newText": "calc"
+      }
+    },
+    {
+      "label": "cbor",
+      "kind": 3,
+      "detail": "([any]) => any",
+      "insertTextFormat": 2,
+      "sortText": "022",
+      "textEdit": {
+        "newText": "cbor(${1:})"
+      }
+    },
+    {
+      "label": "center",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "023",
+      "textEdit": {
+        "newText": "center"
+      }
+    },
+    {
+      "label": "circle",
+      "kind": 3,
+      "detail": "(content | none, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, radius: length, stroke: stroke, width: auto | relative) => circle",
+      "insertTextFormat": 2,
+      "sortText": "024",
+      "textEdit": {
+        "newText": "circle(${1:})"
+      }
+    },
+    {
+      "label": "circle.bracket",
+      "kind": 3,
+      "detail": "(content | none, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, radius: length, stroke: stroke, width: auto | relative) => circle",
+      "insertTextFormat": 2,
+      "sortText": "025",
+      "textEdit": {
+        "newText": "circle[${1:}]"
+      }
+    },
+    {
+      "label": "cite",
+      "kind": 3,
+      "detail": "(cite-label, form: \"author\" | \"full\" | \"normal\" | \"prose\" | \"year\" | none, style: \"alphanumeric\" | \"american-anthropological-association\" | \"american-chemical-society\" | \"american-geophysical-union\" | \"american-institute-of-aeronautics-and-astronautics\" | \"american-institute-of-physics\" | \"american-medical-association\" | \"american-meteorological-society\" | \"american-physics-society\" | \"american-physiological-society\" | \"american-political-science-association\" | \"american-psychological-association\" | \"american-society-for-microbiology\" | \"american-society-of-civil-engineers\" | \"american-society-of-mechanical-engineers\" | \"american-sociological-association\" | \"angewandte-chemie\" | \"annual-reviews\" | \"annual-reviews-author-date\" | \"apa\" | \"associacao-brasileira-de-normas-tecnicas\" | \"association-for-computing-machinery\" | \"biomed-central\" | \"bmj\" | \"bristol-university-press\" | \"british-medical-journal\" | \"cell\" | \"chicago-author-date\" | \"chicago-fullnotes\" | \"chicago-notes\" | \"chicago-shortened-notes\" | \"copernicus\" | \"council-of-science-editors\" | \"council-of-science-editors-author-date\" | \"cse-citation-sequence-brackets-8th-edition\" | \"cse-name-year\" | \"current-opinion\" | \"deutsche-gesellschaft-für-psychologie\" | \"deutsche-sprache\" | \"elsevier-harvard\" | \"elsevier-vancouver\" | \"elsevier-with-titles\" | \"frontiers\" | \"future-medicine\" | \"future-science\" | \"gb-7714-2005-numeric\" | \"gb-7714-2015-author-date\" | \"gb-7714-2015-note\" | \"gb-7714-2015-numeric\" | \"gost-r-705-2008-numeric\" | \"harvard-cite-them-right\" | \"ieee\" | \"institute-of-electrical-and-electronics-engineers\" | \"institute-of-physics-numeric\" | \"iso-690-author-date\" | \"iso-690-numeric\" | \"karger\" | \"mary-ann-liebert-vancouver\" | \"mla\" | \"mla-8\" | \"modern-humanities-research-association\" | \"modern-humanities-research-association-notes\" | \"modern-language-association\" | \"modern-language-association-8\" | \"multidisciplinary-digital-publishing-institute\" | \"nature\" | \"nlm-citation-sequence\" | \"nlm-citation-sequence-superscript\" | \"pensoft\" | \"plos\" | \"public-library-of-science\" | \"royal-society-of-chemistry\" | \"sage-vancouver\" | \"sist02\" | \"spie\" | \"springer-basic\" | \"springer-basic-author-date\" | \"springer-fachzeitschriften-medizin-psychologie\" | \"springer-humanities-author-date\" | \"springer-lecture-notes-in-computer-science\" | \"springer-mathphys\" | \"springer-socpsych-author-date\" | \"springer-vancouver\" | \"taylor-and-francis-chicago-author-date\" | \"taylor-and-francis-national-library-of-medicine\" | \"the-institution-of-engineering-and-technology\" | \"the-lancet\" | \"thieme\" | \"trends\" | \"turabian-author-date\" | \"turabian-fullnote-8\" | \"vancouver\" | \"vancouver-superscript\" | [csl] | auto | bytes | path | str, supplement: content | none) => cite",
+      "insertTextFormat": 2,
+      "sortText": "026",
+      "textEdit": {
+        "newText": "cite(${1:})"
+      }
+    },
+    {
+      "label": "cmyk",
+      "kind": 3,
+      "detail": "(ratio, ratio, ratio, ratio, color) => color",
+      "insertTextFormat": 2,
+      "sortText": "027",
+      "textEdit": {
+        "newText": "cmyk(${1:})"
+      }
+    },
+    {
+      "label": "code block",
+      "kind": 15,
+      "detail": "Inserts a nested code block.",
+      "insertTextFormat": 2,
+      "sortText": "028",
+      "textEdit": {
+        "newText": "{ ${1:} }"
+      }
+    },
+    {
+      "label": "colbreak",
+      "kind": 3,
+      "detail": "(weak: bool) => colbreak",
+      "insertTextFormat": 2,
+      "sortText": "029",
+      "textEdit": {
+        "newText": "colbreak()${1:}"
+      }
+    },
+    {
+      "label": "color",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "030",
+      "textEdit": {
+        "newText": "color"
+      }
+    },
+    {
+      "label": "columns",
+      "kind": 3,
+      "detail": "(int, content, gutter: relative) => columns",
+      "insertTextFormat": 2,
+      "sortText": "031",
+      "textEdit": {
+        "newText": "columns(${1:})"
+      }
+    },
+    {
+      "label": "content",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "032",
+      "textEdit": {
+        "newText": "content"
+      }
+    },
+    {
+      "label": "content block",
+      "kind": 15,
+      "detail": "Switches into markup mode.",
+      "insertTextFormat": 2,
+      "sortText": "033",
+      "textEdit": {
+        "newText": "[${1:content}]"
+      }
+    },
+    {
+      "label": "context expression",
+      "kind": 15,
+      "detail": "Provides contextual data.",
+      "insertTextFormat": 2,
+      "sortText": "034",
+      "textEdit": {
+        "newText": "context ${1:}"
+      }
+    },
+    {
+      "label": "continue",
+      "kind": 15,
+      "detail": "Continues with the next iteration of a loop.",
+      "insertTextFormat": 2,
+      "sortText": "035",
+      "textEdit": {
+        "newText": "continue"
+      }
+    },
+    {
+      "label": "counter",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "036",
+      "textEdit": {
+        "newText": "counter(${1:})"
+      }
+    },
+    {
+      "label": "csv",
+      "kind": 3,
+      "detail": "([csv], delimiter: str, row-type: type) => array",
+      "insertTextFormat": 2,
+      "sortText": "037",
+      "textEdit": {
+        "newText": "csv(${1:})"
+      }
+    },
+    {
+      "label": "curve",
+      "kind": 3,
+      "detail": "(fill: color, fill-rule: \"even-odd\" | \"non-zero\", stroke: stroke, ..: content) => curve",
+      "insertTextFormat": 2,
+      "sortText": "038",
+      "textEdit": {
+        "newText": "curve"
+      }
+    },
+    {
+      "label": "curve.paren",
+      "kind": 3,
+      "detail": "(fill: color, fill-rule: \"even-odd\" | \"non-zero\", stroke: stroke, ..: content) => curve",
+      "insertTextFormat": 2,
+      "sortText": "039",
+      "textEdit": {
+        "newText": "curve(${1:})"
+      }
+    },
+    {
+      "label": "datetime",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "040",
+      "textEdit": {
+        "newText": "datetime"
+      }
+    },
+    {
+      "label": "datetime.paren",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "041",
+      "textEdit": {
+        "newText": "datetime()${1:}"
+      }
+    },
+    {
+      "label": "decimal",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "042",
+      "textEdit": {
+        "newText": "decimal(${1:})"
+      }
+    },
+    {
+      "label": "dictionary",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "043",
+      "textEdit": {
+        "newText": "dictionary(${1:})"
+      }
+    },
+    {
+      "label": "dictionary literal",
+      "kind": 15,
+      "detail": "Creates a mapping from names to value.",
+      "insertTextFormat": 2,
+      "sortText": "044",
+      "textEdit": {
+        "newText": "(${1:a: 1, b: 2})"
+      }
+    },
+    {
+      "label": "direction",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "045",
+      "textEdit": {
+        "newText": "direction"
+      }
+    },
+    {
+      "label": "divider",
+      "kind": 3,
+      "detail": "() => divider",
+      "insertTextFormat": 2,
+      "sortText": "046",
+      "textEdit": {
+        "newText": "divider()${1:}"
+      }
+    },
+    {
+      "label": "document",
+      "kind": 3,
+      "detail": "(str, content, author: array | str, date: auto | datetime | none, description: content | none, format: \"html\" | \"pdf\" | \"png\" | \"svg\" | auto, keywords: array | str, title: content | none) => document",
+      "insertTextFormat": 2,
+      "sortText": "047",
+      "textEdit": {
+        "newText": "document(${1:})"
+      }
+    },
+    {
+      "label": "duration",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "048",
+      "textEdit": {
+        "newText": "duration()${1:}"
+      }
+    },
+    {
+      "label": "eastern",
+      "kind": 6,
+      "detail": "rgb(\"#239dad\")",
+      "insertTextFormat": 2,
+      "sortText": "049",
+      "textEdit": {
+        "newText": "eastern"
+      }
+    },
+    {
+      "label": "ellipse",
+      "kind": 3,
+      "detail": "(content | none, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, stroke: stroke, width: auto | relative) => ellipse",
+      "insertTextFormat": 2,
+      "sortText": "050",
+      "textEdit": {
+        "newText": "ellipse(${1:})"
+      }
+    },
+    {
+      "label": "ellipse.bracket",
+      "kind": 3,
+      "detail": "(content | none, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, stroke: stroke, width: auto | relative) => ellipse",
+      "insertTextFormat": 2,
+      "sortText": "051",
+      "textEdit": {
+        "newText": "ellipse[${1:}]"
+      }
+    },
+    {
+      "label": "emoji",
+      "kind": 9,
+      "detail": "module(\"emoji\")",
+      "insertTextFormat": 2,
+      "sortText": "052",
+      "textEdit": {
+        "newText": "emoji"
+      }
+    },
+    {
+      "label": "emph",
+      "kind": 3,
+      "detail": "(content) => emph",
+      "insertTextFormat": 2,
+      "sortText": "053",
+      "textEdit": {
+        "newText": "emph(${1:})"
+      }
+    },
+    {
+      "label": "emph.bracket",
+      "kind": 3,
+      "detail": "(content) => emph",
+      "insertTextFormat": 2,
+      "sortText": "054",
+      "textEdit": {
+        "newText": "emph[${1:}]"
+      }
+    },
+    {
+      "label": "end",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "055",
+      "textEdit": {
+        "newText": "end"
+      }
+    },
+    {
+      "label": "enum",
+      "kind": 3,
+      "detail": "(body-indent: length, full: bool, indent: length, number-align: alignment, numbering: function | str, reversed: bool, spacing: auto | length, start: auto | int, tight: bool, ..: array | content) => enum",
+      "insertTextFormat": 2,
+      "sortText": "056",
+      "textEdit": {
+        "newText": "enum"
+      }
+    },
+    {
+      "label": "enum.paren",
+      "kind": 3,
+      "detail": "(body-indent: length, full: bool, indent: length, number-align: alignment, numbering: function | str, reversed: bool, spacing: auto | length, start: auto | int, tight: bool, ..: array | content) => enum",
+      "insertTextFormat": 2,
+      "sortText": "057",
+      "textEdit": {
+        "newText": "enum(${1:})"
+      }
+    },
+    {
+      "label": "eval",
+      "kind": 3,
+      "detail": "(str, mode: \"code\" | \"markup\" | \"math\", scope: dictionary) => any",
+      "insertTextFormat": 2,
+      "sortText": "058",
+      "textEdit": {
+        "newText": "eval(${1:})"
+      }
+    },
+    {
+      "label": "figure",
+      "kind": 3,
+      "detail": "(content, alt: none | str, caption: content | none, gap: length, kind: auto | function | str, numbering: function | none | str, outlined: bool, placement: alignment | auto | none, scope: \"column\" | \"parent\", supplement: auto | content | function | none) => figure",
+      "insertTextFormat": 2,
+      "sortText": "059",
+      "textEdit": {
+        "newText": "figure"
+      }
+    },
+    {
+      "label": "figure.bracket",
+      "kind": 3,
+      "detail": "(content, alt: none | str, caption: content | none, gap: length, kind: auto | function | str, numbering: function | none | str, outlined: bool, placement: alignment | auto | none, scope: \"column\" | \"parent\", supplement: auto | content | function | none) => figure",
+      "insertTextFormat": 2,
+      "sortText": "060",
+      "textEdit": {
+        "newText": "figure[${1:}]"
+      }
+    },
+    {
+      "label": "figure.paren",
+      "kind": 3,
+      "detail": "(content, alt: none | str, caption: content | none, gap: length, kind: auto | function | str, numbering: function | none | str, outlined: bool, placement: alignment | auto | none, scope: \"column\" | \"parent\", supplement: auto | content | function | none) => figure",
+      "insertTextFormat": 2,
+      "sortText": "061",
+      "textEdit": {
+        "newText": "figure(${1:})"
+      }
+    },
+    {
+      "label": "float",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "062",
+      "textEdit": {
+        "newText": "float"
+      }
+    },
+    {
+      "label": "float.paren",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "063",
+      "textEdit": {
+        "newText": "float(${1:})"
+      }
+    },
+    {
+      "label": "footnote",
+      "kind": 3,
+      "detail": "(content | label | ref-label, numbering: function | str) => footnote",
+      "insertTextFormat": 2,
+      "sortText": "064",
+      "textEdit": {
+        "newText": "footnote"
+      }
+    },
+    {
+      "label": "footnote.bracket",
+      "kind": 3,
+      "detail": "(content | label | ref-label, numbering: function | str) => footnote",
+      "insertTextFormat": 2,
+      "sortText": "065",
+      "textEdit": {
+        "newText": "footnote[${1:}]"
+      }
+    },
+    {
+      "label": "footnote.paren",
+      "kind": 3,
+      "detail": "(content | label | ref-label, numbering: function | str) => footnote",
+      "insertTextFormat": 2,
+      "sortText": "066",
+      "textEdit": {
+        "newText": "footnote(${1:})"
+      }
+    },
+    {
+      "label": "for loop",
+      "kind": 15,
+      "detail": "Computes or inserts something for each value in a collection.",
+      "insertTextFormat": 2,
+      "sortText": "067",
+      "textEdit": {
+        "newText": "for ${1:value} in ${2:(1, 2, 3)} {\n\t${3:}\n}"
+      }
+    },
+    {
+      "label": "for loop (with key)",
+      "kind": 15,
+      "detail": "Computes or inserts something for each key and value in a collection.",
+      "insertTextFormat": 2,
+      "sortText": "068",
+      "textEdit": {
+        "newText": "for (${1:key}, ${2:value}) in ${3:(a: 1, b: 2)} {\n\t${4:}\n}"
+      }
+    },
+    {
+      "label": "fraction",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "069",
+      "textEdit": {
+        "newText": "fraction"
+      }
+    },
+    {
+      "label": "fuchsia",
+      "kind": 6,
+      "detail": "rgb(\"#f012be\")",
+      "insertTextFormat": 2,
+      "sortText": "070",
+      "textEdit": {
+        "newText": "fuchsia"
+      }
+    },
+    {
+      "label": "function",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "071",
+      "textEdit": {
+        "newText": "function"
+      }
+    },
+    {
+      "label": "function call",
+      "kind": 15,
+      "detail": "Evaluates a function.",
+      "insertTextFormat": 2,
+      "sortText": "072",
+      "textEdit": {
+        "newText": "${1:function}(${2:arguments})[${3:body}]"
+      }
+    },
+    {
+      "label": "gradient",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "073",
+      "textEdit": {
+        "newText": "gradient"
+      }
+    },
+    {
+      "label": "gray",
+      "kind": 6,
+      "detail": "luma(66.67%)",
+      "insertTextFormat": 2,
+      "sortText": "074",
+      "textEdit": {
+        "newText": "gray"
+      }
+    },
+    {
+      "label": "green",
+      "kind": 6,
+      "detail": "rgb(\"#2ecc40\")",
+      "insertTextFormat": 2,
+      "sortText": "075",
+      "textEdit": {
+        "newText": "green"
+      }
+    },
+    {
+      "label": "grid",
+      "kind": 3,
+      "detail": "(align: alignment | array | auto | function, column-gutter: array | auto | length | type, columns: array | auto | length | type, fill: array | color | function | gradient | none | tiling, gutter: array | auto | length | type, inset: array | dictionary | function | relative, row-gutter: array | auto | length | type, rows: array | auto | length | type, stroke: array | color | dictionary | function | gradient | length | none | stroke | tiling, ..: content) => grid",
+      "insertTextFormat": 2,
+      "sortText": "076",
+      "textEdit": {
+        "newText": "grid"
+      }
+    },
+    {
+      "label": "grid.paren",
+      "kind": 3,
+      "detail": "(align: alignment | array | auto | function, column-gutter: array | auto | length | type, columns: array | auto | length | type, fill: array | color | function | gradient | none | tiling, gutter: array | auto | length | type, inset: array | dictionary | function | relative, row-gutter: array | auto | length | type, rows: array | auto | length | type, stroke: array | color | dictionary | function | gradient | length | none | stroke | tiling, ..: content) => grid",
+      "insertTextFormat": 2,
+      "sortText": "077",
+      "textEdit": {
+        "newText": "grid(${1:})"
+      }
+    },
+    {
+      "label": "h",
+      "kind": 3,
+      "detail": "(fraction | relative, weak: bool) => h",
+      "insertTextFormat": 2,
+      "sortText": "078",
+      "textEdit": {
+        "newText": "h(${1:})"
+      }
+    },
+    {
+      "label": "heading",
+      "kind": 3,
+      "detail": "(content, bookmarked: auto | bool, depth: int, hanging-indent: auto | length, level: auto | int, numbering: function | none | str, offset: int, outlined: bool, supplement: auto | content | function | none) => heading",
+      "insertTextFormat": 2,
+      "sortText": "079",
+      "textEdit": {
+        "newText": "heading(${1:})"
+      }
+    },
+    {
+      "label": "heading.bracket",
+      "kind": 3,
+      "detail": "(content, bookmarked: auto | bool, depth: int, hanging-indent: auto | length, level: auto | int, numbering: function | none | str, offset: int, outlined: bool, supplement: auto | content | function | none) => heading",
+      "insertTextFormat": 2,
+      "sortText": "080",
+      "textEdit": {
+        "newText": "heading[${1:}]"
+      }
+    },
+    {
+      "label": "here",
+      "kind": 3,
+      "detail": "() => location",
+      "insertTextFormat": 2,
+      "sortText": "081",
+      "textEdit": {
+        "newText": "here()${1:}"
+      }
+    },
+    {
+      "label": "hide",
+      "kind": 3,
+      "detail": "(content) => hide",
+      "insertTextFormat": 2,
+      "sortText": "082",
+      "textEdit": {
+        "newText": "hide(${1:})"
+      }
+    },
+    {
+      "label": "hide.bracket",
+      "kind": 3,
+      "detail": "(content) => hide",
+      "insertTextFormat": 2,
+      "sortText": "083",
+      "textEdit": {
+        "newText": "hide[${1:}]"
+      }
+    },
+    {
+      "label": "highlight",
+      "kind": 3,
+      "detail": "(content, bottom-edge: \"baseline\" | \"bounds\" | \"descender\" | length, extent: length, fill: color, radius: radius, stroke: stroke, top-edge: \"ascender\" | \"baseline\" | \"bounds\" | \"cap-height\" | \"x-height\" | length) => highlight",
+      "insertTextFormat": 2,
+      "sortText": "084",
+      "textEdit": {
+        "newText": "highlight(${1:})"
+      }
+    },
+    {
+      "label": "highlight.bracket",
+      "kind": 3,
+      "detail": "(content, bottom-edge: \"baseline\" | \"bounds\" | \"descender\" | length, extent: length, fill: color, radius: radius, stroke: stroke, top-edge: \"ascender\" | \"baseline\" | \"bounds\" | \"cap-height\" | \"x-height\" | length) => highlight",
+      "insertTextFormat": 2,
+      "sortText": "085",
+      "textEdit": {
+        "newText": "highlight[${1:}]"
+      }
+    },
+    {
+      "label": "horizon",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "086",
+      "textEdit": {
+        "newText": "horizon"
+      }
+    },
+    {
+      "label": "if conditional",
+      "kind": 15,
+      "detail": "Computes or inserts something conditionally.",
+      "insertTextFormat": 2,
+      "sortText": "087",
+      "textEdit": {
+        "newText": "if ${1:1 < 2} {\n\t${2:}\n}"
+      }
+    },
+    {
+      "label": "if-else conditional",
+      "kind": 15,
+      "detail": "Computes or inserts different things based on a condition.",
+      "insertTextFormat": 2,
+      "sortText": "088",
+      "textEdit": {
+        "newText": "if ${1:1 < 2} {\n\t${2:}\n} else {\n\t${3:}\n}"
+      }
+    },
+    {
+      "label": "image",
+      "kind": 3,
+      "detail": "([image], alt: none | str, fit: \"contain\" | \"cover\" | \"stretch\", format: \"gif\" | \"jpg\" | \"pdf\" | \"png\" | \"svg\" | \"webp\" | auto | dictionary, height: auto | fraction | relative, icc: auto | bytes | path | str, page: int, scaling: \"pixelated\" | \"smooth\" | auto, width: auto | relative) => image",
+      "insertTextFormat": 2,
+      "sortText": "089",
+      "textEdit": {
+        "newText": "image(${1:})"
+      }
+    },
+    {
+      "label": "import (package)",
+      "kind": 15,
+      "detail": "Imports variables from another file.",
+      "insertTextFormat": 2,
+      "sortText": "090",
+      "textEdit": {
+        "newText": "import \"@${1:}\""
+      }
+    },
+    {
+      "label": "import module",
+      "kind": 15,
+      "detail": "Imports module from another file.",
+      "insertTextFormat": 2,
+      "sortText": "091",
+      "textEdit": {
+        "newText": "import \"${1:}\""
+      }
+    },
+    {
+      "label": "import module by expression",
+      "kind": 15,
+      "detail": "Imports items by expression.",
+      "insertTextFormat": 2,
+      "sortText": "092",
+      "textEdit": {
+        "newText": "import ${1:}"
+      }
+    },
+    {
+      "label": "include (file)",
+      "kind": 15,
+      "detail": "Includes content from another file.",
+      "insertTextFormat": 2,
+      "sortText": "093",
+      "textEdit": {
+        "newText": "include \"${1:}\""
+      }
+    },
+    {
+      "label": "include (package)",
+      "kind": 15,
+      "detail": "Includes content from another file.",
+      "insertTextFormat": 2,
+      "sortText": "094",
+      "textEdit": {
+        "newText": "include \"@${1:}\""
+      }
+    },
+    {
+      "label": "int",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "095",
+      "textEdit": {
+        "newText": "int"
+      }
+    },
+    {
+      "label": "int.paren",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "096",
+      "textEdit": {
+        "newText": "int(${1:})"
+      }
+    },
+    {
+      "label": "json",
+      "kind": 3,
+      "detail": "([json]) => any",
+      "insertTextFormat": 2,
+      "sortText": "097",
+      "textEdit": {
+        "newText": "json(${1:})"
+      }
+    },
+    {
+      "label": "label",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "098",
+      "textEdit": {
+        "newText": "label(${1:})"
+      }
+    },
+    {
+      "label": "layout",
+      "kind": 3,
+      "detail": "(function) => content",
+      "insertTextFormat": 2,
+      "sortText": "099",
+      "textEdit": {
+        "newText": "layout(${1:})"
+      }
+    },
+    {
+      "label": "left",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "100",
+      "textEdit": {
+        "newText": "left"
+      }
+    },
+    {
+      "label": "length",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "101",
+      "textEdit": {
+        "newText": "length"
+      }
+    },
+    {
+      "label": "let binding",
+      "kind": 15,
+      "detail": "Saves a value in a variable.",
+      "insertTextFormat": 2,
+      "sortText": "102",
+      "textEdit": {
+        "newText": "let ${1:name} = ${2:value}"
+      }
+    },
+    {
+      "label": "let binding (function)",
+      "kind": 15,
+      "detail": "Defines a function.",
+      "insertTextFormat": 2,
+      "sortText": "103",
+      "textEdit": {
+        "newText": "let ${1:name}(${2:params}) = ${3:output}"
+      }
+    },
+    {
+      "label": "lime",
+      "kind": 6,
+      "detail": "rgb(\"#01ff70\")",
+      "insertTextFormat": 2,
+      "sortText": "104",
+      "textEdit": {
+        "newText": "lime"
+      }
+    },
+    {
+      "label": "line",
+      "kind": 3,
+      "detail": "(angle: angle, end: array | none, length: relative, start: array, stroke: stroke) => line",
+      "insertTextFormat": 2,
+      "sortText": "105",
+      "textEdit": {
+        "newText": "line()${1:}"
+      }
+    },
+    {
+      "label": "linebreak",
+      "kind": 3,
+      "detail": "(justify: bool) => linebreak",
+      "insertTextFormat": 2,
+      "sortText": "106",
+      "textEdit": {
+        "newText": "linebreak()${1:}"
+      }
+    },
+    {
+      "label": "link",
+      "kind": 3,
+      "detail": "(dictionary | location | ref-label | str, content) => link",
+      "insertTextFormat": 2,
+      "sortText": "107",
+      "textEdit": {
+        "newText": "link(${1:})"
+      }
+    },
+    {
+      "label": "list",
+      "kind": 3,
+      "detail": "(body-indent: length, indent: length, marker: array | content | function, marker-align: alignment, spacing: auto | length, tight: bool, ..: content) => list",
+      "insertTextFormat": 2,
+      "sortText": "108",
+      "textEdit": {
+        "newText": "list"
+      }
+    },
+    {
+      "label": "list.paren",
+      "kind": 3,
+      "detail": "(body-indent: length, indent: length, marker: array | content | function, marker-align: alignment, spacing: auto | length, tight: bool, ..: content) => list",
+      "insertTextFormat": 2,
+      "sortText": "109",
+      "textEdit": {
+        "newText": "list(${1:})"
+      }
+    },
+    {
+      "label": "locate",
+      "kind": 3,
+      "detail": "(function | label | location | selector) => location",
+      "insertTextFormat": 2,
+      "sortText": "110",
+      "textEdit": {
+        "newText": "locate(${1:})"
+      }
+    },
+    {
+      "label": "location",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "111",
+      "textEdit": {
+        "newText": "location"
+      }
+    },
+    {
+      "label": "lorem",
+      "kind": 3,
+      "detail": "(int) => str",
+      "insertTextFormat": 2,
+      "sortText": "112",
+      "textEdit": {
+        "newText": "lorem(${1:})"
+      }
+    },
+    {
+      "label": "lower",
+      "kind": 3,
+      "detail": "(content | str) => content | str",
+      "insertTextFormat": 2,
+      "sortText": "113",
+      "textEdit": {
+        "newText": "lower(${1:})"
+      }
+    },
+    {
+      "label": "lower.bracket",
+      "kind": 3,
+      "detail": "(content | str) => content | str",
+      "insertTextFormat": 2,
+      "sortText": "114",
+      "textEdit": {
+        "newText": "lower[${1:}]"
+      }
+    },
+    {
+      "label": "ltr",
+      "kind": 6,
+      "detail": "direction",
+      "insertTextFormat": 2,
+      "sortText": "115",
+      "textEdit": {
+        "newText": "ltr"
+      }
+    },
+    {
+      "label": "luma",
+      "kind": 3,
+      "detail": "(int | ratio, ratio, color) => color",
+      "insertTextFormat": 2,
+      "sortText": "116",
+      "textEdit": {
+        "newText": "luma(${1:})"
+      }
+    },
+    {
+      "label": "maroon",
+      "kind": 6,
+      "detail": "rgb(\"#85144b\")",
+      "insertTextFormat": 2,
+      "sortText": "117",
+      "textEdit": {
+        "newText": "maroon"
+      }
+    },
+    {
+      "label": "math",
+      "kind": 9,
+      "detail": "module(\"math\")",
+      "insertTextFormat": 2,
+      "sortText": "118",
+      "textEdit": {
+        "newText": "math"
+      }
+    },
+    {
+      "label": "measure",
+      "kind": 3,
+      "detail": "(content, height: auto | length, width: auto | length) => dictionary",
+      "insertTextFormat": 2,
+      "sortText": "119",
+      "textEdit": {
+        "newText": "measure(${1:})"
+      }
+    },
+    {
+      "label": "measure.bracket",
+      "kind": 3,
+      "detail": "(content, height: auto | length, width: auto | length) => dictionary",
+      "insertTextFormat": 2,
+      "sortText": "120",
+      "textEdit": {
+        "newText": "measure[${1:}]"
+      }
+    },
+    {
+      "label": "metadata",
+      "kind": 3,
+      "detail": "(any) => metadata",
+      "insertTextFormat": 2,
+      "sortText": "121",
+      "textEdit": {
+        "newText": "metadata(${1:})"
+      }
+    },
+    {
+      "label": "module",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "122",
+      "textEdit": {
+        "newText": "module"
+      }
+    },
+    {
+      "label": "move",
+      "kind": 3,
+      "detail": "(content, dx: relative, dy: relative) => move",
+      "insertTextFormat": 2,
+      "sortText": "123",
+      "textEdit": {
+        "newText": "move(${1:})"
+      }
+    },
+    {
+      "label": "move.bracket",
+      "kind": 3,
+      "detail": "(content, dx: relative, dy: relative) => move",
+      "insertTextFormat": 2,
+      "sortText": "124",
+      "textEdit": {
+        "newText": "move[${1:}]"
+      }
+    },
+    {
+      "label": "navy",
+      "kind": 6,
+      "detail": "rgb(\"#001f3f\")",
+      "insertTextFormat": 2,
+      "sortText": "125",
+      "textEdit": {
+        "newText": "navy"
+      }
+    },
+    {
+      "label": "numbering",
+      "kind": 3,
+      "detail": "(function | str, ..: int) => any",
+      "insertTextFormat": 2,
+      "sortText": "126",
+      "textEdit": {
+        "newText": "numbering(${1:})"
+      }
+    },
+    {
+      "label": "oklab",
+      "kind": 3,
+      "detail": "(ratio, float | ratio, float | ratio, ratio, color) => color",
+      "insertTextFormat": 2,
+      "sortText": "127",
+      "textEdit": {
+        "newText": "oklab(${1:})"
+      }
+    },
+    {
+      "label": "oklch",
+      "kind": 3,
+      "detail": "(ratio, float | ratio, angle, ratio, color) => color",
+      "insertTextFormat": 2,
+      "sortText": "128",
+      "textEdit": {
+        "newText": "oklch(${1:})"
+      }
+    },
+    {
+      "label": "olive",
+      "kind": 6,
+      "detail": "rgb(\"#3d9970\")",
+      "insertTextFormat": 2,
+      "sortText": "129",
+      "textEdit": {
+        "newText": "olive"
+      }
+    },
+    {
+      "label": "orange",
+      "kind": 6,
+      "detail": "rgb(\"#ff851b\")",
+      "insertTextFormat": 2,
+      "sortText": "130",
+      "textEdit": {
+        "newText": "orange"
+      }
+    },
+    {
+      "label": "outline",
+      "kind": 3,
+      "detail": "(depth: int | none, indent: auto | function | relative, target: function | label | location | selector, title: auto | content | none) => outline",
+      "insertTextFormat": 2,
+      "sortText": "131",
+      "textEdit": {
+        "newText": "outline"
+      }
+    },
+    {
+      "label": "outline.paren",
+      "kind": 3,
+      "detail": "(depth: int | none, indent: auto | function | relative, target: function | label | location | selector, title: auto | content | none) => outline",
+      "insertTextFormat": 2,
+      "sortText": "132",
+      "textEdit": {
+        "newText": "outline()${1:}"
+      }
+    },
+    {
+      "label": "overline",
+      "kind": 3,
+      "detail": "(content, background: bool, evade: bool, extent: length, offset: auto | length, stroke: stroke) => overline",
+      "insertTextFormat": 2,
+      "sortText": "133",
+      "textEdit": {
+        "newText": "overline(${1:})"
+      }
+    },
+    {
+      "label": "overline.bracket",
+      "kind": 3,
+      "detail": "(content, background: bool, evade: bool, extent: length, offset: auto | length, stroke: stroke) => overline",
+      "insertTextFormat": 2,
+      "sortText": "134",
+      "textEdit": {
+        "newText": "overline[${1:}]"
+      }
+    },
+    {
+      "label": "pad",
+      "kind": 3,
+      "detail": "(content, bottom: relative, left: relative, rest: relative, right: relative, top: relative, x: relative, y: relative) => pad",
+      "insertTextFormat": 2,
+      "sortText": "135",
+      "textEdit": {
+        "newText": "pad(${1:})"
+      }
+    },
+    {
+      "label": "pad.bracket",
+      "kind": 3,
+      "detail": "(content, bottom: relative, left: relative, rest: relative, right: relative, top: relative, x: relative, y: relative) => pad",
+      "insertTextFormat": 2,
+      "sortText": "136",
+      "textEdit": {
+        "newText": "pad[${1:}]"
+      }
+    },
+    {
+      "label": "page",
+      "kind": 3,
+      "detail": "(background: content | none, binding: alignment | auto, bleed: dictionary | relative, body: content, columns: int, fill: color, flipped: bool, footer: auto | content | none, footer-descent: relative, foreground: content | none, header: auto | content | none, header-ascent: relative, height: auto | length, margin: margin, number-align: alignment, numbering: function | none | str, paper: \"a0\" | \"a1\" | \"a10\" | \"a11\" | \"a2\" | \"a3\" | \"a4\" | \"a5\" | \"a6\" | \"a7\" | \"a8\" | \"a9\" | \"ansi-a\" | \"ansi-b\" | \"ansi-c\" | \"ansi-d\" | \"ansi-e\" | \"arch-a\" | \"arch-b\" | \"arch-c\" | \"arch-d\" | \"arch-e\" | \"arch-e1\" | \"asia-f4\" | \"cn-business-card\" | \"din-d3\" | \"din-d4\" | \"din-d5\" | \"din-d6\" | \"din-d7\" | \"din-d8\" | \"eu-business-card\" | \"fr-carré\" | \"fr-couronne-écriture\" | \"fr-couronne-édition\" | \"fr-jésus\" | \"fr-raisin\" | \"fr-tellière\" | \"iso-b1\" | \"iso-b2\" | \"iso-b3\" | \"iso-b4\" | \"iso-b5\" | \"iso-b6\" | \"iso-b7\" | \"iso-b8\" | \"iso-c3\" | \"iso-c4\" | \"iso-c5\" | \"iso-c6\" | \"iso-c7\" | \"iso-c8\" | \"iso-id-1\" | \"iso-id-2\" | \"iso-id-3\" | \"jis-b0\" | \"jis-b1\" | \"jis-b10\" | \"jis-b11\" | \"jis-b2\" | \"jis-b3\" | \"jis-b4\" | \"jis-b5\" | \"jis-b6\" | \"jis-b7\" | \"jis-b8\" | \"jis-b9\" | \"jp-business-card\" | \"jp-kiku-4\" | \"jp-kiku-5\" | \"jp-shiroku-ban-4\" | \"jp-shiroku-ban-5\" | \"jp-shiroku-ban-6\" | \"newspaper-berliner\" | \"newspaper-broadsheet\" | \"newspaper-compact\" | \"presentation-16-9\" | \"presentation-4-3\" | \"sac-d0\" | \"sac-d1\" | \"sac-d2\" | \"sac-d3\" | \"sac-d4\" | \"sac-d5\" | \"sac-d6\" | \"sis-e5\" | \"sis-g5\" | \"uk-book-a\" | \"uk-book-b\" | \"uk-brief\" | \"uk-crown\" | \"uk-draft\" | \"uk-foolscap\" | \"uk-quarto\" | \"us-business-card\" | \"us-digest\" | \"us-executive\" | \"us-foolscap-folio\" | \"us-gov-legal\" | \"us-gov-letter\" | \"us-ledger\" | \"us-legal\" | \"us-letter\" | \"us-oficio\" | \"us-statement\" | \"us-tabloid\" | \"us-trade\", supplement: auto | content | none, width: auto | length) => page",
+      "insertTextFormat": 2,
+      "sortText": "137",
+      "textEdit": {
+        "newText": "page()${1:}"
+      }
+    },
+    {
+      "label": "pagebreak",
+      "kind": 3,
+      "detail": "(to: \"even\" | \"odd\" | none, weak: bool) => pagebreak",
+      "insertTextFormat": 2,
+      "sortText": "138",
+      "textEdit": {
+        "newText": "pagebreak()${1:}"
+      }
+    },
+    {
+      "label": "panic",
+      "kind": 3,
+      "detail": "(..: any) => any",
+      "insertTextFormat": 2,
+      "sortText": "139",
+      "textEdit": {
+        "newText": "panic(${1:})"
+      }
+    },
+    {
+      "label": "par",
+      "kind": 3,
+      "detail": "(content, first-line-indent: dictionary | length, hanging-indent: length, justification-limits: dictionary, justify: bool, leading: length, linebreaks: \"optimized\" | \"simple\" | auto, spacing: length) => par",
+      "insertTextFormat": 2,
+      "sortText": "140",
+      "textEdit": {
+        "newText": "par"
+      }
+    },
+    {
+      "label": "par.bracket",
+      "kind": 3,
+      "detail": "(content, first-line-indent: dictionary | length, hanging-indent: length, justification-limits: dictionary, justify: bool, leading: length, linebreaks: \"optimized\" | \"simple\" | auto, spacing: length) => par",
+      "insertTextFormat": 2,
+      "sortText": "141",
+      "textEdit": {
+        "newText": "par[${1:}]"
+      }
+    },
+    {
+      "label": "par.paren",
+      "kind": 3,
+      "detail": "(content, first-line-indent: dictionary | length, hanging-indent: length, justification-limits: dictionary, justify: bool, leading: length, linebreaks: \"optimized\" | \"simple\" | auto, spacing: length) => par",
+      "insertTextFormat": 2,
+      "sortText": "142",
+      "textEdit": {
+        "newText": "par(${1:})"
+      }
+    },
+    {
+      "label": "parbreak",
+      "kind": 3,
+      "detail": "() => parbreak",
+      "insertTextFormat": 2,
+      "sortText": "143",
+      "textEdit": {
+        "newText": "parbreak()${1:}"
+      }
+    },
+    {
+      "label": "path",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "144",
+      "textEdit": {
+        "newText": "path(${1:})"
+      }
+    },
+    {
+      "label": "pdf",
+      "kind": 9,
+      "detail": "module(\"pdf\")",
+      "insertTextFormat": 2,
+      "sortText": "145",
+      "textEdit": {
+        "newText": "pdf"
+      }
+    },
+    {
+      "label": "place",
+      "kind": 3,
+      "detail": "(alignment | auto, content, clearance: length, dx: relative, dy: relative, float: bool, scope: \"column\" | \"parent\") => place",
+      "insertTextFormat": 2,
+      "sortText": "146",
+      "textEdit": {
+        "newText": "place"
+      }
+    },
+    {
+      "label": "place.paren",
+      "kind": 3,
+      "detail": "(alignment | auto, content, clearance: length, dx: relative, dy: relative, float: bool, scope: \"column\" | \"parent\") => place",
+      "insertTextFormat": 2,
+      "sortText": "147",
+      "textEdit": {
+        "newText": "place(${1:})"
+      }
+    },
+    {
+      "label": "plugin",
+      "kind": 3,
+      "detail": "([wasm]) => module",
+      "insertTextFormat": 2,
+      "sortText": "148",
+      "textEdit": {
+        "newText": "plugin(${1:})"
+      }
+    },
+    {
+      "label": "polygon",
+      "kind": 3,
+      "detail": "(fill: color, fill-rule: \"even-odd\" | \"non-zero\", stroke: stroke, ..: array) => polygon",
+      "insertTextFormat": 2,
+      "sortText": "149",
+      "textEdit": {
+        "newText": "polygon"
+      }
+    },
+    {
+      "label": "polygon.paren",
+      "kind": 3,
+      "detail": "(fill: color, fill-rule: \"even-odd\" | \"non-zero\", stroke: stroke, ..: array) => polygon",
+      "insertTextFormat": 2,
+      "sortText": "150",
+      "textEdit": {
+        "newText": "polygon(${1:})"
+      }
+    },
+    {
+      "label": "purple",
+      "kind": 6,
+      "detail": "rgb(\"#b10dc9\")",
+      "insertTextFormat": 2,
+      "sortText": "151",
+      "textEdit": {
+        "newText": "purple"
+      }
+    },
+    {
+      "label": "query",
+      "kind": 3,
+      "detail": "(function | label | location | selector) => array",
+      "insertTextFormat": 2,
+      "sortText": "152",
+      "textEdit": {
+        "newText": "query(${1:})"
+      }
+    },
+    {
+      "label": "quote",
+      "kind": 3,
+      "detail": "(content, attribution: content | label | none, block: bool, quotes: auto | bool) => quote",
+      "insertTextFormat": 2,
+      "sortText": "153",
+      "textEdit": {
+        "newText": "quote(${1:})"
+      }
+    },
+    {
+      "label": "quote.bracket",
+      "kind": 3,
+      "detail": "(content, attribution: content | label | none, block: bool, quotes: auto | bool) => quote",
+      "insertTextFormat": 2,
+      "sortText": "154",
+      "textEdit": {
+        "newText": "quote[${1:}]"
+      }
+    },
+    {
+      "label": "range",
+      "kind": 3,
+      "detail": "(int, int, inclusive: bool, step: int) => array",
+      "insertTextFormat": 2,
+      "sortText": "155",
+      "textEdit": {
+        "newText": "range(${1:})"
+      }
+    },
+    {
+      "label": "ratio",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "156",
+      "textEdit": {
+        "newText": "ratio"
+      }
+    },
+    {
+      "label": "raw",
+      "kind": 3,
+      "detail": "(str, align: alignment, block: bool, lang: none | str, syntaxes: [syntax], tab-size: int, theme: [theme]) => raw",
+      "insertTextFormat": 2,
+      "sortText": "157",
+      "textEdit": {
+        "newText": "raw"
+      }
+    },
+    {
+      "label": "raw.paren",
+      "kind": 3,
+      "detail": "(str, align: alignment, block: bool, lang: none | str, syntaxes: [syntax], tab-size: int, theme: [theme]) => raw",
+      "insertTextFormat": 2,
+      "sortText": "158",
+      "textEdit": {
+        "newText": "raw(${1:})"
+      }
+    },
+    {
+      "label": "read",
+      "kind": 3,
+      "detail": "([any], encoding: \"utf8\" | none) => bytes | str",
+      "insertTextFormat": 2,
+      "sortText": "159",
+      "textEdit": {
+        "newText": "read(${1:})"
+      }
+    },
+    {
+      "label": "rect",
+      "kind": 3,
+      "detail": "(content | none, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, radius: radius, stroke: stroke, width: auto | relative) => rect",
+      "insertTextFormat": 2,
+      "sortText": "160",
+      "textEdit": {
+        "newText": "rect(${1:})"
+      }
+    },
+    {
+      "label": "rect.bracket",
+      "kind": 3,
+      "detail": "(content | none, fill: color, height: auto | fraction | relative, inset: inset, outset: outset, radius: radius, stroke: stroke, width: auto | relative) => rect",
+      "insertTextFormat": 2,
+      "sortText": "161",
+      "textEdit": {
+        "newText": "rect[${1:}]"
+      }
+    },
+    {
+      "label": "red",
+      "kind": 6,
+      "detail": "rgb(\"#ff4136\")",
+      "insertTextFormat": 2,
+      "sortText": "162",
+      "textEdit": {
+        "newText": "red"
+      }
+    },
+    {
+      "label": "ref",
+      "kind": 3,
+      "detail": "(ref-label, form: \"normal\" | \"page\", supplement: auto | content | function | none) => ref",
+      "insertTextFormat": 2,
+      "sortText": "163",
+      "textEdit": {
+        "newText": "ref(${1:})"
+      }
+    },
+    {
+      "label": "regex",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "164",
+      "textEdit": {
+        "newText": "regex(${1:})"
+      }
+    },
+    {
+      "label": "relative",
+      "kind": 7,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "165",
+      "textEdit": {
+        "newText": "relative"
+      }
+    },
+    {
+      "label": "repeat",
+      "kind": 3,
+      "detail": "(content, gap: length, justify: bool) => repeat",
+      "insertTextFormat": 2,
+      "sortText": "166",
+      "textEdit": {
+        "newText": "repeat(${1:})"
+      }
+    },
+    {
+      "label": "repeat.bracket",
+      "kind": 3,
+      "detail": "(content, gap: length, justify: bool) => repeat",
+      "insertTextFormat": 2,
+      "sortText": "167",
+      "textEdit": {
+        "newText": "repeat[${1:}]"
+      }
+    },
+    {
+      "label": "repr",
+      "kind": 3,
+      "detail": "(any) => str",
+      "insertTextFormat": 2,
+      "sortText": "168",
+      "textEdit": {
+        "newText": "repr(${1:})"
+      }
+    },
+    {
+      "label": "return",
+      "kind": 15,
+      "detail": "Returns early from a function.",
+      "insertTextFormat": 2,
+      "sortText": "169",
+      "textEdit": {
+        "newText": "return ${1:output}"
+      }
+    },
+    {
+      "label": "rgb",
+      "kind": 3,
+      "detail": "(int | ratio, int | ratio, int | ratio, int | ratio, str, color) => color",
+      "insertTextFormat": 2,
+      "sortText": "170",
+      "textEdit": {
+        "newText": "rgb(${1:})"
+      }
+    },
+    {
+      "label": "right",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "171",
+      "textEdit": {
+        "newText": "right"
+      }
+    },
+    {
+      "label": "rotate",
+      "kind": 3,
+      "detail": "(angle, content, origin: alignment, reflow: bool) => rotate",
+      "insertTextFormat": 2,
+      "sortText": "172",
+      "textEdit": {
+        "newText": "rotate(${1:})"
+      }
+    },
+    {
+      "label": "rtl",
+      "kind": 6,
+      "detail": "direction",
+      "insertTextFormat": 2,
+      "sortText": "173",
+      "textEdit": {
+        "newText": "rtl"
+      }
+    },
+    {
+      "label": "scale",
+      "kind": 3,
+      "detail": "(content, factor: auto | length | ratio, origin: alignment, reflow: bool, x: auto | length | ratio, y: auto | length | ratio) => scale",
+      "insertTextFormat": 2,
+      "sortText": "174",
+      "textEdit": {
+        "newText": "scale(${1:})"
+      }
+    },
+    {
+      "label": "scale.bracket",
+      "kind": 3,
+      "detail": "(content, factor: auto | length | ratio, origin: alignment, reflow: bool, x: auto | length | ratio, y: auto | length | ratio) => scale",
+      "insertTextFormat": 2,
+      "sortText": "175",
+      "textEdit": {
+        "newText": "scale[${1:}]"
+      }
+    },
+    {
+      "label": "selector",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "176",
+      "textEdit": {
+        "newText": "selector(${1:})"
+      }
+    },
+    {
+      "label": "set rule",
+      "kind": 15,
+      "detail": "Sets style properties on an element.",
+      "insertTextFormat": 2,
+      "sortText": "177",
+      "textEdit": {
+        "newText": "set ${1:}"
+      }
+    },
+    {
+      "label": "show rule",
+      "kind": 15,
+      "detail": "Redefines the look of an element.",
+      "insertTextFormat": 2,
+      "sortText": "178",
+      "textEdit": {
+        "newText": "show ${1:}"
+      }
+    },
+    {
+      "label": "show rule (everything)",
+      "kind": 15,
+      "detail": "Transforms everything that follows.",
+      "insertTextFormat": 2,
+      "sortText": "179",
+      "textEdit": {
+        "newText": "show: ${1:}"
+      }
+    },
+    {
+      "label": "silver",
+      "kind": 6,
+      "detail": "luma(86.67%)",
+      "insertTextFormat": 2,
+      "sortText": "180",
+      "textEdit": {
+        "newText": "silver"
+      }
+    },
+    {
+      "label": "skew",
+      "kind": 3,
+      "detail": "(content, ax: angle, ay: angle, origin: alignment, reflow: bool) => skew",
+      "insertTextFormat": 2,
+      "sortText": "181",
+      "textEdit": {
+        "newText": "skew(${1:})"
+      }
+    },
+    {
+      "label": "skew.bracket",
+      "kind": 3,
+      "detail": "(content, ax: angle, ay: angle, origin: alignment, reflow: bool) => skew",
+      "insertTextFormat": 2,
+      "sortText": "182",
+      "textEdit": {
+        "newText": "skew[${1:}]"
+      }
+    },
+    {
+      "label": "smallcaps",
+      "kind": 3,
+      "detail": "(content, all: bool) => smallcaps",
+      "insertTextFormat": 2,
+      "sortText": "183",
+      "textEdit": {
+        "newText": "smallcaps(${1:})"
+      }
+    },
+    {
+      "label": "smallcaps.bracket",
+      "kind": 3,
+      "detail": "(content, all: bool) => smallcaps",
+      "insertTextFormat": 2,
+      "sortText": "184",
+      "textEdit": {
+        "newText": "smallcaps[${1:}]"
+      }
+    },
+    {
+      "label": "smartquote",
+      "kind": 3,
+      "detail": "(alternative: bool, double: bool, enabled: bool, quotes: array | auto | dictionary | str) => smartquote",
+      "insertTextFormat": 2,
+      "sortText": "185",
+      "textEdit": {
+        "newText": "smartquote()${1:}"
+      }
+    },
+    {
+      "label": "square",
+      "kind": 3,
+      "detail": "(content | none, fill: color | gradient | none | tiling, height: auto | fraction | relative, inset: inset, outset: outset, radius: radius, size: auto | length, stroke: auto | color | dictionary | gradient | length | none | stroke | tiling, width: auto | relative) => square",
+      "insertTextFormat": 2,
+      "sortText": "186",
+      "textEdit": {
+        "newText": "square(${1:})"
+      }
+    },
+    {
+      "label": "square.bracket",
+      "kind": 3,
+      "detail": "(content | none, fill: color | gradient | none | tiling, height: auto | fraction | relative, inset: inset, outset: outset, radius: radius, size: auto | length, stroke: auto | color | dictionary | gradient | length | none | stroke | tiling, width: auto | relative) => square",
+      "insertTextFormat": 2,
+      "sortText": "187",
+      "textEdit": {
+        "newText": "square[${1:}]"
+      }
+    },
+    {
+      "label": "stack",
+      "kind": 3,
+      "detail": "(dir: dir, spacing: fraction | none | relative, ..: content | fraction | relative) => stack",
+      "insertTextFormat": 2,
+      "sortText": "188",
+      "textEdit": {
+        "newText": "stack(${1:})"
+      }
+    },
+    {
+      "label": "start",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "189",
+      "textEdit": {
+        "newText": "start"
+      }
+    },
+    {
+      "label": "state",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "190",
+      "textEdit": {
+        "newText": "state(${1:})"
+      }
+    },
+    {
+      "label": "std",
+      "kind": 9,
+      "detail": "module(\"global\")",
+      "insertTextFormat": 2,
+      "sortText": "191",
+      "textEdit": {
+        "newText": "std"
+      }
+    },
+    {
+      "label": "str",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "192",
+      "textEdit": {
+        "newText": "str"
+      }
+    },
+    {
+      "label": "str.paren",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "193",
+      "textEdit": {
+        "newText": "str(${1:})"
+      }
+    },
+    {
+      "label": "strike",
+      "kind": 3,
+      "detail": "(content, background: bool, extent: length, offset: auto | length, stroke: stroke) => strike",
+      "insertTextFormat": 2,
+      "sortText": "194",
+      "textEdit": {
+        "newText": "strike(${1:})"
+      }
+    },
+    {
+      "label": "strike.bracket",
+      "kind": 3,
+      "detail": "(content, background: bool, extent: length, offset: auto | length, stroke: stroke) => strike",
+      "insertTextFormat": 2,
+      "sortText": "195",
+      "textEdit": {
+        "newText": "strike[${1:}]"
+      }
+    },
+    {
+      "label": "stroke",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "196",
+      "textEdit": {
+        "newText": "stroke(${1:})"
+      }
+    },
+    {
+      "label": "strong",
+      "kind": 3,
+      "detail": "(content, delta: int) => strong",
+      "insertTextFormat": 2,
+      "sortText": "197",
+      "textEdit": {
+        "newText": "strong(${1:})"
+      }
+    },
+    {
+      "label": "strong.bracket",
+      "kind": 3,
+      "detail": "(content, delta: int) => strong",
+      "insertTextFormat": 2,
+      "sortText": "198",
+      "textEdit": {
+        "newText": "strong[${1:}]"
+      }
+    },
+    {
+      "label": "sub",
+      "kind": 3,
+      "detail": "(content, baseline: auto | length, size: auto | length, typographic: bool) => sub",
+      "insertTextFormat": 2,
+      "sortText": "199",
+      "textEdit": {
+        "newText": "sub(${1:})"
+      }
+    },
+    {
+      "label": "sub.bracket",
+      "kind": 3,
+      "detail": "(content, baseline: auto | length, size: auto | length, typographic: bool) => sub",
+      "insertTextFormat": 2,
+      "sortText": "200",
+      "textEdit": {
+        "newText": "sub[${1:}]"
+      }
+    },
+    {
+      "label": "super",
+      "kind": 3,
+      "detail": "(content, baseline: auto | length, size: auto | length, typographic: bool) => super",
+      "insertTextFormat": 2,
+      "sortText": "201",
+      "textEdit": {
+        "newText": "super(${1:})"
+      }
+    },
+    {
+      "label": "super.bracket",
+      "kind": 3,
+      "detail": "(content, baseline: auto | length, size: auto | length, typographic: bool) => super",
+      "insertTextFormat": 2,
+      "sortText": "202",
+      "textEdit": {
+        "newText": "super[${1:}]"
+      }
+    },
+    {
+      "label": "sym",
+      "kind": 9,
+      "detail": "module(\"sym\")",
+      "insertTextFormat": 2,
+      "sortText": "203",
+      "textEdit": {
+        "newText": "sym"
+      }
+    },
+    {
+      "label": "symbol",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "204",
+      "textEdit": {
+        "newText": "symbol(${1:})"
+      }
+    },
+    {
+      "label": "sys",
+      "kind": 9,
+      "detail": "module(\"sys\")",
+      "insertTextFormat": 2,
+      "sortText": "205",
+      "textEdit": {
+        "newText": "sys"
+      }
+    },
+    {
+      "label": "table",
+      "kind": 3,
+      "detail": "(align: alignment | array | auto | function, column-gutter: array | auto | length | type, columns: array | auto | length | type, fill: color, gutter: array | auto | length | type, inset: inset, row-gutter: array | auto | length | type, rows: array | auto | length | type, stroke: stroke, ..: content) => table",
+      "insertTextFormat": 2,
+      "sortText": "206",
+      "textEdit": {
+        "newText": "table"
+      }
+    },
+    {
+      "label": "table.paren",
+      "kind": 3,
+      "detail": "(align: alignment | array | auto | function, column-gutter: array | auto | length | type, columns: array | auto | length | type, fill: color, gutter: array | auto | length | type, inset: inset, row-gutter: array | auto | length | type, rows: array | auto | length | type, stroke: stroke, ..: content) => table",
+      "insertTextFormat": 2,
+      "sortText": "207",
+      "textEdit": {
+        "newText": "table(${1:})"
+      }
+    },
+    {
+      "label": "target",
+      "kind": 3,
+      "detail": "() => \"bundle\" | \"html\" | \"paged\"",
+      "insertTextFormat": 2,
+      "sortText": "208",
+      "textEdit": {
+        "newText": "target()${1:}"
+      }
+    },
+    {
+      "label": "teal",
+      "kind": 6,
+      "detail": "rgb(\"#39cccc\")",
+      "insertTextFormat": 2,
+      "sortText": "209",
+      "textEdit": {
+        "newText": "teal"
+      }
+    },
+    {
+      "label": "terms",
+      "kind": 3,
+      "detail": "(hanging-indent: length, indent: length, separator: content, spacing: auto | length, tight: bool, ..: array | content) => terms",
+      "insertTextFormat": 2,
+      "sortText": "210",
+      "textEdit": {
+        "newText": "terms"
+      }
+    },
+    {
+      "label": "terms.paren",
+      "kind": 3,
+      "detail": "(hanging-indent: length, indent: length, separator: content, spacing: auto | length, tight: bool, ..: array | content) => terms",
+      "insertTextFormat": 2,
+      "sortText": "211",
+      "textEdit": {
+        "newText": "terms(${1:})"
+      }
+    },
+    {
+      "label": "text",
+      "kind": 3,
+      "detail": "(str, alternates: bool | int, baseline: length, body: content, bottom-edge: \"baseline\" | \"bounds\" | \"descender\" | length, cjk-latin-spacing: auto | none, costs: dictionary, dir: dir, discretionary-ligatures: bool, fallback: bool, features: array | dictionary, fill: color, font: array | text.font, fractions: bool, historical-ligatures: bool, hyphenate: auto | bool, kerning: bool, lang: text.lang, ligatures: bool, number-type: \"lining\" | \"old-style\" | auto, number-width: \"proportional\" | \"tabular\" | auto, overhang: bool, region: text.region, script: auto | str, size: text.size, slashed-zero: bool, spacing: relative, stretch: ratio, stroke: stroke, style: \"italic\" | \"normal\" | \"oblique\", stylistic-set: array | int | none, top-edge: \"ascender\" | \"baseline\" | \"bounds\" | \"cap-height\" | \"x-height\" | length, tracking: length, variations: dictionary, weight: \"black\" | \"bold\" | \"extrabold\" | \"extralight\" | \"light\" | \"medium\" | \"regular\" | \"semibold\" | \"thin\" | int) => text",
+      "insertTextFormat": 2,
+      "sortText": "212",
+      "textEdit": {
+        "newText": "text(${1:})"
+      }
+    },
+    {
+      "label": "tiling",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "213",
+      "textEdit": {
+        "newText": "tiling(${1:})"
+      }
+    },
+    {
+      "label": "tiling.bracket",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "214",
+      "textEdit": {
+        "newText": "tiling[${1:}]"
+      }
+    },
+    {
+      "label": "title",
+      "kind": 3,
+      "detail": "(auto | content) => title",
+      "insertTextFormat": 2,
+      "sortText": "215",
+      "textEdit": {
+        "newText": "title(${1:})"
+      }
+    },
+    {
+      "label": "title.bracket",
+      "kind": 3,
+      "detail": "(auto | content) => title",
+      "insertTextFormat": 2,
+      "sortText": "216",
+      "textEdit": {
+        "newText": "title[${1:}]"
+      }
+    },
+    {
+      "label": "toml",
+      "kind": 3,
+      "detail": "([toml]) => dictionary",
+      "insertTextFormat": 2,
+      "sortText": "217",
+      "textEdit": {
+        "newText": "toml(${1:})"
+      }
+    },
+    {
+      "label": "top",
+      "kind": 6,
+      "detail": "alignment",
+      "insertTextFormat": 2,
+      "sortText": "218",
+      "textEdit": {
+        "newText": "top"
+      }
+    },
+    {
+      "label": "ttb",
+      "kind": 6,
+      "detail": "direction",
+      "insertTextFormat": 2,
+      "sortText": "219",
+      "textEdit": {
+        "newText": "ttb"
+      }
+    },
+    {
+      "label": "type",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "220",
+      "textEdit": {
+        "newText": "type(${1:})"
+      }
+    },
+    {
+      "label": "underline",
+      "kind": 3,
+      "detail": "(content, background: bool, evade: bool, extent: length, offset: auto | length, stroke: stroke) => underline",
+      "insertTextFormat": 2,
+      "sortText": "221",
+      "textEdit": {
+        "newText": "underline(${1:})"
+      }
+    },
+    {
+      "label": "underline.bracket",
+      "kind": 3,
+      "detail": "(content, background: bool, evade: bool, extent: length, offset: auto | length, stroke: stroke) => underline",
+      "insertTextFormat": 2,
+      "sortText": "222",
+      "textEdit": {
+        "newText": "underline[${1:}]"
+      }
+    },
+    {
+      "label": "upper",
+      "kind": 3,
+      "detail": "(content | str) => content | str",
+      "insertTextFormat": 2,
+      "sortText": "223",
+      "textEdit": {
+        "newText": "upper(${1:})"
+      }
+    },
+    {
+      "label": "upper.bracket",
+      "kind": 3,
+      "detail": "(content | str) => content | str",
+      "insertTextFormat": 2,
+      "sortText": "224",
+      "textEdit": {
+        "newText": "upper[${1:}]"
+      }
+    },
+    {
+      "label": "v",
+      "kind": 3,
+      "detail": "(fraction | relative, weak: bool) => v",
+      "insertTextFormat": 2,
+      "sortText": "225",
+      "textEdit": {
+        "newText": "v(${1:})"
+      }
+    },
+    {
+      "label": "version",
+      "kind": 3,
+      "detail": "type",
+      "insertTextFormat": 2,
+      "sortText": "226",
+      "textEdit": {
+        "newText": "version(${1:})"
+      }
+    },
+    {
+      "label": "while loop",
+      "kind": 15,
+      "detail": "Computes or inserts something while a condition is met.",
+      "insertTextFormat": 2,
+      "sortText": "227",
+      "textEdit": {
+        "newText": "while ${1:1 < 2} {\n\t${2:}\n}"
+      }
+    },
+    {
+      "label": "white",
+      "kind": 6,
+      "detail": "luma(100%)",
+      "insertTextFormat": 2,
+      "sortText": "228",
+      "textEdit": {
+        "newText": "white"
+      }
+    },
+    {
+      "label": "xml",
+      "kind": 3,
+      "detail": "([xml]) => any",
+      "insertTextFormat": 2,
+      "sortText": "229",
+      "textEdit": {
+        "newText": "xml(${1:})"
+      }
+    },
+    {
+      "label": "yaml",
+      "kind": 3,
+      "detail": "([yaml]) => any",
+      "insertTextFormat": 2,
+      "sortText": "230",
+      "textEdit": {
+        "newText": "yaml(${1:})"
+      }
+    },
+    {
+      "label": "yellow",
+      "kind": 6,
+      "detail": "rgb(\"#ffdc00\")",
+      "insertTextFormat": 2,
+      "sortText": "231",
+      "textEdit": {
+        "newText": "yellow"
+      }
+    }
+  ],
+  "fields": {
+    "assert": [
+      {
+        "label": "message",
+        "kind": 5,
+        "detail": "str",
+        "insertText": "message: "
+      }
+    ],
+    "bibliography": [
+      {
+        "label": "full",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "full: "
+      },
+      {
+        "label": "group",
+        "kind": 5,
+        "detail": "auto | none | str",
+        "insertText": "group: "
+      },
+      {
+        "label": "style",
+        "kind": 5,
+        "detail": "\"alphanumeric\" | \"american-anthropological-association\" | \"american-chemical-society\" | \"american-geophysical-union\" | \"american-institute-of-aeronautics-and-astronautics\" | \"american-institute-of-physics\" | \"american-medical-association\" | \"american-meteorological-society\" | \"american-physics-society\" | \"american-physiological-society\" | \"american-political-science-association\" | \"american-psychological-association\" | \"american-society-for-microbiology\" | \"american-society-of-civil-engineers\" | \"american-society-of-mechanical-engineers\" | \"american-sociological-association\" | \"angewandte-chemie\" | \"annual-reviews\" | \"annual-reviews-author-date\" | \"apa\" | \"associacao-brasileira-de-normas-tecnicas\" | \"association-for-computing-machinery\" | \"biomed-central\" | \"bmj\" | \"bristol-university-press\" | \"british-medical-journal\" | \"cell\" | \"chicago-author-date\" | \"chicago-fullnotes\" | \"chicago-notes\" | \"chicago-shortened-notes\" | \"copernicus\" | \"council-of-science-editors\" | \"council-of-science-editors-author-date\" | \"cse-citation-sequence-brackets-8th-edition\" | \"cse-name-year\" | \"current-opinion\" | \"deutsche-gesellschaft-für-psychologie\" | \"deutsche-sprache\" | \"elsevier-harvard\" | \"elsevier-vancouver\" | \"elsevier-with-titles\" | \"frontiers\" | \"future-medicine\" | \"future-science\" | \"gb-7714-2005-numeric\" | \"gb-7714-2015-author-date\" | \"gb-7714-2015-note\" | \"gb-7714-2015-numeric\" | \"gost-r-705-2008-numeric\" | \"harvard-cite-them-right\" | \"ieee\" | \"institute-of-electrical-and-electronics-engineers\" | \"institute-of-physics-numeric\" | \"iso-690-author-date\" | \"iso-690-numeric\" | \"karger\" | \"mary-ann-liebert-vancouver\" | \"mla\" | \"mla-8\" | \"modern-humanities-research-association\" | \"modern-humanities-research-association-notes\" | \"modern-language-association\" | \"modern-language-association-8\" | \"multidisciplinary-digital-publishing-institute\" | \"nature\" | \"nlm-citation-sequence\" | \"nlm-citation-sequence-superscript\" | \"pensoft\" | \"plos\" | \"public-library-of-science\" | \"royal-society-of-chemistry\" | \"sage-vancouver\" | \"sist02\" | \"spie\" | \"springer-basic\" | \"springer-basic-author-date\" | \"springer-fachzeitschriften-medizin-psychologie\" | \"springer-humanities-author-date\" | \"springer-lecture-notes-in-computer-science\" | \"springer-mathphys\" | \"springer-socpsych-author-date\" | \"springer-vancouver\" | \"taylor-and-francis-chicago-author-date\" | \"taylor-and-francis-national-library-of-medicine\" | \"the-institution-of-engineering-and-technology\" | \"the-lancet\" | \"thieme\" | \"trends\" | \"turabian-author-date\" | \"turabian-fullnote-8\" | \"vancouver\" | \"vancouver-superscript\" | [csl] | bytes | path | str",
+        "insertText": "style: "
+      },
+      {
+        "label": "target",
+        "kind": 5,
+        "detail": "auto | function | label | location | selector",
+        "insertText": "target: "
+      },
+      {
+        "label": "title",
+        "kind": 5,
+        "detail": "auto | content | none",
+        "insertText": "title: "
+      }
+    ],
+    "block": [
+      {
+        "label": "above",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "above: "
+      },
+      {
+        "label": "below",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "below: "
+      },
+      {
+        "label": "breakable",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "breakable: "
+      },
+      {
+        "label": "clip",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "clip: "
+      },
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "height: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "inset",
+        "insertText": "inset: "
+      },
+      {
+        "label": "outset",
+        "kind": 5,
+        "detail": "outset",
+        "insertText": "outset: "
+      },
+      {
+        "label": "radius",
+        "kind": 5,
+        "detail": "radius",
+        "insertText": "radius: "
+      },
+      {
+        "label": "spacing",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "spacing: "
+      },
+      {
+        "label": "sticky",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "sticky: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | relative",
+        "insertText": "width: "
+      }
+    ],
+    "box": [
+      {
+        "label": "baseline",
+        "kind": 5,
+        "detail": "alignment | auto | dictionary | relative",
+        "insertText": "baseline: "
+      },
+      {
+        "label": "clip",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "clip: "
+      },
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | relative",
+        "insertText": "height: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "inset",
+        "insertText": "inset: "
+      },
+      {
+        "label": "outset",
+        "kind": 5,
+        "detail": "outset",
+        "insertText": "outset: "
+      },
+      {
+        "label": "radius",
+        "kind": 5,
+        "detail": "radius",
+        "insertText": "radius: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "width: "
+      }
+    ],
+    "circle": [
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "height: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "inset",
+        "insertText": "inset: "
+      },
+      {
+        "label": "outset",
+        "kind": 5,
+        "detail": "outset",
+        "insertText": "outset: "
+      },
+      {
+        "label": "radius",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "radius: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | relative",
+        "insertText": "width: "
+      }
+    ],
+    "cite": [
+      {
+        "label": "form",
+        "kind": 5,
+        "detail": "\"author\" | \"full\" | \"normal\" | \"prose\" | \"year\" | none",
+        "insertText": "form: "
+      },
+      {
+        "label": "style",
+        "kind": 5,
+        "detail": "\"alphanumeric\" | \"american-anthropological-association\" | \"american-chemical-society\" | \"american-geophysical-union\" | \"american-institute-of-aeronautics-and-astronautics\" | \"american-institute-of-physics\" | \"american-medical-association\" | \"american-meteorological-society\" | \"american-physics-society\" | \"american-physiological-society\" | \"american-political-science-association\" | \"american-psychological-association\" | \"american-society-for-microbiology\" | \"american-society-of-civil-engineers\" | \"american-society-of-mechanical-engineers\" | \"american-sociological-association\" | \"angewandte-chemie\" | \"annual-reviews\" | \"annual-reviews-author-date\" | \"apa\" | \"associacao-brasileira-de-normas-tecnicas\" | \"association-for-computing-machinery\" | \"biomed-central\" | \"bmj\" | \"bristol-university-press\" | \"british-medical-journal\" | \"cell\" | \"chicago-author-date\" | \"chicago-fullnotes\" | \"chicago-notes\" | \"chicago-shortened-notes\" | \"copernicus\" | \"council-of-science-editors\" | \"council-of-science-editors-author-date\" | \"cse-citation-sequence-brackets-8th-edition\" | \"cse-name-year\" | \"current-opinion\" | \"deutsche-gesellschaft-für-psychologie\" | \"deutsche-sprache\" | \"elsevier-harvard\" | \"elsevier-vancouver\" | \"elsevier-with-titles\" | \"frontiers\" | \"future-medicine\" | \"future-science\" | \"gb-7714-2005-numeric\" | \"gb-7714-2015-author-date\" | \"gb-7714-2015-note\" | \"gb-7714-2015-numeric\" | \"gost-r-705-2008-numeric\" | \"harvard-cite-them-right\" | \"ieee\" | \"institute-of-electrical-and-electronics-engineers\" | \"institute-of-physics-numeric\" | \"iso-690-author-date\" | \"iso-690-numeric\" | \"karger\" | \"mary-ann-liebert-vancouver\" | \"mla\" | \"mla-8\" | \"modern-humanities-research-association\" | \"modern-humanities-research-association-notes\" | \"modern-language-association\" | \"modern-language-association-8\" | \"multidisciplinary-digital-publishing-institute\" | \"nature\" | \"nlm-citation-sequence\" | \"nlm-citation-sequence-superscript\" | \"pensoft\" | \"plos\" | \"public-library-of-science\" | \"royal-society-of-chemistry\" | \"sage-vancouver\" | \"sist02\" | \"spie\" | \"springer-basic\" | \"springer-basic-author-date\" | \"springer-fachzeitschriften-medizin-psychologie\" | \"springer-humanities-author-date\" | \"springer-lecture-notes-in-computer-science\" | \"springer-mathphys\" | \"springer-socpsych-author-date\" | \"springer-vancouver\" | \"taylor-and-francis-chicago-author-date\" | \"taylor-and-francis-national-library-of-medicine\" | \"the-institution-of-engineering-and-technology\" | \"the-lancet\" | \"thieme\" | \"trends\" | \"turabian-author-date\" | \"turabian-fullnote-8\" | \"vancouver\" | \"vancouver-superscript\" | [csl] | auto | bytes | path | str",
+        "insertText": "style: "
+      },
+      {
+        "label": "supplement",
+        "kind": 5,
+        "detail": "content | none",
+        "insertText": "supplement: "
+      }
+    ],
+    "colbreak": [
+      {
+        "label": "weak",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "weak: "
+      }
+    ],
+    "columns": [
+      {
+        "label": "gutter",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "gutter: "
+      }
+    ],
+    "csv": [
+      {
+        "label": "delimiter",
+        "kind": 5,
+        "detail": "str",
+        "insertText": "delimiter: "
+      },
+      {
+        "label": "row-type",
+        "kind": 5,
+        "detail": "type",
+        "insertText": "row-type: "
+      }
+    ],
+    "curve": [
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "fill-rule",
+        "kind": 5,
+        "detail": "\"even-odd\" | \"non-zero\"",
+        "insertText": "fill-rule: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      }
+    ],
+    "document": [
+      {
+        "label": "author",
+        "kind": 5,
+        "detail": "array | str",
+        "insertText": "author: "
+      },
+      {
+        "label": "date",
+        "kind": 5,
+        "detail": "auto | datetime | none",
+        "insertText": "date: "
+      },
+      {
+        "label": "description",
+        "kind": 5,
+        "detail": "content | none",
+        "insertText": "description: "
+      },
+      {
+        "label": "format",
+        "kind": 5,
+        "detail": "\"html\" | \"pdf\" | \"png\" | \"svg\" | auto",
+        "insertText": "format: "
+      },
+      {
+        "label": "keywords",
+        "kind": 5,
+        "detail": "array | str",
+        "insertText": "keywords: "
+      },
+      {
+        "label": "title",
+        "kind": 5,
+        "detail": "content | none",
+        "insertText": "title: "
+      }
+    ],
+    "ellipse": [
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "height: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "inset",
+        "insertText": "inset: "
+      },
+      {
+        "label": "outset",
+        "kind": 5,
+        "detail": "outset",
+        "insertText": "outset: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | relative",
+        "insertText": "width: "
+      }
+    ],
+    "enum": [
+      {
+        "label": "body-indent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "body-indent: "
+      },
+      {
+        "label": "full",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "full: "
+      },
+      {
+        "label": "indent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "indent: "
+      },
+      {
+        "label": "number-align",
+        "kind": 5,
+        "detail": "alignment",
+        "insertText": "number-align: "
+      },
+      {
+        "label": "numbering",
+        "kind": 5,
+        "detail": "function | str",
+        "insertText": "numbering: "
+      },
+      {
+        "label": "reversed",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "reversed: "
+      },
+      {
+        "label": "spacing",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "spacing: "
+      },
+      {
+        "label": "start",
+        "kind": 5,
+        "detail": "auto | int",
+        "insertText": "start: "
+      },
+      {
+        "label": "tight",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "tight: "
+      }
+    ],
+    "eval": [
+      {
+        "label": "mode",
+        "kind": 5,
+        "detail": "\"code\" | \"markup\" | \"math\"",
+        "insertText": "mode: "
+      },
+      {
+        "label": "scope",
+        "kind": 5,
+        "detail": "dictionary",
+        "insertText": "scope: "
+      }
+    ],
+    "figure": [
+      {
+        "label": "alt",
+        "kind": 5,
+        "detail": "none | str",
+        "insertText": "alt: "
+      },
+      {
+        "label": "caption",
+        "kind": 5,
+        "detail": "content | none",
+        "insertText": "caption: "
+      },
+      {
+        "label": "gap",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "gap: "
+      },
+      {
+        "label": "kind",
+        "kind": 5,
+        "detail": "auto | function | str",
+        "insertText": "kind: "
+      },
+      {
+        "label": "numbering",
+        "kind": 5,
+        "detail": "function | none | str",
+        "insertText": "numbering: "
+      },
+      {
+        "label": "outlined",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "outlined: "
+      },
+      {
+        "label": "placement",
+        "kind": 5,
+        "detail": "alignment | auto | none",
+        "insertText": "placement: "
+      },
+      {
+        "label": "scope",
+        "kind": 5,
+        "detail": "\"column\" | \"parent\"",
+        "insertText": "scope: "
+      },
+      {
+        "label": "supplement",
+        "kind": 5,
+        "detail": "auto | content | function | none",
+        "insertText": "supplement: "
+      }
+    ],
+    "footnote": [
+      {
+        "label": "numbering",
+        "kind": 5,
+        "detail": "function | str",
+        "insertText": "numbering: "
+      }
+    ],
+    "grid": [
+      {
+        "label": "align",
+        "kind": 5,
+        "detail": "alignment | array | auto | function",
+        "insertText": "align: "
+      },
+      {
+        "label": "column-gutter",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "column-gutter: "
+      },
+      {
+        "label": "columns",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "columns: "
+      },
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "array | color | function | gradient | none | tiling",
+        "insertText": "fill: "
+      },
+      {
+        "label": "gutter",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "gutter: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "array | dictionary | function | relative",
+        "insertText": "inset: "
+      },
+      {
+        "label": "row-gutter",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "row-gutter: "
+      },
+      {
+        "label": "rows",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "rows: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "array | color | dictionary | function | gradient | length | none | stroke | tiling",
+        "insertText": "stroke: "
+      }
+    ],
+    "h": [
+      {
+        "label": "weak",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "weak: "
+      }
+    ],
+    "heading": [
+      {
+        "label": "bookmarked",
+        "kind": 5,
+        "detail": "auto | bool",
+        "insertText": "bookmarked: "
+      },
+      {
+        "label": "depth",
+        "kind": 5,
+        "detail": "int",
+        "insertText": "depth: "
+      },
+      {
+        "label": "hanging-indent",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "hanging-indent: "
+      },
+      {
+        "label": "level",
+        "kind": 5,
+        "detail": "auto | int",
+        "insertText": "level: "
+      },
+      {
+        "label": "numbering",
+        "kind": 5,
+        "detail": "function | none | str",
+        "insertText": "numbering: "
+      },
+      {
+        "label": "offset",
+        "kind": 5,
+        "detail": "int",
+        "insertText": "offset: "
+      },
+      {
+        "label": "outlined",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "outlined: "
+      },
+      {
+        "label": "supplement",
+        "kind": 5,
+        "detail": "auto | content | function | none",
+        "insertText": "supplement: "
+      }
+    ],
+    "highlight": [
+      {
+        "label": "bottom-edge",
+        "kind": 5,
+        "detail": "\"baseline\" | \"bounds\" | \"descender\" | length",
+        "insertText": "bottom-edge: "
+      },
+      {
+        "label": "extent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "extent: "
+      },
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "radius",
+        "kind": 5,
+        "detail": "radius",
+        "insertText": "radius: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "top-edge",
+        "kind": 5,
+        "detail": "\"ascender\" | \"baseline\" | \"bounds\" | \"cap-height\" | \"x-height\" | length",
+        "insertText": "top-edge: "
+      }
+    ],
+    "image": [
+      {
+        "label": "alt",
+        "kind": 5,
+        "detail": "none | str",
+        "insertText": "alt: "
+      },
+      {
+        "label": "fit",
+        "kind": 5,
+        "detail": "\"contain\" | \"cover\" | \"stretch\"",
+        "insertText": "fit: "
+      },
+      {
+        "label": "format",
+        "kind": 5,
+        "detail": "\"gif\" | \"jpg\" | \"pdf\" | \"png\" | \"svg\" | \"webp\" | auto | dictionary",
+        "insertText": "format: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "height: "
+      },
+      {
+        "label": "icc",
+        "kind": 5,
+        "detail": "auto | bytes | path | str",
+        "insertText": "icc: "
+      },
+      {
+        "label": "page",
+        "kind": 5,
+        "detail": "int",
+        "insertText": "page: "
+      },
+      {
+        "label": "scaling",
+        "kind": 5,
+        "detail": "\"pixelated\" | \"smooth\" | auto",
+        "insertText": "scaling: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | relative",
+        "insertText": "width: "
+      }
+    ],
+    "line": [
+      {
+        "label": "angle",
+        "kind": 5,
+        "detail": "angle",
+        "insertText": "angle: "
+      },
+      {
+        "label": "end",
+        "kind": 5,
+        "detail": "array | none",
+        "insertText": "end: "
+      },
+      {
+        "label": "length",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "length: "
+      },
+      {
+        "label": "start",
+        "kind": 5,
+        "detail": "array",
+        "insertText": "start: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      }
+    ],
+    "linebreak": [
+      {
+        "label": "justify",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "justify: "
+      }
+    ],
+    "list": [
+      {
+        "label": "body-indent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "body-indent: "
+      },
+      {
+        "label": "indent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "indent: "
+      },
+      {
+        "label": "marker",
+        "kind": 5,
+        "detail": "array | content | function",
+        "insertText": "marker: "
+      },
+      {
+        "label": "marker-align",
+        "kind": 5,
+        "detail": "alignment",
+        "insertText": "marker-align: "
+      },
+      {
+        "label": "spacing",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "spacing: "
+      },
+      {
+        "label": "tight",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "tight: "
+      }
+    ],
+    "measure": [
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "height: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "width: "
+      }
+    ],
+    "move": [
+      {
+        "label": "dx",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "dx: "
+      },
+      {
+        "label": "dy",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "dy: "
+      }
+    ],
+    "outline": [
+      {
+        "label": "depth",
+        "kind": 5,
+        "detail": "int | none",
+        "insertText": "depth: "
+      },
+      {
+        "label": "indent",
+        "kind": 5,
+        "detail": "auto | function | relative",
+        "insertText": "indent: "
+      },
+      {
+        "label": "target",
+        "kind": 5,
+        "detail": "function | label | location | selector",
+        "insertText": "target: "
+      },
+      {
+        "label": "title",
+        "kind": 5,
+        "detail": "auto | content | none",
+        "insertText": "title: "
+      }
+    ],
+    "overline": [
+      {
+        "label": "background",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "background: "
+      },
+      {
+        "label": "evade",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "evade: "
+      },
+      {
+        "label": "extent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "extent: "
+      },
+      {
+        "label": "offset",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "offset: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      }
+    ],
+    "pad": [
+      {
+        "label": "bottom",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "bottom: "
+      },
+      {
+        "label": "left",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "left: "
+      },
+      {
+        "label": "rest",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "rest: "
+      },
+      {
+        "label": "right",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "right: "
+      },
+      {
+        "label": "top",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "top: "
+      },
+      {
+        "label": "x",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "x: "
+      },
+      {
+        "label": "y",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "y: "
+      }
+    ],
+    "page": [
+      {
+        "label": "background",
+        "kind": 5,
+        "detail": "content | none",
+        "insertText": "background: "
+      },
+      {
+        "label": "binding",
+        "kind": 5,
+        "detail": "alignment | auto",
+        "insertText": "binding: "
+      },
+      {
+        "label": "bleed",
+        "kind": 5,
+        "detail": "dictionary | relative",
+        "insertText": "bleed: "
+      },
+      {
+        "label": "body",
+        "kind": 5,
+        "detail": "content",
+        "insertText": "body: "
+      },
+      {
+        "label": "columns",
+        "kind": 5,
+        "detail": "int",
+        "insertText": "columns: "
+      },
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "flipped",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "flipped: "
+      },
+      {
+        "label": "footer",
+        "kind": 5,
+        "detail": "auto | content | none",
+        "insertText": "footer: "
+      },
+      {
+        "label": "footer-descent",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "footer-descent: "
+      },
+      {
+        "label": "foreground",
+        "kind": 5,
+        "detail": "content | none",
+        "insertText": "foreground: "
+      },
+      {
+        "label": "header",
+        "kind": 5,
+        "detail": "auto | content | none",
+        "insertText": "header: "
+      },
+      {
+        "label": "header-ascent",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "header-ascent: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "height: "
+      },
+      {
+        "label": "margin",
+        "kind": 5,
+        "detail": "margin",
+        "insertText": "margin: "
+      },
+      {
+        "label": "number-align",
+        "kind": 5,
+        "detail": "alignment",
+        "insertText": "number-align: "
+      },
+      {
+        "label": "numbering",
+        "kind": 5,
+        "detail": "function | none | str",
+        "insertText": "numbering: "
+      },
+      {
+        "label": "paper",
+        "kind": 5,
+        "detail": "\"a0\" | \"a1\" | \"a10\" | \"a11\" | \"a2\" | \"a3\" | \"a4\" | \"a5\" | \"a6\" | \"a7\" | \"a8\" | \"a9\" | \"ansi-a\" | \"ansi-b\" | \"ansi-c\" | \"ansi-d\" | \"ansi-e\" | \"arch-a\" | \"arch-b\" | \"arch-c\" | \"arch-d\" | \"arch-e\" | \"arch-e1\" | \"asia-f4\" | \"cn-business-card\" | \"din-d3\" | \"din-d4\" | \"din-d5\" | \"din-d6\" | \"din-d7\" | \"din-d8\" | \"eu-business-card\" | \"fr-carré\" | \"fr-couronne-écriture\" | \"fr-couronne-édition\" | \"fr-jésus\" | \"fr-raisin\" | \"fr-tellière\" | \"iso-b1\" | \"iso-b2\" | \"iso-b3\" | \"iso-b4\" | \"iso-b5\" | \"iso-b6\" | \"iso-b7\" | \"iso-b8\" | \"iso-c3\" | \"iso-c4\" | \"iso-c5\" | \"iso-c6\" | \"iso-c7\" | \"iso-c8\" | \"iso-id-1\" | \"iso-id-2\" | \"iso-id-3\" | \"jis-b0\" | \"jis-b1\" | \"jis-b10\" | \"jis-b11\" | \"jis-b2\" | \"jis-b3\" | \"jis-b4\" | \"jis-b5\" | \"jis-b6\" | \"jis-b7\" | \"jis-b8\" | \"jis-b9\" | \"jp-business-card\" | \"jp-kiku-4\" | \"jp-kiku-5\" | \"jp-shiroku-ban-4\" | \"jp-shiroku-ban-5\" | \"jp-shiroku-ban-6\" | \"newspaper-berliner\" | \"newspaper-broadsheet\" | \"newspaper-compact\" | \"presentation-16-9\" | \"presentation-4-3\" | \"sac-d0\" | \"sac-d1\" | \"sac-d2\" | \"sac-d3\" | \"sac-d4\" | \"sac-d5\" | \"sac-d6\" | \"sis-e5\" | \"sis-g5\" | \"uk-book-a\" | \"uk-book-b\" | \"uk-brief\" | \"uk-crown\" | \"uk-draft\" | \"uk-foolscap\" | \"uk-quarto\" | \"us-business-card\" | \"us-digest\" | \"us-executive\" | \"us-foolscap-folio\" | \"us-gov-legal\" | \"us-gov-letter\" | \"us-ledger\" | \"us-legal\" | \"us-letter\" | \"us-oficio\" | \"us-statement\" | \"us-tabloid\" | \"us-trade\"",
+        "insertText": "paper: "
+      },
+      {
+        "label": "supplement",
+        "kind": 5,
+        "detail": "auto | content | none",
+        "insertText": "supplement: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "width: "
+      }
+    ],
+    "pagebreak": [
+      {
+        "label": "to",
+        "kind": 5,
+        "detail": "\"even\" | \"odd\" | none",
+        "insertText": "to: "
+      },
+      {
+        "label": "weak",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "weak: "
+      }
+    ],
+    "par": [
+      {
+        "label": "first-line-indent",
+        "kind": 5,
+        "detail": "dictionary | length",
+        "insertText": "first-line-indent: "
+      },
+      {
+        "label": "hanging-indent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "hanging-indent: "
+      },
+      {
+        "label": "justification-limits",
+        "kind": 5,
+        "detail": "dictionary",
+        "insertText": "justification-limits: "
+      },
+      {
+        "label": "justify",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "justify: "
+      },
+      {
+        "label": "leading",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "leading: "
+      },
+      {
+        "label": "linebreaks",
+        "kind": 5,
+        "detail": "\"optimized\" | \"simple\" | auto",
+        "insertText": "linebreaks: "
+      },
+      {
+        "label": "spacing",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "spacing: "
+      }
+    ],
+    "place": [
+      {
+        "label": "clearance",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "clearance: "
+      },
+      {
+        "label": "dx",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "dx: "
+      },
+      {
+        "label": "dy",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "dy: "
+      },
+      {
+        "label": "float",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "float: "
+      },
+      {
+        "label": "scope",
+        "kind": 5,
+        "detail": "\"column\" | \"parent\"",
+        "insertText": "scope: "
+      }
+    ],
+    "polygon": [
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "fill-rule",
+        "kind": 5,
+        "detail": "\"even-odd\" | \"non-zero\"",
+        "insertText": "fill-rule: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      }
+    ],
+    "quote": [
+      {
+        "label": "attribution",
+        "kind": 5,
+        "detail": "content | label | none",
+        "insertText": "attribution: "
+      },
+      {
+        "label": "block",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "block: "
+      },
+      {
+        "label": "quotes",
+        "kind": 5,
+        "detail": "auto | bool",
+        "insertText": "quotes: "
+      }
+    ],
+    "range": [
+      {
+        "label": "inclusive",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "inclusive: "
+      },
+      {
+        "label": "step",
+        "kind": 5,
+        "detail": "int",
+        "insertText": "step: "
+      }
+    ],
+    "raw": [
+      {
+        "label": "align",
+        "kind": 5,
+        "detail": "alignment",
+        "insertText": "align: "
+      },
+      {
+        "label": "block",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "block: "
+      },
+      {
+        "label": "lang",
+        "kind": 5,
+        "detail": "none | str",
+        "insertText": "lang: "
+      },
+      {
+        "label": "syntaxes",
+        "kind": 5,
+        "detail": "[syntax]",
+        "insertText": "syntaxes: "
+      },
+      {
+        "label": "tab-size",
+        "kind": 5,
+        "detail": "int",
+        "insertText": "tab-size: "
+      },
+      {
+        "label": "theme",
+        "kind": 5,
+        "detail": "[theme]",
+        "insertText": "theme: "
+      }
+    ],
+    "read": [
+      {
+        "label": "encoding",
+        "kind": 5,
+        "detail": "\"utf8\" | none",
+        "insertText": "encoding: "
+      }
+    ],
+    "rect": [
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "height: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "inset",
+        "insertText": "inset: "
+      },
+      {
+        "label": "outset",
+        "kind": 5,
+        "detail": "outset",
+        "insertText": "outset: "
+      },
+      {
+        "label": "radius",
+        "kind": 5,
+        "detail": "radius",
+        "insertText": "radius: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | relative",
+        "insertText": "width: "
+      }
+    ],
+    "ref": [
+      {
+        "label": "form",
+        "kind": 5,
+        "detail": "\"normal\" | \"page\"",
+        "insertText": "form: "
+      },
+      {
+        "label": "supplement",
+        "kind": 5,
+        "detail": "auto | content | function | none",
+        "insertText": "supplement: "
+      }
+    ],
+    "repeat": [
+      {
+        "label": "gap",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "gap: "
+      },
+      {
+        "label": "justify",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "justify: "
+      }
+    ],
+    "rotate": [
+      {
+        "label": "origin",
+        "kind": 5,
+        "detail": "alignment",
+        "insertText": "origin: "
+      },
+      {
+        "label": "reflow",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "reflow: "
+      }
+    ],
+    "scale": [
+      {
+        "label": "factor",
+        "kind": 5,
+        "detail": "auto | length | ratio",
+        "insertText": "factor: "
+      },
+      {
+        "label": "origin",
+        "kind": 5,
+        "detail": "alignment",
+        "insertText": "origin: "
+      },
+      {
+        "label": "reflow",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "reflow: "
+      },
+      {
+        "label": "x",
+        "kind": 5,
+        "detail": "auto | length | ratio",
+        "insertText": "x: "
+      },
+      {
+        "label": "y",
+        "kind": 5,
+        "detail": "auto | length | ratio",
+        "insertText": "y: "
+      }
+    ],
+    "skew": [
+      {
+        "label": "ax",
+        "kind": 5,
+        "detail": "angle",
+        "insertText": "ax: "
+      },
+      {
+        "label": "ay",
+        "kind": 5,
+        "detail": "angle",
+        "insertText": "ay: "
+      },
+      {
+        "label": "origin",
+        "kind": 5,
+        "detail": "alignment",
+        "insertText": "origin: "
+      },
+      {
+        "label": "reflow",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "reflow: "
+      }
+    ],
+    "smallcaps": [
+      {
+        "label": "all",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "all: "
+      }
+    ],
+    "smartquote": [
+      {
+        "label": "alternative",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "alternative: "
+      },
+      {
+        "label": "double",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "double: "
+      },
+      {
+        "label": "enabled",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "enabled: "
+      },
+      {
+        "label": "quotes",
+        "kind": 5,
+        "detail": "array | auto | dictionary | str",
+        "insertText": "quotes: "
+      }
+    ],
+    "square": [
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color | gradient | none | tiling",
+        "insertText": "fill: "
+      },
+      {
+        "label": "height",
+        "kind": 5,
+        "detail": "auto | fraction | relative",
+        "insertText": "height: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "inset",
+        "insertText": "inset: "
+      },
+      {
+        "label": "outset",
+        "kind": 5,
+        "detail": "outset",
+        "insertText": "outset: "
+      },
+      {
+        "label": "radius",
+        "kind": 5,
+        "detail": "radius",
+        "insertText": "radius: "
+      },
+      {
+        "label": "size",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "size: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "auto | color | dictionary | gradient | length | none | stroke | tiling",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "width",
+        "kind": 5,
+        "detail": "auto | relative",
+        "insertText": "width: "
+      }
+    ],
+    "stack": [
+      {
+        "label": "dir",
+        "kind": 5,
+        "detail": "dir",
+        "insertText": "dir: "
+      },
+      {
+        "label": "spacing",
+        "kind": 5,
+        "detail": "fraction | none | relative",
+        "insertText": "spacing: "
+      }
+    ],
+    "strike": [
+      {
+        "label": "background",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "background: "
+      },
+      {
+        "label": "extent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "extent: "
+      },
+      {
+        "label": "offset",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "offset: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      }
+    ],
+    "strong": [
+      {
+        "label": "delta",
+        "kind": 5,
+        "detail": "int",
+        "insertText": "delta: "
+      }
+    ],
+    "sub": [
+      {
+        "label": "baseline",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "baseline: "
+      },
+      {
+        "label": "size",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "size: "
+      },
+      {
+        "label": "typographic",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "typographic: "
+      }
+    ],
+    "super": [
+      {
+        "label": "baseline",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "baseline: "
+      },
+      {
+        "label": "size",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "size: "
+      },
+      {
+        "label": "typographic",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "typographic: "
+      }
+    ],
+    "table": [
+      {
+        "label": "align",
+        "kind": 5,
+        "detail": "alignment | array | auto | function",
+        "insertText": "align: "
+      },
+      {
+        "label": "column-gutter",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "column-gutter: "
+      },
+      {
+        "label": "columns",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "columns: "
+      },
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "gutter",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "gutter: "
+      },
+      {
+        "label": "inset",
+        "kind": 5,
+        "detail": "inset",
+        "insertText": "inset: "
+      },
+      {
+        "label": "row-gutter",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "row-gutter: "
+      },
+      {
+        "label": "rows",
+        "kind": 5,
+        "detail": "array | auto | length | type",
+        "insertText": "rows: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      }
+    ],
+    "terms": [
+      {
+        "label": "hanging-indent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "hanging-indent: "
+      },
+      {
+        "label": "indent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "indent: "
+      },
+      {
+        "label": "separator",
+        "kind": 5,
+        "detail": "content",
+        "insertText": "separator: "
+      },
+      {
+        "label": "spacing",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "spacing: "
+      },
+      {
+        "label": "tight",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "tight: "
+      }
+    ],
+    "text": [
+      {
+        "label": "alternates",
+        "kind": 5,
+        "detail": "bool | int",
+        "insertText": "alternates: "
+      },
+      {
+        "label": "baseline",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "baseline: "
+      },
+      {
+        "label": "body",
+        "kind": 5,
+        "detail": "content",
+        "insertText": "body: "
+      },
+      {
+        "label": "bottom-edge",
+        "kind": 5,
+        "detail": "\"baseline\" | \"bounds\" | \"descender\" | length",
+        "insertText": "bottom-edge: "
+      },
+      {
+        "label": "cjk-latin-spacing",
+        "kind": 5,
+        "detail": "auto | none",
+        "insertText": "cjk-latin-spacing: "
+      },
+      {
+        "label": "costs",
+        "kind": 5,
+        "detail": "dictionary",
+        "insertText": "costs: "
+      },
+      {
+        "label": "dir",
+        "kind": 5,
+        "detail": "dir",
+        "insertText": "dir: "
+      },
+      {
+        "label": "discretionary-ligatures",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "discretionary-ligatures: "
+      },
+      {
+        "label": "fallback",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "fallback: "
+      },
+      {
+        "label": "features",
+        "kind": 5,
+        "detail": "array | dictionary",
+        "insertText": "features: "
+      },
+      {
+        "label": "fill",
+        "kind": 5,
+        "detail": "color",
+        "insertText": "fill: "
+      },
+      {
+        "label": "font",
+        "kind": 5,
+        "detail": "array | text.font",
+        "insertText": "font: "
+      },
+      {
+        "label": "fractions",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "fractions: "
+      },
+      {
+        "label": "historical-ligatures",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "historical-ligatures: "
+      },
+      {
+        "label": "hyphenate",
+        "kind": 5,
+        "detail": "auto | bool",
+        "insertText": "hyphenate: "
+      },
+      {
+        "label": "kerning",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "kerning: "
+      },
+      {
+        "label": "lang",
+        "kind": 5,
+        "detail": "text.lang",
+        "insertText": "lang: "
+      },
+      {
+        "label": "ligatures",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "ligatures: "
+      },
+      {
+        "label": "number-type",
+        "kind": 5,
+        "detail": "\"lining\" | \"old-style\" | auto",
+        "insertText": "number-type: "
+      },
+      {
+        "label": "number-width",
+        "kind": 5,
+        "detail": "\"proportional\" | \"tabular\" | auto",
+        "insertText": "number-width: "
+      },
+      {
+        "label": "overhang",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "overhang: "
+      },
+      {
+        "label": "region",
+        "kind": 5,
+        "detail": "text.region",
+        "insertText": "region: "
+      },
+      {
+        "label": "script",
+        "kind": 5,
+        "detail": "auto | str",
+        "insertText": "script: "
+      },
+      {
+        "label": "size",
+        "kind": 5,
+        "detail": "text.size",
+        "insertText": "size: "
+      },
+      {
+        "label": "slashed-zero",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "slashed-zero: "
+      },
+      {
+        "label": "spacing",
+        "kind": 5,
+        "detail": "relative",
+        "insertText": "spacing: "
+      },
+      {
+        "label": "stretch",
+        "kind": 5,
+        "detail": "ratio",
+        "insertText": "stretch: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      },
+      {
+        "label": "style",
+        "kind": 5,
+        "detail": "\"italic\" | \"normal\" | \"oblique\"",
+        "insertText": "style: "
+      },
+      {
+        "label": "stylistic-set",
+        "kind": 5,
+        "detail": "array | int | none",
+        "insertText": "stylistic-set: "
+      },
+      {
+        "label": "top-edge",
+        "kind": 5,
+        "detail": "\"ascender\" | \"baseline\" | \"bounds\" | \"cap-height\" | \"x-height\" | length",
+        "insertText": "top-edge: "
+      },
+      {
+        "label": "tracking",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "tracking: "
+      },
+      {
+        "label": "variations",
+        "kind": 5,
+        "detail": "dictionary",
+        "insertText": "variations: "
+      },
+      {
+        "label": "weight",
+        "kind": 5,
+        "detail": "\"black\" | \"bold\" | \"extrabold\" | \"extralight\" | \"light\" | \"medium\" | \"regular\" | \"semibold\" | \"thin\" | int",
+        "insertText": "weight: "
+      }
+    ],
+    "underline": [
+      {
+        "label": "background",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "background: "
+      },
+      {
+        "label": "evade",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "evade: "
+      },
+      {
+        "label": "extent",
+        "kind": 5,
+        "detail": "length",
+        "insertText": "extent: "
+      },
+      {
+        "label": "offset",
+        "kind": 5,
+        "detail": "auto | length",
+        "insertText": "offset: "
+      },
+      {
+        "label": "stroke",
+        "kind": 5,
+        "detail": "stroke",
+        "insertText": "stroke: "
+      }
+    ],
+    "v": [
+      {
+        "label": "weak",
+        "kind": 5,
+        "detail": "bool",
+        "insertText": "weak: "
+      }
+    ]
+  }
+}

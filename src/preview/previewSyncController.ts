@@ -32,6 +32,7 @@ export type PreviewSyncDependencies = {
   getPreviewTaskId: () => string | null;
   isReady: () => boolean;
   isEnabled: () => boolean;
+  isLowMemoryMode: () => boolean;
   handleForwardPosition?: (path: string, cursor: number) => Promise<boolean>;
   mapForwardPosition?: (path: string, cursor: number) => Promise<{ filepath: string; line: number; character: number } | null>;
   sourceMap?: SourceMapSessionController;
@@ -163,6 +164,10 @@ export class PreviewSyncController {
     this.pendingPreviewClick = null;
     this.cancelManual();
     this.clearWarmup();
+  }
+
+  public applyLowMemoryMode(enabled: boolean): void {
+    if (enabled) this.clearWarmup();
   }
 
   public requestManual(path: string, cursor: number): void {
@@ -358,6 +363,7 @@ export class PreviewSyncController {
 
   public scheduleWarmup(generation: number): void {
     this.clearWarmup();
+    if (this.dependencies.isLowMemoryMode()) return;
     const startedAt = performance.now();
     const attempt = () => {
       this.warmupTimer = null;

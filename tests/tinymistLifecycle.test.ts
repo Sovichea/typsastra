@@ -31,7 +31,10 @@ describe("Tinymist workspace lifecycle", () => {
       new URL("../src/typography/documentTypographyApplicationController.ts", import.meta.url),
     ).text();
 
-    expect(pinnedMainSource).toContain("mainChanged && deps.hasLspClient()");
+    expect(pinnedMainSource).toContain("if (mainChanged && previewApproved)");
+    expect(pinnedMainSource).toContain("if (deps.hasLspClient())");
+    expect(pinnedMainSource).toContain("if (deps.isLowMemoryMode())");
+    expect(pinnedMainSource).toContain("await deps.refreshActivePreviewRoot(true)");
     expect(pinnedMainSource).toContain("await deps.prepareTypography(path)");
     expect(typographySource).toContain("scaled_workspace_font_set_status");
     expect(typographySource).toContain("activate_scaled_workspace_fonts");

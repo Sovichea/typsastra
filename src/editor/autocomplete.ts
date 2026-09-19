@@ -10,6 +10,13 @@ import type { TinymistLspClient } from "../compiler/lsp";
 import type { LanguageProviderCapabilities } from "../languageSupport";
 import { invoke } from "@tauri-apps/api/core";
 import type { CompletionProviderSelection } from "./languageScopes";
+import type { TypstCompletionMode } from "../settings";
+import {
+  staticTypstFieldCompletions,
+  staticTypstGlobalCompletions,
+  staticTypstMemberCompletions,
+  staticTypstValueCompletions,
+} from "./typstCompletionCatalog";
 
 type LspPosition = { line: number; character?: number };
 type LspRange = { start: LspPosition; end: LspPosition };
@@ -955,6 +962,45 @@ function getCmCompletionType(kind?: number): string {
   }
 }
 
+export function isStaticTypstCompletionContextAt(
+  doc: Text,
+  cursorPosition: number
+): boolean {
+  const line = doc.lineAt(cursorPosition);
+  const cursor = cursorPosition - line.from;
+  const before = line.text.slice(0, cursor);
+
+  if (isTypstFunctionArgumentContextAt(doc, cursorPosition, true)
+    || isTypstFunctionArgumentValueContextAt(doc, cursorPosition)
+    || isTypstMemberAccessAt(line.text, cursor)
+    || isTypstRuleTargetAt(line.text, cursor)
+    || /#[\p{L}\p{M}\p{N}_.-]*$/u.test(before)) {
+    return true;
+  }
+
+  // These statements remain in code mode after their leading keyword, so a
+  // manual request on the right-hand side should still expose the catalog.
+  if (/^\s*#(?:let|set|show|if|for|while|return|context|import|include)\b/u.test(before)) {
+    return true;
+  }
+
+  const documentBefore = doc.sliceString(0, cursorPosition);
+  const openBraces = (documentBefore.match(/\{/g) ?? []).length;
+  const closeBraces = (documentBefore.match(/\}/g) ?? []).length;
+  return openBraces > closeBraces;
+}
+
+export function innermostTypstArgumentFieldName(
+  doc: Text,
+  cursorPosition: number
+): string | null {
+  const argumentStart = innermostTypstFunctionArgumentStart(doc, cursorPosition);
+  if (argumentStart === null) return null;
+  const segment = doc.sliceString(argumentStart + 1, cursorPosition);
+  const slot = segment.slice(Math.max(segment.lastIndexOf(","), segment.lastIndexOf("\n")) + 1);
+  return /^\s*([\p{L}_][\p{L}\p{M}\p{N}_-]*)\s*:/u.exec(slot)?.[1] ?? null;
+}
+
 export type ProviderCapabilities = LanguageProviderCapabilities;
 
 export function createTypstAutocomplete(
@@ -968,6 +1014,7 @@ export function createTypstAutocomplete(
   onLanguageCompletionPerformance?: (milliseconds: number) => void,
   onTypstCompletionTrace?: (message: string) => void,
   getUserDictionary: () => readonly string[] = () => [],
+  typstCompletionMode: TypstCompletionMode = "on-type",
 ) {
   return autocompletion({
     override: [
@@ -1042,6 +1089,8 @@ export function createTypstAutocomplete(
             }
           }
         }
+
+        if (!context.explicit && typstCompletionMode === "on-demand") return null;
 
         const activeCompletionLine = context.state.doc.lineAt(context.pos);
         const completionColumn = context.pos - activeCompletionLine.from;
@@ -1142,32 +1191,48 @@ export function createTypstAutocomplete(
           ? null
           : typstCompletions(context);
 
+        const doc = context.state.doc;
         const client = getClient();
         const uri = getUri();
-        if (!client || !uri) return fallbackCompletions();
-        
-        const doc = context.state.doc;
-        const requestPosition = quotedArgumentValueStart
-          ?? typstCompletionRequestPosition(doc, context.pos, isFunctionArgumentStart);
-        const position = client.lspPositionFromEditorPosition(doc, requestPosition);
-        
-        try {
-          // Force flush any pending LSP document changes so the server completes
-          // against the same text CodeMirror is showing.
-          await flushLspSync();
-          if (traceRelevant) {
-            onTypstCompletionTrace?.(
-              `Requesting Tinymist completion: uri=${uri}; line=${position.line}; character=${position.character ?? 0}; aborted=${context.aborted}.`
-            );
-          }
+        let characterOffset = (_text: string, character: number) => character;
 
-          const response = await client.request<LspCompletionResponse>("textDocument/completion", {
-            textDocument: { uri },
-            position,
-            context: {
-              triggerKind: 1
+        try {
+          let response: LspCompletionResponse;
+          if (client && uri) {
+            const requestPosition = quotedArgumentValueStart
+              ?? typstCompletionRequestPosition(doc, context.pos, isFunctionArgumentStart);
+            const position = client.lspPositionFromEditorPosition(doc, requestPosition);
+            // Force flush any pending LSP document changes so the server completes
+            // against the same text CodeMirror is showing.
+            await flushLspSync();
+            if (traceRelevant) {
+              onTypstCompletionTrace?.(
+                `Requesting Tinymist completion: uri=${uri}; line=${position.line}; character=${position.character ?? 0}; aborted=${context.aborted}.`
+              );
             }
-          });
+            response = await client.request<LspCompletionResponse>("textDocument/completion", {
+              textDocument: { uri },
+              position,
+              context: { triggerKind: 1 }
+            });
+            characterOffset = (text, character) => client.stringOffsetFromLspCharacter(text, character);
+          } else {
+            if (!isStaticTypstCompletionContextAt(doc, context.pos)) {
+              return fallbackCompletions();
+            }
+            response = isFunctionArgumentStart
+              ? staticTypstFieldCompletions(innermostTypstFunctionName(doc, context.pos))
+              : isFunctionArgumentValue
+                ? staticTypstValueCompletions(innermostTypstArgumentFieldName(doc, context.pos))
+                : isMemberAccess
+                  ? staticTypstMemberCompletions()
+                  : staticTypstGlobalCompletions();
+            if (traceRelevant) {
+              onTypstCompletionTrace?.(
+                `Built-in Typst catalog returned ${response.length} completion(s); mode=${typstCompletionMode}.`
+              );
+            }
+          }
           
           if (!response) return fallbackCompletions();
           
@@ -1302,7 +1367,7 @@ export function createTypstAutocomplete(
                     to,
                     apply,
                     textEdit,
-                    (text, character) => client.stringOffsetFromLspCharacter(text, character),
+                    characterOffset,
                     liveTokenEdit?.from ?? from,
                     liveTokenEdit?.to ?? to,
                     Boolean(liveTokenEdit) || preferLocalTokenRange
@@ -1371,7 +1436,7 @@ export function createTypstAutocomplete(
                   to,
                   apply,
                   textEdit,
-                  (text, character) => client.stringOffsetFromLspCharacter(text, character),
+                  characterOffset,
                   liveTokenEdit?.from ?? from,
                   liveTokenEdit?.to ?? to,
                   Boolean(liveTokenEdit) || preferLocalTokenRange

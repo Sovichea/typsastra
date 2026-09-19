@@ -15,6 +15,13 @@ export type PreviewPageStatus = {
   pageCount: number;
 };
 
+export type PreviewOutlineItem = {
+  title: string;
+  position?: { page_no: number; x: number; y: number };
+  bookmarkIndex?: number;
+  children: PreviewOutlineItem[];
+};
+
 export type PreviewSurface = "live" | "pdf";
 
 export type DraftPreviewImage = {
@@ -247,6 +254,7 @@ export class PreviewFrame {
   private standalonePdfSelectionAutoScrollFrame: number | null = null;
   private standalonePdfSelectionDragging = false;
   private standalonePdfSelectionRetainClick = false;
+  private pdfOutlineDestinations: unknown[] = [];
 
   constructor(
     private readonly pane: HTMLElement,
@@ -257,6 +265,8 @@ export class PreviewFrame {
     private readonly onPageChanged?: (status: PreviewPageStatus) => void,
     private readonly onDraftImageRequest?: (id: string) => Promise<DraftPreviewImageResult | null>,
     private readonly onScrollPositionChanged?: (scrollTop: number) => void,
+    private readonly onDebug?: (message: string) => void,
+    private readonly onDocumentOutline?: (items: PreviewOutlineItem[]) => void,
     private readonly onLoadStage?: (
       stage: string,
       detail: Record<string, number | string | boolean>
@@ -370,6 +380,7 @@ export class PreviewFrame {
     this.pendingRestoredScrollTop = typeof scrollTop === "number" && Number.isFinite(scrollTop)
       ? Math.max(0, scrollTop)
       : null;
+    this.onDebug?.(`Preview tab scroll queued: requested=${this.pendingRestoredScrollTop ?? "none"}; session=${this.mountedSessionKey || "none"}; url=${this.mountedUrl ? "mounted" : "none"}.`);
   }
 
   public queueViewportAnchor(anchor?: PreviewViewportAnchor | null): void {
@@ -668,6 +679,8 @@ export class PreviewFrame {
     this.lastPageStatusKey = "";
     this.onPageChanged?.({ currentPage: 0, pageCount: 0 });
     this.onStandalonePdfOutlineChanged?.(surface === "pdf" ? [] : null);
+    this.pdfOutlineDestinations = [];
+    if (surface === "live") this.onDocumentOutline?.([]);
     const existingIframeDoc = this.iframe?.contentDocument ?? null;
     if (existingIframeDoc) {
       if (this.iframe) this.iframe.dataset.previewSurface = surface;
@@ -689,6 +702,12 @@ export class PreviewFrame {
       || restoredScrollTop !== null;
     const previousScrollTop = restoredScrollTop ?? this.captureScrollPosition();
     this.clearErrorOverlay();
+    // A large-file guardrail can leave a message host above the preview pane.
+    // Loading a real PDF must always replace that surface, including when the
+    // low-memory path restores a cached PDF rather than activating a resident
+    // session.
+    this.clearMessageHost();
+    this.onDebug?.(`Preview PDF load clears any prior placeholder: identity=${identity}; session=${sessionKey}; surface=${surface}.`);
 
     const iframe = await this.ensureIframe();
     if (generation !== this.pdfGeneration) return 0;
@@ -928,6 +947,17 @@ export class PreviewFrame {
         this.pendingRestoredViewportAnchor = null;
       }
       this.reportPageStatus(this.visiblePageNumber());
+      if (surface === "live" && this.onDocumentOutline) {
+        void this.readDocumentOutline(pdfDoc, generation).then(items => {
+          if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
+            this.onDocumentOutline?.(items);
+          }
+        }).catch(error => {
+          if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
+            console.warn("Failed to read PDF outline destinations:", error);
+          }
+        });
+      }
       void this.hydratePageDimensions(pdfDoc, generation).catch(error => {
         if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
           console.warn("Failed to finish PDF page geometry discovery:", error);
@@ -981,6 +1011,31 @@ export class PreviewFrame {
       }
     }
     return pdfByteLength;
+  }
+
+  private async readDocumentOutline(pdfDoc: any, generation: number): Promise<PreviewOutlineItem[]> {
+    const outline = await pdfDoc.getOutline();
+    if (!Array.isArray(outline) || generation !== this.pdfGeneration) return [];
+    const destinations: unknown[] = [];
+
+    const convert = async (item: any): Promise<PreviewOutlineItem> => {
+      const bookmarkIndex = destinations.length;
+      destinations.push(item?.dest);
+      const children = Array.isArray(item?.items)
+        ? await Promise.all(item.items.map((child: unknown) => convert(child)))
+        : [];
+      return {
+        title: typeof item?.title === "string" ? item.title : "",
+        bookmarkIndex,
+        children,
+      };
+    };
+
+    const items = await Promise.all(outline.map((item: unknown) => convert(item)));
+    if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
+      this.pdfOutlineDestinations = destinations;
+    }
+    return items;
   }
 
   private async pdfJs(): Promise<PdfJsModule> {
@@ -1874,6 +1929,7 @@ export class PreviewFrame {
     }
     this.pageDimensions.clear();
     this.pageSlots = [];
+    this.pdfOutlineDestinations = [];
   }
 
   private resetStandalonePdfSearch(): void {
@@ -1908,6 +1964,30 @@ export class PreviewFrame {
     this.jumpToPreviewOffset(slot.offsetTop, normalizedPage);
   }
 
+  public async scrollToOutlineBookmark(bookmarkIndex: number): Promise<boolean> {
+    const pdfDoc = this.pdfDoc;
+    const generation = this.pdfGeneration;
+    const rawDestination = this.pdfOutlineDestinations[bookmarkIndex];
+    if (!pdfDoc || rawDestination === undefined) return false;
+    try {
+      const destination = typeof rawDestination === "string"
+        ? await pdfDoc.getDestination(rawDestination)
+        : rawDestination;
+      if (generation !== this.pdfGeneration || this.pdfDoc !== pdfDoc) return false;
+      const pageReference = Array.isArray(destination) ? destination[0] : null;
+      if (pageReference === null || pageReference === undefined) return false;
+      const pageIndex = typeof pageReference === "number"
+        ? pageReference
+        : await pdfDoc.getPageIndex(pageReference);
+      if (generation !== this.pdfGeneration || this.pdfDoc !== pdfDoc) return false;
+      if (!Number.isInteger(pageIndex) || pageIndex < 0) return false;
+      this.scrollToPage(pageIndex + 1);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private schedulePdfResourceCleanup(
     pdfDoc: any,
     loadingTask: { destroy(): Promise<void> } | null,
@@ -1922,36 +2002,37 @@ export class PreviewFrame {
       });
   }
 
-  public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<void> {
+  public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<boolean> {
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
-    if (!slot) return;
+    if (!slot) return false;
     const view = this.iframe?.contentWindow;
-    if (!view) return;
+    if (!view) return false;
 
     const zoom = this.previewZoomPercent / 100;
     const targetY = slot.offsetTop + (position.y * zoom) - (view.innerHeight * 0.45);
     this.jumpToPreviewOffset(Math.max(0, targetY), position.page_no);
     if (options.ripple) {
-      await this.showForwardSyncRippleAtDocumentPosition(position);
+      return this.showForwardSyncRippleAtDocumentPosition(position);
     }
+    return true;
   }
 
-  private async showForwardSyncRippleAtDocumentPosition(position: { page_no: number; x: number; y: number }): Promise<void> {
+  private async showForwardSyncRippleAtDocumentPosition(position: { page_no: number; x: number; y: number }): Promise<boolean> {
     const generation = ++this.forwardRippleGeneration;
     const view = this.iframe?.contentWindow;
     const doc = this.iframe?.contentDocument;
-    if (!view || !doc) return;
+    if (!view || !doc) return false;
 
     await waitForPreviewScrollToSettle(view, 100, 100);
     const slot = doc.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
-    if (generation !== this.forwardRippleGeneration || !slot) return;
+    if (generation !== this.forwardRippleGeneration || !slot) return false;
 
     const zoom = this.previewZoomPercent / 100;
     const slotRect = slot.getBoundingClientRect();
     const x = slotRect.left + (position.x * zoom);
     const y = slotRect.top + (position.y * zoom);
-    this.renderForwardSyncRipple(doc, x, y);
+    return this.renderForwardSyncRipple(doc, x, y);
   }
 
   private jumpToPreviewOffset(top: number, pageNo: number): void {
@@ -1959,6 +2040,7 @@ export class PreviewFrame {
     if (!view) return;
     this.instantScrollTargetPage = pageNo;
     view.scrollTo({ top, behavior: "auto" });
+    this.onDebug?.(`Preview programmatic scroll requested: page=${pageNo}; target=${top.toFixed(1)}; observed=${view.scrollY.toFixed(1)}; session=${this.mountedSessionKey || "none"}.`);
     this.finishInstantPageJump(pageNo);
     window.setTimeout(() => {
       if (this.instantScrollTargetPage !== pageNo) return;
@@ -1980,7 +2062,16 @@ export class PreviewFrame {
     this.queueViewportFinalRenders("first-stable");
     void this.pumpPageRenderQueue();
     this.reportPageStatus(pageNo);
-    this.onScrollPositionChanged?.(view.scrollY);
+    const reportScrollPosition = (phase: string) => {
+      this.onScrollPositionChanged?.(view.scrollY);
+      this.onDebug?.(`Preview programmatic scroll observed: phase=${phase}; page=${pageNo}; observed=${view.scrollY.toFixed(1)}; session=${this.mountedSessionKey || "none"}.`);
+    };
+    // WebView can report the old scroll offset immediately after scrollTo.
+    // Report again after layout so session-linked tabs retain the position
+    // reached by forward/inverse navigation, not the previous viewport.
+    reportScrollPosition("immediate");
+    view.requestAnimationFrame(() => reportScrollPosition("animation-frame"));
+    view.setTimeout(() => reportScrollPosition("32ms"), 32);
   }
 
   private reportPageStatus(currentPage: number): void {
@@ -1994,8 +2085,8 @@ export class PreviewFrame {
     this.onPageChanged?.({ currentPage: normalizedPage, pageCount });
   }
 
-  private renderForwardSyncRipple(doc: Document, x: number, y: number): void {
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  private renderForwardSyncRipple(doc: Document, x: number, y: number): boolean {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
     doc.querySelectorAll(".forward-sync-ripple").forEach(element => element.remove());
     const ripple = doc.createElement("div");
     ripple.className = "forward-sync-ripple";
@@ -2004,7 +2095,8 @@ export class PreviewFrame {
     doc.body.appendChild(ripple);
     window.setTimeout(() => {
       if (ripple.isConnected) ripple.remove();
-    }, 1000);
+    }, 1600);
+    return true;
   }
 
   private captureScrollAnchor(): PreviewViewportAnchor | null {

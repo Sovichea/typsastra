@@ -4,6 +4,7 @@ import {
   type DraftPreviewImageResult,
   type PreviewClickPoint,
   type PreviewInteractionStatus,
+  type PreviewOutlineItem,
   type PreviewPageStatus,
 } from "./previewFrame";
 import {
@@ -20,6 +21,8 @@ export interface PreviewControllerPort {
   onPageChanged(status: PreviewPageStatus): void;
   loadDraftImage(id: string): Promise<DraftPreviewImageResult | null>;
   onScrollPositionChanged(scrollTop: number): void;
+  onDebug(message: string): void;
+  onDocumentOutline(items: PreviewOutlineItem[]): void;
   onLoadStage(
     stage: string,
     detail: Record<string, number | string | boolean>,
@@ -45,6 +48,8 @@ export class PreviewController {
       status => port.onPageChanged(status),
       id => port.loadDraftImage(id),
       scrollTop => port.onScrollPositionChanged(scrollTop),
+      message => port.onDebug(message),
+      items => port.onDocumentOutline(items),
       (stage, detail) => port.onLoadStage(stage, detail),
       () => port.openEditorSearch(),
       items => port.onStandalonePdfOutlineChanged(items),

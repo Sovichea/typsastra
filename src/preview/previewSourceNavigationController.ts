@@ -20,6 +20,7 @@ import {
   usesTemplateAwareStandaloneRoot,
 } from "./previewPolicy";
 import type { PreviewSyncController } from "./previewSyncController";
+import type { LowMemorySyncIndexController } from "./lowMemorySyncIndexController";
 
 function ensureEditorCaretRippleStyle(): void {
   if (document.getElementById("typsastra-editor-caret-ripple-style")) return;
@@ -68,6 +69,8 @@ export interface PreviewSourceNavigationDependencies {
   getCacheRootPath(): string | null;
   utf8ByteOffsetToStringOffset(text: string, byteOffset: number): number;
   isPreviewOnlyWindow(): boolean;
+  isLowMemoryMode(): boolean;
+  lowMemorySync: LowMemorySyncIndexController;
   setPreviewReadyStatus(message: string): void;
   log(kind: "info" | "warning", source: string, message: string): void;
 }
@@ -156,7 +159,14 @@ export class PreviewSourceNavigationController {
       this.deps.setPreviewReadyStatus("Open a Typst file to reveal it in preview");
       return;
     }
-    this.deps.previewSync.requestManual(path, this.deps.getEditor().state.selection.main.head);
+    const cursor = this.deps.getEditor().state.selection.main.head;
+    if (this.deps.isLowMemoryMode()) {
+      if (!this.deps.lowMemorySync.followEditor(path, this.deps.getEditor(), cursor, true)) {
+        this.deps.setPreviewReadyStatus("No low-memory sync index is available for this preview yet");
+      }
+      return;
+    }
+    this.deps.previewSync.requestManual(path, cursor);
   }
 
   public cancelManualForwardSync(): void {
@@ -269,6 +279,24 @@ export class PreviewSourceNavigationController {
         "preview iframe",
         "Ignored source-sync click because the active preview is a direct PDF document.",
       );
+      return;
+    }
+    if (this.deps.isLowMemoryMode()) {
+      const position = point.documentPosition;
+      const anchor = position ? this.deps.lowMemorySync.findInverse(position) : null;
+      if (!anchor) {
+        this.deps.setPreviewReadyStatus("No low-memory sync index is available for this preview yet");
+        this.deps.log("info", "inverse sync", "Low-memory preview click has no indexed source location.");
+        return;
+      }
+      const existing = this.deps.getOpenTabs().find(tab => filePathKey(tab.path) === filePathKey(anchor.path));
+      if (filePathKey(this.deps.getActiveFilePath() ?? "") !== filePathKey(anchor.path)) {
+        await this.deps.loadFile(existing?.path ?? anchor.path, { preservePreviewSession: this.deps.capturePreviewSession() });
+      }
+      const editor = this.deps.getEditor();
+      const line = editor.state.doc.line(Math.max(1, Math.min(anchor.line + 1, editor.state.doc.lines)));
+      await this.applyInverseSyncSelection(line.from);
+      this.deps.log("info", "inverse sync", `Indexed inverse sync: page ${position!.page_no} → ${anchor.path}:${anchor.line + 1}.`);
       return;
     }
     await this.deps.previewSync.sendInverse(point);

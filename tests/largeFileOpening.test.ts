@@ -133,5 +133,13 @@ describe("large file opening notice", () => {
     const servicesEnd = lifecycle.indexOf("async restoreToolchain", servicesStart);
     const servicesSource = lifecycle.slice(servicesStart, servicesEnd);
     expect(servicesSource).toContain("app.workspaceServicesDeferredForLargeFile");
+
+    const activation = await Bun.file(
+      new URL("../src/editor/editorTabActivationController.ts", import.meta.url),
+    ).text();
+    const resumeIndex = activation.indexOf("deps.resumeDeferredWorkspaceServices();");
+    const prepareIndex = activation.indexOf("await deps.previewActivation.prepare");
+    expect(resumeIndex).toBeGreaterThan(-1);
+    expect(resumeIndex).toBeLessThan(prepareIndex);
   });
 });

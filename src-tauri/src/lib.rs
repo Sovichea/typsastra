@@ -5575,6 +5575,597 @@ async fn stop_tinymist_lsp(state: tauri::State<'_, LspState>) -> Result<(), Stri
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OneShotCompileResult {
+    pdf_path: String,
+    diagnostics: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LowMemorySyncInstrumentation {
+    root_path: String,
+    workspace_root_path: String,
+    files: Vec<String>,
+    anchor_count: usize,
+}
+
+fn low_memory_sync_line_is_markup(
+    root: &typst_syntax::LinkedNode<'_>,
+    first_content_byte: usize,
+) -> bool {
+    use typst_syntax::{Side, SyntaxKind};
+
+    let Some(leaf) = root.leaf_at(first_content_byte, Side::After) else {
+        return false;
+    };
+    let mut ancestor = Some(&leaf);
+    while let Some(node) = ancestor {
+        if matches!(
+            node.kind(),
+            SyntaxKind::Raw | SyntaxKind::Equation | SyntaxKind::Math
+        ) {
+            return false;
+        }
+        ancestor = node.parent();
+    }
+
+    // Markup text has distinct leaf kinds from code identifiers and values.
+    // Classifying the leaf is also correct after a completed multiline code
+    // expression, where the previous token's mode can still describe code.
+    matches!(
+        leaf.kind(),
+        SyntaxKind::Text
+            | SyntaxKind::HeadingMarker
+            | SyntaxKind::ListMarker
+            | SyntaxKind::EnumMarker
+            | SyntaxKind::TermMarker
+            | SyntaxKind::SmartQuote
+            | SyntaxKind::Escape
+            | SyntaxKind::Shorthand
+            | SyntaxKind::Link
+            | SyntaxKind::RefMarker
+    ) || matches!(
+        (leaf.kind(), leaf.parent_kind()),
+        (SyntaxKind::Star, Some(SyntaxKind::Strong))
+            | (SyntaxKind::Underscore, Some(SyntaxKind::Emph))
+    )
+}
+
+fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (String, usize) {
+    // The staged file is written with LF endings. Parse that exact normalized
+    // text as well so byte offsets remain correct for CRLF workspace files.
+    let normalized_source = source_text.replace("\r\n", "\n").replace('\r', "\n");
+    let syntax = typst_syntax::parse(&normalized_source);
+    let root = typst_syntax::LinkedNode::new(&syntax);
+    let mut output = String::with_capacity(normalized_source.len() + 256);
+    let mut anchor_count = 0usize;
+    let mut line_start = 0usize;
+
+    for (line, text) in normalized_source.lines().enumerate() {
+        let trimmed = text.trim_start();
+        let leading_bytes = text.len() - trimmed.len();
+        let first_content_byte = line_start + leading_bytes;
+
+        // Only visible markup boundaries are useful navigation anchors. The
+        // syntax-mode check prevents markup-form anchors from being injected
+        // into multiline code, arrays, dictionaries, math, and raw content.
+        // Missing lines intentionally fall back to the nearest safe anchor.
+        let visible_markup = !trimmed.is_empty()
+            && !trimmed.starts_with('#')
+            && !trimmed.starts_with("//")
+            && !trimmed.starts_with("/*")
+            && !trimmed.starts_with('`')
+            && !matches!(trimmed.chars().next(), Some(']') | Some('}') | Some(')'));
+        if visible_markup && low_memory_sync_line_is_markup(&root, first_content_byte) {
+            output.push_str(&format!(
+                "#context metadata((typsastra_sync: true, file: {file_id}, line: {line}, pos: here().position())) <typsastra-sync>\n"
+            ));
+            anchor_count += 1;
+        }
+        output.push_str(text);
+        output.push('\n');
+        line_start += text.len() + 1;
+    }
+
+    (output, anchor_count)
+}
+
+#[cfg(test)]
+mod low_memory_sync_instrumentation_tests {
+    use super::instrument_low_memory_sync_source;
+
+    const MARKER: &str = "#context metadata((typsastra_sync: true, file:";
+
+    #[test]
+    fn instruments_markup_but_skips_multiline_code_and_raw_content() {
+        let source = r#"= Visible heading
+Visible paragraph
+
+#let rows = (
+  [content stored in an array],
+  (name: "value"),
+)
+
+#let body = [
+  Visible content block paragraph
+]
+
+```typ
+Raw text is not an anchor
+```
+"#;
+
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 4);
+        assert_eq!(anchors, 3);
+        assert_eq!(instrumented.matches(MARKER).count(), 3);
+        assert!(instrumented.contains(&format!("{MARKER} 4, line: 0")));
+        assert!(instrumented.contains(&format!("{MARKER} 4, line: 1")));
+        assert!(instrumented.contains(&format!("{MARKER} 4, line: 9")));
+        assert!(!instrumented.contains(&format!("{MARKER} 4, line: 4")));
+        assert!(!instrumented.contains(&format!("{MARKER} 4, line: 14")));
+    }
+
+    #[test]
+    fn skips_code_lines_that_begin_with_text_or_content() {
+        let source = r#"#let configuration = (
+  family: "Example",
+  content: [Rendered value],
+  values: (
+    [First],
+    [Second],
+  ),
+)
+After the configuration.
+"#;
+
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 1);
+        assert_eq!(anchors, 1);
+        assert_eq!(instrumented.matches(MARKER).count(), 1);
+        assert!(instrumented.contains(&format!("{MARKER} 1, line: 8")));
+    }
+}
+
+fn copy_low_memory_sync_tree(
+    source: &Path,
+    target: &Path,
+    files: &mut Vec<PathBuf>,
+    anchors: &mut usize,
+) -> Result<(), String> {
+    std::fs::create_dir_all(target)
+        .map_err(|error| format!("Unable to create low-memory sync directory: {error}"))?;
+    for entry in std::fs::read_dir(source)
+        .map_err(|error| format!("Unable to read prepared preview directory: {error}"))?
+    {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let destination = target.join(entry.file_name());
+        if path.is_dir() {
+            copy_low_memory_sync_tree(&path, &destination, files, anchors)?;
+        } else if path.extension().and_then(|value| value.to_str()) == Some("typ") {
+            let source_text = std::fs::read_to_string(&path)
+                .map_err(|error| format!("Unable to read prepared Typst file: {error}"))?;
+            let file_id = files.len();
+            files.push(path);
+            let (output, file_anchor_count) =
+                instrument_low_memory_sync_source(&source_text, file_id);
+            *anchors += file_anchor_count;
+            std::fs::write(destination, output)
+                .map_err(|error| format!("Unable to write instrumented Typst file: {error}"))?;
+        } else {
+            std::fs::copy(&path, &destination)
+                .map_err(|error| format!("Unable to copy low-memory sync asset: {error}"))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn prepare_low_memory_sync_instrumentation(
+    workspace_root_path: String,
+    input_path: String,
+    generation_id: String,
+) -> Result<LowMemorySyncInstrumentation, String> {
+    let root = PathBuf::from(&workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let input = PathBuf::from(&input_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve prepared preview input: {error}"))?;
+    let render_root = root.join(".typsastra").join("cache").join("render");
+    if !input.starts_with(&render_root) {
+        return Err("Low-memory sync input must be a prepared render file.".into());
+    }
+    let staging_root = root
+        .join(".typsastra")
+        .join("cache")
+        .join("low-memory-sync")
+        .join(&generation_id)
+        .join("render");
+    if staging_root.exists() {
+        let _ = std::fs::remove_dir_all(&staging_root);
+    }
+    let mut source_files = Vec::new();
+    let mut anchor_count = 0;
+    copy_low_memory_sync_tree(
+        &render_root,
+        &staging_root,
+        &mut source_files,
+        &mut anchor_count,
+    )?;
+    let relative_input = input
+        .strip_prefix(&render_root)
+        .map_err(|_| "Unable to map prepared root into sync staging.")?;
+    Ok(LowMemorySyncInstrumentation {
+        root_path: staging_root
+            .join(relative_input)
+            .to_string_lossy()
+            .into_owned(),
+        workspace_root_path: staging_root.to_string_lossy().into_owned(),
+        files: source_files
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect(),
+        anchor_count,
+    })
+}
+
+#[tauri::command]
+async fn hash_cached_preview_file(path: String) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|error| format!("Unable to read preview for hashing: {error}"))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LowMemoryPreviewCacheManifest {
+    version: u8,
+    root_path: String,
+    source_signature: String,
+    pdf_path: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LowMemoryPreviewCacheEntry {
+    pdf_path: String,
+    index_json: String,
+    source_signature: String,
+}
+
+fn low_memory_preview_cache_key(root: &Path, preview_root: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let relative = preview_root
+        .strip_prefix(root)
+        .map_err(|_| "The low-memory preview root must remain inside its workspace.".to_string())?;
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(relative.to_string_lossy().as_bytes())
+    ))
+}
+
+fn collect_workspace_signature_files(
+    root: &Path,
+    directory: &Path,
+    files: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    for entry in std::fs::read_dir(directory)
+        .map_err(|error| format!("Unable to inspect workspace for preview caching: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("Unable to inspect workspace entry: {error}"))?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        if file_name == ".typsastra" {
+            continue;
+        }
+        let metadata = entry
+            .metadata()
+            .map_err(|error| format!("Unable to inspect workspace metadata: {error}"))?;
+        if metadata.is_dir() {
+            collect_workspace_signature_files(root, &path, files)?;
+        } else if metadata.is_file() {
+            files.push(path);
+        }
+    }
+    let _ = root;
+    Ok(())
+}
+
+fn calculate_workspace_preview_signature(root: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut files = Vec::new();
+    collect_workspace_signature_files(root, root, &mut files)?;
+    files.sort_by(|left, right| left.to_string_lossy().cmp(&right.to_string_lossy()));
+    let mut hash = Sha256::new();
+    for path in files {
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|_| "Unable to make workspace path relative for preview cache.".to_string())?;
+        hash.update(relative.to_string_lossy().as_bytes());
+        hash.update([0]);
+        let bytes = std::fs::read(&path)
+            .map_err(|error| format!("Unable to read workspace file for preview cache: {error}"))?;
+        hash.update(&bytes);
+        hash.update([0]);
+    }
+    Ok(format!("{:x}", hash.finalize()))
+}
+
+#[tauri::command]
+async fn workspace_preview_signature(workspace_root_path: String) -> Result<String, String> {
+    let root = PathBuf::from(workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    calculate_workspace_preview_signature(&root)
+}
+
+fn low_memory_preview_cache_directory(root: &Path) -> PathBuf {
+    root.join(".typsastra")
+        .join("cache")
+        .join("preview")
+        .join("low-memory")
+}
+
+fn low_memory_sync_index_path(root: &Path, preview_root: &Path) -> Result<PathBuf, String> {
+    Ok(low_memory_preview_cache_directory(root).join(format!(
+        "{}-sync-index-v1.json",
+        low_memory_preview_cache_key(root, preview_root)?
+    )))
+}
+
+#[tauri::command]
+async fn restore_low_memory_preview_cache(
+    workspace_root_path: String,
+    preview_root_path: String,
+) -> Result<Option<LowMemoryPreviewCacheEntry>, String> {
+    let root = PathBuf::from(workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let preview_root = PathBuf::from(preview_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
+    let key = low_memory_preview_cache_key(&root, &preview_root)?;
+    let directory = low_memory_preview_cache_directory(&root);
+    let manifest_path = directory.join(format!("{key}.json"));
+    let manifest = match tokio::fs::read_to_string(manifest_path).await {
+        Ok(contents) => {
+            serde_json::from_str::<LowMemoryPreviewCacheManifest>(&contents).map_err(|error| {
+                format!("Unable to parse low-memory preview cache manifest: {error}")
+            })?
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "Unable to load low-memory preview cache manifest: {error}"
+            ))
+        }
+    };
+    if manifest.version != 1 || manifest.root_path != preview_root.to_string_lossy() {
+        return Ok(None);
+    }
+    if calculate_workspace_preview_signature(&root)? != manifest.source_signature {
+        return Ok(None);
+    }
+    let pdf_path = PathBuf::from(&manifest.pdf_path);
+    if !pdf_path.is_file() {
+        return Ok(None);
+    }
+    let index_json =
+        match tokio::fs::read_to_string(low_memory_sync_index_path(&root, &preview_root)?).await {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(format!("Unable to load low-memory sync index: {error}")),
+        };
+    Ok(Some(LowMemoryPreviewCacheEntry {
+        pdf_path: pdf_path.to_string_lossy().into_owned(),
+        index_json,
+        source_signature: manifest.source_signature,
+    }))
+}
+
+#[tauri::command]
+async fn persist_low_memory_preview_cache(
+    workspace_root_path: String,
+    preview_root_path: String,
+    pdf_path: String,
+    source_signature: Option<String>,
+) -> Result<String, String> {
+    let root = PathBuf::from(workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let preview_root = PathBuf::from(preview_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
+    let source = PathBuf::from(pdf_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve generated preview PDF: {error}"))?;
+    let current_source_signature = calculate_workspace_preview_signature(&root)?;
+    if let Some(expected_source_signature) = source_signature {
+        if expected_source_signature != current_source_signature {
+            return Err("Workspace changed while the low-memory preview was compiling; its cache was not persisted.".into());
+        }
+    }
+    let key = low_memory_preview_cache_key(&root, &preview_root)?;
+    let directory = low_memory_preview_cache_directory(&root);
+    tokio::fs::create_dir_all(&directory)
+        .await
+        .map_err(|error| format!("Unable to create low-memory preview cache: {error}"))?;
+    let destination = directory.join(format!("{key}.pdf"));
+    let temporary = directory.join(format!("{key}.pdf.tmp"));
+    let _ = std::fs::remove_file(&temporary);
+    if std::fs::hard_link(&source, &temporary).is_err() {
+        tokio::fs::copy(&source, &temporary)
+            .await
+            .map_err(|error| format!("Unable to copy low-memory preview cache: {error}"))?;
+    }
+    tokio::fs::rename(&temporary, &destination)
+        .await
+        .map_err(|error| format!("Unable to activate low-memory preview cache: {error}"))?;
+    let manifest = LowMemoryPreviewCacheManifest {
+        version: 1,
+        root_path: preview_root.to_string_lossy().into_owned(),
+        source_signature: current_source_signature,
+        pdf_path: destination.to_string_lossy().into_owned(),
+    };
+    let manifest_temporary = directory.join(format!("{key}.json.tmp"));
+    let manifest_destination = directory.join(format!("{key}.json"));
+    tokio::fs::write(
+        &manifest_temporary,
+        serde_json::to_string(&manifest).unwrap(),
+    )
+    .await
+    .map_err(|error| format!("Unable to save low-memory preview cache manifest: {error}"))?;
+    tokio::fs::rename(manifest_temporary, manifest_destination)
+        .await
+        .map_err(|error| {
+            format!("Unable to activate low-memory preview cache manifest: {error}")
+        })?;
+    Ok(destination.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+async fn save_low_memory_sync_index(
+    workspace_root_path: String,
+    preview_root_path: String,
+    index_json: String,
+) -> Result<(), String> {
+    let root = PathBuf::from(workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let preview_root = PathBuf::from(preview_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
+    let directory = low_memory_preview_cache_directory(&root);
+    tokio::fs::create_dir_all(&directory)
+        .await
+        .map_err(|error| error.to_string())?;
+    let destination = low_memory_sync_index_path(&root, &preview_root)?;
+    let temporary = destination.with_extension("json.tmp");
+    tokio::fs::write(&temporary, index_json)
+        .await
+        .map_err(|error| format!("Unable to save low-memory sync index: {error}"))?;
+    tokio::fs::rename(temporary, destination)
+        .await
+        .map_err(|error| format!("Unable to activate low-memory sync index: {error}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_low_memory_sync_index(
+    workspace_root_path: String,
+    preview_root_path: String,
+) -> Result<Option<String>, String> {
+    let root = PathBuf::from(workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let preview_root = PathBuf::from(preview_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
+    let path = low_memory_sync_index_path(&root, &preview_root)?;
+    match tokio::fs::read_to_string(path).await {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Unable to load low-memory sync index: {error}")),
+    }
+}
+
+#[tauri::command]
+async fn compile_tinymist_pdf_once(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+    input_path: String,
+    output_path: String,
+) -> Result<OneShotCompileResult, String> {
+    let root = PathBuf::from(&workspace_root_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let input = PathBuf::from(&input_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve prepared preview input: {error}"))?;
+    let cache_root = root.join(".typsastra").join("cache");
+    let render_root = cache_root.join("render");
+    if !input.starts_with(&render_root) || !input.is_file() {
+        return Err(
+            "Low-memory compilation input must be a prepared Typsastra render file.".into(),
+        );
+    }
+    let output = PathBuf::from(&output_path);
+    let output_parent = output
+        .parent()
+        .ok_or_else(|| "Low-memory preview output has no parent directory.".to_string())?;
+    tokio::fs::create_dir_all(output_parent)
+        .await
+        .map_err(|error| format!("Unable to create preview output directory: {error}"))?;
+    let output_parent = output_parent
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve preview output directory: {error}"))?;
+    if !output_parent.starts_with(&cache_root) {
+        return Err(
+            "Low-memory preview output must stay inside Typsastra's workspace cache.".into(),
+        );
+    }
+    // Tinymist requires the entry file to be addressed from its compilation
+    // root. The prepared source lives below `.typsastra/cache/render`, not
+    // the user's workspace root, so passing the original workspace root with
+    // an absolute cache path makes recent Tinymist versions reject nested
+    // preview roots. Compile from the prepared render tree instead.
+    let render_root = render_root
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve prepared render root: {error}"))?;
+    let input_relative = input
+        .strip_prefix(&render_root)
+        .map_err(|_| "Prepared preview input is outside the render root.".to_string())?;
+
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let executable = active_tinymist(&data_dir)
+        .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
+    let mut command = tokio::process::Command::new(executable);
+    command
+        .arg("compile")
+        .current_dir(&render_root)
+        .arg(input_relative)
+        .arg(&output)
+        .arg("--root")
+        .arg(".")
+        .kill_on_drop(true);
+    let font_paths = compiler_font_directories(&app_handle, &data_dir, &root);
+    if !font_paths.is_empty() {
+        if let Ok(value) = std::env::join_paths(font_paths) {
+            command.env("TYPST_FONT_PATHS", value);
+        }
+    }
+    configure_background_compiler(&mut command);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let result = command
+        .output()
+        .await
+        .map_err(|error| format!("Failed to start one-shot Tinymist compiler: {error}"))?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("One-shot Tinymist compiler exited with {}.", result.status)
+        } else {
+            stderr
+        });
+    }
+    if !output.is_file() {
+        return Err("One-shot Tinymist compiler did not produce a PDF.".into());
+    }
+    Ok(OneShotCompileResult {
+        pdf_path: output.to_string_lossy().into_owned(),
+        diagnostics: String::from_utf8_lossy(&result.stderr).trim().to_string(),
+    })
+}
+
 #[tauri::command]
 async fn install_tinymist_toolchain(
     app_handle: tauri::AppHandle,
@@ -6565,6 +7156,14 @@ pub fn run() {
             install_enhanced_unicode_engine,
             start_tinymist_lsp,
             stop_tinymist_lsp,
+            compile_tinymist_pdf_once,
+            prepare_low_memory_sync_instrumentation,
+            hash_cached_preview_file,
+            workspace_preview_signature,
+            restore_low_memory_preview_cache,
+            persist_low_memory_preview_cache,
+            save_low_memory_sync_index,
+            load_low_memory_sync_index,
             send_lsp_message,
             prepare_render_project,
             inspect_render_cache_storage,

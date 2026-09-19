@@ -42,11 +42,19 @@ export class OutlineNavigationController {
       effects: EditorView.scrollIntoView(cursor, { y: "start", yMargin: 28 }),
     });
     outline.setCursorPosition(cursor, this.deps.activeFilePath());
-    if (currentHeading.previewPosition) {
-      this.deps.previewFrame().scrollToPage(currentHeading.previewPosition.page_no);
-    } else {
-      const previewPos = outline.previewPositionAt(cursor);
-      if (previewPos) this.deps.previewFrame().scrollToPage(previewPos.page_no);
+    this.revealInPreview(currentHeading);
+  }
+
+  revealInPreview(heading: DocumentHeading): void {
+    if (heading.previewPosition) {
+      this.deps.previewFrame().scrollToPage(heading.previewPosition.page_no);
+      return;
     }
+    if (heading.previewBookmarkIndex !== undefined) {
+      void this.deps.previewFrame().scrollToOutlineBookmark(heading.previewBookmarkIndex);
+      return;
+    }
+    const previewPosition = this.deps.outline().previewPositionAt(heading.textFrom);
+    if (previewPosition) this.deps.previewFrame().scrollToPage(previewPosition.page_no);
   }
 }

@@ -63,7 +63,8 @@ export interface EditorTabActivationDependencies {
   restoreCachedEditorDiagnostics(path: string): void;
   draftPreview: DraftPreviewController;
   updateWorkspaceViewportVisibility(): void;
-  resumeDeferredWorkspaceServices(): void;
+  resumeDeferredWorkspaceServices(): Promise<void>;
+  isLowMemoryMode(): boolean;
   restoreTabFoldState(tab: EditorTab): void;
   restoreEditorTabViewport(tab: EditorTab, path: string): Promise<void>;
   toolbar: EditorToolbarController;
@@ -76,6 +77,7 @@ export interface EditorTabActivationDependencies {
   activeMode(): "CODE" | "WYSIWYM";
   mapMarkupToWysiwym(markup: string): void;
   editorController: EditorController;
+  logPreview(message: string): void;
 }
 
 export class EditorTabActivationController {
@@ -89,12 +91,14 @@ export class EditorTabActivationController {
     const tab = deps.openTabs().find(candidate => filePathKey(candidate.path) === filePathKey(path));
     const activeFilePath = deps.activeFilePath();
     const sameActivePath = activeFilePath !== null && filePathKey(activeFilePath) === filePathKey(path);
+    deps.logPreview(`Tab activation started: path=${path}; sameActive=${sameActivePath}; confirmed=${options.largeFileConfirmed === true}; lowMemory=${deps.isLowMemoryMode()}.`);
     if (tab && !isSupportedInAppPath(tab.path) && await deps.classifyUnknownTextPath(tab.path)) {
       if (!tab.content && !tab.savedContent) tab.contentLoaded = false;
     }
     if (tab && !tab.contentLoaded) {
       const notice = await deps.largeFileNoticeForTab(tab);
       if (notice && !options.largeFileConfirmed) {
+        deps.logPreview(`Tab activation blocked by large-file guard: tab=${path}; kind=${notice.kind}; previewRoot=${notice.previewRootPath ?? "none"}.`);
         if (persistCurrent && !sameActivePath) deps.persistActiveTabState();
         deps.showLargeFileConfirmation(tab, notice);
         return;
@@ -183,7 +187,7 @@ export class EditorTabActivationController {
         deps.updateWorkspaceViewportVisibility();
         deps.renderEditorTabs();
         deps.saveWorkspaceState();
-        deps.resumeDeferredWorkspaceServices();
+        void deps.resumeDeferredWorkspaceServices();
         return;
       }
       deps.presentation.presentText(tab, path);
@@ -216,6 +220,17 @@ export class EditorTabActivationController {
     if (!sameActivePath && !previewActivation.presentationReused) {
       deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab));
     }
+    // A large-file confirmation initially holds workspace services back. The
+    // preview target must be resolved first: for an included file that target
+    // is its effective main document, not the tab itself. In low-memory mode
+    // wait for preparation before the one-shot render so the first confirmed
+    // preview cannot race the cache/render-project setup.
+    if (deps.isLowMemoryMode()) {
+      deps.logPreview(`Tab activation resumes deferred low-memory services: tab=${path}; root=${tab.previewMainPath ?? tab.previewRootPath ?? "none"}.`);
+      await deps.resumeDeferredWorkspaceServices();
+    } else {
+      void deps.resumeDeferredWorkspaceServices();
+    }
     deps.activateSpellcheckDocument(isMarkdownDocument ? null : path);
     deps.clearPendingLspSync();
     deps.previewSync.clearForward();
@@ -238,6 +253,5 @@ export class EditorTabActivationController {
     deps.updateManualForwardSyncAction();
     if (options.focusEditor !== false) deps.editor().focus();
     deps.saveWorkspaceState();
-    deps.resumeDeferredWorkspaceServices();
   }
 }
