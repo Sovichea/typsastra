@@ -2340,11 +2340,13 @@ export class TypsastraWorkspaceController {
   }
 
   private async restoreLowMemoryPreviewCache(): Promise<{ pdfPath: string; indexJson: string } | null> {
-    if (!this.workspaceRootPath || !this.previewRootPath) return null;
+    const cacheRootPath = this.getCacheRootPath();
+    if (!this.workspaceRootPath || !this.previewRootPath || !cacheRootPath) return null;
     const cached = await invoke<{ pdfPath: string; indexJson: string } | null>(
       "restore_low_memory_preview_cache",
       {
         workspaceRootPath: this.workspaceRootPath,
+        cacheRootPath,
         previewRootPath: this.previewRootPath,
       },
     );
@@ -2378,7 +2380,8 @@ export class TypsastraWorkspaceController {
     pdfPath: string,
     sourceSignature: string | null,
   ): Promise<void> {
-    if (!this.workspaceRootPath || !this.settingsController.value.preview.lowMemoryMode) return;
+    const cacheRootPath = this.getCacheRootPath();
+    if (!this.workspaceRootPath || !cacheRootPath || !this.settingsController.value.preview.lowMemoryMode) return;
     const workspaceRootPath = this.workspaceRootPath;
     const previewRootPath = this.previewRootPath;
     if (!previewRootPath) return;
@@ -2388,7 +2391,7 @@ export class TypsastraWorkspaceController {
     try {
       const pdfHash = await invoke<string>("hash_cached_preview_file", { path: pdfPath });
       const generationId = pdfHash;
-      const cached = await invoke<string | null>("load_low_memory_sync_index", { workspaceRootPath, previewRootPath });
+      const cached = await invoke<string | null>("load_low_memory_sync_index", { workspaceRootPath, cacheRootPath, previewRootPath });
       if (cached && this.lowMemorySyncIndexController.install(JSON.parse(cached), { generationId, pdfHash })) {
         this.setLowMemoryIndexStatus({ kind: "ready", message: "Sync index ready · cached" });
         this.appendDeveloperLog({ kind: "info", source: "forward sync", message: "Low-memory sync: reused persistent index for the current PDF." });
@@ -2401,6 +2404,7 @@ export class TypsastraWorkspaceController {
           () => {},
         ),
         workspaceRootPath,
+        cacheRootPath,
         preparedRootPath,
         generationId,
         pdfHash,
@@ -2420,6 +2424,7 @@ export class TypsastraWorkspaceController {
       index.files = index.files.map(path => this.mapToOriginalPath(path));
       await invoke("save_low_memory_sync_index", {
         workspaceRootPath,
+        cacheRootPath,
         previewRootPath,
         indexJson: JSON.stringify(index),
       });
@@ -2438,6 +2443,7 @@ export class TypsastraWorkspaceController {
       // skip both compilation and one-shot indexing.
       await invoke("persist_low_memory_preview_cache", {
         workspaceRootPath,
+        cacheRootPath,
         previewRootPath,
         pdfPath,
         sourceSignature,

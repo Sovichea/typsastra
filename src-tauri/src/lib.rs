@@ -5761,25 +5761,48 @@ fn copy_low_memory_sync_tree(
     Ok(())
 }
 
+/// Resolves the machine-local render cache and verifies it belongs to the
+/// active project. Low-memory compilation and indexing must use the same cache
+/// root as the normal preview mirror.
+fn resolve_low_memory_cache_root(
+    app_local_data_dir: &Path,
+    workspace_root: &Path,
+    cache_root_path: &str,
+) -> Result<PathBuf, String> {
+    let expected = workspace_render_cache_root(app_local_data_dir, workspace_root);
+    let cache_root = dunce::canonicalize(cache_root_path)
+        .map_err(|error| format!("Failed to resolve the preview cache: {error}"))?;
+    let expected = dunce::canonicalize(&expected)
+        .map_err(|error| format!("Failed to resolve the managed preview cache: {error}"))?;
+    if cache_root != expected {
+        return Err("The preview cache does not belong to the active project.".into());
+    }
+    Ok(cache_root)
+}
+
 #[tauri::command]
 async fn prepare_low_memory_sync_instrumentation(
+    app_handle: tauri::AppHandle,
     workspace_root_path: String,
+    cache_root_path: String,
     input_path: String,
     generation_id: String,
 ) -> Result<LowMemorySyncInstrumentation, String> {
-    let root = PathBuf::from(&workspace_root_path)
-        .canonicalize()
+    let root = dunce::canonicalize(&workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
-    let input = PathBuf::from(&input_path)
-        .canonicalize()
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let render_root = dunce::canonicalize(cache_root.join("render"))
+        .map_err(|error| format!("Unable to resolve prepared render root: {error}"))?;
+    let input = dunce::canonicalize(&input_path)
         .map_err(|error| format!("Unable to resolve prepared preview input: {error}"))?;
-    let render_root = root.join(".typsastra").join("cache").join("render");
-    if !input.starts_with(&render_root) {
+    if !input.is_file() || !input.starts_with(&render_root) {
         return Err("Low-memory sync input must be a prepared render file.".into());
     }
-    let staging_root = root
-        .join(".typsastra")
-        .join("cache")
+    let staging_root = cache_root
         .join("low-memory-sync")
         .join(&generation_id)
         .join("render");
@@ -5903,15 +5926,16 @@ async fn workspace_preview_signature(workspace_root_path: String) -> Result<Stri
     calculate_workspace_preview_signature(&root)
 }
 
-fn low_memory_preview_cache_directory(root: &Path) -> PathBuf {
-    root.join(".typsastra")
-        .join("cache")
-        .join("preview")
-        .join("low-memory")
+fn low_memory_preview_cache_directory(cache_root: &Path) -> PathBuf {
+    cache_root.join("low-memory-preview")
 }
 
-fn low_memory_sync_index_path(root: &Path, preview_root: &Path) -> Result<PathBuf, String> {
-    Ok(low_memory_preview_cache_directory(root).join(format!(
+fn low_memory_sync_index_path(
+    cache_root: &Path,
+    root: &Path,
+    preview_root: &Path,
+) -> Result<PathBuf, String> {
+    Ok(low_memory_preview_cache_directory(cache_root).join(format!(
         "{}-sync-index-v1.json",
         low_memory_preview_cache_key(root, preview_root)?
     )))
@@ -5919,17 +5943,22 @@ fn low_memory_sync_index_path(root: &Path, preview_root: &Path) -> Result<PathBu
 
 #[tauri::command]
 async fn restore_low_memory_preview_cache(
+    app_handle: tauri::AppHandle,
     workspace_root_path: String,
+    cache_root_path: String,
     preview_root_path: String,
 ) -> Result<Option<LowMemoryPreviewCacheEntry>, String> {
-    let root = PathBuf::from(workspace_root_path)
-        .canonicalize()
+    let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
-    let preview_root = PathBuf::from(preview_root_path)
-        .canonicalize()
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
     let key = low_memory_preview_cache_key(&root, &preview_root)?;
-    let directory = low_memory_preview_cache_directory(&root);
+    let directory = low_memory_preview_cache_directory(&cache_root);
     let manifest_path = directory.join(format!("{key}.json"));
     let manifest = match tokio::fs::read_to_string(manifest_path).await {
         Ok(contents) => {
@@ -5954,12 +5983,17 @@ async fn restore_low_memory_preview_cache(
     if !pdf_path.is_file() {
         return Ok(None);
     }
-    let index_json =
-        match tokio::fs::read_to_string(low_memory_sync_index_path(&root, &preview_root)?).await {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(format!("Unable to load low-memory sync index: {error}")),
-        };
+    let index_json = match tokio::fs::read_to_string(low_memory_sync_index_path(
+        &cache_root,
+        &root,
+        &preview_root,
+    )?)
+    .await
+    {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("Unable to load low-memory sync index: {error}")),
+    };
     Ok(Some(LowMemoryPreviewCacheEntry {
         pdf_path: pdf_path.to_string_lossy().into_owned(),
         index_json,
@@ -5969,16 +6003,21 @@ async fn restore_low_memory_preview_cache(
 
 #[tauri::command]
 async fn persist_low_memory_preview_cache(
+    app_handle: tauri::AppHandle,
     workspace_root_path: String,
+    cache_root_path: String,
     preview_root_path: String,
     pdf_path: String,
     source_signature: Option<String>,
 ) -> Result<String, String> {
-    let root = PathBuf::from(workspace_root_path)
-        .canonicalize()
+    let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
-    let preview_root = PathBuf::from(preview_root_path)
-        .canonicalize()
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
     let source = PathBuf::from(pdf_path)
         .canonicalize()
@@ -5990,7 +6029,7 @@ async fn persist_low_memory_preview_cache(
         }
     }
     let key = low_memory_preview_cache_key(&root, &preview_root)?;
-    let directory = low_memory_preview_cache_directory(&root);
+    let directory = low_memory_preview_cache_directory(&cache_root);
     tokio::fs::create_dir_all(&directory)
         .await
         .map_err(|error| format!("Unable to create low-memory preview cache: {error}"))?;
@@ -6029,21 +6068,26 @@ async fn persist_low_memory_preview_cache(
 
 #[tauri::command]
 async fn save_low_memory_sync_index(
+    app_handle: tauri::AppHandle,
     workspace_root_path: String,
+    cache_root_path: String,
     preview_root_path: String,
     index_json: String,
 ) -> Result<(), String> {
-    let root = PathBuf::from(workspace_root_path)
-        .canonicalize()
+    let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
-    let preview_root = PathBuf::from(preview_root_path)
-        .canonicalize()
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
-    let directory = low_memory_preview_cache_directory(&root);
+    let directory = low_memory_preview_cache_directory(&cache_root);
     tokio::fs::create_dir_all(&directory)
         .await
         .map_err(|error| error.to_string())?;
-    let destination = low_memory_sync_index_path(&root, &preview_root)?;
+    let destination = low_memory_sync_index_path(&cache_root, &root, &preview_root)?;
     let temporary = destination.with_extension("json.tmp");
     tokio::fs::write(&temporary, index_json)
         .await
@@ -6056,16 +6100,21 @@ async fn save_low_memory_sync_index(
 
 #[tauri::command]
 async fn load_low_memory_sync_index(
+    app_handle: tauri::AppHandle,
     workspace_root_path: String,
+    cache_root_path: String,
     preview_root_path: String,
 ) -> Result<Option<String>, String> {
-    let root = PathBuf::from(workspace_root_path)
-        .canonicalize()
+    let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
-    let preview_root = PathBuf::from(preview_root_path)
-        .canonicalize()
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
-    let path = low_memory_sync_index_path(&root, &preview_root)?;
+    let path = low_memory_sync_index_path(&cache_root, &root, &preview_root)?;
     match tokio::fs::read_to_string(path).await {
         Ok(value) => Ok(Some(value)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -6073,21 +6122,58 @@ async fn load_low_memory_sync_index(
     }
 }
 
+#[cfg(test)]
+mod low_memory_cache_root_tests {
+    use super::{resolve_low_memory_cache_root, workspace_render_cache_root};
+
+    #[test]
+    fn accepts_the_managed_cache_root_and_rejects_foreign_roots() {
+        let app_data = tempfile::tempdir().expect("create app data");
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let cache_root = workspace_render_cache_root(app_data.path(), workspace.path());
+        std::fs::create_dir_all(cache_root.join("render")).expect("create render mirror");
+
+        let resolved = resolve_low_memory_cache_root(
+            app_data.path(),
+            workspace.path(),
+            cache_root.to_str().unwrap(),
+        )
+        .expect("managed cache root is accepted");
+        assert_eq!(
+            resolved,
+            dunce::canonicalize(&cache_root).expect("canonical cache root")
+        );
+
+        let foreign = tempfile::tempdir().expect("create foreign cache");
+        let error = resolve_low_memory_cache_root(
+            app_data.path(),
+            workspace.path(),
+            foreign.path().to_str().unwrap(),
+        )
+        .expect_err("foreign cache root is rejected");
+        assert!(error.contains("does not belong to the active project"));
+    }
+}
+
 #[tauri::command]
 async fn compile_tinymist_pdf_once(
     app_handle: tauri::AppHandle,
     workspace_root_path: String,
+    cache_root_path: String,
     input_path: String,
     output_path: String,
 ) -> Result<OneShotCompileResult, String> {
-    let root = PathBuf::from(&workspace_root_path)
-        .canonicalize()
+    let root = dunce::canonicalize(&workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
-    let input = PathBuf::from(&input_path)
-        .canonicalize()
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let render_root = dunce::canonicalize(cache_root.join("render"))
+        .map_err(|error| format!("Unable to resolve prepared render root: {error}"))?;
+    let input = dunce::canonicalize(&input_path)
         .map_err(|error| format!("Unable to resolve prepared preview input: {error}"))?;
-    let cache_root = root.join(".typsastra").join("cache");
-    let render_root = cache_root.join("render");
     if !input.starts_with(&render_root) || !input.is_file() {
         return Err(
             "Low-memory compilation input must be a prepared Typsastra render file.".into(),
@@ -6100,8 +6186,7 @@ async fn compile_tinymist_pdf_once(
     tokio::fs::create_dir_all(output_parent)
         .await
         .map_err(|error| format!("Unable to create preview output directory: {error}"))?;
-    let output_parent = output_parent
-        .canonicalize()
+    let output_parent = dunce::canonicalize(output_parent)
         .map_err(|error| format!("Unable to resolve preview output directory: {error}"))?;
     if !output_parent.starts_with(&cache_root) {
         return Err(
@@ -6109,13 +6194,10 @@ async fn compile_tinymist_pdf_once(
         );
     }
     // Tinymist requires the entry file to be addressed from its compilation
-    // root. The prepared source lives below `.typsastra/cache/render`, not
-    // the user's workspace root, so passing the original workspace root with
-    // an absolute cache path makes recent Tinymist versions reject nested
-    // preview roots. Compile from the prepared render tree instead.
-    let render_root = render_root
-        .canonicalize()
-        .map_err(|error| format!("Unable to resolve prepared render root: {error}"))?;
+    // root. The prepared source lives below the managed render mirror, not the
+    // user's workspace root, so passing the original workspace root with an
+    // absolute cache path makes recent Tinymist versions reject nested preview
+    // roots. Compile from the prepared render tree instead.
     let input_relative = input
         .strip_prefix(&render_root)
         .map_err(|_| "Prepared preview input is outside the render root.".to_string())?;

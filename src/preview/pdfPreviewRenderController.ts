@@ -439,6 +439,7 @@ export class PdfPreviewRenderController {
         this.managedPdfPathKeysValue.add(anticipatedPdfPathKey);
         const result = await invoke<OneShotCompileResult>("compile_tinymist_pdf_once", {
           workspaceRootPath,
+          cacheRootPath: cacheRoot,
           inputPath: previewPath,
           outputPath: anticipatedPdfPath,
         });

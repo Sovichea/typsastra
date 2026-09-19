@@ -52,12 +52,14 @@ export function parseLowMemorySyncQuery(raw: string): LowMemorySyncAnchor[] {
 export async function buildLowMemorySyncIndex(options: {
   createClient(workspaceRootPath: string): TinymistLspClient;
   workspaceRootPath: string;
+  cacheRootPath: string;
   preparedRootPath: string;
   generationId: string;
   pdfHash: string;
 }): Promise<LowMemorySyncIndex> {
   const staging = await invoke<Instrumentation>("prepare_low_memory_sync_instrumentation", {
     workspaceRootPath: options.workspaceRootPath,
+    cacheRootPath: options.cacheRootPath,
     inputPath: options.preparedRootPath,
     generationId: options.generationId,
   });
