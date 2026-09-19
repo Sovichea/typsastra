@@ -136,6 +136,12 @@ describe("table typst generation", () => {
     expect(source).toContain('this.applyBorderToSelection(table, "outline")');
     expect(source).toContain("--edge-color");
     expect(source).toContain("OPPOSITE_SIDE[side]");
+    expect(source).toContain('event.code === "KeyZ"');
+    expect(source).toContain("private undo(): void");
+    expect(source).toContain("private redo(): void");
+    expect(source).toContain("private commitHistory(): void");
+    expect(source).toContain("private refreshTableMenu(): void");
+    expect(source).toContain('item.addEventListener("click", () => onSelect())');
   });
 
   test("builds and finds the managed directive block", () => {

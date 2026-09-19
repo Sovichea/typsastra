@@ -99,8 +99,16 @@ export class TableToolController {
   private borderColor = "#000000";
   private draggingSelection = false;
   private activeMenu: HTMLElement | null = null;
+  private activeMenuAnchor: HTMLButtonElement | null = null;
+  private menuBuild: ((menu: HTMLElement) => void) | null = null;
   private menuCleanup: (() => void) | null = null;
   private readonly cellInputs = new Map<string, HTMLInputElement>();
+  private historyPast: StoredTable[] = [];
+  private historyFuture: StoredTable[] = [];
+  private pendingSnapshot: StoredTable | null = null;
+  private lastState: StoredTable | null = null;
+  private historyTimer: number | null = null;
+  private applyingHistory = false;
   private persistTimer: number | null = null;
   private previewTimer: number | null = null;
   private previewGeneration = 0;
@@ -114,6 +122,16 @@ export class TableToolController {
   ) {
     document.getElementById("tables-new-button")?.addEventListener("click", () => this.createTable());
     window.addEventListener("pointerup", () => { this.draggingSelection = false; });
+    this.inspector.addEventListener("keydown", event => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.code === "KeyZ" && !event.shiftKey) {
+        event.preventDefault();
+        this.undo();
+      } else if (event.code === "KeyY" || (event.code === "KeyZ" && event.shiftKey)) {
+        event.preventDefault();
+        this.redo();
+      }
+    }, true);
   }
 
   public setWorkspace(tables: readonly StoredTable[]): void {
@@ -122,6 +140,7 @@ export class TableToolController {
       this.selectedId = this.tables[0]?.id ?? null;
     }
     this.resetSelection();
+    this.resetHistory(this.selected());
     this.renderSidebar();
     this.renderInspector();
   }
@@ -164,6 +183,7 @@ export class TableToolController {
     this.selectedId = id;
     this.selectionAnchor = { row: 0, column: 0 };
     this.selectionFocus = { row: 0, column: 0 };
+    this.resetHistory(table);
     this.emitChange();
     this.renderSidebar();
     this.renderInspector();
@@ -173,6 +193,7 @@ export class TableToolController {
     if (!this.tables.some(table => table.id === id)) return;
     this.selectedId = id;
     this.resetSelection();
+    this.resetHistory(this.selected());
     this.renderSidebar();
     this.renderInspector();
     this.schedulePreview();
@@ -195,9 +216,93 @@ export class TableToolController {
   }
 
   private emitChange(): void {
+    if (!this.applyingHistory) this.recordHistoryBurst();
     this.deps.tablesChanged?.(this.tables);
     this.schedulePersist();
     this.schedulePreview();
+  }
+
+  private recordHistoryBurst(): void {
+    const table = this.selected();
+    if (!table) return;
+    if (this.pendingSnapshot === null && this.lastState) {
+      this.pendingSnapshot = cloneTable(this.lastState);
+    }
+    if (this.historyTimer !== null) window.clearTimeout(this.historyTimer);
+    this.historyTimer = window.setTimeout(() => this.commitHistory(), 400);
+  }
+
+  private commitHistory(): void {
+    if (this.historyTimer !== null) window.clearTimeout(this.historyTimer);
+    this.historyTimer = null;
+    const table = this.selected();
+    if (this.pendingSnapshot && table) {
+      this.historyPast.push(this.pendingSnapshot);
+      if (this.historyPast.length > 100) this.historyPast.shift();
+      this.historyFuture = [];
+    }
+    this.pendingSnapshot = null;
+    if (table) this.lastState = cloneTable(table);
+  }
+
+  private resetHistory(table: StoredTable | null): void {
+    this.commitHistory();
+    this.historyPast = [];
+    this.historyFuture = [];
+    this.pendingSnapshot = null;
+    this.historyTimer = null;
+    this.lastState = table ? cloneTable(table) : null;
+  }
+
+  private undo(): void {
+    this.commitHistory();
+    const table = this.selected();
+    if (!table || this.historyPast.length === 0) return;
+    const previous = this.historyPast.pop()!;
+    this.historyFuture.push(cloneTable(table));
+    this.applyTableState(previous);
+  }
+
+  private redo(): void {
+    this.commitHistory();
+    const table = this.selected();
+    if (!table || this.historyFuture.length === 0) return;
+    const next = this.historyFuture.pop()!;
+    this.historyPast.push(cloneTable(table));
+    this.applyTableState(next);
+  }
+
+  private applyTableState(state: StoredTable): void {
+    const index = this.tables.findIndex(candidate => candidate.id === state.id);
+    if (index === -1) return;
+    const restored = cloneTable(state);
+    this.tables[index] = restored;
+    const anchor = this.selectionAnchor
+      && tableCellOrigin(restored, this.selectionAnchor.row, this.selectionAnchor.column)
+      ? this.selectionAnchor
+      : null;
+    const focus = this.selectionFocus
+      && tableCellOrigin(restored, this.selectionFocus.row, this.selectionFocus.column)
+      ? this.selectionFocus
+      : anchor;
+    this.selectionAnchor = anchor;
+    this.selectionFocus = focus;
+    this.applyingHistory = true;
+    try {
+      this.lastState = cloneTable(restored);
+      this.renderGrid(restored);
+      this.updateCode(restored);
+      this.syncSelectionSummary();
+      this.emitChange();
+    } finally {
+      this.applyingHistory = false;
+    }
+  }
+
+  private refreshGrid(table: StoredTable): void {
+    this.renderGrid(table);
+    this.updateCode(table);
+    this.syncSelectionSummary();
   }
 
   private schedulePersist(): void {
@@ -353,7 +458,7 @@ export class TableToolController {
       this.appendMenuItem(menuElement, "Add row", () => {
         if (table.rows.length >= MAX_ROWS) return;
         table.rows.push(emptyRow(table.columns));
-        this.renderInspector();
+        this.refreshGrid(table);
         this.emitChange();
       });
       this.appendMenuItem(menuElement, "Remove row", () => {
@@ -364,7 +469,7 @@ export class TableToolController {
         }
         table.rows.pop();
         this.resetSelection();
-        this.renderInspector();
+        this.refreshGrid(table);
         this.emitChange();
       });
     });
@@ -376,7 +481,7 @@ export class TableToolController {
         if (table.columns >= MAX_COLUMNS) return;
         table.columns += 1;
         for (const row of table.rows) row.push(emptyCell());
-        this.renderInspector();
+        this.refreshGrid(table);
         this.emitChange();
       });
       this.appendMenuItem(menuElement, "Remove column", () => {
@@ -388,7 +493,7 @@ export class TableToolController {
         table.columns -= 1;
         for (const row of table.rows) row.length = table.columns;
         this.resetSelection();
-        this.renderInspector();
+        this.refreshGrid(table);
         this.emitChange();
       });
     });
@@ -401,6 +506,7 @@ export class TableToolController {
         this.borderMode = !this.borderMode;
         this.renderGrid(table);
         this.syncSelectionSummary();
+        this.refreshTableMenu();
       });
       this.appendMenuSeparator(menuElement);
       this.appendMenuHeading(menuElement, "Apply to selection");
@@ -423,17 +529,20 @@ export class TableToolController {
         table.headerRow = !table.headerRow;
         this.renderGrid(table);
         this.emitChange();
+        this.refreshTableMenu();
       });
       this.appendMenuToggle(menuElement, "Header column", table.headerColumn, () => {
         table.headerColumn = !table.headerColumn;
         this.renderGrid(table);
         this.emitChange();
+        this.refreshTableMenu();
       });
       this.appendMenuSeparator(menuElement);
       this.appendMenuToggle(menuElement, "Table border", table.stroke === "solid", () => {
         table.stroke = table.stroke === "solid" ? "none" : "solid";
         this.renderGrid(table);
         this.emitChange();
+        this.refreshTableMenu();
       });
       this.appendMenuHeading(menuElement, `Table thickness (${table.strokeWidth}pt)`);
       this.appendMenuChoices(menuElement, [0.25, 0.5, 1, 2], () => table.strokeWidth, value => {
@@ -680,7 +789,7 @@ export class TableToolController {
     }
     this.selectionAnchor = { row: range.minRow, column: range.minColumn };
     this.selectionFocus = { ...this.selectionAnchor };
-    this.renderInspector();
+    this.refreshGrid(table);
     this.emitChange();
   }
 
@@ -708,7 +817,7 @@ export class TableToolController {
       this.deps.showPreviewMessage?.("Select a merged cell to split it.");
       return;
     }
-    this.renderInspector();
+    this.refreshGrid(table);
     this.emitChange();
   }
 
@@ -724,7 +833,7 @@ export class TableToolController {
     [table.rows[range.minRow], table.rows[target]] = [table.rows[target], table.rows[range.minRow]];
     this.selectionAnchor = { row: target, column: this.selectionAnchor?.column ?? 0 };
     this.selectionFocus = { ...this.selectionAnchor };
-    this.renderInspector();
+    this.refreshGrid(table);
     this.emitChange();
   }
 
@@ -743,7 +852,7 @@ export class TableToolController {
     }
     this.selectionAnchor = { row: this.selectionAnchor?.row ?? 0, column: target };
     this.selectionFocus = { ...this.selectionAnchor };
-    this.renderInspector();
+    this.refreshGrid(table);
     this.emitChange();
   }
 
@@ -807,11 +916,17 @@ export class TableToolController {
   }
 
   private openTableMenu(anchor: HTMLButtonElement, build: (menu: HTMLElement) => void): void {
+    if (this.activeMenu && this.activeMenuAnchor === anchor) {
+      this.closeTableMenu();
+      return;
+    }
     this.closeTableMenu();
     const menu = document.createElement("div");
     menu.className = "dropdown-menu table-tool-menu";
     menu.setAttribute("role", "menu");
     build(menu);
+    this.menuBuild = build;
+    this.activeMenuAnchor = anchor;
     document.body.appendChild(menu);
     const rect = anchor.getBoundingClientRect();
     menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
@@ -839,6 +954,17 @@ export class TableToolController {
     this.menuCleanup = null;
     this.activeMenu?.remove();
     this.activeMenu = null;
+    this.activeMenuAnchor = null;
+    this.menuBuild = null;
+  }
+
+  /** Rebuilds the open menu so toggles and choice highlights stay current. */
+  private refreshTableMenu(): void {
+    const menu = this.activeMenu;
+    const build = this.menuBuild;
+    if (!menu || !build) return;
+    menu.replaceChildren();
+    build(menu);
   }
 
   private appendMenuItem(
@@ -853,10 +979,9 @@ export class TableToolController {
     item.setAttribute("role", "menuitem");
     item.textContent = options.checked ? `✓ ${label}` : label;
     if (!options.disabled) {
-      item.addEventListener("click", () => {
-        this.closeTableMenu();
-        onSelect();
-      });
+      // Menus stay open after a selection; an outside click or the owning
+      // button closes them.
+      item.addEventListener("click", () => onSelect());
     }
     menu.appendChild(item);
   }
@@ -893,7 +1018,7 @@ export class TableToolController {
       if (current() === value) button.classList.add("active");
       button.addEventListener("click", () => {
         onSelect(value);
-        this.closeTableMenu();
+        this.refreshTableMenu();
       });
       row.appendChild(button);
     }
