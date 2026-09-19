@@ -1,5 +1,83 @@
 import { describe, expect, test } from "bun:test";
 import { SourceLocationController } from "../src/navigation/sourceLocationController";
+import { filePathKey } from "../src/platform/paths";
+
+function navigationController(options: {
+  loadFile: (path: string) => Promise<void>;
+  resolveOpenTabPath?: (path: string) => string | null;
+  activeFilePath?: string | null;
+}) {
+  return new SourceLocationController({
+    workspaceRootPath: () => "C:\\Projects\\Demo",
+    cacheRootPath: () => "C:\\cache",
+    activeFilePath: () => options.activeFilePath ?? null,
+    editor: () => {
+      throw new Error("editor should not be touched");
+    },
+    lspClient: () => undefined,
+    loadFile: options.loadFile,
+    activeTabContentLoaded: () => false,
+    generatedPreviewText: async () => "",
+    resolveOpenTabPath: options.resolveOpenTabPath,
+  });
+}
+
+describe("LSP URI navigation path identity", () => {
+  test("prefers an open tab's native path for a Ctrl+click URI", async () => {
+    const nativePath = "C:\\Projects\\Demo\\chapters\\one.typ";
+    const loaded: string[] = [];
+    const controller = navigationController({
+      loadFile: async path => {
+        loaded.push(path);
+      },
+      resolveOpenTabPath: path =>
+        filePathKey(path) === filePathKey(nativePath) ? nativePath : null,
+    });
+
+    await controller.navigateToLspLocation(
+      "file:///C:/Projects/Demo/chapters/one.typ",
+      0,
+      0,
+    );
+
+    expect(loaded).toEqual([nativePath]);
+  });
+
+  test("normalizes a URI-derived path when the file has no open tab", async () => {
+    const loaded: string[] = [];
+    const controller = navigationController({
+      loadFile: async path => {
+        loaded.push(path);
+      },
+    });
+
+    await controller.navigateToLspLocation(
+      "file:///C:/Projects/Demo/chapters/one.typ",
+      0,
+      0,
+    );
+
+    expect(loaded).toEqual(["C:\\Projects\\Demo\\chapters\\one.typ"]);
+  });
+
+  test("skips loading when the resolved path is already active", async () => {
+    const loaded: string[] = [];
+    const controller = navigationController({
+      loadFile: async path => {
+        loaded.push(path);
+      },
+      activeFilePath: "c:/projects/demo/chapters/one.typ",
+    });
+
+    await controller.navigateToLspLocation(
+      "file:///C:/Projects/Demo/chapters/one.typ",
+      0,
+      0,
+    );
+
+    expect(loaded).toEqual([]);
+  });
+});
 
 describe("source location cache mapping", () => {
   test("recognizes Rust-escaped mirror paths in Unicode workspaces", () => {

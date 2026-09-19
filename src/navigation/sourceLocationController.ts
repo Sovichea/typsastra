@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { EditorView } from "@codemirror/view";
 import type { TinymistLspClient, LspSourcePosition } from "../compiler/lsp";
 import { isTypstDocumentPath } from "../platform/fileTypes";
-import { filePathFromUri, filePathToUri } from "../platform/paths";
+import { filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath } from "../platform/paths";
 import { decodeRustUnicodeEscapes } from "../compiler/previewError";
 
 export interface SourceLocationDependencies {
@@ -14,6 +14,7 @@ export interface SourceLocationDependencies {
   loadFile(path: string): Promise<void>;
   activeTabContentLoaded(): boolean;
   generatedPreviewText(originalPath: string): Promise<string>;
+  resolveOpenTabPath?(path: string): string | null;
 }
 
 /** Owns workspace/cache source mapping and editor navigation for LSP locations. */
@@ -67,8 +68,12 @@ export class SourceLocationController {
 
   async navigateToLspLocation(uri: string, line: number, character: number): Promise<void> {
     const rawPath = filePathFromUri(uri);
-    const filePath = this.mapToOriginalPath(rawPath);
-    if (filePath !== this.deps.activeFilePath()) {
+    const mappedPath = this.mapToOriginalPath(rawPath);
+    // LSP URIs are always forward-slash and may carry different drive-letter
+    // casing. Prefer an open tab's native path so a Ctrl+click-opened include
+    // shares the workspace path identity used by preview forward sync.
+    const filePath = this.deps.resolveOpenTabPath?.(mappedPath) ?? nativeFilePath(mappedPath);
+    if (filePathKey(filePath) !== filePathKey(this.deps.activeFilePath() ?? "")) {
       await this.deps.loadFile(filePath);
     }
     if (!this.deps.activeTabContentLoaded()) return;
@@ -77,9 +82,8 @@ export class SourceLocationController {
     let cursor = 0;
     if (this.isRenderCachePath(rawPath) && client) {
       const workspaceRootPath = this.deps.workspaceRootPath();
-      const relPath = workspaceRootPath && filePath.startsWith(workspaceRootPath)
-        ? filePath.substring(workspaceRootPath.length).replace(/^[/\\]+/, "")
-        : filePath;
+      const relative = workspaceRootPath ? relativeFilePath(workspaceRootPath, filePath) : null;
+      const relPath = relative === null || relative === "" ? filePath : relative;
       const cacheContent = await this.deps.generatedPreviewText(filePath);
       cursor = await this.mapCacheLspPositionToOriginalEditorOffset(
         relPath,

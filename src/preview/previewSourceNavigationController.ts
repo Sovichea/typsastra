@@ -5,7 +5,7 @@ import type { LspInverseSyncResult, LspSourcePosition } from "../compiler/lsp";
 import type { LogConsoleEntryInput } from "../diagnostics/logConsoleController";
 import type { EditorTab, PreviewSessionState } from "../editor/editorTab";
 import { isTypstDocumentPath } from "../platform/fileTypes";
-import { fileNameFromPath, filePathFromUri, filePathKey } from "../platform/paths";
+import { fileNameFromPath, filePathFromUri, filePathKey, relativeFilePath } from "../platform/paths";
 import {
   TYPSASTRA_GREEN,
   TYPSASTRA_GREEN_RIPPLE_FILL,
@@ -226,9 +226,11 @@ export class PreviewSourceNavigationController {
 
     const originalContent = editor.state.doc.toString();
     const sourceByteOffset = new TextEncoder().encode(originalContent.slice(0, position)).length;
-    const relativePath = path.startsWith(workspaceRootPath)
-      ? path.substring(workspaceRootPath.length).replace(/^[/\\]+/, "")
-      : path;
+    // LSP URI navigation (Ctrl+click) can leave the active path in a
+    // forward-slash, differently-cased form. Use the shared case/separator
+    // normalized helper so the render-cache map key still resolves.
+    const relativePath = relativeFilePath(workspaceRootPath, path);
+    if (relativePath === null || relativePath === "") return null;
     const generatedByteOffset = await invoke<number | null>("map_source_to_generated", {
       cacheRoot,
       relativePath,

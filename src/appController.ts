@@ -593,6 +593,8 @@ export class TypsastraWorkspaceController {
     loadFile: path => this.loadFile(path),
     activeTabContentLoaded: () => this.getActiveTab()?.contentLoaded === true,
     generatedPreviewText: path => this.pdfGeneratedPreviewText(path),
+    resolveOpenTabPath: path =>
+      this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(path))?.path ?? null,
   });
   private readonly surroundWithDiscoveryController = new SurroundWithDiscoveryController({
     client: () => this.documentSessionController.hasClient ? this.lspClient : null,

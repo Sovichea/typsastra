@@ -24,4 +24,25 @@ describe("preview source navigation controller", () => {
     expect(source).toContain("return this.previewSourceNavigationController.forwardSyncTarget(path, cursor);");
     expect(source).toContain("return this.previewSourceNavigationController.handlePdfPreviewClick(point);");
   });
+
+  test("derives the render-cache relative path with the shared helper", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/previewSourceNavigationController.ts", import.meta.url),
+    ).text();
+
+    // Ctrl+click (LSP URI) paths use forward slashes and may differ in case
+    // from the workspace root, so forward sync must not use a raw startsWith.
+    expect(source).toContain("relativeFilePath(workspaceRootPath, path)");
+    expect(source).not.toContain("path.startsWith(workspaceRootPath)");
+  });
+
+  test("resolves LSP navigation to native path identity without raw startsWith", async () => {
+    const source = await Bun.file(
+      new URL("../src/navigation/sourceLocationController.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("nativeFilePath(mappedPath)");
+    expect(source).toContain("relativeFilePath(workspaceRootPath, filePath)");
+    expect(source).not.toContain("filePath.startsWith(workspaceRootPath)");
+  });
 });
