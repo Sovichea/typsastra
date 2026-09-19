@@ -46,6 +46,11 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 1420,
     strictPort: true,
+    watch: {
+      // The Rust backend is compiled by cargo; watching its target directory
+      // throws EBUSY on Windows when cargo holds a lock on a dependency DLL.
+      ignored: ["**/src-tauri/**"],
+    },
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {
