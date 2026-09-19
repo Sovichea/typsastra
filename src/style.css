@@ -3118,8 +3118,13 @@ body.table-tools-active #code-render-pane {
   display: grid;
   grid-template-columns: repeat(var(--table-columns, 2), minmax(80px, 1fr));
   grid-auto-rows: minmax(26px, auto);
-  gap: 2px;
+  gap: 0;
   min-width: max-content;
+}
+/* In border mode, pull the cells apart so each edge handle is easy to hit. */
+.table-tool-grid.borders-mode {
+  gap: 12px;
+  padding: 6px;
 }
 .table-tool-cell-wrap { position: relative; display: grid; }
 .table-tool-cell {
@@ -3162,32 +3167,32 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-edge:hover::after { background: color-mix(in srgb, var(--ui-accent-color) 55%, transparent); }
 .table-tool-edge.on::after { background: var(--edge-color, var(--ui-accent-color)); }
-.table-tool-edge-top { top: -3px; left: 0; right: 0; height: 6px; }
+.table-tool-edge-top { top: -8px; left: 0; right: 0; height: 16px; }
 .table-tool-edge-top::after {
   left: 0;
   right: 0;
-  top: calc(3px - var(--edge-width, 1px) / 2);
+  top: calc(8px - var(--edge-width, 1px) / 2);
   height: var(--edge-width, 1px);
 }
-.table-tool-edge-bottom { bottom: -3px; left: 0; right: 0; height: 6px; }
+.table-tool-edge-bottom { bottom: -8px; left: 0; right: 0; height: 16px; }
 .table-tool-edge-bottom::after {
   left: 0;
   right: 0;
-  bottom: calc(3px - var(--edge-width, 1px) / 2);
+  bottom: calc(8px - var(--edge-width, 1px) / 2);
   height: var(--edge-width, 1px);
 }
-.table-tool-edge-left { left: -3px; top: 0; bottom: 0; width: 6px; }
+.table-tool-edge-left { left: -8px; top: 0; bottom: 0; width: 16px; }
 .table-tool-edge-left::after {
   top: 0;
   bottom: 0;
-  left: calc(3px - var(--edge-width, 1px) / 2);
+  left: calc(8px - var(--edge-width, 1px) / 2);
   width: var(--edge-width, 1px);
 }
-.table-tool-edge-right { right: -3px; top: 0; bottom: 0; width: 6px; }
+.table-tool-edge-right { right: -8px; top: 0; bottom: 0; width: 16px; }
 .table-tool-edge-right::after {
   top: 0;
   bottom: 0;
-  right: calc(3px - var(--edge-width, 1px) / 2);
+  right: calc(8px - var(--edge-width, 1px) / 2);
   width: var(--edge-width, 1px);
 }
 .table-tool-code {
