@@ -3148,6 +3148,15 @@ async fn project_image_index(
     .map_err(|error| format!("Could not index project images: {error}"))?
 }
 
+#[derive(Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ImageToolCrop {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ImageToolPreviewRequest {
@@ -3157,6 +3166,8 @@ struct ImageToolPreviewRequest {
     height: u32,
     format: String,
     quality: u8,
+    #[serde(default)]
+    crop: Option<ImageToolCrop>,
 }
 
 #[derive(serde::Serialize)]
@@ -3249,8 +3260,16 @@ fn image_tool_generate_preview_blocking(
     format.hash(&mut identity);
     request.quality.hash(&mut identity);
     inspection_proxy.hash(&mut identity);
+    request
+        .crop
+        .map(|crop| (crop.x, crop.y, crop.width, crop.height))
+        .hash(&mut identity);
+    let crop_suffix = request
+        .crop
+        .map(|crop| format!("-crop{}_{}_{}_{}", crop.x, crop.y, crop.width, crop.height))
+        .unwrap_or_default();
     let destination = cache.join(format!(
-        "preview-{identity:016x}-{request_width}x{request_height}.{extension}",
+        "preview-{identity:016x}-{request_width}x{request_height}{crop_suffix}.{extension}",
         identity = identity.finish(),
         request_width = request.width,
         request_height = request.height
@@ -3270,6 +3289,23 @@ fn image_tool_generate_preview_blocking(
     let mut decoded = DynamicImage::from_decoder(decoder)
         .map_err(|error| format!("Could not decode {}: {error}", source.display()))?;
     decoded.apply_orientation(orientation);
+    if let Some(crop) = request.crop {
+        if crop.width == 0 || crop.height == 0 {
+            return Err("Crop dimensions must be at least 1 pixel".into());
+        }
+        let (source_width, source_height) = (decoded.width(), decoded.height());
+        let right = crop.x.checked_add(crop.width);
+        let bottom = crop.y.checked_add(crop.height);
+        let fits = right.is_some_and(|right| right <= source_width)
+            && bottom.is_some_and(|bottom| bottom <= source_height);
+        if !fits {
+            return Err(format!(
+                "Crop region {}x{} at ({}, {}) is outside the {}x{} image",
+                crop.width, crop.height, crop.x, crop.y, source_width, source_height
+            ));
+        }
+        decoded = decoded.crop_imm(crop.x, crop.y, crop.width, crop.height);
+    }
     let filter = if inspection_proxy {
         FilterType::Triangle
     } else {
@@ -3499,12 +3535,59 @@ mod image_tool_tests {
             height: 5,
             format: "jpeg".into(),
             quality: 80,
+            crop: None,
         })
         .expect("generate preview");
 
         assert_eq!((result.width, result.height), (10, 5));
         assert!(std::path::Path::new(&result.path).starts_with(workspace.path().join(".typsastra")));
         assert!(result.output_bytes > 0);
+    }
+
+    #[test]
+    fn crops_a_source_region_before_resizing_the_preview() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let source = workspace.path().join("source.png");
+        write_png(&source, 20, 10);
+
+        let cropped = image_tool_generate_preview_blocking(super::ImageToolPreviewRequest {
+            workspace_root_path: workspace.path().to_string_lossy().to_string(),
+            source_path: source.to_string_lossy().to_string(),
+            width: 8,
+            height: 8,
+            format: "png".into(),
+            quality: 80,
+            crop: Some(super::ImageToolCrop {
+                x: 4,
+                y: 2,
+                width: 12,
+                height: 6,
+            }),
+        })
+        .expect("crop preview");
+        assert_eq!((cropped.width, cropped.height), (8, 8));
+        assert!(
+            std::path::Path::new(&cropped.path).starts_with(workspace.path().join(".typsastra"))
+        );
+
+        let error = match image_tool_generate_preview_blocking(super::ImageToolPreviewRequest {
+            workspace_root_path: workspace.path().to_string_lossy().to_string(),
+            source_path: source.to_string_lossy().to_string(),
+            width: 8,
+            height: 8,
+            format: "png".into(),
+            quality: 80,
+            crop: Some(super::ImageToolCrop {
+                x: 15,
+                y: 2,
+                width: 12,
+                height: 6,
+            }),
+        }) {
+            Ok(_) => panic!("expected an out-of-bounds crop error"),
+            Err(error) => error,
+        };
+        assert!(error.contains("outside the"));
     }
 
     #[test]
@@ -3519,6 +3602,7 @@ mod image_tool_tests {
             height: 5,
             format: "auto".into(),
             quality: 84,
+            crop: None,
         };
 
         let first = image_tool_generate_preview_blocking(request()).expect("generate preview");
@@ -3557,6 +3641,7 @@ mod image_tool_tests {
             height: 5,
             format: "png".into(),
             quality: 80,
+            crop: None,
         })
         .expect("generate preview");
         let replacement = images.join("optimized.png");
