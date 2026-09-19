@@ -3169,6 +3169,8 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-cell.align-center { text-align: center; }
 .table-tool-cell.align-right { text-align: right; }
+.table-tool-cell-wrap .table-tool-cell.emphasis-bold { font-weight: 700; }
+.table-tool-cell-wrap .table-tool-cell.emphasis-italic { font-style: italic; }
 .table-tool-selection { margin: 4px 0 0; color: var(--ui-header-text); font-size: 11px; }
 .table-tool-edge {
   position: absolute;

@@ -13,7 +13,7 @@ import {
 } from "../src/workspace/workspaceStateStore";
 
 function cell(text: string, align: StoredTableAlignment | null = null): StoredTableCell {
-  return { text, align, verticalAlign: null, colspan: 1, rowspan: 1, covered: false, borders: null };
+  return { text, align, verticalAlign: null, emphasis: null, colspan: 1, rowspan: 1, covered: false, borders: null };
 }
 
 const table: StoredTable = {
@@ -175,6 +175,23 @@ describe("table typst generation", () => {
     ].join("\n"));
   });
 
+  test("wraps emphasis without breaking escaping", () => {
+    const generated = generateTableTypst({
+      ...table,
+      columns: 3,
+      headerRow: false,
+      rows: [[
+        { ...cell("A*B"), emphasis: "bold" },
+        { ...cell("C"), emphasis: "italic" },
+        { ...cell("D"), emphasis: "regular" },
+      ]],
+    });
+
+    expect(generated).toContain(
+      '[#strong[A\\*B]], [#emph[C]], [#text(weight: "regular", style: "normal")[D]],',
+    );
+  });
+
   test("preserves inline math and raw spans", () => {
     const generated = generateTableTypst({
       ...table,
@@ -276,6 +293,8 @@ describe("table typst generation", () => {
     expect(source).toContain('data-menu="table"');
     expect(source).toContain('data-field="table-style"');
     expect(source).toContain("private applyTableStyle(");
+    expect(source).toContain('data-field="cell-emphasis"');
+    expect(source).toContain("private applyEmphasis(");
     expect(source).toContain("private openTableMenu(");
     expect(source).toContain('"Merge cells"');
     expect(source).toContain("this.draggingSelection = true");
@@ -314,7 +333,7 @@ describe("table typst generation", () => {
       "if (!extend || !this.selectionAnchor) this.selectionAnchor = origin;\n"
       + "    this.selectionFocus = origin;\n"
       + "    this.syncSelectionHighlight();\n"
-      + "    this.syncAlignSelects(table);\n"
+      + "    this.syncCellSelects(table);\n"
       + "    this.cellInputs.get(`${origin.row}:${origin.column}`)?.focus();",
     );
     // Focusing the range focus must not collapse the selection.
@@ -369,7 +388,11 @@ describe("stored table normalization", () => {
             name: "  Summary  ",
             columns: 3,
             headerColumn: true,
-            rows: [[{ text: "a", align: "left" }, { text: "b" }, { text: "c", align: "bogus" }]],
+            rows: [[
+              { text: "a", align: "left", emphasis: "bold" },
+              { text: "b", emphasis: "bogus" },
+              { text: "c", align: "bogus" },
+            ]],
           },
           { id: "not-a-table", columns: 2 },
           { id: "table_3", columns: -4, style: "booktabs" },
@@ -392,6 +415,7 @@ describe("stored table normalization", () => {
     expect(first.strokeWidth).toBe(0.5);
     expect(first.strokeColor).toBe("#000000");
     expect(first.rows[0].map(entry => entry.align)).toEqual(["left", null, null]);
+    expect(first.rows[0].map(entry => entry.emphasis)).toEqual(["bold", null, null]);
     expect(first.rows[0][0]).toMatchObject({
       colspan: 1,
       rowspan: 1,
@@ -403,6 +427,7 @@ describe("stored table normalization", () => {
       text: "",
       align: null,
       verticalAlign: null,
+      emphasis: null,
       colspan: 1,
       rowspan: 1,
       covered: false,

@@ -6,6 +6,7 @@ import type {
   StoredTableCell,
   StoredTableCellBorders,
   StoredTableAlignment,
+  StoredTableEmphasis,
   StoredTableStyle,
   StoredTableVerticalAlignment,
 } from "../workspace/workspaceStateStore";
@@ -58,6 +59,7 @@ function emptyCell(): StoredTableCell {
     text: "",
     align: null,
     verticalAlign: null,
+    emphasis: null,
     colspan: 1,
     rowspan: 1,
     covered: false,
@@ -440,6 +442,7 @@ export class TableToolController {
       `<label class="table-tool-inline">Style <select data-field="table-style"><option value="default">Default</option><option value="banded-rows">Banded rows</option><option value="banded-columns">Banded columns</option><option value="booktabs">Booktabs</option></select></label>` +
       `<label class="table-tool-inline">Align <select data-field="cell-align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>` +
       `<label class="table-tool-inline">Vertical <select data-field="cell-vertical-align"><option value="">Default</option><option value="top">Top</option><option value="center">Middle</option><option value="bottom">Bottom</option></select></label>` +
+      `<label class="table-tool-inline">Format <select data-field="cell-emphasis"><option value="">Default</option><option value="regular">Regular</option><option value="bold">Bold</option><option value="italic">Italic</option></select></label>` +
       `</div>` +
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
       `<div class="table-tool-grid-host"></div></section>` +
@@ -469,6 +472,11 @@ export class TableToolController {
     verticalAlign.addEventListener("change", () => this.applyVerticalAlignment(
       table,
       (verticalAlign.value || null) as StoredTableVerticalAlignment | null,
+    ));
+    const emphasis = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-emphasis"]')!;
+    emphasis.addEventListener("change", () => this.applyEmphasis(
+      table,
+      (emphasis.value || null) as StoredTableEmphasis | null,
     ));
 
     const menu = (name: string, build: (menuElement: HTMLElement) => void) => {
@@ -607,7 +615,7 @@ export class TableToolController {
     });
 
     this.renderGrid(table);
-    this.syncAlignSelects(table);
+    this.syncCellSelects(table);
     this.updateCode(table);
   }
 
@@ -652,6 +660,8 @@ export class TableToolController {
         input.dataset.row = String(rowIndex);
         input.dataset.column = String(columnIndex);
         if (cell.align) input.classList.add(`align-${cell.align}`);
+        if (cell.emphasis === "bold") input.classList.add("emphasis-bold");
+        if (cell.emphasis === "italic") input.classList.add("emphasis-italic");
         input.value = cell.text;
         input.readOnly = true;
         input.addEventListener("input", () => {
@@ -699,7 +709,7 @@ export class TableToolController {
           input.focus();
           this.syncSelectionHighlight();
           this.syncSelectionSummary();
-          this.syncAlignSelects(table);
+          this.syncCellSelects(table);
         });
         input.addEventListener("dblclick", event => {
           event.preventDefault();
@@ -805,7 +815,7 @@ export class TableToolController {
     if (!extend || !this.selectionAnchor) this.selectionAnchor = origin;
     this.selectionFocus = origin;
     this.syncSelectionHighlight();
-    this.syncAlignSelects(table);
+    this.syncCellSelects(table);
     this.cellInputs.get(`${origin.row}:${origin.column}`)?.focus();
     this.syncSelectionSummary();
   }
@@ -953,6 +963,30 @@ export class TableToolController {
         cell.verticalAlign = verticalAlign;
       }
     }
+    this.emitChange();
+  }
+
+  private applyEmphasis(table: StoredTable, emphasis: StoredTableEmphasis | null): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    const visited = new Set<string>();
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+        const origin = tableCellOrigin(table, row, column);
+        if (!origin) continue;
+        const key = `${origin.row}:${origin.column}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        table.rows[origin.row][origin.column].emphasis = emphasis;
+        const input = this.cellInputs.get(key);
+        if (input) {
+          input.classList.remove("emphasis-bold", "emphasis-italic");
+          if (emphasis === "bold") input.classList.add("emphasis-bold");
+          if (emphasis === "italic") input.classList.add("emphasis-italic");
+        }
+      }
+    }
+    this.updateCode(table);
     this.emitChange();
   }
 
@@ -1236,7 +1270,7 @@ export class TableToolController {
     menu.appendChild(row);
   }
 
-  private syncAlignSelects(table: StoredTable): void {
+  private syncCellSelects(table: StoredTable): void {
     const focus = this.selectionFocus;
     const cell = focus ? table.rows[focus.row]?.[focus.column] : null;
     const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
@@ -1248,6 +1282,11 @@ export class TableToolController {
     if (verticalAlign) {
       verticalAlign.value = cell?.verticalAlign ?? "";
       verticalAlign.disabled = !focus;
+    }
+    const emphasis = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-emphasis"]');
+    if (emphasis) {
+      emphasis.value = cell?.emphasis ?? "";
+      emphasis.disabled = !focus;
     }
   }
 

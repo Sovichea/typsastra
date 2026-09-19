@@ -24,6 +24,7 @@ export type StoredScriptLanguageAssignment = {
 
 export type StoredTableAlignment = "left" | "center" | "right";
 export type StoredTableVerticalAlignment = "top" | "center" | "bottom";
+export type StoredTableEmphasis = "regular" | "bold" | "italic";
 
 /** A per-side border override; null inherits the table stroke. */
 export type StoredTableBorderSide = {
@@ -45,6 +46,7 @@ export type StoredTableCell = {
   text: string;
   align: StoredTableAlignment | null;
   verticalAlign: StoredTableVerticalAlignment | null;
+  emphasis: StoredTableEmphasis | null;
   /** Grid span of the origin cell; covered slots inherit it. */
   colspan: number;
   rowspan: number;
@@ -322,6 +324,10 @@ function normalizeTableVerticalAlignment(value: unknown): StoredTableVerticalAli
   return value === "top" || value === "center" || value === "bottom" ? value : null;
 }
 
+function normalizeTableEmphasis(value: unknown): StoredTableEmphasis | null {
+  return value === "regular" || value === "bold" || value === "italic" ? value : null;
+}
+
 function normalizeTableStyle(value: unknown): StoredTableStyle {
   return value === "banded-rows" || value === "banded-columns" || value === "booktabs"
     ? value
@@ -403,6 +409,7 @@ function normalizeTables(value: unknown): StoredTable[] {
             text: "",
             align: null,
             verticalAlign: null,
+            emphasis: null,
             colspan: 1,
             rowspan: 1,
             covered: true,
@@ -424,6 +431,7 @@ function normalizeTables(value: unknown): StoredTable[] {
           text: typeof cell.text === "string" ? cell.text.slice(0, 2_000) : "",
           align: normalizeTableAlignment(cell.align),
           verticalAlign: normalizeTableVerticalAlignment(cell.verticalAlign),
+          emphasis: normalizeTableEmphasis(cell.emphasis),
           colspan,
           rowspan,
           covered: false,

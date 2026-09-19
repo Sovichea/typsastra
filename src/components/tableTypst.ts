@@ -360,14 +360,23 @@ function alignArgument(table: StoredTable, groups: Array<CellGroup<string>>): st
   return lines.join("\n");
 }
 
-function cellSource(cell: StoredTableCell): string {
+function cellBody(cell: StoredTableCell): string {
   const text = escapeTableText(cell.text);
+  if (cell.emphasis === "bold") return `#strong[${text}]`;
+  if (cell.emphasis === "italic") return `#emph[${text}]`;
+  // "Regular" must also win over an inherited bold/italic show rule.
+  if (cell.emphasis === "regular") return `#text(weight: "regular", style: "normal")[${text}]`;
+  return text;
+}
+
+function cellSource(cell: StoredTableCell): string {
+  const body = cellBody(cell);
   const argumentsList: string[] = [];
   if (cell.colspan > 1) argumentsList.push(`colspan: ${cell.colspan}`);
   if (cell.rowspan > 1) argumentsList.push(`rowspan: ${cell.rowspan}`);
   return argumentsList.length > 0
-    ? `table.cell(${argumentsList.join(", ")})[${text}]`
-    : `[${text}]`;
+    ? `table.cell(${argumentsList.join(", ")})[${body}]`
+    : `[${body}]`;
 }
 
 /** Generates the managed Typst `table` call for a project table. */
