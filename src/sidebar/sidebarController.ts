@@ -52,6 +52,9 @@ export class SidebarController {
 
   public toggle(): void {
     if (!this.port.hasWorkspace()) return;
+    // Image Tools owns the sidebar surface. Toggling the workspace sidebar
+    // must not hide the image explorer while that tool is active.
+    if (this.state.activeTool === "images") return;
     this.state.visible = !this.state.visible;
     this.applyVisibility();
     this.port.persist();
@@ -104,14 +107,26 @@ export class SidebarController {
     const explorerSidebar = document.getElementById("explorer-sidebar");
     const explorerResizer = document.getElementById("explorer-resizer");
     const sidebarToggle = document.getElementById("sidebar-toggle-button") as HTMLButtonElement | null;
-    const visible = this.state.visible && !this.port.isWorkspaceLoading();
+    const showingImages = this.state.activeTool === "images";
+    // Image Tools keeps the sidebar surface (and its image explorer) open even
+    // when the workspace sidebar preference is hidden.
+    const visible = (this.state.visible || showingImages) && !this.port.isWorkspaceLoading();
 
     explorerSidebar?.classList.toggle("hidden", !visible);
     if (explorerSidebar) explorerSidebar.style.display = "";
     explorerResizer?.classList.toggle("hidden", !visible);
     this.port.reconcileDockedPaneWidths();
-    sidebarToggle?.setAttribute("aria-expanded", String(this.state.visible));
-    sidebarToggle?.setAttribute("aria-label", this.state.visible ? "Hide sidebar" : "Show sidebar");
-    if (sidebarToggle) sidebarToggle.title = this.state.visible ? "Hide sidebar" : "Show sidebar";
+    if (sidebarToggle) {
+      sidebarToggle.disabled = showingImages;
+      const expanded = showingImages || this.state.visible;
+      const label = showingImages
+        ? "Image Tools keeps the sidebar open"
+        : this.state.visible
+          ? "Hide sidebar"
+          : "Show sidebar";
+      sidebarToggle.setAttribute("aria-expanded", String(expanded));
+      sidebarToggle.setAttribute("aria-label", label);
+      sidebarToggle.title = label;
+    }
   }
 }

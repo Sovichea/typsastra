@@ -73,14 +73,25 @@ function createController(): { controller: SidebarController; elements: Map<stri
 }
 
 describe("sidebar visibility persistence", () => {
-  test("restores a hidden sidebar without the active tool reopening it", () => {
+  test("keeps the sidebar open for Image Tools even when the workspace preference is hidden", () => {
     const { controller, elements } = createController();
 
     controller.restore({ visible: false, activeTool: "images" });
 
     expect(controller.visible).toBe(false);
     expect(controller.activeTool).toBe("images");
-    expect(elements.get("explorer-sidebar")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("explorer-sidebar")!.classList.contains("hidden")).toBe(false);
+    expect((elements.get("sidebar-toggle-button") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test("does not hide the image explorer when the sidebar toggles while Image Tools is active", () => {
+    const { controller, elements } = createController();
+
+    controller.setTool("images");
+    controller.toggle();
+
+    expect(controller.visible).toBe(true);
+    expect(elements.get("explorer-sidebar")!.classList.contains("hidden")).toBe(false);
   });
 
   test("keeps visibility unchanged when switching between Explorer and Images", () => {

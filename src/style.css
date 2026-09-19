@@ -499,6 +499,15 @@ html.native-app-menu #app-menus {
   color: var(--ui-text);
 }
 
+.sidebar-activity-button:disabled {
+  opacity: 0.45;
+}
+
+.sidebar-activity-button:disabled:hover {
+  background: transparent;
+  color: var(--ui-header-text);
+}
+
 .sidebar-activity-button.active {
   color: var(--ui-accent-color);
   background: var(--ui-navigation-background);
