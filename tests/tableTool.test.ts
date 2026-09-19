@@ -25,6 +25,7 @@ const table: StoredTable = {
   stroke: "solid",
   strokeWidth: 0.5,
   strokeColor: "#000000",
+  style: "default",
   rows: [
     [cell("Name"), cell("Value")],
     [cell("Alpha"), cell("1*2", "right")],
@@ -98,6 +99,50 @@ describe("table typst generation", () => {
       "  } else if (x == 0 and y == 1) {",
       '    (top: 2pt + rgb("#000000"), rest: 0.5pt + rgb("#000000"))',
     ].join("\n"));
+  });
+
+  test("renders banded row and column styles with a fill function", () => {
+    expect(generateTableTypst({ ...table, style: "banded-rows" })).toContain(
+      "  fill: (x, y) => if calc.odd(y) { luma(245) },",
+    );
+    expect(generateTableTypst({ ...table, style: "banded-columns" })).toContain(
+      "  fill: (x, y) => if calc.odd(x) { luma(245) },",
+    );
+    expect(generateTableTypst({ ...table, style: "default" })).not.toContain("fill:");
+  });
+
+  test("renders booktabs rules without vertical lines", () => {
+    const generated = generateTableTypst({ ...table, style: "booktabs" });
+
+    expect(generated).toContain([
+      "  stroke: (x, y) => if y == 0 {",
+      '    (top: 1.5pt + rgb("#000000"), bottom: 0.75pt + rgb("#000000"), rest: none)',
+      "  } else if y == 1 {",
+      '    (top: 0.75pt + rgb("#000000"), bottom: 1.5pt + rgb("#000000"), rest: none)',
+      "  } else {",
+      "    none",
+      "  },",
+    ].join("\n"));
+  });
+
+  test("lets an explicit border override survive the booktabs style", () => {
+    const generated = generateTableTypst({
+      ...table,
+      style: "booktabs",
+      rows: [
+        [cell("Name"), cell("Value")],
+        [
+          { ...cell("Alpha"), borders: { top: null, right: { enabled: true, width: 2, color: "#ff0000" }, bottom: null, left: null } },
+          cell("1"),
+        ],
+        [cell("Beta"), cell("2")],
+      ],
+    });
+
+    // The header rule is shared, so the neighbor's top side carries it too.
+    expect(generated).toContain(
+      '    (top: 0.75pt + rgb("#000000"), right: 2pt + rgb("#ff0000"), rest: none)',
+    );
   });
 
   test("escapes Typst markup characters", () => {
@@ -229,6 +274,8 @@ describe("table typst generation", () => {
     expect(source).toContain('data-menu="cells"');
     expect(source).toContain('data-menu="borders"');
     expect(source).toContain('data-menu="table"');
+    expect(source).toContain('data-field="table-style"');
+    expect(source).toContain("private applyTableStyle(");
     expect(source).toContain("private openTableMenu(");
     expect(source).toContain('"Merge cells"');
     expect(source).toContain("this.draggingSelection = true");
@@ -314,16 +361,20 @@ describe("stored table normalization", () => {
             rows: [[{ text: "a", align: "left" }, { text: "b" }, { text: "c", align: "bogus" }]],
           },
           { id: "not-a-table", columns: 2 },
-          { id: "table_3", columns: -4 },
+          { id: "table_3", columns: -4, style: "booktabs" },
+          { id: "table_4", columns: 2, style: "bogus" },
         ],
       },
       workspace: null,
     }, () => "pid");
 
     expect(metadata.project.projectId).toBe("pid");
-    expect(metadata.project.tables.map(entry => entry.id)).toEqual(["table_2", "table_3"]);
-    const [first, second] = metadata.project.tables;
+    expect(metadata.project.tables.map(entry => entry.id)).toEqual(["table_2", "table_3", "table_4"]);
+    const [first, second, third] = metadata.project.tables;
     expect(first.name).toBe("Summary");
+    expect(first.style).toBe("default");
+    expect(second.style).toBe("booktabs");
+    expect(third.style).toBe("default");
     expect(first.headerRow).toBe(true);
     expect(first.headerColumn).toBe(true);
     expect(first.stroke).toBe("solid");

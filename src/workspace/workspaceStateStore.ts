@@ -56,6 +56,9 @@ export type StoredTableCell = {
 
 export type StoredTableStroke = "none" | "solid";
 
+/** A predefined look; `default` follows the stroke settings. */
+export type StoredTableStyle = "default" | "banded-rows" | "banded-columns" | "booktabs";
+
 /**
  * A project-owned table reference. Tables are internal assignments: they live
  * in the portable project config and never create their own `.typ` files.
@@ -69,6 +72,7 @@ export type StoredTable = {
   stroke: StoredTableStroke;
   strokeWidth: number;
   strokeColor: string;
+  style: StoredTableStyle;
   rows: StoredTableCell[][];
 };
 
@@ -318,6 +322,12 @@ function normalizeTableVerticalAlignment(value: unknown): StoredTableVerticalAli
   return value === "top" || value === "center" || value === "bottom" ? value : null;
 }
 
+function normalizeTableStyle(value: unknown): StoredTableStyle {
+  return value === "banded-rows" || value === "banded-columns" || value === "booktabs"
+    ? value
+    : "default";
+}
+
 function tableSpanOverlaps(
   occupied: boolean[][],
   row: number,
@@ -434,6 +444,7 @@ function normalizeTables(value: unknown): StoredTable[] {
       stroke: record.stroke === "none" ? "none" : "solid",
       strokeWidth: normalizeStrokeWidth(record.strokeWidth),
       strokeColor: normalizeStrokeColor(record.strokeColor),
+      style: normalizeTableStyle(record.style),
       rows,
     });
   }

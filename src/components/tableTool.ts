@@ -6,6 +6,7 @@ import type {
   StoredTableCell,
   StoredTableCellBorders,
   StoredTableAlignment,
+  StoredTableStyle,
   StoredTableVerticalAlignment,
 } from "../workspace/workspaceStateStore";
 import { generateTableTypst } from "./tableTypst";
@@ -188,6 +189,7 @@ export class TableToolController {
       stroke: "solid",
       strokeWidth: 0.5,
       strokeColor: "#000000",
+      style: "default",
       rows: [emptyRow(2), emptyRow(2)],
     };
     this.tables.push(table);
@@ -435,6 +437,7 @@ export class TableToolController {
       `<button type="button" data-menu="cells">Cells ▾</button>` +
       `<button type="button" data-menu="borders">Borders ▾</button>` +
       `<button type="button" data-menu="table">Table ▾</button>` +
+      `<label class="table-tool-inline">Style <select data-field="table-style"><option value="default">Default</option><option value="banded-rows">Banded rows</option><option value="banded-columns">Banded columns</option><option value="booktabs">Booktabs</option></select></label>` +
       `<label class="table-tool-inline">Align <select data-field="cell-align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>` +
       `<label class="table-tool-inline">Vertical <select data-field="cell-vertical-align"><option value="">Default</option><option value="top">Top</option><option value="center">Middle</option><option value="bottom">Bottom</option></select></label>` +
       `</div>` +
@@ -457,6 +460,9 @@ export class TableToolController {
       this.emitChange();
     });
 
+    const style = this.inspector.querySelector<HTMLSelectElement>('[data-field="table-style"]')!;
+    style.value = table.style;
+    style.addEventListener("change", () => this.applyTableStyle(table, style.value as StoredTableStyle));
     const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]')!;
     align.addEventListener("change", () => this.applyAlignment(table, (align.value || null) as StoredTableAlignment | null));
     const verticalAlign = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-vertical-align"]')!;
@@ -624,6 +630,10 @@ export class TableToolController {
         wrap.style.gridColumn = `${columnIndex + 1} / span ${cell.colspan}`;
         if (table.headerRow && rowIndex === 0) wrap.classList.add("is-header-row");
         if (table.headerColumn && columnIndex === 0) wrap.classList.add("is-header-column");
+        const banded = table.style === "banded-rows"
+          ? rowIndex % 2 === 1
+          : table.style === "banded-columns" && columnIndex % 2 === 1;
+        if (banded) wrap.classList.add("band-fill");
         if (range
           && rowIndex >= range.minRow && rowIndex <= range.maxRow
           && columnIndex >= range.minColumn && columnIndex <= range.maxColumn) {
@@ -897,6 +907,12 @@ export class TableToolController {
     summary.textContent = rows === 1 && columns === 1
       ? `Cell R${range.minRow + 1}C${range.minColumn + 1}. Shift+click or Shift+arrows select a range.`
       : `Selected ${rows} × ${columns} cells.`;
+  }
+
+  private applyTableStyle(table: StoredTable, style: StoredTableStyle): void {
+    table.style = style;
+    this.refreshGrid(table);
+    this.emitChange();
   }
 
   private applyAlignment(table: StoredTable, align: StoredTableAlignment | null): void {

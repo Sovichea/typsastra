@@ -3127,6 +3127,9 @@ body.table-tools-active #code-render-pane {
   padding: 6px;
 }
 .table-tool-cell-wrap { position: relative; display: grid; }
+.table-tool-cell-wrap.band-fill .table-tool-cell {
+  background: color-mix(in srgb, var(--ui-bg) 94%, var(--ui-hover));
+}
 .table-tool-cell {
   width: 100%;
   min-width: 80px;

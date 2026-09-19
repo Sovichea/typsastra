@@ -127,13 +127,41 @@ function neighborSlots(
   return neighbors;
 }
 
+const BAND_FILL = "luma(245)";
+const BOOKTABS_OUTER_RULE = 1.5;
+const BOOKTABS_HEADER_RULE = 0.75;
+
+/** The stroke a style gives each cell side before any explicit override. */
+function baselineRecord(table: StoredTable, slot: CellSlot): Record<SideKey, string> {
+  const record = {} as Record<SideKey, string>;
+  if (table.style !== "booktabs") {
+    const stroke = defaultStroke(table);
+    CELL_BORDER_SIDES.forEach(side => { record[side] = stroke; });
+    return record;
+  }
+  CELL_BORDER_SIDES.forEach(side => { record[side] = "none"; });
+  if (slot.row === 0) record.top = typstStroke(BOOKTABS_OUTER_RULE, table.strokeColor);
+  if (table.headerRow && slot.row === 0) {
+    record.bottom = typstStroke(BOOKTABS_HEADER_RULE, table.strokeColor);
+  }
+  const cell = table.rows[slot.row]?.[slot.column];
+  if (cell && slot.row + cell.rowspan === table.rows.length) {
+    record.bottom = typstStroke(BOOKTABS_OUTER_RULE, table.strokeColor);
+  }
+  return record;
+}
+
+/** The stroke argument shared by every cell that has no override. */
+function strokeFallback(table: StoredTable): string {
+  return table.style === "booktabs" ? "none" : defaultStroke(table);
+}
+
 /**
  * Typst resolves coincident cell sides in favor of the lower or right cell, so
  * an override applied to only one side of a shared edge would vanish from the
  * compiled preview. Unify every shared edge across its touching cells first.
  */
 function effectiveStrokes(table: StoredTable): Map<string, Record<SideKey, string>> {
-  const fallback = defaultStroke(table);
   const slots = collectSlots(table);
   const grid = buildOriginGrid(table);
   const parent = new Map<string, string>();
@@ -153,12 +181,15 @@ function effectiveStrokes(table: StoredTable): Map<string, Record<SideKey, strin
     const rootB = find(b);
     if (rootA !== rootB) parent.set(rootB, rootA);
   };
+  const baselines = new Map<string, string>();
   const explicit = new Map<string, string>();
   slots.forEach(slot => {
     const cell = table.rows[slot.row][slot.column];
+    const baseline = baselineRecord(table, slot);
     CELL_BORDER_SIDES.forEach(side => {
       const key = `${slotKey(slot)}:${side}`;
       parent.set(key, key);
+      baselines.set(key, baseline[side]);
       if (cell.borders?.[side]) explicit.set(key, sideSource(table, cell, side));
     });
   });
@@ -169,20 +200,27 @@ function effectiveStrokes(table: StoredTable): Map<string, Record<SideKey, strin
       });
     });
   });
-  const groupValues = new Map<string, { value: string; row: number; column: number }>();
-  explicit.forEach((value, key) => {
+  const groupValues = new Map<string, { value: string; row: number; column: number; priority: number }>();
+  const consider = (value: string, key: string, priority: number) => {
     const root = find(key);
     const [row, column] = key.split(":").map(Number);
     const current = groupValues.get(root);
-    if (!current || row > current.row || (row === current.row && column > current.column)) {
-      groupValues.set(root, { value, row, column });
+    if (!current
+      || priority > current.priority
+      || (priority === current.priority
+        && (row > current.row || (row === current.row && column > current.column)))) {
+      groupValues.set(root, { value, row, column, priority });
     }
+  };
+  baselines.forEach((value, key) => {
+    if (value !== "none") consider(value, key, 0);
   });
+  explicit.forEach((value, key) => consider(value, key, 1));
   const strokes = new Map<string, Record<SideKey, string>>();
   slots.forEach(slot => {
     const record = {} as Record<SideKey, string>;
     CELL_BORDER_SIDES.forEach(side => {
-      record[side] = groupValues.get(find(`${slotKey(slot)}:${side}`))?.value ?? fallback;
+      record[side] = groupValues.get(find(`${slotKey(slot)}:${side}`))?.value ?? "none";
     });
     strokes.set(slotKey(slot), record);
   });
@@ -283,7 +321,7 @@ function conditionalArgument(
 }
 
 function strokeArgument(table: StoredTable, groups: Array<CellGroup<SideOverrides>>): string {
-  const fallback = defaultStroke(table);
+  const fallback = strokeFallback(table);
   if (groups.length === 0) return `  stroke: ${fallback},`;
   const lines: string[] = [];
   conditionalArgument(
@@ -299,6 +337,16 @@ function strokeArgument(table: StoredTable, groups: Array<CellGroup<SideOverride
     fallback,
   );
   return lines.join("\n");
+}
+
+function fillArgument(table: StoredTable): string | null {
+  if (table.style === "banded-rows") {
+    return `  fill: (x, y) => if calc.odd(y) { ${BAND_FILL} },`;
+  }
+  if (table.style === "banded-columns") {
+    return `  fill: (x, y) => if calc.odd(x) { ${BAND_FILL} },`;
+  }
+  return null;
 }
 
 function alignArgument(table: StoredTable, groups: Array<CellGroup<string>>): string {
@@ -324,7 +372,7 @@ function cellSource(cell: StoredTableCell): string {
 
 /** Generates the managed Typst `table` call for a project table. */
 export function generateTableTypst(table: StoredTable): string {
-  const fallback = defaultStroke(table);
+  const fallback = strokeFallback(table);
   const strokes = effectiveStrokes(table);
   const strokeGroups = groupCells(table, slot => {
     const record = strokes.get(slotKey(slot));
@@ -338,6 +386,8 @@ export function generateTableTypst(table: StoredTable): string {
     `  columns: ${table.columns},`,
     strokeArgument(table, strokeGroups),
   ];
+  const fill = fillArgument(table);
+  if (fill) lines.push(fill);
   if (alignGroups.length > 0) lines.push(alignArgument(table, alignGroups));
   table.rows.forEach((row, rowIndex) => {
     const isHeaderRow = table.headerRow && rowIndex === 0;
