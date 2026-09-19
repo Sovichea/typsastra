@@ -98,6 +98,8 @@ export class TableToolController {
   private borderWidth = 0.5;
   private borderColor = "#000000";
   private draggingSelection = false;
+  private editingCell: Slot | null = null;
+  private editStartValue = "";
   private activeMenu: HTMLElement | null = null;
   private activeMenuAnchor: HTMLButtonElement | null = null;
   private menuBuild: ((menu: HTMLElement) => void) | null = null;
@@ -217,6 +219,10 @@ export class TableToolController {
 
   private emitChange(): void {
     if (!this.applyingHistory) this.recordHistoryBurst();
+    this.notifyChange();
+  }
+
+  private notifyChange(): void {
     this.deps.tablesChanged?.(this.tables);
     this.schedulePersist();
     this.schedulePreview();
@@ -587,6 +593,7 @@ export class TableToolController {
   private renderGrid(table: StoredTable): void {
     const host = this.inspector.querySelector<HTMLElement>(".table-tool-grid-host");
     if (!host) return;
+    this.commitEdit();
     this.cellInputs.clear();
     const grid = document.createElement("div");
     grid.className = "table-tool-grid";
@@ -621,31 +628,60 @@ export class TableToolController {
         input.dataset.column = String(columnIndex);
         if (cell.align) input.classList.add(`align-${cell.align}`);
         input.value = cell.text;
+        input.readOnly = true;
         input.addEventListener("input", () => {
           cell.text = input.value;
           this.updateCode(table);
           this.emitChange();
         });
-        input.addEventListener("mousedown", event => {
-          if (event.button !== 0) return;
-          if (event.shiftKey && this.selectionAnchor) {
-            this.selectionFocus = { row: rowIndex, column: columnIndex };
-          } else {
-            this.selectionAnchor = { row: rowIndex, column: columnIndex };
-            this.selectionFocus = { row: rowIndex, column: columnIndex };
-            this.draggingSelection = true;
-          }
-          this.syncSelectionHighlight();
-          const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
-          if (align) this.syncAlignSelect(align, table);
-        });
-        input.addEventListener("pointerenter", event => {
-          if (!this.draggingSelection || (event.buttons & 1) === 0) return;
+        input.addEventListener("focus", () => {
+          if (this.editingCell) return;
+          this.selectionAnchor = { row: rowIndex, column: columnIndex };
           this.selectionFocus = { row: rowIndex, column: columnIndex };
           this.syncSelectionHighlight();
           this.syncSelectionSummary();
         });
-        input.addEventListener("keydown", event => this.handleCellKeydown(event, table, rowIndex, columnIndex, cell));
+        input.addEventListener("mousedown", event => {
+          if (event.button !== 0) return;
+          // Navigation and editing are separate states: the first click only
+          // selects a cell, a second click (or typing) starts editing.
+          event.preventDefault();
+          const origin = { row: rowIndex, column: columnIndex };
+          const isFocus = this.selectionFocus?.row === rowIndex
+            && this.selectionFocus?.column === columnIndex;
+          if (this.editingCell
+            && (this.editingCell.row !== rowIndex || this.editingCell.column !== columnIndex)) {
+            this.commitEdit();
+          }
+          if (isFocus && !this.editingCell) {
+            this.enterEditMode(table, origin);
+            return;
+          }
+          if (event.shiftKey && this.selectionAnchor) {
+            this.selectionFocus = origin;
+          } else {
+            this.selectionAnchor = origin;
+            this.selectionFocus = origin;
+            this.draggingSelection = true;
+          }
+          input.focus();
+          this.syncSelectionHighlight();
+          this.syncSelectionSummary();
+          const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
+          if (align) this.syncAlignSelect(align, table);
+        });
+        input.addEventListener("dblclick", event => {
+          event.preventDefault();
+          this.enterEditMode(table, { row: rowIndex, column: columnIndex });
+        });
+        input.addEventListener("pointerenter", event => {
+          if (this.editingCell || !this.draggingSelection || (event.buttons & 1) === 0) return;
+          this.selectionFocus = { row: rowIndex, column: columnIndex };
+          this.syncSelectionHighlight();
+          this.syncSelectionSummary();
+        });
+        input.addEventListener("keydown", event =>
+          this.handleCellKeydown(event, table, rowIndex, columnIndex, cell, input));
         wrap.appendChild(input);
         // Always draw the model's strokes; the edge strips become clickable
         // handles only while border mode is active.
@@ -678,29 +714,131 @@ export class TableToolController {
     row: number,
     column: number,
     cell: StoredTableCell,
+    input: HTMLInputElement,
   ): void {
-    const moves: Record<string, Slot> = {
+    const editing = this.editingCell?.row === row && this.editingCell?.column === column;
+    if (editing) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.cancelEdit(table, input);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        this.commitEdit();
+        this.moveSelection(table, "ArrowDown", row, column, cell);
+      }
+      return;
+    }
+    if (event.key === "Escape") return;
+    if (event.key === "Enter" || event.key === "F2") {
+      event.preventDefault();
+      this.enterEditMode(table, { row, column });
+      return;
+    }
+    if (event.key === "Backspace" || event.key === "Delete") {
+      event.preventDefault();
+      cell.text = "";
+      input.value = "";
+      this.updateCode(table);
+      this.emitChange();
+      return;
+    }
+    // Typing replaces the cell content and starts editing.
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      this.enterEditMode(table, { row, column }, event.key);
+      return;
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight"
+      || event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      this.moveSelection(table, event.key, row, column, cell, event.shiftKey);
+    }
+  }
+
+  private moveSelection(
+    table: StoredTable,
+    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+    row: number,
+    column: number,
+    cell: StoredTableCell,
+    extend = false,
+  ): void {
+    const moves: Record<typeof key, Slot> = {
       ArrowLeft: { row, column: column - 1 },
       ArrowRight: { row, column: column + cell.colspan },
       ArrowUp: { row: row - 1, column },
       ArrowDown: { row: row + cell.rowspan, column },
     };
-    const target = moves[event.key];
-    if (!target) return;
-    const origin = tableCellOrigin(table, target.row, target.column);
+    const origin = tableCellOrigin(table, moves[key].row, moves[key].column);
     if (!origin) return;
-    event.preventDefault();
-    if (event.shiftKey && this.selectionAnchor) {
+    if (extend && this.selectionAnchor) {
       this.selectionFocus = origin;
-    } else {
-      this.selectionAnchor = origin;
-      this.selectionFocus = origin;
+      this.syncSelectionHighlight();
+      this.syncSelectionSummary();
+      return;
     }
+    this.selectionAnchor = origin;
+    this.selectionFocus = origin;
     this.syncSelectionHighlight();
     const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
     if (align) this.syncAlignSelect(align, table);
     this.cellInputs.get(`${origin.row}:${origin.column}`)?.focus();
     this.syncSelectionSummary();
+  }
+
+  private enterEditMode(table: StoredTable, origin: Slot, typedCharacter?: string): void {
+    const cell = table.rows[origin.row]?.[origin.column];
+    const input = this.cellInputs.get(`${origin.row}:${origin.column}`);
+    if (!cell || cell.covered || !input) return;
+    this.editingCell = origin;
+    this.editStartValue = cell.text;
+    this.selectionAnchor = origin;
+    this.selectionFocus = origin;
+    if (typedCharacter !== undefined) cell.text = typedCharacter;
+    input.readOnly = false;
+    input.value = cell.text;
+    input.classList.add("is-editing");
+    input.focus();
+    const caret = input.value.length;
+    input.setSelectionRange(caret, caret);
+    this.syncSelectionHighlight();
+    this.syncSelectionSummary();
+    if (typedCharacter !== undefined) {
+      this.updateCode(table);
+      this.emitChange();
+    }
+  }
+
+  private commitEdit(): void {
+    const origin = this.editingCell;
+    if (!origin) return;
+    this.editingCell = null;
+    const input = this.cellInputs.get(`${origin.row}:${origin.column}`);
+    if (input) {
+      input.readOnly = true;
+      input.classList.remove("is-editing");
+    }
+  }
+
+  private cancelEdit(table: StoredTable, input: HTMLInputElement): void {
+    const origin = this.editingCell;
+    if (!origin) return;
+    const cell = table.rows[origin.row]?.[origin.column];
+    if (cell) cell.text = this.editStartValue;
+    input.value = this.editStartValue;
+    this.editingCell = null;
+    input.readOnly = true;
+    input.classList.remove("is-editing");
+    // A cancelled edit must not remain in history or the persisted model.
+    if (this.historyTimer !== null) {
+      window.clearTimeout(this.historyTimer);
+      this.historyTimer = null;
+    }
+    this.pendingSnapshot = null;
+    const selected = this.selected();
+    this.lastState = selected ? cloneTable(selected) : null;
+    this.updateCode(table);
+    this.notifyChange();
   }
 
   private syncSelectionHighlight(): void {

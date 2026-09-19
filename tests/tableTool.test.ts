@@ -144,6 +144,25 @@ describe("table typst generation", () => {
     expect(source).toContain('item.addEventListener("click", () => onSelect())');
   });
 
+  test("uses Excel-style navigation and editing states", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("private editingCell: Slot | null = null");
+    expect(source).toContain("input.readOnly = true");
+    expect(source).toContain("private enterEditMode(");
+    expect(source).toContain("private commitEdit(): void");
+    expect(source).toContain("private cancelEdit(");
+    expect(source).toContain("private moveSelection(");
+    // Typing a printable character replaces the content and starts editing.
+    expect(source).toContain("this.enterEditMode(table, { row, column }, event.key)");
+    // Escape restores the pre-edit value.
+    expect(source).toContain("input.value = this.editStartValue");
+    // A second click on the active cell enters editing.
+    expect(source).toContain("if (isFocus && !this.editingCell)");
+  });
+
   test("builds and finds the managed directive block", () => {
     const block = tableDirectiveBlock(table);
     expect(block.startsWith("//@table:table_1\n//@generated-table-start\n")).toBe(true);

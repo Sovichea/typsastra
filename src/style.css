@@ -3140,6 +3140,12 @@ body.table-tools-active #code-render-pane {
   font: 12px var(--font-family-sans);
 }
 .table-tool-cell:focus { outline: 1px solid var(--ui-accent-color); outline-offset: -1px; }
+.table-tool-cell[readonly] {
+  caret-color: transparent;
+  cursor: cell;
+}
+.table-tool-cell[readonly]:focus { outline: none; }
+.table-tool-cell.is-editing { cursor: text; }
 .table-tool-cell-wrap.is-header-row .table-tool-cell,
 .table-tool-cell-wrap.is-header-column .table-tool-cell {
   font-weight: 600;
