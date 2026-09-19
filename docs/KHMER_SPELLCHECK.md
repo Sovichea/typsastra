@@ -13,28 +13,33 @@ ISO 15924 script:  Khmr
 Support:           Deep · Experimental
 Policy contract:   1
 Capability schema: 1
-Upstream commit:   d52f302fabadbde9107acd0e28362a8d40af10ed (v0.2.0)
+Upstream commit:   cfff5f962bb120dac909131dfb6b382d50545143 (v0.3.0)
 ```
 
 The gitlink at `third_party/khmer_segmenter` pins the code, curated language
 data, and normalization behavior. Typsastra bundles the release's unified KDIC
 v2 artifact under `src-tauri/resources/language-providers/khmer/` for spellcheck,
 corrections, and typing suggestions. The provider uses the segmenter's
-single-pass analysis API with `SpellingAccuracy::Visual`,
-which treats the legacy COENG DA and COENG TA forms in words such as `ស្ដាប់`
-and `ស្តាប់` as equivalent correct spelling. Completion also queries the visual
-COENG alias of a typed prefix, so `ស្តាប` can offer the curated `ស្ដាប់` before
-the final mark is entered. Completion and correction output continues to use
-the curated form. `tests/fixtures/khmer/provider.json` records
-the same commit and exact expected output. Runtime artifacts retain the usage
-and attribution requirements documented upstream. Changing the submodule,
-dictionary, normalization, or post-processing requires an intentional fixture
-update and an explanation in the change review.
+single-pass analysis API with `SpellingAccuracy::Visual` and the reviewed
+practical `SpellingAuthority::Community` spelling authority. Visual accuracy
+treats the legacy COENG DA and COENG TA forms in words such as `ស្ដាប់` and
+`ស្តាប់` as equivalent correct spelling, while community authority additionally
+accepts the reviewed legacy variants such as `អោយ`, `ឲ្យ`, and `ឱ្យ`. Completion
+also queries the visual COENG alias of a typed prefix, so `ស្តាប` can offer the
+curated `ស្ដាប់` before the final mark is entered, and community words
+participate in completion. Word composition and the completion length cap
+shipped in v0.3.0 are baked into the KDIC pack, so long curated phrases split
+into ordinary words and are not offered as single completions.
+`tests/fixtures/khmer/provider.json` records the
+same commit and exact expected output. Runtime artifacts retain the usage and
+attribution requirements documented upstream. Changing the submodule,
+dictionary, spelling authority or accuracy, normalization, or post-processing
+requires an intentional fixture update and an explanation in the change review.
 
 Typsastra does not add semantic or LLM-generated boundary repairs after the
 segmenter. The pinned deterministic output remains the segmentation baseline;
-visual spelling equivalence is an explicit upstream accuracy policy rather than
-Typsastra post-processing. Typsastra does not integrate the segmenter's reserved
+the reviewed practical spelling authority is an explicit upstream policy rather
+than Typsastra post-processing. Typsastra does not integrate the segmenter's reserved
 layout APIs or transform preview and export source with generated word breaks.
 
 ## Reference architecture
@@ -92,10 +97,10 @@ The editing policy never performs dictionary lookup or IPC. The Rust provider ne
 |:--|:--|:--|
 | Normalization and source spans | pinned segmenter | Return normalized ranges mapped to original byte ranges |
 | Editor offsets | Khmer provider | Convert upstream source-byte boundaries to CodeMirror UTF-16 once |
-| Lexical segmentation | pinned segmenter and dictionary | Deterministic dictionary/frequency output |
+| Lexical segmentation | pinned segmenter and dictionary | Deterministic dictionary/frequency output; long curated forms are split into accepted words by the baked-in composition policy |
 | Segmentation words | pinned segmenter | May include supplemental forms solely to maintain reliable boundaries |
-| Spellcheck validity and prefixes | pinned segmenter | Use visual accuracy for COENG DA/TA equivalence while keeping the curated spelling vocabulary and completion index; unrelated segmentation-only forms are not silently accepted |
-| Completion | `complete_language_word` | Return provider ID, explicit UTF-16 replacement range, and bounded ranked options |
+| Spellcheck validity and prefixes | pinned segmenter | Use visual accuracy for COENG DA/TA equivalence plus community authority for reviewed practical variants such as `អោយ`, `ឲ្យ`, and `ឱ្យ`; unrelated segmentation-only forms are not silently accepted |
+| Completion | `complete_language_word` | Return provider ID, explicit UTF-16 replacement range, and bounded ranked options; the completion length cap is baked into the KDIC pack |
 | Current known word | Khmer provider | Put the exact current known word first before longer completions |
 | Corrections | pinned segmenter and capability contract | Return ranked corrections for upstream intended-word spans |
 

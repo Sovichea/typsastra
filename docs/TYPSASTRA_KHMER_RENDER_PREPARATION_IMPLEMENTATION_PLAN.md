@@ -1,6 +1,6 @@
 # Historical: Typsastra Khmer Render Preparation Implementation Plan
 
-> **Retired:** This document records a removed experimental design. Typsastra no longer rewrites Khmer preview/export input or inserts word-break controls. With `khmer_segmenter` v0.2.0, the dependency is restricted to typing suggestions and spellcheck; its layout-oriented APIs are reserved for native layout-engine integration and are not called by Typsastra. The details below are retained only as historical context.
+> **Retired:** This document records a removed experimental design. Typsastra no longer rewrites Khmer preview/export input or inserts word-break controls. With `khmer_segmenter` v0.3.0, the dependency is restricted to typing suggestions and spellcheck; its layout-oriented APIs are reserved for native layout-engine integration and are not called by Typsastra. The details below are retained only as historical context.
 
 The original goal was:
 

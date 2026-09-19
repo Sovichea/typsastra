@@ -7,7 +7,9 @@ use super::provider::{
 use crate::render_prepare::scanner::{scan_typst_content, ScanState};
 use icu_segmenter::{options::WordBreakInvariantOptions, WordSegmenter, WordSegmenterBorrowed};
 use khmer_segmenter::kdict::coeng_da_ta_variants;
-use khmer_segmenter::{KhmerSegmenter, SegmenterConfig, SpellcheckProfile, SpellingAccuracy};
+use khmer_segmenter::{
+    KhmerSegmenter, SegmenterConfig, SpellcheckProfile, SpellingAccuracy, SpellingAuthority,
+};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -373,9 +375,18 @@ struct KhmerProvider {
 
 impl KhmerProvider {
     fn new() -> Result<Self, String> {
-        let segmenter =
-            KhmerSegmenter::from_bytes(KHMER_DICTIONARY.to_vec(), SegmenterConfig::default())
-                .map_err(|error| format!("Failed to load Khmer dictionary: {error}"))?;
+        // The visual accuracy policy treats the COENG DA/TA forms that render
+        // equivalently as valid, while the practical spelling authority accepts
+        // the segmenter's reviewed community lexicon (legacy variants such as
+        // `អោយ` and `ឲ្យ`).
+        let segmenter = KhmerSegmenter::from_bytes(
+            KHMER_DICTIONARY.to_vec(),
+            SegmenterConfig {
+                spelling_authority: SpellingAuthority::Community,
+                ..SegmenterConfig::default()
+            },
+        )
+        .map_err(|error| format!("Failed to load Khmer dictionary: {error}"))?;
         Ok(Self { segmenter })
     }
 
@@ -428,7 +439,7 @@ impl LanguageSegmenter for KhmerProvider {
     }
 
     fn version(&self) -> &'static str {
-        "0.2.0"
+        "0.3.0"
     }
 
     fn license(&self) -> &'static str {
@@ -1366,7 +1377,7 @@ fn khmer_provider_capabilities() -> ProviderCapabilities {
         supports_custom_dictionary: true,
         has_editing_policy: true,
         provider_type: "deep".to_string(),
-        version: "0.2.0".to_string(),
+        version: "0.3.0".to_string(),
         license: "MIT AND LicenseRef-Khmer-Dictionary-NC".to_string(),
     }
 }
@@ -2626,7 +2637,7 @@ mod tests {
 
     #[test]
     fn khmer_reference_provider_fixtures_are_locked() {
-        const PINNED_UPSTREAM: &str = "d52f302fabadbde9107acd0e28362a8d40af10ed";
+        const PINNED_UPSTREAM: &str = "cfff5f962bb120dac909131dfb6b382d50545143";
         let fixture: KhmerReferenceFixture =
             serde_json::from_str(include_str!("../../../tests/fixtures/khmer/provider.json"))
                 .expect("Khmer provider reference fixture");
@@ -2862,6 +2873,46 @@ mod tests {
         assert_eq!(response.from, 0);
         assert_eq!(response.to, "ស្តាប".encode_utf16().count());
         assert!(response.options.iter().any(|word| word == "ស្ដាប់"));
+    }
+
+    #[test]
+    fn accepts_practical_community_spelling_variants() {
+        let provider = KhmerProvider::new().expect("Khmer provider");
+        // The official RAC spelling and the reviewed practical community
+        // variants must all be treated as known under community authority.
+        for word in ["ឱ្យ", "អោយ", "ឲ្យ"] {
+            assert!(provider.is_known_word(word), "{word} should be known");
+            let analysis = provider.analyze(word).expect("practical spelling analysis");
+            assert!(
+                analysis.tokens.iter().all(|token| token.known),
+                "{word} should analyze as known"
+            );
+        }
+    }
+
+    #[test]
+    fn completes_a_practical_community_prefix() {
+        let provider = KhmerProvider::new().expect("Khmer provider");
+        let response = complete_with_provider(
+            &provider,
+            &CompletionRequest {
+                provider: "khmer-segmenter".to_string(),
+                text: "អោ".to_string(),
+                cursor_utf16: "អោ".encode_utf16().count(),
+                limit: 10,
+                user_dictionary: Vec::new(),
+            },
+        )
+        .expect("practical prefix completion")
+        .expect("completion response");
+
+        assert_eq!(response.from, 0);
+        assert_eq!(response.to, "អោ".encode_utf16().count());
+        assert!(
+            response.options.iter().any(|word| word == "អោយ"),
+            "community spelling should be offered: {:?}",
+            response.options
+        );
     }
 
     #[test]
@@ -3388,7 +3439,7 @@ mod tests {
             .find(|provider| provider.id == "khmer-segmenter")
             .expect("Khmer capabilities");
         assert_eq!(khmer.support_level, "deep");
-        assert_eq!(khmer.version, "0.2.0");
+        assert_eq!(khmer.version, "0.3.0");
         assert_eq!(khmer.stability, "experimental");
         assert!(khmer.supports_spellcheck);
         assert!(khmer.supports_completion);
