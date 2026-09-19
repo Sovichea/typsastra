@@ -8,8 +8,40 @@ export const TABLE_DIRECTIVE_PREFIX = "//@table:";
 export const TABLE_MANAGED_START = "//@generated-table-start";
 export const TABLE_MANAGED_END = "//@generated-table-end";
 
+/**
+ * Escapes Typst markup in a cell while preserving inline math (`$...$`) and
+ * raw spans (`` `...` ``), so authors can write equations and raw code.
+ */
 export function escapeTableText(text: string): string {
-  return text.replace(/([\\[\]#$*_`@])/gu, "\\$1");
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const character = text[index];
+    if (character === "\\") {
+      result += "\\\\";
+      index += 1;
+      continue;
+    }
+    if (character === "$" || character === "`") {
+      const end = text.indexOf(character, index + 1);
+      if (end !== -1) {
+        result += text.slice(index, end + 1);
+        index = end + 1;
+        continue;
+      }
+      result += `\\${character}`;
+      index += 1;
+      continue;
+    }
+    if ("[]#$*_@".includes(character)) {
+      result += `\\${character}`;
+      index += 1;
+      continue;
+    }
+    result += character;
+    index += 1;
+  }
+  return result;
 }
 
 const CELL_BORDER_SIDES: Array<keyof StoredTableCellBorders> = ["top", "right", "bottom", "left"];

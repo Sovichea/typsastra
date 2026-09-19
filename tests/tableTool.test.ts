@@ -58,6 +58,26 @@ describe("table typst generation", () => {
     expect(generated).toContain("[a\\[b\\]\\#c\\$d\\_e], [plain],");
   });
 
+  test("preserves inline math and raw spans", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [[cell("$x^2$ and `code`"), cell("plain")]],
+    });
+
+    expect(generated).toContain("[$x^2$ and `code`], [plain],");
+  });
+
+  test("escapes unpaired dollars and backticks", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [[cell("price $5"), cell("a`b")]],
+    });
+
+    expect(generated).toContain("[price \\$5], [a\\`b],");
+  });
+
   test("emits merged cells and per-cell stroke overrides", () => {
     const side = (enabled: boolean, width = 0.5, color = "#000000") => ({ enabled, width, color });
     const generated = generateTableTypst({
