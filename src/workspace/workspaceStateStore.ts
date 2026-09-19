@@ -24,11 +24,20 @@ export type StoredScriptLanguageAssignment = {
 
 export type StoredTableAlignment = "left" | "center" | "right";
 
+/** A per-side border override; null inherits the table stroke. */
+export type StoredTableBorderSide = {
+  enabled: boolean;
+  /** Stroke thickness in points. */
+  width: number;
+  /** `#rrggbb`. */
+  color: string;
+} | null;
+
 export type StoredTableCellBorders = {
-  top: boolean;
-  right: boolean;
-  bottom: boolean;
-  left: boolean;
+  top: StoredTableBorderSide;
+  right: StoredTableBorderSide;
+  bottom: StoredTableBorderSide;
+  left: StoredTableBorderSide;
 };
 
 export type StoredTableCell = {
@@ -56,6 +65,8 @@ export type StoredTable = {
   headerRow: boolean;
   headerColumn: boolean;
   stroke: StoredTableStroke;
+  strokeWidth: number;
+  strokeColor: string;
   rows: StoredTableCell[][];
 };
 
@@ -317,20 +328,41 @@ function tableSpanOverlaps(
   return false;
 }
 
-function normalizeCellBorders(value: unknown): StoredTableCellBorders | null {
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/u;
+export const DEFAULT_TABLE_STROKE_WIDTH = 0.5;
+export const DEFAULT_TABLE_STROKE_COLOR = "#000000";
+
+function normalizeStrokeWidth(value: unknown): number {
+  const width = numberOr(value, DEFAULT_TABLE_STROKE_WIDTH);
+  return Math.max(0.1, Math.min(Math.round(width * 100) / 100, 10));
+}
+
+function normalizeStrokeColor(value: unknown): string {
+  return typeof value === "string" && HEX_COLOR_PATTERN.test(value)
+    ? value.toLowerCase()
+    : DEFAULT_TABLE_STROKE_COLOR;
+}
+
+function normalizeBorderSide(value: unknown): StoredTableBorderSide {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = objectValue(value);
-  if (typeof record.top !== "boolean"
-    && typeof record.right !== "boolean"
-    && typeof record.bottom !== "boolean"
-    && typeof record.left !== "boolean") {
-    return null;
-  }
   return {
-    top: record.top === true,
-    right: record.right === true,
-    bottom: record.bottom === true,
-    left: record.left === true,
+    enabled: record.enabled !== false,
+    width: normalizeStrokeWidth(record.width),
+    color: normalizeStrokeColor(record.color),
   };
+}
+
+function normalizeCellBorders(value: unknown): StoredTableCellBorders | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = objectValue(value);
+  const borders: StoredTableCellBorders = {
+    top: normalizeBorderSide(record.top),
+    right: normalizeBorderSide(record.right),
+    bottom: normalizeBorderSide(record.bottom),
+    left: normalizeBorderSide(record.left),
+  };
+  return borders.top || borders.right || borders.bottom || borders.left ? borders : null;
 }
 
 function normalizeTables(value: unknown): StoredTable[] {
@@ -385,6 +417,8 @@ function normalizeTables(value: unknown): StoredTable[] {
       headerRow: record.headerRow !== false,
       headerColumn: record.headerColumn === true,
       stroke: record.stroke === "none" ? "none" : "solid",
+      strokeWidth: normalizeStrokeWidth(record.strokeWidth),
+      strokeColor: normalizeStrokeColor(record.strokeColor),
       rows,
     });
   }

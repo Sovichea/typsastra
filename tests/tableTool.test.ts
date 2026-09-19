@@ -23,6 +23,8 @@ const table: StoredTable = {
   headerRow: true,
   headerColumn: false,
   stroke: "solid",
+  strokeWidth: 0.5,
+  strokeColor: "#000000",
   rows: [
     [cell("Name"), cell("Value")],
     [cell("Alpha"), cell("1*2", "right")],
@@ -34,7 +36,7 @@ describe("table typst generation", () => {
     expect(generateTableTypst(table)).toBe([
       "#table(",
       "  columns: 2,",
-      "  stroke: 0.5pt,",
+      '  stroke: 0.5pt + rgb("#000000"),',
       "  table.header([Name], [Value]),",
       "  [Alpha], #align(right)[1\\*2],",
       ")",
@@ -57,13 +59,22 @@ describe("table typst generation", () => {
   });
 
   test("emits merged cells and per-cell stroke overrides", () => {
+    const side = (enabled: boolean, width = 0.5, color = "#000000") => ({ enabled, width, color });
     const generated = generateTableTypst({
       ...table,
       stroke: "none",
       rows: [
         [{ ...cell("Header"), colspan: 2 }, { ...cell(""), covered: true }],
         [
-          { ...cell("A"), borders: { top: true, right: false, bottom: true, left: true } },
+          {
+            ...cell("A"),
+            borders: {
+              top: side(true, 1, "#ff0000"),
+              right: side(false),
+              bottom: side(true),
+              left: side(false),
+            },
+          },
           cell("B"),
         ],
       ],
@@ -72,7 +83,7 @@ describe("table typst generation", () => {
     expect(generated).toContain("  stroke: none,");
     expect(generated).toContain("table.header(table.cell(colspan: 2)[Header])");
     expect(generated).toContain(
-      "table.cell(stroke: (top: 0.5pt, right: none, bottom: 0.5pt, left: 0.5pt))[A]",
+      'table.cell(stroke: (top: 1pt + rgb("#ff0000"), right: none, bottom: 0.5pt + rgb("#000000"), left: none))[A]',
     );
   });
 
@@ -113,12 +124,17 @@ describe("table typst generation", () => {
 
     expect(source).toContain("ArrowRight: { row, column: column + cell.colspan }");
     expect(source).toContain("event.shiftKey && this.selectionAnchor");
-    expect(source).toContain('data-action="merge"');
-    expect(source).toContain('data-action="split"');
-    expect(source).toContain('data-action="move-row-up"');
-    expect(source).toContain('data-action="move-column-left"');
-    expect(source).toContain('data-action="borders"');
-    expect(source).toContain("table-tool-edge-${side}");
+    expect(source).toContain('data-menu="rows"');
+    expect(source).toContain('data-menu="columns"');
+    expect(source).toContain('data-menu="cells"');
+    expect(source).toContain('data-menu="borders"');
+    expect(source).toContain('data-menu="table"');
+    expect(source).toContain("private openTableMenu(");
+    expect(source).toContain('"Merge cells"');
+    expect(source).toContain("this.draggingSelection = true");
+    expect(source).toContain('input.addEventListener("pointerenter"');
+    expect(source).toContain('this.applyBorderToSelection(table, "outline")');
+    expect(source).toContain("--edge-color");
     expect(source).toContain("OPPOSITE_SIDE[side]");
   });
 
@@ -186,6 +202,8 @@ describe("stored table normalization", () => {
     expect(first.headerRow).toBe(true);
     expect(first.headerColumn).toBe(true);
     expect(first.stroke).toBe("solid");
+    expect(first.strokeWidth).toBe(0.5);
+    expect(first.strokeColor).toBe("#000000");
     expect(first.rows[0].map(entry => entry.align)).toEqual(["left", null, null]);
     expect(first.rows[0][0]).toMatchObject({
       colspan: 1,

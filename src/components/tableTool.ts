@@ -2,10 +2,10 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { createAppIcon } from "../ui/icons";
 import type {
   StoredTable,
+  StoredTableBorderSide,
   StoredTableCell,
   StoredTableCellBorders,
   StoredTableAlignment,
-  StoredTableStroke,
 } from "../workspace/workspaceStateStore";
 import { generateTableTypst } from "./tableTypst";
 
@@ -78,9 +78,14 @@ function tableHasSpans(table: StoredTable): boolean {
   return table.rows.some(row => row.some(cell => !cell.covered && (cell.colspan > 1 || cell.rowspan > 1)));
 }
 
-function effectiveBorder(table: StoredTable, cell: StoredTableCell, side: keyof StoredTableCellBorders): boolean {
-  const override = cell.borders?.[side];
-  return typeof override === "boolean" ? override : table.stroke === "solid";
+function effectiveSide(
+  table: StoredTable,
+  cell: StoredTableCell,
+  side: keyof StoredTableCellBorders,
+): { enabled: boolean; width: number; color: string } {
+  const override: StoredTableBorderSide = cell.borders?.[side] ?? null;
+  if (override) return { enabled: override.enabled, width: override.width, color: override.color };
+  return { enabled: table.stroke === "solid", width: table.strokeWidth, color: table.strokeColor };
 }
 
 /** Owns the project table list, the grid editor, and generated Typst code. */
@@ -90,6 +95,11 @@ export class TableToolController {
   private selectionAnchor: Slot | null = null;
   private selectionFocus: Slot | null = null;
   private borderMode = false;
+  private borderWidth = 0.5;
+  private borderColor = "#000000";
+  private draggingSelection = false;
+  private activeMenu: HTMLElement | null = null;
+  private menuCleanup: (() => void) | null = null;
   private readonly cellInputs = new Map<string, HTMLInputElement>();
   private persistTimer: number | null = null;
   private previewTimer: number | null = null;
@@ -103,6 +113,7 @@ export class TableToolController {
     private readonly deps: TableToolDependencies,
   ) {
     document.getElementById("tables-new-button")?.addEventListener("click", () => this.createTable());
+    window.addEventListener("pointerup", () => { this.draggingSelection = false; });
   }
 
   public setWorkspace(tables: readonly StoredTable[]): void {
@@ -122,6 +133,7 @@ export class TableToolController {
   }
 
   public hide(): void {
+    this.closeTableMenu();
     this.flushPersist();
     if (this.previewTimer !== null) {
       window.clearTimeout(this.previewTimer);
@@ -144,6 +156,8 @@ export class TableToolController {
       headerRow: true,
       headerColumn: false,
       stroke: "solid",
+      strokeWidth: 0.5,
+      strokeColor: "#000000",
       rows: [emptyRow(2), emptyRow(2)],
     };
     this.tables.push(table);
@@ -282,6 +296,7 @@ export class TableToolController {
   }
 
   private renderInspector(): void {
+    this.closeTableMenu();
     const table = this.selected();
     if (!table) {
       this.inspector.innerHTML =
@@ -294,25 +309,13 @@ export class TableToolController {
       `<div class="image-tool-inspector-header"><div><h2 data-field="table-heading"></h2><div class="image-tool-path" data-field="table-id"></div></div><span class="image-tool-status current-document">Table</span></div>` +
       `<section class="image-tool-section"><h3>Structure</h3>` +
       `<label class="table-tool-name">Name <input data-field="table-name" type="text" maxlength="80" /></label>` +
-      `<div class="table-tool-toolbar">` +
-      `<button type="button" data-action="merge">Merge</button>` +
-      `<button type="button" data-action="split">Split</button>` +
-      `<button type="button" data-action="move-row-up" title="Move row up">Row ↑</button>` +
-      `<button type="button" data-action="move-row-down" title="Move row down">Row ↓</button>` +
-      `<button type="button" data-action="move-column-left" title="Move column left">Col ←</button>` +
-      `<button type="button" data-action="move-column-right" title="Move column right">Col →</button>` +
-      `<button type="button" data-action="add-row">Add row</button>` +
-      `<button type="button" data-action="remove-row">Remove row</button>` +
-      `<button type="button" data-action="add-column">Add column</button>` +
-      `<button type="button" data-action="remove-column">Remove column</button>` +
-      `<button type="button" data-action="borders">Borders</button>` +
-      `<button type="button" data-action="delete">Delete table</button>` +
-      `</div>` +
-      `<div class="table-tool-options">` +
-      `<label class="image-tool-lock"><input data-field="header-row" type="checkbox" /> Header row</label>` +
-      `<label class="image-tool-lock"><input data-field="header-column" type="checkbox" /> Header column</label>` +
-      `<label>Align selection <select data-field="cell-align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>` +
-      `<label>Table stroke <select data-field="table-stroke"><option value="solid">Solid</option><option value="none">None</option></select></label>` +
+      `<div class="table-tool-menubar">` +
+      `<button type="button" data-menu="rows">Rows ▾</button>` +
+      `<button type="button" data-menu="columns">Columns ▾</button>` +
+      `<button type="button" data-menu="cells">Cells ▾</button>` +
+      `<button type="button" data-menu="borders">Borders ▾</button>` +
+      `<button type="button" data-menu="table">Table ▾</button>` +
+      `<label class="table-tool-inline">Align <select data-field="cell-align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>` +
       `</div>` +
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
       `<div class="table-tool-grid-host"></div></section>` +
@@ -333,91 +336,128 @@ export class TableToolController {
       this.emitChange();
     });
 
-    const headerRow = this.inspector.querySelector<HTMLInputElement>('[data-field="header-row"]')!;
-    headerRow.checked = table.headerRow;
-    headerRow.addEventListener("change", () => {
-      table.headerRow = headerRow.checked;
-      this.renderGrid(table);
-      this.emitChange();
-    });
-    const headerColumn = this.inspector.querySelector<HTMLInputElement>('[data-field="header-column"]')!;
-    headerColumn.checked = table.headerColumn;
-    headerColumn.addEventListener("change", () => {
-      table.headerColumn = headerColumn.checked;
-      this.renderGrid(table);
-      this.emitChange();
-    });
-
     const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]')!;
     align.addEventListener("change", () => this.applyAlignment(table, (align.value || null) as StoredTableAlignment | null));
 
-    const stroke = this.inspector.querySelector<HTMLSelectElement>('[data-field="table-stroke"]')!;
-    stroke.value = table.stroke;
-    stroke.addEventListener("change", () => {
-      table.stroke = (stroke.value === "none" ? "none" : "solid") as StoredTableStroke;
-      this.renderGrid(table);
-      this.emitChange();
-    });
-
-    const on = (action: string, handler: () => void) => {
-      this.inspector.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)?.addEventListener("click", handler);
+    const menu = (name: string, build: (menuElement: HTMLElement) => void) => {
+      this.inspector.querySelector<HTMLButtonElement>(`[data-menu="${name}"]`)
+        ?.addEventListener("click", event => {
+          event.stopPropagation();
+          this.openTableMenu(event.currentTarget as HTMLButtonElement, build);
+        });
     };
-    on("merge", () => this.mergeSelection(table));
-    on("split", () => this.splitSelection(table));
-    on("move-row-up", () => this.moveRow(table, -1));
-    on("move-row-down", () => this.moveRow(table, 1));
-    on("move-column-left", () => this.moveColumn(table, -1));
-    on("move-column-right", () => this.moveColumn(table, 1));
-    on("borders", () => {
-      this.borderMode = !this.borderMode;
-      this.renderGrid(table);
-      this.syncSelectionSummary();
+    menu("rows", menuElement => {
+      this.appendMenuItem(menuElement, "Move row up", () => this.moveRow(table, -1));
+      this.appendMenuItem(menuElement, "Move row down", () => this.moveRow(table, 1));
+      this.appendMenuSeparator(menuElement);
+      this.appendMenuItem(menuElement, "Add row", () => {
+        if (table.rows.length >= MAX_ROWS) return;
+        table.rows.push(emptyRow(table.columns));
+        this.renderInspector();
+        this.emitChange();
+      });
+      this.appendMenuItem(menuElement, "Remove row", () => {
+        if (table.rows.length <= 1) return;
+        if (tableHasSpans(table)) {
+          this.deps.showPreviewMessage?.("Remove rows after splitting merged cells.");
+          return;
+        }
+        table.rows.pop();
+        this.resetSelection();
+        this.renderInspector();
+        this.emitChange();
+      });
     });
-    on("add-row", () => {
-      if (table.rows.length >= MAX_ROWS) return;
-      table.rows.push(emptyRow(table.columns));
-      this.renderInspector();
-      this.emitChange();
+    menu("columns", menuElement => {
+      this.appendMenuItem(menuElement, "Move column left", () => this.moveColumn(table, -1));
+      this.appendMenuItem(menuElement, "Move column right", () => this.moveColumn(table, 1));
+      this.appendMenuSeparator(menuElement);
+      this.appendMenuItem(menuElement, "Add column", () => {
+        if (table.columns >= MAX_COLUMNS) return;
+        table.columns += 1;
+        for (const row of table.rows) row.push(emptyCell());
+        this.renderInspector();
+        this.emitChange();
+      });
+      this.appendMenuItem(menuElement, "Remove column", () => {
+        if (table.columns <= 1) return;
+        if (tableHasSpans(table)) {
+          this.deps.showPreviewMessage?.("Remove columns after splitting merged cells.");
+          return;
+        }
+        table.columns -= 1;
+        for (const row of table.rows) row.length = table.columns;
+        this.resetSelection();
+        this.renderInspector();
+        this.emitChange();
+      });
     });
-    on("remove-row", () => {
-      if (table.rows.length <= 1) return;
-      if (tableHasSpans(table)) {
-        this.deps.showPreviewMessage?.("Remove rows after splitting merged cells.");
-        return;
-      }
-      table.rows.pop();
-      this.resetSelection();
-      this.renderInspector();
-      this.emitChange();
+    menu("cells", menuElement => {
+      this.appendMenuItem(menuElement, "Merge cells", () => this.mergeSelection(table));
+      this.appendMenuItem(menuElement, "Split cells", () => this.splitSelection(table));
     });
-    on("add-column", () => {
-      if (table.columns >= MAX_COLUMNS) return;
-      table.columns += 1;
-      for (const row of table.rows) row.push(emptyCell());
-      this.renderInspector();
-      this.emitChange();
+    menu("borders", menuElement => {
+      this.appendMenuToggle(menuElement, "Show border handles", this.borderMode, () => {
+        this.borderMode = !this.borderMode;
+        this.renderGrid(table);
+        this.syncSelectionSummary();
+      });
+      this.appendMenuSeparator(menuElement);
+      this.appendMenuHeading(menuElement, "Apply to selection");
+      this.appendMenuItem(menuElement, "All borders", () => this.applyBorderToSelection(table, "all"));
+      this.appendMenuItem(menuElement, "No borders", () => this.applyBorderToSelection(table, "none"));
+      this.appendMenuItem(menuElement, "Outline only", () => this.applyBorderToSelection(table, "outline"));
+      this.appendMenuHeading(menuElement, `Thickness (${this.borderWidth}pt)`);
+      this.appendMenuChoices(menuElement, [0.25, 0.5, 1, 2], () => this.borderWidth, value => {
+        this.borderWidth = value;
+        this.emitChange();
+      });
+      this.appendMenuHeading(menuElement, "Color");
+      this.appendMenuColor(menuElement, this.borderColor, value => {
+        this.borderColor = value;
+        this.emitChange();
+      });
     });
-    on("remove-column", () => {
-      if (table.columns <= 1) return;
-      if (tableHasSpans(table)) {
-        this.deps.showPreviewMessage?.("Remove columns after splitting merged cells.");
-        return;
-      }
-      table.columns -= 1;
-      for (const row of table.rows) row.length = table.columns;
-      this.resetSelection();
-      this.renderInspector();
-      this.emitChange();
-    });
-    on("delete", () => {
-      const index = this.tables.findIndex(candidate => candidate.id === table.id);
-      if (index === -1) return;
-      this.tables.splice(index, 1);
-      this.selectedId = this.tables[Math.min(index, this.tables.length - 1)]?.id ?? null;
-      this.resetSelection();
-      this.renderSidebar();
-      this.renderInspector();
-      this.emitChange();
+    menu("table", menuElement => {
+      this.appendMenuToggle(menuElement, "Header row", table.headerRow, () => {
+        table.headerRow = !table.headerRow;
+        this.renderGrid(table);
+        this.emitChange();
+      });
+      this.appendMenuToggle(menuElement, "Header column", table.headerColumn, () => {
+        table.headerColumn = !table.headerColumn;
+        this.renderGrid(table);
+        this.emitChange();
+      });
+      this.appendMenuSeparator(menuElement);
+      this.appendMenuToggle(menuElement, "Table border", table.stroke === "solid", () => {
+        table.stroke = table.stroke === "solid" ? "none" : "solid";
+        this.renderGrid(table);
+        this.emitChange();
+      });
+      this.appendMenuHeading(menuElement, `Table thickness (${table.strokeWidth}pt)`);
+      this.appendMenuChoices(menuElement, [0.25, 0.5, 1, 2], () => table.strokeWidth, value => {
+        table.strokeWidth = value;
+        this.renderGrid(table);
+        this.emitChange();
+      });
+      this.appendMenuHeading(menuElement, "Table color");
+      this.appendMenuColor(menuElement, table.strokeColor, value => {
+        table.strokeColor = value;
+        this.renderGrid(table);
+        this.emitChange();
+      });
+      this.appendMenuSeparator(menuElement);
+      this.appendMenuItem(menuElement, "Delete table", () => {
+        const index = this.tables.findIndex(candidate => candidate.id === table.id);
+        if (index === -1) return;
+        this.tables.splice(index, 1);
+        this.selectedId = this.tables[Math.min(index, this.tables.length - 1)]?.id ?? null;
+        this.resetSelection();
+        this.renderSidebar();
+        this.renderInspector();
+        this.emitChange();
+      });
     });
 
     const copy = this.inspector.querySelector<HTMLButtonElement>('[data-action="copy"]')!;
@@ -473,15 +513,23 @@ export class TableToolController {
           this.emitChange();
         });
         input.addEventListener("mousedown", event => {
+          if (event.button !== 0) return;
           if (event.shiftKey && this.selectionAnchor) {
             this.selectionFocus = { row: rowIndex, column: columnIndex };
           } else {
             this.selectionAnchor = { row: rowIndex, column: columnIndex };
             this.selectionFocus = { row: rowIndex, column: columnIndex };
+            this.draggingSelection = true;
           }
           this.syncSelectionHighlight();
           const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
           if (align) this.syncAlignSelect(align, table);
+        });
+        input.addEventListener("pointerenter", event => {
+          if (!this.draggingSelection || (event.buttons & 1) === 0) return;
+          this.selectionFocus = { row: rowIndex, column: columnIndex };
+          this.syncSelectionHighlight();
+          this.syncSelectionSummary();
         });
         input.addEventListener("keydown", event => this.handleCellKeydown(event, table, rowIndex, columnIndex, cell));
         wrap.appendChild(input);
@@ -489,8 +537,11 @@ export class TableToolController {
           for (const side of BORDER_SIDES) {
             const edge = document.createElement("span");
             edge.className = `table-tool-edge table-tool-edge-${side}`;
-            if (effectiveBorder(table, cell, side)) edge.classList.add("on");
-            edge.title = `${side} border`;
+            const sideStyle = effectiveSide(table, cell, side);
+            edge.classList.toggle("on", sideStyle.enabled);
+            edge.style.setProperty("--edge-color", sideStyle.color);
+            edge.style.setProperty("--edge-width", `${Math.max(1, Math.round(sideStyle.width * 1.5))}px`);
+            edge.title = `${side} border (${sideStyle.enabled ? "on" : "off"})`;
             edge.addEventListener("pointerdown", event => {
               event.preventDefault();
               event.stopPropagation();
@@ -686,17 +737,15 @@ export class TableToolController {
     this.emitChange();
   }
 
+  private setCellBorder(cell: StoredTableCell, side: keyof StoredTableCellBorders, enabled: boolean): void {
+    if (!cell.borders) cell.borders = { top: null, right: null, bottom: null, left: null };
+    cell.borders[side] = { enabled, width: this.borderWidth, color: this.borderColor };
+  }
+
   private toggleBorder(table: StoredTable, origin: Slot, side: keyof StoredTableCellBorders): void {
     const cell = table.rows[origin.row][origin.column];
-    const next = !effectiveBorder(table, cell, side);
-    const apply = (target: StoredTableCell, targetSide: keyof StoredTableCellBorders, value: boolean) => {
-      if (!target.borders) {
-        const base = table.stroke === "solid";
-        target.borders = { top: base, right: base, bottom: base, left: base };
-      }
-      target.borders[targetSide] = value;
-    };
-    apply(cell, side, next);
+    const next = !effectiveSide(table, cell, side).enabled;
+    this.setCellBorder(cell, side, next);
     const neighborSlot: Record<keyof StoredTableCellBorders, Slot> = {
       top: { row: origin.row - 1, column: origin.column },
       bottom: { row: origin.row + cell.rowspan, column: origin.column },
@@ -705,11 +754,151 @@ export class TableToolController {
     };
     const neighbor = tableCellOrigin(table, neighborSlot[side].row, neighborSlot[side].column);
     if (neighbor && (neighbor.row !== origin.row || neighbor.column !== origin.column)) {
-      apply(table.rows[neighbor.row][neighbor.column], OPPOSITE_SIDE[side], next);
+      this.setCellBorder(table.rows[neighbor.row][neighbor.column], OPPOSITE_SIDE[side], next);
     }
     this.renderGrid(table);
     this.syncSelectionHighlight();
     this.emitChange();
+  }
+
+  private applyBorderToSelection(table: StoredTable, mode: "all" | "none" | "outline"): void {
+    const range = this.selectionRange();
+    if (!range) {
+      this.deps.showPreviewMessage?.("Select cells before applying borders.");
+      return;
+    }
+    const inside = (row: number, column: number) =>
+      row >= range.minRow && row <= range.maxRow && column >= range.minColumn && column <= range.maxColumn;
+    const visited = new Set<string>();
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+        const origin = tableCellOrigin(table, row, column);
+        if (!origin) continue;
+        const key = `${origin.row}:${origin.column}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        const cell = table.rows[origin.row][origin.column];
+        const sides: Array<[keyof StoredTableCellBorders, Slot]> = [
+          ["top", { row: origin.row - 1, column: origin.column }],
+          ["bottom", { row: origin.row + cell.rowspan, column: origin.column }],
+          ["left", { row: origin.row, column: origin.column - 1 }],
+          ["right", { row: origin.row, column: origin.column + cell.colspan }],
+        ];
+        for (const [side, neighbor] of sides) {
+          const outer = !inside(neighbor.row, neighbor.column);
+          const enabled = mode === "all" ? true : mode === "none" ? false : outer;
+          this.setCellBorder(cell, side, enabled);
+        }
+      }
+    }
+    this.renderGrid(table);
+    this.syncSelectionHighlight();
+    this.emitChange();
+  }
+
+  private openTableMenu(anchor: HTMLButtonElement, build: (menu: HTMLElement) => void): void {
+    this.closeTableMenu();
+    const menu = document.createElement("div");
+    menu.className = "dropdown table-tool-menu";
+    menu.setAttribute("role", "menu");
+    build(menu);
+    document.body.appendChild(menu);
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+    this.activeMenu = menu;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && menu.contains(event.target)) return;
+      this.closeTableMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") this.closeTableMenu();
+    };
+    this.menuCleanup = () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+    window.setTimeout(() => {
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    }, 0);
+  }
+
+  private closeTableMenu(): void {
+    this.menuCleanup?.();
+    this.menuCleanup = null;
+    this.activeMenu?.remove();
+    this.activeMenu = null;
+  }
+
+  private appendMenuItem(
+    menu: HTMLElement,
+    label: string,
+    onSelect: () => void,
+    options: { disabled?: boolean; checked?: boolean } = {},
+  ): void {
+    const item = document.createElement("div");
+    item.className = "dropdown-item";
+    if (options.disabled) item.classList.add("dropdown-item-disabled");
+    item.setAttribute("role", "menuitem");
+    item.textContent = options.checked ? `✓ ${label}` : label;
+    if (!options.disabled) {
+      item.addEventListener("click", () => {
+        this.closeTableMenu();
+        onSelect();
+      });
+    }
+    menu.appendChild(item);
+  }
+
+  private appendMenuToggle(menu: HTMLElement, label: string, checked: boolean, onSelect: () => void): void {
+    this.appendMenuItem(menu, label, onSelect, { checked });
+  }
+
+  private appendMenuSeparator(menu: HTMLElement): void {
+    const separator = document.createElement("div");
+    separator.className = "dropdown-separator";
+    menu.appendChild(separator);
+  }
+
+  private appendMenuHeading(menu: HTMLElement, label: string): void {
+    const heading = document.createElement("div");
+    heading.className = "table-tool-menu-heading";
+    heading.textContent = label;
+    menu.appendChild(heading);
+  }
+
+  private appendMenuChoices(
+    menu: HTMLElement,
+    values: readonly number[],
+    current: () => number,
+    onSelect: (value: number) => void,
+  ): void {
+    const row = document.createElement("div");
+    row.className = "table-tool-menu-choices";
+    for (const value of values) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${value}pt`;
+      if (current() === value) button.classList.add("active");
+      button.addEventListener("click", () => {
+        onSelect(value);
+        this.closeTableMenu();
+      });
+      row.appendChild(button);
+    }
+    menu.appendChild(row);
+  }
+
+  private appendMenuColor(menu: HTMLElement, value: string, onSelect: (value: string) => void): void {
+    const row = document.createElement("div");
+    row.className = "table-tool-menu-color";
+    const input = document.createElement("input");
+    input.type = "color";
+    input.value = value;
+    input.addEventListener("input", () => onSelect(input.value));
+    row.appendChild(input);
+    menu.appendChild(row);
   }
 
   private syncAlignSelect(select: HTMLSelectElement, table: StoredTable): void {

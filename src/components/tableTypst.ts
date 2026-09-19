@@ -14,10 +14,18 @@ export function escapeTableText(text: string): string {
 
 const CELL_BORDER_SIDES: Array<keyof StoredTableCellBorders> = ["top", "right", "bottom", "left"];
 
-function effectiveBorder(table: StoredTable, cell: StoredTableCell, side: keyof StoredTableCellBorders): boolean {
+function formatPoints(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value).replace(/0+$/u, "").replace(/\.$/u, "");
+}
+
+export function typstStroke(width: number, color: string): string {
+  return `${formatPoints(width)}pt + rgb("${color}")`;
+}
+
+function sideSource(table: StoredTable, cell: StoredTableCell, side: keyof StoredTableCellBorders): string {
   const override = cell.borders?.[side];
-  if (typeof override === "boolean") return override;
-  return table.stroke === "solid";
+  if (override) return override.enabled ? typstStroke(override.width, override.color) : "none";
+  return table.stroke === "solid" ? typstStroke(table.strokeWidth, table.strokeColor) : "none";
 }
 
 function cellSource(table: StoredTable, cell: StoredTableCell): string {
@@ -28,7 +36,7 @@ function cellSource(table: StoredTable, cell: StoredTableCell): string {
   if (cell.rowspan > 1) argumentsList.push(`rowspan: ${cell.rowspan}`);
   if (cell.borders) {
     const dict = CELL_BORDER_SIDES
-      .map(side => `${side}: ${effectiveBorder(table, cell, side) ? "0.5pt" : "none"}`)
+      .map(side => `${side}: ${sideSource(table, cell, side)}`)
       .join(", ");
     argumentsList.push(`stroke: (${dict})`);
   }
@@ -42,7 +50,7 @@ export function generateTableTypst(table: StoredTable): string {
   const lines: string[] = [
     "#table(",
     `  columns: ${table.columns},`,
-    `  stroke: ${table.stroke === "none" ? "none" : "0.5pt"},`,
+    `  stroke: ${table.stroke === "none" ? "none" : typstStroke(table.strokeWidth, table.strokeColor)},`,
   ];
   table.rows.forEach((row, rowIndex) => {
     const isHeaderRow = table.headerRow && rowIndex === 0;
