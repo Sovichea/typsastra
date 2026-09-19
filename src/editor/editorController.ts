@@ -10,7 +10,7 @@ import {
 import type { PerformanceMetric } from "../performance/diagnostics";
 import { editorDiagnosticsStateField } from "./diagnostics";
 import { editorMatchQuery, editorSelectionMatchRangeAllowed } from "./extensions";
-import { imageOptimizationWarningField } from "./imageWarnings";
+import { ImageOptimizationMarker, imageOptimizationWarningField } from "./imageWarnings";
 import { cursorRowColumn } from "./verticalCursor";
 import { TYPSASTRA_GREEN } from "../ui/brandColors";
 import { isAltGraphKeyboardEvent } from "../ui/keyboardModifiers";
@@ -407,7 +407,10 @@ export class EditorController {
         to: Math.max(0, Math.min(diagnostic.to, doc.length)),
       });
     }
-    imageWarnings?.between(0, doc.length, (from, to) => {
+    imageWarnings?.between(0, doc.length, (from, to, marker) => {
+      // Ordinary images only get the informational gutter icon, not an
+      // overview-ruler warning tick.
+      if (marker instanceof ImageOptimizationMarker && marker.severity === "info") return;
       const line = doc.lineAt(Math.max(0, Math.min(from, doc.length))).number;
       addMarker({ line, severity: "warning", from, to: Math.max(from, to) });
     });

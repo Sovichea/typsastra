@@ -262,9 +262,17 @@ export class DraftPreviewController {
       return;
     }
     const activeKey = filePathKey(activePath);
+    const recommendedKeys = new Set(candidates.map(image => filePathKey(image.path)));
     const warnings: ImageOptimizationWarning[] = [];
-    for (const image of candidates) {
-      const message = this.optimizationMessage(image, profile);
+    // Every referenced image gets a clickable gutter icon. Recommended images
+    // keep the optimizer warning; ordinary images get an informational marker
+    // that still opens Image Tools so authors can shrink the exported PDF.
+    for (const image of profile.images) {
+      const recommended = recommendedKeys.has(filePathKey(image.path));
+      const severity: ImageOptimizationWarning["severity"] = recommended ? "warning" : "info";
+      const message = recommended
+        ? this.optimizationMessage(image, profile)
+        : this.imageToolMessage(image);
       for (const reference of image.references) {
         if (filePathKey(reference.sourcePath) !== activeKey) continue;
         warnings.push({
@@ -272,6 +280,7 @@ export class DraftPreviewController {
           to: reference.toUtf16,
           message,
           imagePath: image.path,
+          severity,
         });
       }
     }
@@ -456,6 +465,14 @@ export class DraftPreviewController {
         .forEach(select);
     }
     return [...selected.values()].sort((left, right) => right.estimatedDecodedBytes - left.estimatedDecodedBytes);
+  }
+
+  private imageToolMessage(image: PreviewImageAsset): string {
+    return [
+      `${fileNameFromPath(image.path)} is ${image.width.toLocaleString()} × ${image.height.toLocaleString()} pixels`,
+      `and uses ${formatFileSize(image.sourceBytes)} on disk (about ${formatFileSize(image.estimatedDecodedBytes)} when decoded).`,
+      "Open Image Tools to compress or re-encode it and reduce the exported PDF size.",
+    ].join(" ");
   }
 
   private optimizationMessage(image: PreviewImageAsset, profile: PreviewImageProfile): string {

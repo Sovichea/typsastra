@@ -82,6 +82,22 @@ describe("large-image preview recommendation", () => {
     expect(draftController).toContain('getElementById("preview-image-warning-btn")');
   });
 
+  test("offers a clickable informational Image Tools marker for ordinary images", async () => {
+    const draftController = await Bun.file(new URL("../src/preview/draftPreviewController.ts", import.meta.url)).text();
+    const warnings = await Bun.file(new URL("../src/editor/imageWarnings.ts", import.meta.url)).text();
+
+    expect(draftController).toContain("const recommendedKeys = new Set(candidates.map");
+    expect(draftController).toContain('const severity: ImageOptimizationWarning["severity"] = recommended ? "warning" : "info"');
+    expect(draftController).toContain("this.imageToolMessage(image)");
+    expect(draftController).toContain("Open Image Tools to compress or re-encode it and reduce the exported PDF size.");
+    expect(warnings).toContain('createAppIcon("info", { size: 15 })');
+    expect(warnings).toContain('marker.classList.add("cm-image-info-marker")');
+    expect(warnings).toContain('if ((warning.severity ?? "warning") === "warning") entry.severity = "warning"');
+    expect(warnings).toContain("imageSeverity: marker.severity");
+    // The shared click handler opens Image Tools for both warning and info markers.
+    expect(warnings).toContain('window.dispatchEvent(new CustomEvent("typsastra-open-image-tool"');
+  });
+
   test("plans a source-preserving draft preview for v0.6.0", async () => {
     const roadmap = await Bun.file(new URL("../docs/ROADMAP.md", import.meta.url)).text();
     const versionStart = roadmap.indexOf("## v0.6.0");

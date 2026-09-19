@@ -4982,6 +4982,10 @@ button.welcome-item:disabled {
 
 .cm-image-optimization-marker.clickable { cursor: default; }
 
+.cm-image-optimization-marker.cm-image-info-marker {
+  color: color-mix(in srgb, #3794ff 78%, var(--ui-header-text));
+}
+
 .cm-image-optimization-marker-spacer {
   display: block;
   width: 18px;

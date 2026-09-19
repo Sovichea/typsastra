@@ -9,6 +9,11 @@ export type ImageOptimizationWarning = {
   to: number;
   message: string;
   imagePath?: string;
+  /**
+   * `warning` marks an image the optimizer recommends changing; `info` marks an
+   * ordinary image that can still be opened in Image Tools to shrink the PDF.
+   */
+  severity?: "warning" | "info";
 };
 
 export const setImageOptimizationWarningsEffect = StateEffect.define<ImageOptimizationWarning[]>({
@@ -21,21 +26,31 @@ export const setImageOptimizationWarningsEffect = StateEffect.define<ImageOptimi
   }
 });
 
-class ImageOptimizationMarker extends GutterMarker {
-  constructor(readonly message: string, readonly imagePath?: string) {
+export class ImageOptimizationMarker extends GutterMarker {
+  constructor(
+    readonly message: string,
+    readonly imagePath?: string,
+    readonly severity: "warning" | "info" = "warning",
+  ) {
     super();
   }
 
   eq(other: GutterMarker): boolean {
     return other instanceof ImageOptimizationMarker
       && other.message === this.message
-      && other.imagePath === this.imagePath;
+      && other.imagePath === this.imagePath
+      && other.severity === this.severity;
   }
 
   toDOM(): HTMLElement {
     const marker = document.createElement("span");
     marker.className = "cm-image-optimization-marker";
-    marker.appendChild(createAppIcon("triangleAlert", { size: 17 }));
+    marker.appendChild(
+      this.severity === "info"
+        ? createAppIcon("info", { size: 15 })
+        : createAppIcon("triangleAlert", { size: 17 })
+    );
+    if (this.severity === "info") marker.classList.add("cm-image-info-marker");
     marker.title = this.message;
     marker.setAttribute("aria-label", this.message);
     if (this.imagePath) {
@@ -125,21 +140,34 @@ export const imageOptimizationWarningField = StateField.define<RangeSet<GutterMa
     for (const effect of transaction.effects) {
       if (!effect.is(setImageOptimizationWarningsEffect)) continue;
 
-      const byLine = new Map<number, { messages: string[]; imagePath?: string }>();
+      const byLine = new Map<number, {
+        messages: string[];
+        imagePath?: string;
+        severity: "warning" | "info";
+      }>();
 
       for (const warning of effect.value) {
         const position = Math.max(0, Math.min(warning.from, transaction.state.doc.length));
         const line = transaction.state.doc.lineAt(position);
-        const entry = byLine.get(line.from) ?? { messages: [], imagePath: warning.imagePath };
+        const entry = byLine.get(line.from) ?? {
+          messages: [],
+          imagePath: warning.imagePath,
+          severity: warning.severity ?? "warning",
+        };
         if (!entry.messages.includes(warning.message)) entry.messages.push(warning.message);
         entry.imagePath ??= warning.imagePath;
+        if ((warning.severity ?? "warning") === "warning") entry.severity = "warning";
         byLine.set(line.from, entry);
       }
 
       const builder = new RangeSetBuilder<GutterMarker>();
 
       for (const [lineFrom, entry] of [...byLine].sort((left, right) => left[0] - right[0])) {
-        builder.add(lineFrom, lineFrom, new ImageOptimizationMarker(entry.messages.join("\n\n"), entry.imagePath));
+        builder.add(
+          lineFrom,
+          lineFrom,
+          new ImageOptimizationMarker(entry.messages.join("\n\n"), entry.imagePath, entry.severity)
+        );
       }
 
       next = builder.finish();
@@ -160,11 +188,17 @@ const sharedWarningGutter = gutter({
       severity: "error" | "related" | "image";
       message: string;
       imagePath?: string;
+      imageSeverity?: "warning" | "info";
     }>();
 
     imageMarkers.between(0, view.state.doc.length, (from, _to, marker) => {
       if (marker instanceof ImageOptimizationMarker) {
-        byLine.set(from, { severity: "image", message: marker.message, imagePath: marker.imagePath });
+        byLine.set(from, {
+          severity: "image",
+          message: marker.message,
+          imagePath: marker.imagePath,
+          imageSeverity: marker.severity,
+        });
       }
     });
 
@@ -197,7 +231,7 @@ const sharedWarningGutter = gutter({
           ? new LspErrorMarker(marker.message)
           : marker.severity === "related"
             ? new RelatedErrorMarker(marker.message)
-            : new ImageOptimizationMarker(marker.message, marker.imagePath)
+            : new ImageOptimizationMarker(marker.message, marker.imagePath, marker.imageSeverity)
       );
     }
 
