@@ -799,7 +799,7 @@ export class TableToolController {
   private openTableMenu(anchor: HTMLButtonElement, build: (menu: HTMLElement) => void): void {
     this.closeTableMenu();
     const menu = document.createElement("div");
-    menu.className = "dropdown table-tool-menu";
+    menu.className = "dropdown-menu table-tool-menu";
     menu.setAttribute("role", "menu");
     build(menu);
     document.body.appendChild(menu);

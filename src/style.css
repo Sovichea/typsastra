@@ -3071,9 +3071,17 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-menu {
   position: fixed;
+  display: block;
+  top: auto;
+  left: auto;
+  margin-top: 0;
   z-index: 2147483000;
-  min-width: 200px;
+  min-width: 220px;
   padding: 4px 0;
+  background-color: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 .table-tool-menu-heading {
   padding: 5px 16px 2px;
