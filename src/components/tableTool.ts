@@ -933,7 +933,12 @@ export class TableToolController {
     menu.style.top = `${rect.bottom + 4}px`;
     this.activeMenu = menu;
     const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && menu.contains(event.target)) return;
+      if (event.target instanceof Node
+        && (menu.contains(event.target) || this.activeMenuAnchor?.contains(event.target))) {
+        // Clicks inside the menu or on its owning button must not count as
+        // "outside"; the button's click handler toggles the menu closed.
+        return;
+      }
       this.closeTableMenu();
     };
     const onKeyDown = (event: KeyboardEvent) => {
