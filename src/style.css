@@ -3146,8 +3146,18 @@ body.table-tools-active #code-render-pane {
   background: color-mix(in srgb, var(--ui-bg) 88%, var(--ui-hover));
 }
 .table-tool-cell-wrap.selected .table-tool-cell {
-  box-shadow: inset 0 0 0 1px var(--ui-accent-color);
-  background: color-mix(in srgb, var(--ui-bg) 82%, var(--ui-accent-color));
+  background: color-mix(in srgb, var(--ui-bg) 90%, var(--ui-accent-color));
+}
+.table-tool-cell-wrap.selected.focus-cell .table-tool-cell {
+  background: color-mix(in srgb, var(--ui-bg) 84%, var(--ui-accent-color));
+  box-shadow: inset 0 -2px 0 var(--ui-accent-color);
+}
+.table-tool-cell-wrap.selected .table-tool-cell:focus { outline: none; }
+.table-tool-grid.borders-mode .table-tool-cell-wrap.selected .table-tool-cell {
+  background: color-mix(in srgb, var(--ui-bg) 95%, var(--ui-accent-color));
+}
+.table-tool-grid.borders-mode .table-tool-cell-wrap.selected.focus-cell .table-tool-cell {
+  background: color-mix(in srgb, var(--ui-bg) 90%, var(--ui-accent-color));
 }
 .table-tool-cell.align-center { text-align: center; }
 .table-tool-cell.align-right { text-align: right; }

@@ -498,6 +498,11 @@ export class TableToolController {
           && columnIndex >= range.minColumn && columnIndex <= range.maxColumn) {
           wrap.classList.add("selected");
         }
+        if (this.selectionFocus
+          && rowIndex === this.selectionFocus.row
+          && columnIndex === this.selectionFocus.column) {
+          wrap.classList.add("focus-cell");
+        }
         if (this.borderMode) wrap.classList.add("borders-visible");
 
         const input = document.createElement("input");
@@ -601,6 +606,11 @@ export class TableToolController {
         && row >= range.minRow && row <= range.maxRow
         && column >= range.minColumn && column <= range.maxColumn;
       wrap.classList.toggle("selected", Boolean(selected));
+      const focus = this.selectionFocus;
+      wrap.classList.toggle(
+        "focus-cell",
+        focus !== null && row === focus.row && column === focus.column,
+      );
     }
   }
 
