@@ -538,22 +538,22 @@ export class TableToolController {
         });
         input.addEventListener("keydown", event => this.handleCellKeydown(event, table, rowIndex, columnIndex, cell));
         wrap.appendChild(input);
-        if (this.borderMode) {
-          for (const side of BORDER_SIDES) {
-            const edge = document.createElement("span");
-            edge.className = `table-tool-edge table-tool-edge-${side}`;
-            const sideStyle = effectiveSide(table, cell, side);
-            edge.classList.toggle("on", sideStyle.enabled);
-            edge.style.setProperty("--edge-color", sideStyle.color);
-            edge.style.setProperty("--edge-width", `${Math.max(1, Math.round(sideStyle.width * 1.5))}px`);
-            edge.title = `${side} border (${sideStyle.enabled ? "on" : "off"})`;
-            edge.addEventListener("pointerdown", event => {
-              event.preventDefault();
-              event.stopPropagation();
-              this.toggleBorder(table, { row: rowIndex, column: columnIndex }, side);
-            });
-            wrap.appendChild(edge);
-          }
+        // Always draw the model's strokes; the edge strips become clickable
+        // handles only while border mode is active.
+        for (const side of BORDER_SIDES) {
+          const edge = document.createElement("span");
+          edge.className = `table-tool-edge table-tool-edge-${side}`;
+          const sideStyle = effectiveSide(table, cell, side);
+          edge.classList.toggle("on", sideStyle.enabled);
+          edge.style.setProperty("--edge-color", sideStyle.color);
+          edge.style.setProperty("--edge-width", `${Math.max(1, Math.round(sideStyle.width * 1.5))}px`);
+          edge.title = `${side} border (${sideStyle.enabled ? "on" : "off"})`;
+          edge.addEventListener("pointerdown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.toggleBorder(table, { row: rowIndex, column: columnIndex }, side);
+          });
+          wrap.appendChild(edge);
         }
         this.cellInputs.set(`${rowIndex}:${columnIndex}`, input);
         grid.appendChild(wrap);
