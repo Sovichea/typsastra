@@ -662,6 +662,12 @@ export class TableToolController {
         });
         input.addEventListener("focus", () => {
           if (this.editingCell) return;
+          // Shift+arrow moves DOM focus to the range focus; that focus already
+          // matches the selection, so it must not collapse the range.
+          if (this.selectionFocus?.row === rowIndex
+            && this.selectionFocus?.column === columnIndex) {
+            return;
+          }
           this.selectionAnchor = { row: rowIndex, column: columnIndex };
           this.selectionFocus = { row: rowIndex, column: columnIndex };
           this.syncSelectionHighlight();

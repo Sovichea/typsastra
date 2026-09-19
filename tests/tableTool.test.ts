@@ -317,6 +317,8 @@ describe("table typst generation", () => {
       + "    this.syncAlignSelects(table);\n"
       + "    this.cellInputs.get(`${origin.row}:${origin.column}`)?.focus();",
     );
+    // Focusing the range focus must not collapse the selection.
+    expect(source).toContain("if (this.selectionFocus?.row === rowIndex");
   });
 
   test("builds and finds the managed directive block", () => {
