@@ -6,6 +6,7 @@ import type {
   StoredTableCell,
   StoredTableCellBorders,
   StoredTableAlignment,
+  StoredTableVerticalAlignment,
 } from "../workspace/workspaceStateStore";
 import { generateTableTypst } from "./tableTypst";
 
@@ -52,7 +53,15 @@ function cloneTable(table: StoredTable): StoredTable {
 }
 
 function emptyCell(): StoredTableCell {
-  return { text: "", align: null, colspan: 1, rowspan: 1, covered: false, borders: null };
+  return {
+    text: "",
+    align: null,
+    verticalAlign: null,
+    colspan: 1,
+    rowspan: 1,
+    covered: false,
+    borders: null,
+  };
 }
 
 function emptyRow(columns: number): StoredTableCell[] {
@@ -427,6 +436,7 @@ export class TableToolController {
       `<button type="button" data-menu="borders">Borders ▾</button>` +
       `<button type="button" data-menu="table">Table ▾</button>` +
       `<label class="table-tool-inline">Align <select data-field="cell-align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>` +
+      `<label class="table-tool-inline">Vertical <select data-field="cell-vertical-align"><option value="">Default</option><option value="top">Top</option><option value="center">Middle</option><option value="bottom">Bottom</option></select></label>` +
       `</div>` +
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
       `<div class="table-tool-grid-host"></div></section>` +
@@ -449,6 +459,11 @@ export class TableToolController {
 
     const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]')!;
     align.addEventListener("change", () => this.applyAlignment(table, (align.value || null) as StoredTableAlignment | null));
+    const verticalAlign = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-vertical-align"]')!;
+    verticalAlign.addEventListener("change", () => this.applyVerticalAlignment(
+      table,
+      (verticalAlign.value || null) as StoredTableVerticalAlignment | null,
+    ));
 
     const menu = (name: string, build: (menuElement: HTMLElement) => void) => {
       this.inspector.querySelector<HTMLButtonElement>(`[data-menu="${name}"]`)
@@ -586,7 +601,7 @@ export class TableToolController {
     });
 
     this.renderGrid(table);
-    this.syncAlignSelect(align, table);
+    this.syncAlignSelects(table);
     this.updateCode(table);
   }
 
@@ -668,8 +683,7 @@ export class TableToolController {
           input.focus();
           this.syncSelectionHighlight();
           this.syncSelectionSummary();
-          const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
-          if (align) this.syncAlignSelect(align, table);
+          this.syncAlignSelects(table);
         });
         input.addEventListener("dblclick", event => {
           event.preventDefault();
@@ -781,8 +795,7 @@ export class TableToolController {
     this.selectionAnchor = origin;
     this.selectionFocus = origin;
     this.syncSelectionHighlight();
-    const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
-    if (align) this.syncAlignSelect(align, table);
+    this.syncAlignSelects(table);
     this.cellInputs.get(`${origin.row}:${origin.column}`)?.focus();
     this.syncSelectionSummary();
   }
@@ -904,6 +917,24 @@ export class TableToolController {
           input.classList.remove("align-left", "align-center", "align-right");
           if (align) input.classList.add(`align-${align}`);
         }
+      }
+    }
+    this.emitChange();
+  }
+
+  private applyVerticalAlignment(table: StoredTable, verticalAlign: StoredTableVerticalAlignment | null): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    const visited = new Set<string>();
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+        const origin = tableCellOrigin(table, row, column);
+        if (!origin) continue;
+        const key = `${origin.row}:${origin.column}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        const cell = table.rows[origin.row][origin.column];
+        cell.verticalAlign = verticalAlign;
       }
     }
     this.emitChange();
@@ -1189,11 +1220,19 @@ export class TableToolController {
     menu.appendChild(row);
   }
 
-  private syncAlignSelect(select: HTMLSelectElement, table: StoredTable): void {
+  private syncAlignSelects(table: StoredTable): void {
     const focus = this.selectionFocus;
     const cell = focus ? table.rows[focus.row]?.[focus.column] : null;
-    select.value = cell?.align ?? "";
-    select.disabled = !focus;
+    const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
+    if (align) {
+      align.value = cell?.align ?? "";
+      align.disabled = !focus;
+    }
+    const verticalAlign = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-vertical-align"]');
+    if (verticalAlign) {
+      verticalAlign.value = cell?.verticalAlign ?? "";
+      verticalAlign.disabled = !focus;
+    }
   }
 
   private updateCode(table: StoredTable): void {

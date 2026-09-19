@@ -13,7 +13,7 @@ import {
 } from "../src/workspace/workspaceStateStore";
 
 function cell(text: string, align: StoredTableAlignment | null = null): StoredTableCell {
-  return { text, align, colspan: 1, rowspan: 1, covered: false, borders: null };
+  return { text, align, verticalAlign: null, colspan: 1, rowspan: 1, covered: false, borders: null };
 }
 
 const table: StoredTable = {
@@ -56,6 +56,21 @@ describe("table typst generation", () => {
       rows: [[cell("a[b]#c$d_e"), cell("plain")]],
     });
     expect(generated).toContain("[a\\[b\\]\\#c\\$d\\_e], [plain],");
+  });
+
+  test("combines horizontal and vertical alignment", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [[
+        { ...cell("A"), align: "right", verticalAlign: "center" },
+        { ...cell("B"), verticalAlign: "bottom" },
+      ]],
+    });
+
+    expect(generated).toContain(
+      "table.cell(align: right + horizon)[A], table.cell(align: bottom)[B],",
+    );
   });
 
   test("preserves inline math and raw spans", () => {
@@ -260,6 +275,7 @@ describe("stored table normalization", () => {
     expect(second.rows).toEqual([[{
       text: "",
       align: null,
+      verticalAlign: null,
       colspan: 1,
       rowspan: 1,
       covered: false,

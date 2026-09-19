@@ -23,6 +23,7 @@ export type StoredScriptLanguageAssignment = {
 };
 
 export type StoredTableAlignment = "left" | "center" | "right";
+export type StoredTableVerticalAlignment = "top" | "center" | "bottom";
 
 /** A per-side border override; null inherits the table stroke. */
 export type StoredTableBorderSide = {
@@ -43,6 +44,7 @@ export type StoredTableCellBorders = {
 export type StoredTableCell = {
   text: string;
   align: StoredTableAlignment | null;
+  verticalAlign: StoredTableVerticalAlignment | null;
   /** Grid span of the origin cell; covered slots inherit it. */
   colspan: number;
   rowspan: number;
@@ -312,6 +314,10 @@ function normalizeTableAlignment(value: unknown): StoredTableAlignment | null {
   return value === "left" || value === "center" || value === "right" ? value : null;
 }
 
+function normalizeTableVerticalAlignment(value: unknown): StoredTableVerticalAlignment | null {
+  return value === "top" || value === "center" || value === "bottom" ? value : null;
+}
+
 function tableSpanOverlaps(
   occupied: boolean[][],
   row: number,
@@ -383,7 +389,15 @@ function normalizeTables(value: unknown): StoredTable[] {
       const row: StoredTableCell[] = [];
       for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
         if (occupied[rowIndex][columnIndex]) {
-          row.push({ text: "", align: null, colspan: 1, rowspan: 1, covered: true, borders: null });
+          row.push({
+            text: "",
+            align: null,
+            verticalAlign: null,
+            colspan: 1,
+            rowspan: 1,
+            covered: true,
+            borders: null,
+          });
           continue;
         }
         const cell = objectValue(rawRow[columnIndex]);
@@ -399,6 +413,7 @@ function normalizeTables(value: unknown): StoredTable[] {
         row.push({
           text: typeof cell.text === "string" ? cell.text.slice(0, 2_000) : "",
           align: normalizeTableAlignment(cell.align),
+          verticalAlign: normalizeTableVerticalAlignment(cell.verticalAlign),
           colspan,
           rowspan,
           covered: false,

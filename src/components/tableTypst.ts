@@ -66,8 +66,14 @@ function cellSource(table: StoredTable, cell: StoredTableCell): string {
   if (cell.colspan > 1) argumentsList.push(`colspan: ${cell.colspan}`);
   if (cell.rowspan > 1) argumentsList.push(`rowspan: ${cell.rowspan}`);
   // Use table.cell's own align parameter; a `#align(...)` wrapper after a
-  // `table.cell(...)` code expression is invalid Typst.
-  if (cell.align) argumentsList.push(`align: ${cell.align}`);
+  // `table.cell(...)` code expression is invalid Typst. Typst combines axes
+  // with `+`, and vertical centering is spelled `horizon`.
+  const alignParts: string[] = [];
+  if (cell.align) alignParts.push(cell.align);
+  if (cell.verticalAlign) {
+    alignParts.push(cell.verticalAlign === "center" ? "horizon" : cell.verticalAlign);
+  }
+  if (alignParts.length > 0) argumentsList.push(`align: ${alignParts.join(" + ")}`);
   if (cell.borders) {
     const dict = CELL_BORDER_SIDES
       .map(side => `${side}: ${sideSource(table, cell, side)}`)
