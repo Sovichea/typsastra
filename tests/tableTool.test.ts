@@ -32,21 +32,49 @@ const table: StoredTable = {
 };
 
 describe("table typst generation", () => {
-  test("generates a header row and per-cell alignment", () => {
+  test("generates a header row and a coordinate align function", () => {
     expect(generateTableTypst(table)).toBe([
       "#table(",
       "  columns: 2,",
       '  stroke: 0.5pt + rgb("#000000"),',
+      "  align: (x, y) => if (x == 1 and y == 1) {",
+      "    right",
+      "  } else {",
+      "    auto",
+      "  },",
       "  table.header([Name], [Value]),",
-      "  [Alpha], table.cell(align: right)[1\\*2],",
+      "  [Alpha], [1\\*2],",
       ")",
     ].join("\n"));
   });
 
   test("marks each row's first cell for a header column", () => {
     expect(generateTableTypst({ ...table, headerColumn: true, headerRow: false })).toContain(
-      "  table.header([Alpha]), table.cell(align: right)[1\\*2],",
+      "  table.header([Alpha]), [1\\*2],",
     );
+  });
+
+  test("collapses row-wide border overrides into a y condition", () => {
+    const border = { enabled: true, width: 1, color: "#9caec8" };
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [
+        [
+          { ...cell("Name"), borders: { top: null, right: null, bottom: border, left: null } },
+          { ...cell("Value"), borders: { top: null, right: null, bottom: border, left: null } },
+        ],
+        [cell("Alpha"), cell("1*2")],
+      ],
+    });
+
+    expect(generated).toContain([
+      "  stroke: (x, y) => if y == 0 {",
+      '    (bottom: 1pt + rgb("#9caec8"), rest: 0.5pt + rgb("#000000"))',
+      "  } else {",
+      '    0.5pt + rgb("#000000")',
+      "  },",
+    ].join("\n"));
   });
 
   test("escapes Typst markup characters", () => {
@@ -68,9 +96,15 @@ describe("table typst generation", () => {
       ]],
     });
 
-    expect(generated).toContain(
-      "table.cell(align: right + horizon)[A], table.cell(align: bottom)[B],",
-    );
+    expect(generated).toContain([
+      "  align: (x, y) => if (x == 0 and y == 0) {",
+      "    right + horizon",
+      "  } else if (x == 1 and y == 0) {",
+      "    bottom",
+      "  } else {",
+      "    auto",
+      "  },",
+    ].join("\n"));
   });
 
   test("preserves inline math and raw spans", () => {
@@ -115,11 +149,15 @@ describe("table typst generation", () => {
       ],
     });
 
-    expect(generated).toContain("  stroke: none,");
     expect(generated).toContain("table.header(table.cell(colspan: 2)[Header])");
-    expect(generated).toContain(
-      'table.cell(stroke: (top: 1pt + rgb("#ff0000"), right: none, bottom: 0.5pt + rgb("#000000"), left: none))[A]',
-    );
+    expect(generated).toContain([
+      "  stroke: (x, y) => if (x == 0 and y == 1) {",
+      '    (top: 1pt + rgb("#ff0000"), bottom: 0.5pt + rgb("#000000"), rest: none)',
+      "  } else {",
+      "    none",
+      "  },",
+    ].join("\n"));
+    expect(generated).toContain("  [A], [B],");
   });
 
   test("maps covered slots to their merged origin", () => {

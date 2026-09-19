@@ -60,26 +60,156 @@ function sideSource(table: StoredTable, cell: StoredTableCell, side: keyof Store
   return table.stroke === "solid" ? typstStroke(table.strokeWidth, table.strokeColor) : "none";
 }
 
-function cellSource(table: StoredTable, cell: StoredTableCell): string {
+function defaultStroke(table: StoredTable): string {
+  return table.stroke === "solid" ? typstStroke(table.strokeWidth, table.strokeColor) : "none";
+}
+
+type CellSlot = { row: number; column: number };
+type SideOverrides = Partial<Record<keyof StoredTableCellBorders, string>>;
+type CellGroup<Value> = { slots: CellSlot[]; value: Value };
+
+function collectSlots(table: StoredTable): CellSlot[] {
+  const slots: CellSlot[] = [];
+  table.rows.forEach((row, rowIndex) => {
+    row.forEach((cell, columnIndex) => {
+      if (!cell.covered) slots.push({ row: rowIndex, column: columnIndex });
+    });
+  });
+  return slots;
+}
+
+function cellOverrides(table: StoredTable, cell: StoredTableCell): SideOverrides {
+  const overrides: SideOverrides = {};
+  if (!cell.borders) return overrides;
+  const fallback = defaultStroke(table);
+  CELL_BORDER_SIDES.forEach(side => {
+    if (!cell.borders?.[side]) return;
+    const value = sideSource(table, cell, side);
+    if (value !== fallback) overrides[side] = value;
+  });
+  return overrides;
+}
+
+function overrideKey(overrides: SideOverrides): string {
+  return CELL_BORDER_SIDES
+    .filter(side => overrides[side] !== undefined)
+    .map(side => `${side}=${overrides[side]}`)
+    .join(";");
+}
+
+function alignmentValue(cell: StoredTableCell): string | null {
+  const parts: string[] = [];
+  if (cell.align) parts.push(cell.align);
+  if (cell.verticalAlign) {
+    parts.push(cell.verticalAlign === "center" ? "horizon" : cell.verticalAlign);
+  }
+  return parts.length > 0 ? parts.join(" + ") : null;
+}
+
+function groupCells<Value>(
+  table: StoredTable,
+  valueOf: (cell: StoredTableCell) => Value | null,
+  keyOf: (value: Value) => string,
+): Array<CellGroup<Value>> {
+  const groups = new Map<string, CellGroup<Value>>();
+  collectSlots(table).forEach(slot => {
+    const cell = table.rows[slot.row][slot.column];
+    const value = valueOf(cell);
+    if (value === null) return;
+    const key = keyOf(value);
+    const group = groups.get(key);
+    if (group) group.slots.push(slot);
+    else groups.set(key, { slots: [slot], value });
+  });
+  return [...groups.values()];
+}
+
+/**
+ * Translates a set of coordinates into the shortest condition the generated
+ * stroke/align functions can test. Whole rows collapse to `y == n`, while
+ * scattered cells become `(x == a or x == b) and y == n`.
+ */
+function coordinatePredicate(table: StoredTable, slots: CellSlot[]): string {
+  const originColumns = new Map<number, Set<number>>();
+  collectSlots(table).forEach(slot => {
+    const columns = originColumns.get(slot.row) ?? new Set<number>();
+    columns.add(slot.column);
+    originColumns.set(slot.row, columns);
+  });
+  const byRow = new Map<number, number[]>();
+  slots.forEach(slot => {
+    const columns = byRow.get(slot.row) ?? [];
+    columns.push(slot.column);
+    byRow.set(slot.row, columns);
+  });
+  const terms: string[] = [];
+  for (const [row, columns] of [...byRow.entries()].sort((a, b) => a[0] - b[0])) {
+    const sorted = [...columns].sort((a, b) => a - b);
+    const allColumns = originColumns.get(row) ?? new Set<number>();
+    const coversRow = sorted.length === allColumns.size && sorted.every(column => allColumns.has(column));
+    if (coversRow) {
+      terms.push(`y == ${row}`);
+      continue;
+    }
+    const horizontal = sorted.length === 1
+      ? `x == ${sorted[0]}`
+      : `(${sorted.map(column => `x == ${column}`).join(" or ")})`;
+    terms.push(`(${horizontal} and y == ${row})`);
+  }
+  return terms.join(" or ");
+}
+
+function conditionalArgument(
+  lines: string[],
+  parameter: string,
+  branches: Array<{ predicate: string; value: string }>,
+  fallback: string,
+): void {
+  branches.forEach((branch, index) => {
+    const opener = index === 0 ? `  ${parameter}: (x, y) => if` : "  } else if";
+    lines.push(`${opener} ${branch.predicate} {`);
+    lines.push(`    ${branch.value}`);
+  });
+  lines.push(`  } else {`);
+  lines.push(`    ${fallback}`);
+  lines.push("  },");
+}
+
+function strokeArgument(table: StoredTable, groups: Array<CellGroup<SideOverrides>>): string {
+  const fallback = defaultStroke(table);
+  if (groups.length === 0) return `  stroke: ${fallback},`;
+  const lines: string[] = [];
+  conditionalArgument(
+    lines,
+    "stroke",
+    groups.map(group => {
+      const sides = CELL_BORDER_SIDES
+        .filter(side => group.value[side] !== undefined)
+        .map(side => `${side}: ${group.value[side]}`);
+      if (sides.length < CELL_BORDER_SIDES.length) sides.push(`rest: ${fallback}`);
+      return { predicate: coordinatePredicate(table, group.slots), value: `(${sides.join(", ")})` };
+    }),
+    fallback,
+  );
+  return lines.join("\n");
+}
+
+function alignArgument(table: StoredTable, groups: Array<CellGroup<string>>): string {
+  const lines: string[] = [];
+  conditionalArgument(
+    lines,
+    "align",
+    groups.map(group => ({ predicate: coordinatePredicate(table, group.slots), value: group.value })),
+    "auto",
+  );
+  return lines.join("\n");
+}
+
+function cellSource(cell: StoredTableCell): string {
   const text = escapeTableText(cell.text);
   const argumentsList: string[] = [];
   if (cell.colspan > 1) argumentsList.push(`colspan: ${cell.colspan}`);
   if (cell.rowspan > 1) argumentsList.push(`rowspan: ${cell.rowspan}`);
-  // Use table.cell's own align parameter; a `#align(...)` wrapper after a
-  // `table.cell(...)` code expression is invalid Typst. Typst combines axes
-  // with `+`, and vertical centering is spelled `horizon`.
-  const alignParts: string[] = [];
-  if (cell.align) alignParts.push(cell.align);
-  if (cell.verticalAlign) {
-    alignParts.push(cell.verticalAlign === "center" ? "horizon" : cell.verticalAlign);
-  }
-  if (alignParts.length > 0) argumentsList.push(`align: ${alignParts.join(" + ")}`);
-  if (cell.borders) {
-    const dict = CELL_BORDER_SIDES
-      .map(side => `${side}: ${sideSource(table, cell, side)}`)
-      .join(", ");
-    argumentsList.push(`stroke: (${dict})`);
-  }
   return argumentsList.length > 0
     ? `table.cell(${argumentsList.join(", ")})[${text}]`
     : `[${text}]`;
@@ -87,18 +217,24 @@ function cellSource(table: StoredTable, cell: StoredTableCell): string {
 
 /** Generates the managed Typst `table` call for a project table. */
 export function generateTableTypst(table: StoredTable): string {
+  const strokeGroups = groupCells(table, cell => {
+    const overrides = cellOverrides(table, cell);
+    return overrideKey(overrides) === "" ? null : overrides;
+  }, overrideKey);
+  const alignGroups = groupCells(table, cell => alignmentValue(cell), value => value);
   const lines: string[] = [
     "#table(",
     `  columns: ${table.columns},`,
-    `  stroke: ${table.stroke === "none" ? "none" : typstStroke(table.strokeWidth, table.strokeColor)},`,
+    strokeArgument(table, strokeGroups),
   ];
+  if (alignGroups.length > 0) lines.push(alignArgument(table, alignGroups));
   table.rows.forEach((row, rowIndex) => {
     const isHeaderRow = table.headerRow && rowIndex === 0;
     const cells = row
       .map((cell, columnIndex) => ({ cell, columnIndex }))
       .filter(({ cell }) => !cell.covered)
       .map(({ cell, columnIndex }) => {
-        const source = cellSource(table, cell);
+        const source = cellSource(cell);
         return table.headerColumn && !isHeaderRow && columnIndex === 0
           ? `table.header(${source})`
           : source;
