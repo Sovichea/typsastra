@@ -64,9 +64,21 @@ function defaultStroke(table: StoredTable): string {
   return table.stroke === "solid" ? typstStroke(table.strokeWidth, table.strokeColor) : "none";
 }
 
+type SideKey = keyof StoredTableCellBorders;
 type CellSlot = { row: number; column: number };
-type SideOverrides = Partial<Record<keyof StoredTableCellBorders, string>>;
+type SideOverrides = Partial<Record<SideKey, string>>;
 type CellGroup<Value> = { slots: CellSlot[]; value: Value };
+
+const OPPOSITE_SIDE: Record<SideKey, SideKey> = {
+  top: "bottom",
+  right: "left",
+  bottom: "top",
+  left: "right",
+};
+
+function slotKey(slot: CellSlot): string {
+  return `${slot.row}:${slot.column}`;
+}
 
 function collectSlots(table: StoredTable): CellSlot[] {
   const slots: CellSlot[] = [];
@@ -78,14 +90,109 @@ function collectSlots(table: StoredTable): CellSlot[] {
   return slots;
 }
 
-function cellOverrides(table: StoredTable, cell: StoredTableCell): SideOverrides {
-  const overrides: SideOverrides = {};
-  if (!cell.borders) return overrides;
+function buildOriginGrid(table: StoredTable): Array<Array<CellSlot | null>> {
+  const grid = table.rows.map(row => row.map(() => null as CellSlot | null));
+  table.rows.forEach((row, rowIndex) => {
+    row.forEach((cell, columnIndex) => {
+      if (cell.covered) return;
+      for (let r = rowIndex; r < Math.min(rowIndex + cell.rowspan, table.rows.length); r += 1) {
+        for (let c = columnIndex; c < Math.min(columnIndex + cell.colspan, table.columns); c += 1) {
+          if (grid[r] && c < grid[r].length) grid[r][c] = { row: rowIndex, column: columnIndex };
+        }
+      }
+    });
+  });
+  return grid;
+}
+
+function neighborSlots(
+  table: StoredTable,
+  grid: Array<Array<CellSlot | null>>,
+  slot: CellSlot,
+  side: SideKey,
+): CellSlot[] {
+  const cell = table.rows[slot.row][slot.column];
+  const neighbors: CellSlot[] = [];
+  const add = (row: number, column: number) => {
+    const origin = row >= 0 && column >= 0 ? grid[row]?.[column] ?? null : null;
+    if (origin && (origin.row !== slot.row || origin.column !== slot.column)) neighbors.push(origin);
+  };
+  if (side === "top" || side === "bottom") {
+    const row = side === "top" ? slot.row - 1 : slot.row + cell.rowspan;
+    for (let column = slot.column; column < slot.column + cell.colspan; column += 1) add(row, column);
+  } else {
+    const column = side === "left" ? slot.column - 1 : slot.column + cell.colspan;
+    for (let row = slot.row; row < slot.row + cell.rowspan; row += 1) add(row, column);
+  }
+  return neighbors;
+}
+
+/**
+ * Typst resolves coincident cell sides in favor of the lower or right cell, so
+ * an override applied to only one side of a shared edge would vanish from the
+ * compiled preview. Unify every shared edge across its touching cells first.
+ */
+function effectiveStrokes(table: StoredTable): Map<string, Record<SideKey, string>> {
   const fallback = defaultStroke(table);
+  const slots = collectSlots(table);
+  const grid = buildOriginGrid(table);
+  const parent = new Map<string, string>();
+  const find = (key: string): string => {
+    let root = key;
+    while (parent.get(root) !== root) root = parent.get(root) as string;
+    let cursor = key;
+    while (parent.get(cursor) !== root) {
+      const next = parent.get(cursor) as string;
+      parent.set(cursor, root);
+      cursor = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+  const explicit = new Map<string, string>();
+  slots.forEach(slot => {
+    const cell = table.rows[slot.row][slot.column];
+    CELL_BORDER_SIDES.forEach(side => {
+      const key = `${slotKey(slot)}:${side}`;
+      parent.set(key, key);
+      if (cell.borders?.[side]) explicit.set(key, sideSource(table, cell, side));
+    });
+  });
+  slots.forEach(slot => {
+    CELL_BORDER_SIDES.forEach(side => {
+      neighborSlots(table, grid, slot, side).forEach(neighbor => {
+        union(`${slotKey(slot)}:${side}`, `${slotKey(neighbor)}:${OPPOSITE_SIDE[side]}`);
+      });
+    });
+  });
+  const groupValues = new Map<string, { value: string; row: number; column: number }>();
+  explicit.forEach((value, key) => {
+    const root = find(key);
+    const [row, column] = key.split(":").map(Number);
+    const current = groupValues.get(root);
+    if (!current || row > current.row || (row === current.row && column > current.column)) {
+      groupValues.set(root, { value, row, column });
+    }
+  });
+  const strokes = new Map<string, Record<SideKey, string>>();
+  slots.forEach(slot => {
+    const record = {} as Record<SideKey, string>;
+    CELL_BORDER_SIDES.forEach(side => {
+      record[side] = groupValues.get(find(`${slotKey(slot)}:${side}`))?.value ?? fallback;
+    });
+    strokes.set(slotKey(slot), record);
+  });
+  return strokes;
+}
+
+function cellOverrides(strokes: Record<SideKey, string>, fallback: string): SideOverrides {
+  const overrides: SideOverrides = {};
   CELL_BORDER_SIDES.forEach(side => {
-    if (!cell.borders?.[side]) return;
-    const value = sideSource(table, cell, side);
-    if (value !== fallback) overrides[side] = value;
+    if (strokes[side] !== fallback) overrides[side] = strokes[side];
   });
   return overrides;
 }
@@ -108,13 +215,13 @@ function alignmentValue(cell: StoredTableCell): string | null {
 
 function groupCells<Value>(
   table: StoredTable,
-  valueOf: (cell: StoredTableCell) => Value | null,
+  valueOf: (slot: CellSlot, cell: StoredTableCell) => Value | null,
   keyOf: (value: Value) => string,
 ): Array<CellGroup<Value>> {
   const groups = new Map<string, CellGroup<Value>>();
   collectSlots(table).forEach(slot => {
     const cell = table.rows[slot.row][slot.column];
-    const value = valueOf(cell);
+    const value = valueOf(slot, cell);
     if (value === null) return;
     const key = keyOf(value);
     const group = groups.get(key);
@@ -217,11 +324,15 @@ function cellSource(cell: StoredTableCell): string {
 
 /** Generates the managed Typst `table` call for a project table. */
 export function generateTableTypst(table: StoredTable): string {
-  const strokeGroups = groupCells(table, cell => {
-    const overrides = cellOverrides(table, cell);
+  const fallback = defaultStroke(table);
+  const strokes = effectiveStrokes(table);
+  const strokeGroups = groupCells(table, slot => {
+    const record = strokes.get(slotKey(slot));
+    if (!record) return null;
+    const overrides = cellOverrides(record, fallback);
     return overrideKey(overrides) === "" ? null : overrides;
   }, overrideKey);
-  const alignGroups = groupCells(table, cell => alignmentValue(cell), value => value);
+  const alignGroups = groupCells(table, (_slot, cell) => alignmentValue(cell), value => value);
   const lines: string[] = [
     "#table(",
     `  columns: ${table.columns},`,

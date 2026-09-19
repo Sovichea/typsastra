@@ -71,9 +71,32 @@ describe("table typst generation", () => {
     expect(generated).toContain([
       "  stroke: (x, y) => if y == 0 {",
       '    (bottom: 1pt + rgb("#9caec8"), rest: 0.5pt + rgb("#000000"))',
+      "  } else if y == 1 {",
+      '    (top: 1pt + rgb("#9caec8"), rest: 0.5pt + rgb("#000000"))',
       "  } else {",
       '    0.5pt + rgb("#000000")',
       "  },",
+    ].join("\n"));
+  });
+
+  test("mirrors a one-sided border override onto the neighboring cell", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [
+        [
+          { ...cell("A"), borders: { top: null, right: null, bottom: { enabled: true, width: 2, color: "#000000" }, left: null } },
+          cell("B"),
+        ],
+        [cell("C"), cell("D")],
+      ],
+    });
+
+    // Typst lets the lower cell hide the upper cell's bottom stroke, so the
+    // neighboring cell's top must carry the same override.
+    expect(generated).toContain([
+      "  } else if (x == 0 and y == 1) {",
+      '    (top: 2pt + rgb("#000000"), rest: 0.5pt + rgb("#000000"))',
     ].join("\n"));
   });
 
@@ -151,11 +174,15 @@ describe("table typst generation", () => {
 
     expect(generated).toContain("table.header(table.cell(colspan: 2)[Header])");
     expect(generated).toContain([
-      "  stroke: (x, y) => if (x == 0 and y == 1) {",
+      "  stroke: (x, y) => if y == 0 {",
+      '    (bottom: 1pt + rgb("#ff0000"), rest: none)',
+      "  } else if (x == 0 and y == 1) {",
       '    (top: 1pt + rgb("#ff0000"), bottom: 0.5pt + rgb("#000000"), rest: none)',
-      "  } else {",
-      "    none",
-      "  },",
+    ].join("\n"));
+    // The merged header's bottom edge is shared with both body cells.
+    expect(generated).toContain([
+      "  } else if (x == 1 and y == 1) {",
+      '    (top: 1pt + rgb("#ff0000"), rest: none)',
     ].join("\n"));
     expect(generated).toContain("  [A], [B],");
   });
