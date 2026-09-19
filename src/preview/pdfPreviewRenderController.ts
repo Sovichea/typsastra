@@ -338,6 +338,15 @@ export class PdfPreviewRenderController {
         if (cached && generation === this.generationValue) {
           this.lastPdfPathValue = cached.pdfPath;
           this.managedPdfPathKeysValue.add(filePathKey(cached.pdfPath));
+          // Restoring the cached live PDF must keep the viewport the live
+          // preview had before it was replaced, for example after returning
+          // from a standalone PDF preview.
+          if (this.hasLiveViewportValue) {
+            this.deps.previewFrame.preserveViewportForNextLoad(
+              this.liveViewportAnchorValue,
+              this.liveScrollTopValue,
+            );
+          }
           await this.loadPdfPath(
             cached.pdfPath,
             this.deps.getPreviewRootPath() ?? cached.pdfPath,

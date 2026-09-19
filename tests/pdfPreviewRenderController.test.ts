@@ -61,6 +61,21 @@ describe("PDF preview render controller", () => {
     expect(source).toContain('surface === "pdf"');
   });
 
+  test("restores the live viewport when reopening the cached low-memory PDF", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
+    ).text();
+    const restore = source.indexOf("const cached = await this.deps.restoreLowMemoryPreviewCache()");
+    const load = source.indexOf("await this.loadPdfPath(", restore);
+    const block = source.slice(restore, load);
+
+    expect(restore).toBeGreaterThan(-1);
+    expect(block).toContain("if (this.hasLiveViewportValue)");
+    expect(block).toContain("this.deps.previewFrame.preserveViewportForNextLoad(");
+    expect(block).toContain("this.liveViewportAnchorValue");
+    expect(block).toContain("this.liveScrollTopValue");
+  });
+
   test("falls back to replacing the preview when hashing fails", async () => {
     const source = await Bun.file(
       new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
