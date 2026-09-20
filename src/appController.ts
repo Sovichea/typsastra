@@ -739,6 +739,7 @@ export class TypsastraWorkspaceController {
       clear: () => this.imagePreviewController.clearCropOverlay(),
     },
   );
+  private lastTablePreviewPages: string | null = null;
   private readonly tableToolController = new TableToolController(
     document.getElementById("tables-sidebar-list")!,
     document.getElementById("table-tool-inspector")!,
@@ -3087,13 +3088,14 @@ export class TypsastraWorkspaceController {
 
   private showTablePreview(pages: readonly string[]): void {
     if (pages.length === 0) {
+      this.lastTablePreviewPages = null;
       this.showTablePreviewMessage("Create or select a table to preview it.");
       return;
     }
-    const html = pages
+    this.lastTablePreviewPages = pages
       .map(svg => `<div class="table-tool-preview-page">${svg}</div>`)
       .join("");
-    this.previewFrame.setMessage(`<div class="table-tool-preview">${html}</div>`);
+    this.previewFrame.setMessage(`<div class="table-tool-preview">${this.lastTablePreviewPages}</div>`);
   }
 
   private showTablePreviewMessage(message: string): void {
@@ -3103,6 +3105,15 @@ export class TypsastraWorkspaceController {
       ">": "&gt;",
       '"': "&quot;",
     }[character] ?? character));
+    if (this.lastTablePreviewPages !== null) {
+      // Keep the rendered table on screen and float the notice over it, so the
+      // user never loses the preview to a transient message.
+      this.previewFrame.setMessage(
+        `<div class="table-tool-preview"><div class="table-tool-preview-toast" role="status">${escaped}</div>` +
+        `${this.lastTablePreviewPages}</div>`,
+      );
+      return;
+    }
     this.previewFrame.setMessage(
       `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
       `<div class="preview-disabled-title preview-accent-title">Table Preview</div>` +

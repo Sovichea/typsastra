@@ -3277,6 +3277,24 @@ body.table-tools-active #code-render-pane {
   overscroll-behavior-y: none;
   background: var(--ui-bg);
 }
+.table-tool-preview-toast {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: block;
+  width: fit-content;
+  max-width: min(90%, 520px);
+  margin: 8px auto 0;
+  padding: 8px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font: 12px var(--font-family-sans);
+  text-align: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
 .table-tool-preview-page { display: flex; justify-content: center; padding: 18px; }
 .table-tool-preview-page + .table-tool-preview-page { border-top: 1px solid var(--ui-border); }
 .table-tool-preview-page svg {
