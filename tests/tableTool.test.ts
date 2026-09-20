@@ -612,8 +612,7 @@ describe("table typst generation", () => {
     expect(source).toContain("private applyInset(");
     expect(source).toContain("private applyColumnSize(");
     expect(source).toContain("private applyRotate(");
-    expect(source).toContain("private applyDataFile(");
-    expect(source).toContain('label: "CSV data source"');
+
     expect(source).toContain("private applyCellBreakable(");
     expect(source).toContain('label: "Rotate content"');
     expect(source).toContain('label: "Keep together"');

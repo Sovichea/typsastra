@@ -1214,15 +1214,6 @@ export class TableToolController {
             },
           },
           { kind: "separator" },
-          { kind: "heading", label: "CSV data source" },
-          {
-            kind: "field",
-            value: table.dataFile,
-            placeholder: "path (e.g. data/results.csv)",
-            ariaLabel: "CSV data file",
-            onCommit: value => this.applyDataFile(table, value),
-          },
-          { kind: "separator" },
           { kind: "heading", label: "Document" },
           {
             kind: "item",
@@ -1995,17 +1986,6 @@ export class TableToolController {
       cell.rotate = false;
     });
     this.refreshGrid(table);
-    this.emitChange();
-  }
-
-  private applyDataFile(table: StoredTable, value: string): void {
-    const file = value.trim();
-    if (file && tableHasSpans(table)) {
-      this.deps.showPreviewMessage?.("CSV data needs a table without merged cells.");
-      return;
-    }
-    table.dataFile = file;
-    this.updateCode(table);
     this.emitChange();
   }
 
