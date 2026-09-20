@@ -12,6 +12,8 @@ function cell(text: string, init: Partial<StoredTableCell> = {}): StoredTableCel
     borders: null,
     fill: null,
     textColor: null,
+    rotate: false,
+    breakable: null,
     inset: null,
     raw: false,
     ...init,
@@ -44,6 +46,7 @@ function table(init: Partial<StoredTable> & { columns: number; rows: StoredTable
     alt: "",
     footerRow: false,
     footerRepeat: true,
+    breakable: false,
     rules: [],
     rows,
     ...overrides,
@@ -179,6 +182,31 @@ export const TABLE_SAMPLES: TableSample[] = [
         ],
       });
     },
+  },
+  {
+    id: "vertical",
+    name: "Vertical headers",
+    description: "Rotated month headers, a caption, and page-break friendly.",
+    build: () => table({
+      id: "sample_vertical",
+      name: "Vertical headers",
+      columns: 4,
+      columnSizes: ["auto", "1fr", "1fr", "1fr"],
+      breakable: true,
+      caption: "Revenue by month",
+      captionAlign: "center",
+      rows: [
+        [
+          cell(""),
+          cell("January", { rotate: true }),
+          cell("February", { rotate: true }),
+          cell("March", { rotate: true }),
+        ],
+        [cell("Revenue"), cell("1,240"), cell("1,510"), cell("1,690")],
+        [cell("Expenses"), cell("820"), cell("910"), cell("1,020")],
+        [cell("Profit"), cell("420"), cell("600"), cell("670")],
+      ],
+    }),
   },
   {
     id: "booktabs",

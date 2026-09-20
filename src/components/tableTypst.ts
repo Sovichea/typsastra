@@ -451,10 +451,12 @@ function cellBody(cell: StoredTableCell): string {
   // Raw cells carry author-written Typst (links, footnotes, lists, ...).
   let text = cell.raw ? cell.text : escapeTableText(cell.text);
   if (cell.textColor) text = `#text(fill: rgb("${cell.textColor}"))[${text}]`;
-  if (cell.emphasis === "bold") return `#strong[${text}]`;
-  if (cell.emphasis === "italic") return `#emph[${text}]`;
+  if (cell.emphasis === "bold") text = `#strong[${text}]`;
+  else if (cell.emphasis === "italic") text = `#emph[${text}]`;
   // "Regular" must also win over an inherited bold/italic show rule.
-  if (cell.emphasis === "regular") return `#text(weight: "regular", style: "normal")[${text}]`;
+  else if (cell.emphasis === "regular") text = `#text(weight: "regular", style: "normal")[${text}]`;
+  // Vertical headers rotate the whole cell content.
+  if (cell.rotate) text = `#rotate(-90deg, reflow: true)[${text}]`;
   return text;
 }
 
@@ -463,6 +465,7 @@ function cellSource(cell: StoredTableCell): string {
   const argumentsList: string[] = [];
   if (cell.colspan > 1) argumentsList.push(`colspan: ${cell.colspan}`);
   if (cell.rowspan > 1) argumentsList.push(`rowspan: ${cell.rowspan}`);
+  if (cell.breakable !== null) argumentsList.push(`breakable: ${cell.breakable}`);
   return argumentsList.length > 0
     ? `table.cell(${argumentsList.join(", ")})[${body}]`
     : `[${body}]`;
@@ -569,8 +572,12 @@ export function generateTableTypst(table: StoredTable): string {
     figureLines.push(`  caption: ${captionArg},`);
   }
   figureLines.push(")");
-  const figure = figureLines.join("\n");
-  return label ? `${figure} <${label}>` : figure;
+  const figure = label ? `${figureLines.join("\n")} <${label}>` : figureLines.join("\n");
+  if (!table.breakable) return figure;
+  // Figures are unbreakable by default; this scoped show rule lets long
+  // captioned tables flow across pages.
+  const indented = figure.split("\n").map(line => `  ${line}`).join("\n");
+  return `#[\n  #show figure: set block(breakable: true)\n${indented}\n]`;
 }
 
 /**

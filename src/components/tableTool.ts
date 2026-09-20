@@ -89,6 +89,8 @@ function emptyCell(): StoredTableCell {
     borders: null,
     fill: null,
     textColor: null,
+    rotate: false,
+    breakable: null,
     inset: null,
     raw: false,
   };
@@ -769,6 +771,22 @@ export class TableToolController {
             onSelect: value => this.applyInset(table, Number(value)),
           },
           { kind: "separator" },
+          {
+            kind: "toggle",
+            label: "Rotate content",
+            checked: this.selectionAll(table, cell => cell.rotate),
+            onSelect: () => this.applyRotate(table, !this.selectionAll(table, cell => cell.rotate)),
+          },
+          {
+            kind: "toggle",
+            label: "Keep together",
+            checked: this.selectionAll(table, cell => cell.breakable === false),
+            onSelect: () => this.applyCellBreakable(
+              table,
+              this.selectionAll(table, cell => cell.breakable === false) ? null : false,
+            ),
+          },
+          { kind: "separator" },
           { kind: "item", label: "Copy formatting", icon: "copy", onSelect: () => this.copyFormatting(table) },
           {
             kind: "item",
@@ -924,6 +942,16 @@ export class TableToolController {
             checked: table.footerRepeat,
             onSelect: () => {
               table.footerRepeat = !table.footerRepeat;
+              this.emitChange();
+            },
+          },
+          {
+            kind: "toggle",
+            label: "Break across pages",
+            checked: table.breakable,
+            onSelect: () => {
+              table.breakable = !table.breakable;
+              this.updateCode(table);
               this.emitChange();
             },
           },
@@ -1530,14 +1558,21 @@ export class TableToolController {
     }
   }
 
-  private selectionIsRaw(table: StoredTable): boolean {
+  private selectionAll(
+    table: StoredTable,
+    predicate: (cell: StoredTableCell) => boolean,
+  ): boolean {
     let any = false;
     let all = true;
     this.forEachSelectionOrigin(table, cell => {
       any = true;
-      if (!cell.raw) all = false;
+      if (!predicate(cell)) all = false;
     });
     return any && all;
+  }
+
+  private selectionIsRaw(table: StoredTable): boolean {
+    return this.selectionAll(table, cell => cell.raw);
   }
 
   private selectionInset(table: StoredTable): number | null {
@@ -1618,6 +1653,18 @@ export class TableToolController {
       if (fill) input.style.setProperty("--cell-fill", fill);
       else input.style.removeProperty("--cell-fill");
     });
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyRotate(table: StoredTable, rotate: boolean): void {
+    this.forEachSelectionOrigin(table, cell => { cell.rotate = rotate; });
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyCellBreakable(table: StoredTable, breakable: boolean | null): void {
+    this.forEachSelectionOrigin(table, cell => { cell.breakable = breakable; });
     this.updateCode(table);
     this.emitChange();
   }

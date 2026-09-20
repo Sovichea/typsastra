@@ -7,7 +7,8 @@ describe("table samples", () => {
     expect(TABLE_SAMPLES.length).toBeGreaterThanOrEqual(5);
     for (const sample of TABLE_SAMPLES) {
       const code = generateTableTypst(sample.build());
-      expect(code.startsWith("#table(") || code.startsWith("#figure(")).toBe(true);
+      const generated = code.startsWith("#table(") || code.startsWith("#figure(") || code.startsWith("#[");
+      expect(generated).toBe(true);
       expect(sample.name.length).toBeGreaterThan(0);
       expect(sample.description.length).toBeGreaterThan(0);
     }
@@ -28,6 +29,15 @@ describe("table samples", () => {
     expect(grades.rows[0][0].fill).toBe("#3f4759");
     expect(grades.rows[0][0].textColor).toBe("#ffffff");
     expect(code).toContain('#text(fill: rgb("#ffffff"))');
+  });
+
+  test("the vertical sample rotates headers and allows page breaks", () => {
+    const vertical = TABLE_SAMPLES.find(sample => sample.id === "vertical")!.build();
+    const code = generateTableTypst(vertical);
+    expect(vertical.breakable).toBe(true);
+    expect(vertical.rows[0][1].rotate).toBe(true);
+    expect(code).toContain("#rotate(-90deg, reflow: true)[January]");
+    expect(code).toContain("#show figure: set block(breakable: true)");
   });
 
   test("the grouped sample exercises merges, headers, and a footer", () => {

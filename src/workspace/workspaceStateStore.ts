@@ -58,6 +58,10 @@ export type StoredTableCell = {
   fill: string | null;
   /** `#rrggbb` cell text color; null inherits the document text color. */
   textColor: string | null;
+  /** Rotates the cell content 90° counter-clockwise (vertical headers). */
+  rotate: boolean;
+  /** Whether the cell may split across pages; null uses the default. */
+  breakable: boolean | null;
   /** Cell padding in points; null inherits the table inset. */
   inset: number | null;
   /** When true, `text` is emitted as Typst content instead of escaped markup. */
@@ -123,6 +127,8 @@ export type StoredTable = {
   footerRow: boolean;
   /** Whether the footer repeats on every page. */
   footerRepeat: boolean;
+  /** Lets a captioned (figure) table break across pages. */
+  breakable: boolean;
   /** Explicit rules drawn with `table.hline`/`table.vline`. */
   rules: StoredTableRule[];
   rows: StoredTableCell[][];
@@ -534,6 +540,8 @@ function normalizeTables(value: unknown): StoredTable[] {
             borders: null,
             fill: null,
             textColor: null,
+            rotate: false,
+            breakable: null,
             inset: null,
             raw: false,
           });
@@ -560,6 +568,8 @@ function normalizeTables(value: unknown): StoredTable[] {
           borders: normalizeCellBorders(cell.borders),
           fill: normalizeCellFill(cell.fill),
           textColor: normalizeCellFill(cell.textColor),
+          rotate: cell.rotate === true,
+          breakable: typeof cell.breakable === "boolean" ? cell.breakable : null,
           inset: normalizeCellInset(cell.inset),
           raw: cell.raw === true,
         });
@@ -595,6 +605,7 @@ function normalizeTables(value: unknown): StoredTable[] {
       alt: normalizeTableAlt(record.alt),
       footerRow: record.footerRow === true,
       footerRepeat: record.footerRepeat !== false,
+      breakable: record.breakable === true,
       rules: normalizeTableRules(record.rules, rowCount, columns),
       rows,
     });

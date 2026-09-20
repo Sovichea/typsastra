@@ -24,6 +24,8 @@ function cell(text: string, align: StoredTableAlignment | null = null): StoredTa
     borders: null,
     fill: null,
     textColor: null,
+    rotate: false,
+    breakable: null,
     inset: null,
     raw: false,
   };
@@ -51,6 +53,7 @@ const table: StoredTable = {
   alt: "",
   footerRow: false,
   footerRepeat: true,
+  breakable: false,
   rules: [],
   rows: [
     [cell("Name"), cell("Value")],
@@ -288,6 +291,30 @@ describe("table typst generation", () => {
     expect(generated).toContain('[#strong[#text(fill: rgb("#ffffff"))[A]]], [B],');
   });
 
+  test("rotates cell content and can keep a spanned cell together", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [[
+        { ...cell("USD/day"), rotate: true, breakable: false },
+        cell("A"),
+      ]],
+    });
+
+    expect(generated).toContain(
+      "table.cell(breakable: false)[#rotate(-90deg, reflow: true)[USD/day]]",
+    );
+    expect(generated).toContain("[A],");
+  });
+
+  test("lets a captioned table break across pages", () => {
+    const generated = generateTableTypst({ ...table, breakable: true, caption: "Results" });
+    expect(generated.startsWith("#[\n  #show figure: set block(breakable: true)\n  #figure(")).toBe(true);
+    expect(generated.endsWith("\n]")).toBe(true);
+    // Without a figure there is nothing to make breakable.
+    expect(generateTableTypst({ ...table, breakable: true })).toMatch(/^#table\(/u);
+  });
+
   test("emits explicit rules before the footer", () => {
     const generated = generateTableTypst({
       ...table,
@@ -513,6 +540,11 @@ describe("table typst generation", () => {
     expect(source).toContain("private applyFill(");
     expect(source).toContain("private applyInset(");
     expect(source).toContain("private applyColumnSize(");
+    expect(source).toContain("private applyRotate(");
+    expect(source).toContain("private applyCellBreakable(");
+    expect(source).toContain('label: "Rotate content"');
+    expect(source).toContain('label: "Keep together"');
+    expect(source).toContain('label: "Break across pages"');
     expect(source).toContain("private addRuleFromSelection(");
     expect(source).toContain("private shiftRulesForInsert(");
     expect(source).toContain("private shiftRulesForDelete(");
@@ -679,7 +711,7 @@ describe("stored table normalization", () => {
               { axis: "bogus" },
             ],
             rows: [[
-              { text: "a", align: "left", emphasis: "bold", fill: "#ABCDEF", textColor: "#112233", inset: 3, raw: true },
+              { text: "a", align: "left", emphasis: "bold", fill: "#ABCDEF", textColor: "#112233", rotate: true, breakable: false, inset: 3, raw: true },
               { text: "b", emphasis: "bogus" },
               { text: "c", align: "bogus" },
             ]],
@@ -726,6 +758,8 @@ describe("stored table normalization", () => {
     expect(first.rules[1]).toMatchObject({ axis: "vertical", position: 3, start: 0, end: null });
     expect(first.rows[0][0].fill).toBe("#abcdef");
     expect(first.rows[0][0].textColor).toBe("#112233");
+    expect(first.rows[0][0].rotate).toBe(true);
+    expect(first.rows[0][0].breakable).toBe(false);
     expect(first.rows[0][0].inset).toBe(3);
     expect(first.rows[0][0].raw).toBe(true);
     expect(second.columnSizes).toEqual([""]);
@@ -749,6 +783,8 @@ describe("stored table normalization", () => {
       borders: null,
       fill: null,
       textColor: null,
+      rotate: false,
+      breakable: null,
       inset: null,
       raw: false,
     }]]);
