@@ -1,5 +1,11 @@
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { createAppIcon, type AppIconName } from "../ui/icons";
+import { createAppIcon } from "../ui/icons";
+import {
+  createToolbar,
+  type SharedToolbar,
+  type ToolbarEntry,
+  type ToolbarMenuEntry,
+} from "../ui/toolbar";
 import type {
   StoredTable,
   StoredTableBorderSide,
@@ -112,10 +118,7 @@ export class TableToolController {
   private draggingSelection = false;
   private editingCell: Slot | null = null;
   private editStartValue = "";
-  private activeMenu: HTMLElement | null = null;
-  private activeMenuAnchor: HTMLElement | null = null;
-  private menuBuild: ((menu: HTMLElement) => void) | null = null;
-  private menuCleanup: (() => void) | null = null;
+  private toolbar: SharedToolbar | null = null;
   private readonly cellInputs = new Map<string, HTMLInputElement>();
   private historyPast: StoredTable[] = [];
   private historyFuture: StoredTable[] = [];
@@ -166,7 +169,7 @@ export class TableToolController {
   }
 
   public hide(): void {
-    this.closeTableMenu();
+    this.toolbar?.closeMenus();
     this.flushPersist();
     if (this.previewTimer !== null) {
       window.clearTimeout(this.previewTimer);
@@ -420,7 +423,8 @@ export class TableToolController {
   }
 
   private renderInspector(): void {
-    this.closeTableMenu();
+    this.toolbar?.dispose();
+    this.toolbar = null;
     const table = this.selected();
     if (!table) {
       this.inspector.innerHTML =
@@ -433,21 +437,7 @@ export class TableToolController {
       `<div class="image-tool-inspector-header"><div><h2 data-field="table-heading"></h2><div class="image-tool-path" data-field="table-id"></div></div><span class="image-tool-status current-document">Table</span></div>` +
       `<section class="image-tool-section"><h3>Structure</h3>` +
       `<label class="table-tool-name">Name <input data-field="table-name" type="text" maxlength="80" /></label>` +
-      `<div class="table-tool-menubar">` +
-      `<button type="button" data-menu="rows">Rows</button>` +
-      `<button type="button" data-menu="columns">Columns</button>` +
-      `<button type="button" data-menu="cells">Cells</button>` +
-      `<button type="button" data-menu="borders">Borders</button>` +
-      `<button type="button" data-menu="table">Table</button>` +
-      `<label class="table-tool-inline">Style <select data-field="table-style"><option value="default">Default</option><option value="banded-rows">Banded rows</option><option value="banded-columns">Banded columns</option><option value="booktabs">Booktabs</option></select></label>` +
-      `<label class="table-tool-inline">Align <select data-field="cell-align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>` +
-      `<label class="table-tool-inline">Vertical <select data-field="cell-vertical-align"><option value="">Default</option><option value="top">Top</option><option value="center">Middle</option><option value="bottom">Bottom</option></select></label>` +
-      `<span class="table-tool-format-group" role="group" aria-label="Cell format">` +
-      `<button type="button" data-emphasis="bold" title="Bold" aria-label="Bold"></button>` +
-      `<button type="button" data-emphasis="italic" title="Italic" aria-label="Italic"></button>` +
-      `<button type="button" data-emphasis="regular" title="Regular" aria-label="Regular"></button>` +
-      `</span>` +
-      `</div>` +
+      `<div class="table-tool-menubar-host"></div>` +
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
       `<div class="table-tool-grid-host"></div></section>` +
       `<section class="image-tool-section"><h3>Generated Typst</h3>` +
@@ -467,144 +457,15 @@ export class TableToolController {
       this.emitChange();
     });
 
-    const style = this.inspector.querySelector<HTMLSelectElement>('[data-field="table-style"]')!;
-    style.value = table.style;
-    style.addEventListener("change", () => this.applyTableStyle(table, style.value as StoredTableStyle));
-    const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]')!;
-    align.addEventListener("change", () => this.applyAlignment(table, (align.value || null) as StoredTableAlignment | null));
-    const verticalAlign = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-vertical-align"]')!;
-    verticalAlign.addEventListener("change", () => this.applyVerticalAlignment(
-      table,
-      (verticalAlign.value || null) as StoredTableVerticalAlignment | null,
-    ));
-    this.renderMenubarIcons(table);
-
-    const menu = (name: string, build: (menuElement: HTMLElement) => void) => {
-      this.inspector.querySelector<HTMLButtonElement>(`[data-menu="${name}"]`)
-        ?.addEventListener("click", event => {
-          event.stopPropagation();
-          this.openTableMenu(event.currentTarget as HTMLButtonElement, build);
-        });
-    };
-    menu("rows", menuElement => {
-      this.appendMenuItem(menuElement, "Move row up", () => this.moveRow(table, -1), { icon: "arrowUp" });
-      this.appendMenuItem(menuElement, "Move row down", () => this.moveRow(table, 1), { icon: "arrowDown" });
-      this.appendMenuSeparator(menuElement);
-      this.appendMenuItem(menuElement, "Add row", () => {
-        if (table.rows.length >= MAX_ROWS) return;
-        table.rows.push(emptyRow(table.columns));
-        this.refreshGrid(table);
-        this.emitChange();
-      }, { icon: "plus" });
-      this.appendMenuItem(menuElement, "Remove row", () => {
-        if (table.rows.length <= 1) return;
-        if (tableHasSpans(table)) {
-          this.deps.showPreviewMessage?.("Remove rows after splitting merged cells.");
-          return;
-        }
-        table.rows.pop();
-        this.resetSelection();
-        this.refreshGrid(table);
-        this.emitChange();
-      }, { icon: "minus" });
+    this.toolbar = createToolbar({
+      className: "table-tool-menubar",
+      ariaLabel: "Table actions",
+      entries: this.toolbarEntries(table),
     });
-    menu("columns", menuElement => {
-      this.appendMenuItem(menuElement, "Move column left", () => this.moveColumn(table, -1), { icon: "chevronLeft" });
-      this.appendMenuItem(menuElement, "Move column right", () => this.moveColumn(table, 1), { icon: "chevronRight" });
-      this.appendMenuSeparator(menuElement);
-      this.appendMenuItem(menuElement, "Add column", () => {
-        if (table.columns >= MAX_COLUMNS) return;
-        table.columns += 1;
-        for (const row of table.rows) row.push(emptyCell());
-        this.refreshGrid(table);
-        this.emitChange();
-      }, { icon: "plus" });
-      this.appendMenuItem(menuElement, "Remove column", () => {
-        if (table.columns <= 1) return;
-        if (tableHasSpans(table)) {
-          this.deps.showPreviewMessage?.("Remove columns after splitting merged cells.");
-          return;
-        }
-        table.columns -= 1;
-        for (const row of table.rows) row.length = table.columns;
-        this.resetSelection();
-        this.refreshGrid(table);
-        this.emitChange();
-      }, { icon: "minus" });
-    });
-    menu("cells", menuElement => {
-      this.appendMenuItem(menuElement, "Merge cells", () => this.mergeSelection(table));
-      this.appendMenuItem(menuElement, "Split cells", () => this.splitSelection(table));
-    });
-    menu("borders", menuElement => {
-      this.appendMenuToggle(menuElement, "Show border handles", this.borderMode, () => {
-        this.borderMode = !this.borderMode;
-        this.renderGrid(table);
-        this.syncSelectionSummary();
-        this.refreshTableMenu();
-      });
-      this.appendMenuSeparator(menuElement);
-      this.appendMenuHeading(menuElement, "Apply to selection");
-      this.appendMenuItem(menuElement, "All borders", () => this.applyBorderToSelection(table, "all"));
-      this.appendMenuItem(menuElement, "No borders", () => this.applyBorderToSelection(table, "none"));
-      this.appendMenuItem(menuElement, "Outline only", () => this.applyBorderToSelection(table, "outline"));
-      this.appendMenuHeading(menuElement, `Thickness (${this.borderWidth}pt)`);
-      this.appendMenuChoices(menuElement, [0.25, 0.5, 1, 2], () => this.borderWidth, value => {
-        this.borderWidth = value;
-        this.emitChange();
-      });
-      this.appendMenuHeading(menuElement, "Color");
-      this.appendMenuColor(menuElement, this.borderColor, value => {
-        this.borderColor = value;
-        this.emitChange();
-      });
-    });
-    menu("table", menuElement => {
-      this.appendMenuToggle(menuElement, "Header row", table.headerRow, () => {
-        table.headerRow = !table.headerRow;
-        this.renderGrid(table);
-        this.emitChange();
-        this.refreshTableMenu();
-      });
-      this.appendMenuToggle(menuElement, "Header column", table.headerColumn, () => {
-        table.headerColumn = !table.headerColumn;
-        this.renderGrid(table);
-        this.emitChange();
-        this.refreshTableMenu();
-      });
-      this.appendMenuSeparator(menuElement);
-      this.appendMenuToggle(menuElement, "Table border", table.stroke === "solid", () => {
-        table.stroke = table.stroke === "solid" ? "none" : "solid";
-        this.renderGrid(table);
-        this.emitChange();
-        this.refreshTableMenu();
-      });
-      this.appendMenuHeading(menuElement, `Table thickness (${table.strokeWidth}pt)`);
-      this.appendMenuChoices(menuElement, [0.25, 0.5, 1, 2], () => table.strokeWidth, value => {
-        table.strokeWidth = value;
-        this.renderGrid(table);
-        this.emitChange();
-      });
-      this.appendMenuHeading(menuElement, "Table color");
-      this.appendMenuColor(menuElement, table.strokeColor, value => {
-        table.strokeColor = value;
-        this.renderGrid(table);
-        this.emitChange();
-      });
-      this.appendMenuSeparator(menuElement);
-      this.appendMenuItem(menuElement, "Delete table", () => {
-        const index = this.tables.findIndex(candidate => candidate.id === table.id);
-        if (index === -1) return;
-        this.tables.splice(index, 1);
-        this.selectedId = this.tables[Math.min(index, this.tables.length - 1)]?.id ?? null;
-        this.resetSelection();
-        this.renderSidebar();
-        this.renderInspector();
-        this.emitChange();
-      }, { icon: "x" });
-    });
+    this.inspector.querySelector(".table-tool-menubar-host")?.replaceWith(this.toolbar.element);
 
     const copy = this.inspector.querySelector<HTMLButtonElement>('[data-action="copy"]')!;
+    copy.prepend(createAppIcon("copy", { size: 13 }));
     const copyLabel = this.inspector.querySelector<HTMLElement>('[data-field="copy-label"]')!;
     copy.addEventListener("click", () => {
       void writeText(generateTableTypst(table))
@@ -618,6 +479,253 @@ export class TableToolController {
     this.renderGrid(table);
     this.syncCellSelects(table);
     this.updateCode(table);
+  }
+
+  /** The table editor shares the app toolbar, exposing only table controls. */
+  private toolbarEntries(table: StoredTable): ToolbarEntry[] {
+    return [
+      {
+        kind: "menu",
+        id: "rows",
+        label: "Rows",
+        entries: () => [
+          { kind: "item", label: "Move row up", icon: "arrowUp", onSelect: () => this.moveRow(table, -1) },
+          { kind: "item", label: "Move row down", icon: "arrowDown", onSelect: () => this.moveRow(table, 1) },
+          { kind: "separator" },
+          {
+            kind: "item",
+            label: "Add row",
+            icon: "plus",
+            onSelect: () => {
+              if (table.rows.length >= MAX_ROWS) return;
+              table.rows.push(emptyRow(table.columns));
+              this.refreshGrid(table);
+              this.emitChange();
+            },
+          },
+          {
+            kind: "item",
+            label: "Remove row",
+            icon: "minus",
+            onSelect: () => {
+              if (table.rows.length <= 1) return;
+              if (tableHasSpans(table)) {
+                this.deps.showPreviewMessage?.("Remove rows after splitting merged cells.");
+                return;
+              }
+              table.rows.pop();
+              this.resetSelection();
+              this.refreshGrid(table);
+              this.emitChange();
+            },
+          },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "columns",
+        label: "Columns",
+        entries: () => [
+          { kind: "item", label: "Move column left", icon: "chevronLeft", onSelect: () => this.moveColumn(table, -1) },
+          { kind: "item", label: "Move column right", icon: "chevronRight", onSelect: () => this.moveColumn(table, 1) },
+          { kind: "separator" },
+          {
+            kind: "item",
+            label: "Add column",
+            icon: "plus",
+            onSelect: () => {
+              if (table.columns >= MAX_COLUMNS) return;
+              table.columns += 1;
+              for (const row of table.rows) row.push(emptyCell());
+              this.refreshGrid(table);
+              this.emitChange();
+            },
+          },
+          {
+            kind: "item",
+            label: "Remove column",
+            icon: "minus",
+            onSelect: () => {
+              if (table.columns <= 1) return;
+              if (tableHasSpans(table)) {
+                this.deps.showPreviewMessage?.("Remove columns after splitting merged cells.");
+                return;
+              }
+              table.columns -= 1;
+              for (const row of table.rows) row.length = table.columns;
+              this.resetSelection();
+              this.refreshGrid(table);
+              this.emitChange();
+            },
+          },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "cells",
+        label: "Cells",
+        entries: () => [
+          { kind: "item", label: "Merge cells", onSelect: () => this.mergeSelection(table) },
+          { kind: "item", label: "Split cells", onSelect: () => this.splitSelection(table) },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "borders",
+        label: "Borders",
+        entries: () => [
+          {
+            kind: "toggle",
+            label: "Show border handles",
+            checked: this.borderMode,
+            onSelect: () => {
+              this.borderMode = !this.borderMode;
+              this.renderGrid(table);
+              this.syncSelectionSummary();
+            },
+          },
+          { kind: "separator" },
+          { kind: "heading", label: "Apply to selection" },
+          { kind: "item", label: "All borders", onSelect: () => this.applyBorderToSelection(table, "all") },
+          { kind: "item", label: "No borders", onSelect: () => this.applyBorderToSelection(table, "none") },
+          { kind: "item", label: "Outline only", onSelect: () => this.applyBorderToSelection(table, "outline") },
+          { kind: "heading", label: `Thickness (${this.borderWidth}pt)` },
+          {
+            kind: "choices",
+            values: [0.25, 0.5, 1, 2],
+            current: () => this.borderWidth,
+            onSelect: value => {
+              this.borderWidth = value;
+              this.emitChange();
+            },
+          },
+          { kind: "heading", label: "Color" },
+          { kind: "color", value: this.borderColor, onInput: value => { this.borderColor = value; this.emitChange(); } },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "table",
+        label: "Table",
+        entries: () => [
+          {
+            kind: "toggle",
+            label: "Header row",
+            checked: table.headerRow,
+            onSelect: () => {
+              table.headerRow = !table.headerRow;
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          {
+            kind: "toggle",
+            label: "Header column",
+            checked: table.headerColumn,
+            onSelect: () => {
+              table.headerColumn = !table.headerColumn;
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          { kind: "separator" },
+          {
+            kind: "toggle",
+            label: "Table border",
+            checked: table.stroke === "solid",
+            onSelect: () => {
+              table.stroke = table.stroke === "solid" ? "none" : "solid";
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          { kind: "heading", label: `Table thickness (${table.strokeWidth}pt)` },
+          {
+            kind: "choices",
+            values: [0.25, 0.5, 1, 2],
+            current: () => table.strokeWidth,
+            onSelect: value => {
+              table.strokeWidth = value;
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          { kind: "heading", label: "Table color" },
+          {
+            kind: "color",
+            value: table.strokeColor,
+            onInput: value => {
+              table.strokeColor = value;
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          { kind: "separator" },
+          { kind: "item", label: "Delete table", icon: "x", onSelect: () => this.deleteTable(table) },
+        ],
+      },
+      { kind: "separator" },
+      {
+        kind: "select",
+        id: "style",
+        label: "Style",
+        value: table.style,
+        options: [
+          { value: "default", label: "Default" },
+          { value: "banded-rows", label: "Banded rows" },
+          { value: "banded-columns", label: "Banded columns" },
+          { value: "booktabs", label: "Booktabs" },
+        ],
+        onChange: value => this.applyTableStyle(table, value as StoredTableStyle),
+      },
+      {
+        kind: "select",
+        id: "align",
+        label: "Align",
+        value: "",
+        options: [
+          { value: "", label: "Default" },
+          { value: "left", label: "Left" },
+          { value: "center", label: "Center" },
+          { value: "right", label: "Right" },
+        ],
+        onChange: value => this.applyAlignment(table, (value || null) as StoredTableAlignment | null),
+      },
+      {
+        kind: "select",
+        id: "vertical",
+        label: "Vertical",
+        value: "",
+        options: [
+          { value: "", label: "Default" },
+          { value: "top", label: "Top" },
+          { value: "center", label: "Middle" },
+          { value: "bottom", label: "Bottom" },
+        ],
+        onChange: value => this.applyVerticalAlignment(table, (value || null) as StoredTableVerticalAlignment | null),
+      },
+      { kind: "separator" },
+      { kind: "toggle", id: "bold", title: "Bold", icon: "bold", onSelect: () => this.toggleEmphasis(table, "bold") },
+      { kind: "toggle", id: "italic", title: "Italic", icon: "italic", onSelect: () => this.toggleEmphasis(table, "italic") },
+    ];
+  }
+
+  private toggleEmphasis(table: StoredTable, value: StoredTableEmphasis): void {
+    const focus = this.selectionFocus;
+    const current = focus ? table.rows[focus.row]?.[focus.column]?.emphasis ?? null : null;
+    this.applyEmphasis(table, current === value ? null : value);
+    this.syncCellSelects(table);
+  }
+
+  private deleteTable(table: StoredTable): void {
+    const index = this.tables.findIndex(candidate => candidate.id === table.id);
+    if (index === -1) return;
+    this.tables.splice(index, 1);
+    this.selectedId = this.tables[Math.min(index, this.tables.length - 1)]?.id ?? null;
+    this.resetSelection();
+    this.renderSidebar();
+    this.renderInspector();
+    this.emitChange();
   }
 
   private renderGrid(table: StoredTable): void {
@@ -1023,23 +1131,24 @@ export class TableToolController {
       this.syncSelectionSummary();
     }
     const cell = table.rows[row][column];
-    this.showTableMenu({ left: event.clientX, top: event.clientY }, menu => {
-      this.appendMenuItem(menu, "Cut", () => this.copySelection(table, true), { icon: "scissors" });
-      this.appendMenuItem(menu, "Copy", () => this.copySelection(table, false), { icon: "copy" });
-      this.appendMenuItem(menu, "Paste", () => this.pasteSelection(table), { icon: "clipboardPaste" });
-      this.appendMenuSeparator(menu);
-      this.appendMenuItem(menu, "Insert row above", () => this.insertRow(table, row), { icon: "arrowUp" });
-      this.appendMenuItem(menu, "Insert row below", () => this.insertRow(table, row + cell.rowspan), { icon: "arrowDown" });
-      this.appendMenuItem(menu, "Insert column left", () => this.insertColumn(table, column), { icon: "chevronLeft" });
-      this.appendMenuItem(menu, "Insert column right", () => this.insertColumn(table, column + cell.colspan), { icon: "chevronRight" });
-      this.appendMenuItem(menu, "Delete row", () => this.deleteRow(table, row), { icon: "minus" });
-      this.appendMenuItem(menu, "Delete column", () => this.deleteColumn(table, column), { icon: "minus" });
-      this.appendMenuSeparator(menu);
-      this.appendMenuItem(menu, "Merge cells", () => this.mergeSelection(table));
-      this.appendMenuItem(menu, "Split cells", () => this.splitSelection(table));
-      this.appendMenuSeparator(menu);
-      this.appendMenuItem(menu, "Copy table code", () => this.copyTableCode(table), { icon: "copy" });
-    }, null);
+    const entries: ToolbarMenuEntry[] = [
+      { kind: "item", label: "Cut", icon: "scissors", onSelect: () => this.copySelection(table, true) },
+      { kind: "item", label: "Copy", icon: "copy", onSelect: () => this.copySelection(table, false) },
+      { kind: "item", label: "Paste", icon: "clipboardPaste", onSelect: () => this.pasteSelection(table) },
+      { kind: "separator" },
+      { kind: "item", label: "Insert row above", icon: "arrowUp", onSelect: () => this.insertRow(table, row) },
+      { kind: "item", label: "Insert row below", icon: "arrowDown", onSelect: () => this.insertRow(table, row + cell.rowspan) },
+      { kind: "item", label: "Insert column left", icon: "chevronLeft", onSelect: () => this.insertColumn(table, column) },
+      { kind: "item", label: "Insert column right", icon: "chevronRight", onSelect: () => this.insertColumn(table, column + cell.colspan) },
+      { kind: "item", label: "Delete row", icon: "minus", onSelect: () => this.deleteRow(table, row) },
+      { kind: "item", label: "Delete column", icon: "minus", onSelect: () => this.deleteColumn(table, column) },
+      { kind: "separator" },
+      { kind: "item", label: "Merge cells", onSelect: () => this.mergeSelection(table) },
+      { kind: "item", label: "Split cells", onSelect: () => this.splitSelection(table) },
+      { kind: "separator" },
+      { kind: "item", label: "Copy table code", icon: "copy", onSelect: () => this.copyTableCode(table) },
+    ];
+    this.toolbar?.openMenuAt({ left: event.clientX, top: event.clientY }, () => entries);
   }
 
   private insertRow(table: StoredTable, index: number): void {
@@ -1333,190 +1442,17 @@ export class TableToolController {
     this.emitChange();
   }
 
-  private openTableMenu(anchor: HTMLButtonElement, build: (menu: HTMLElement) => void): void {
-    if (this.activeMenu && this.activeMenuAnchor === anchor) {
-      this.closeTableMenu();
-      return;
-    }
-    const rect = anchor.getBoundingClientRect();
-    this.showTableMenu({ left: rect.left, top: rect.bottom + 4 }, build, anchor);
-  }
-
-  private showTableMenu(
-    position: { left: number; top: number },
-    build: (menu: HTMLElement) => void,
-    anchor: HTMLElement | null,
-  ): void {
-    this.closeTableMenu();
-    const menu = document.createElement("div");
-    menu.className = "dropdown-menu table-tool-menu";
-    menu.setAttribute("role", "menu");
-    build(menu);
-    this.menuBuild = build;
-    this.activeMenuAnchor = anchor;
-    document.body.appendChild(menu);
-    menu.style.left = `${Math.max(8, Math.min(position.left, window.innerWidth - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${Math.max(8, Math.min(position.top, window.innerHeight - menu.offsetHeight - 8))}px`;
-    this.activeMenu = menu;
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node
-        && (menu.contains(event.target) || this.activeMenuAnchor?.contains(event.target))) {
-        // Clicks inside the menu or on its owning button must not count as
-        // "outside"; the button's click handler toggles the menu closed.
-        return;
-      }
-      this.closeTableMenu();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") this.closeTableMenu();
-    };
-    this.menuCleanup = () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-    window.setTimeout(() => {
-      document.addEventListener("pointerdown", onPointerDown, true);
-      document.addEventListener("keydown", onKeyDown, true);
-    }, 0);
-  }
-
-  private closeTableMenu(): void {
-    this.menuCleanup?.();
-    this.menuCleanup = null;
-    this.activeMenu?.remove();
-    this.activeMenu = null;
-    this.activeMenuAnchor = null;
-    this.menuBuild = null;
-  }
-
-  /** Rebuilds the open menu so toggles and choice highlights stay current. */
-  private refreshTableMenu(): void {
-    const menu = this.activeMenu;
-    const build = this.menuBuild;
-    if (!menu || !build) return;
-    menu.replaceChildren();
-    build(menu);
-  }
-
-  /** Reuses the editor toolbar's icon set for the builder controls. */
-  private renderMenubarIcons(table: StoredTable): void {
-    this.inspector.querySelectorAll<HTMLButtonElement>(".table-tool-menubar > button")
-      .forEach(button => {
-        button.appendChild(createAppIcon("chevronDown", { size: 12, className: "table-tool-menu-caret" }));
-      });
-    const emphasisIcons: Record<StoredTableEmphasis, AppIconName> = {
-      bold: "bold",
-      italic: "italic",
-      regular: "removeFormatting",
-    };
-    this.inspector.querySelectorAll<HTMLButtonElement>("[data-emphasis]")
-      .forEach(button => {
-        const emphasis = button.dataset.emphasis as StoredTableEmphasis;
-        button.appendChild(createAppIcon(emphasisIcons[emphasis], { size: 14 }));
-        button.addEventListener("click", () => {
-          const focus = this.selectionFocus;
-          const current = focus ? table.rows[focus.row]?.[focus.column]?.emphasis ?? null : null;
-          this.applyEmphasis(table, current === emphasis ? null : emphasis);
-          this.syncCellSelects(table);
-        });
-      });
-    this.inspector.querySelector<HTMLButtonElement>('[data-action="copy"]')
-      ?.prepend(createAppIcon("copy", { size: 13 }));
-  }
-
-  private appendMenuItem(
-    menu: HTMLElement,
-    label: string,
-    onSelect: () => void,
-    options: { disabled?: boolean; checked?: boolean; icon?: AppIconName } = {},
-  ): void {
-    const item = document.createElement("div");
-    item.className = "dropdown-item";
-    if (options.disabled) item.classList.add("dropdown-item-disabled");
-    item.setAttribute("role", "menuitem");
-    if (options.icon) {
-      item.appendChild(createAppIcon(options.icon, { size: 14, className: "table-tool-menu-icon" }));
-    }
-    const text = document.createElement("span");
-    text.className = "table-tool-menu-label";
-    text.textContent = options.checked ? `✓ ${label}` : label;
-    item.appendChild(text);
-    if (!options.disabled) {
-      // Menus stay open after a selection; an outside click or the owning
-      // button closes them.
-      item.addEventListener("click", () => onSelect());
-    }
-    menu.appendChild(item);
-  }
-
-  private appendMenuToggle(menu: HTMLElement, label: string, checked: boolean, onSelect: () => void): void {
-    this.appendMenuItem(menu, label, onSelect, { checked });
-  }
-
-  private appendMenuSeparator(menu: HTMLElement): void {
-    const separator = document.createElement("div");
-    separator.className = "dropdown-separator";
-    menu.appendChild(separator);
-  }
-
-  private appendMenuHeading(menu: HTMLElement, label: string): void {
-    const heading = document.createElement("div");
-    heading.className = "table-tool-menu-heading";
-    heading.textContent = label;
-    menu.appendChild(heading);
-  }
-
-  private appendMenuChoices(
-    menu: HTMLElement,
-    values: readonly number[],
-    current: () => number,
-    onSelect: (value: number) => void,
-  ): void {
-    const row = document.createElement("div");
-    row.className = "table-tool-menu-choices";
-    for (const value of values) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = `${value}pt`;
-      if (current() === value) button.classList.add("active");
-      button.addEventListener("click", () => {
-        onSelect(value);
-        this.refreshTableMenu();
-      });
-      row.appendChild(button);
-    }
-    menu.appendChild(row);
-  }
-
-  private appendMenuColor(menu: HTMLElement, value: string, onSelect: (value: string) => void): void {
-    const row = document.createElement("div");
-    row.className = "table-tool-menu-color";
-    const input = document.createElement("input");
-    input.type = "color";
-    input.value = value;
-    input.addEventListener("input", () => onSelect(input.value));
-    row.appendChild(input);
-    menu.appendChild(row);
-  }
-
   private syncCellSelects(table: StoredTable): void {
     const focus = this.selectionFocus;
     const cell = focus ? table.rows[focus.row]?.[focus.column] : null;
-    const align = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-align"]');
-    if (align) {
-      align.value = cell?.align ?? "";
-      align.disabled = !focus;
-    }
-    const verticalAlign = this.inspector.querySelector<HTMLSelectElement>('[data-field="cell-vertical-align"]');
-    if (verticalAlign) {
-      verticalAlign.value = cell?.verticalAlign ?? "";
-      verticalAlign.disabled = !focus;
-    }
-    const emphasis = cell?.emphasis ?? null;
-    this.inspector.querySelectorAll<HTMLButtonElement>("[data-emphasis]").forEach(button => {
-      button.classList.toggle("active", button.dataset.emphasis === emphasis);
-      button.disabled = !focus;
-    });
+    this.toolbar?.setSelectValue("align", cell?.align ?? "");
+    this.toolbar?.setDisabled("align", !focus);
+    this.toolbar?.setSelectValue("vertical", cell?.verticalAlign ?? "");
+    this.toolbar?.setDisabled("vertical", !focus);
+    this.toolbar?.setActive("bold", cell?.emphasis === "bold");
+    this.toolbar?.setActive("italic", cell?.emphasis === "italic");
+    this.toolbar?.setDisabled("bold", !focus);
+    this.toolbar?.setDisabled("italic", !focus);
   }
 
   private updateCode(table: StoredTable): void {

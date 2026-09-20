@@ -286,18 +286,20 @@ describe("table typst generation", () => {
 
     expect(source).toContain("ArrowRight: { row, column: column + cell.colspan }");
     expect(source).toContain("event.shiftKey && this.selectionAnchor");
-    expect(source).toContain('data-menu="rows"');
-    expect(source).toContain('data-menu="columns"');
-    expect(source).toContain('data-menu="cells"');
-    expect(source).toContain('data-menu="borders"');
-    expect(source).toContain('data-menu="table"');
-    expect(source).toContain('data-field="table-style"');
+    // The builder mounts the shared toolbar with only its own entries.
+    expect(source).toContain("private toolbarEntries(table: StoredTable): ToolbarEntry[]");
+    expect(source).toContain('entries: this.toolbarEntries(table)');
+    expect(source).toContain('id: "rows"');
+    expect(source).toContain('id: "columns"');
+    expect(source).toContain('id: "cells"');
+    expect(source).toContain('id: "borders"');
+    expect(source).toContain('id: "table"');
+    expect(source).toContain('id: "style"');
     expect(source).toContain("private applyTableStyle(");
-    expect(source).toContain('data-emphasis="bold"');
-    expect(source).toContain('data-emphasis="italic"');
-    expect(source).toContain('data-emphasis="regular"');
+    expect(source).toContain('id: "bold"');
+    expect(source).toContain('id: "italic"');
     expect(source).toContain("private applyEmphasis(");
-    expect(source).toContain('createAppIcon("chevronDown"');
+    expect(source).toContain("private toggleEmphasis(");
     expect(source).toContain('createAppIcon("copy"');
     expect(source).toContain('input.addEventListener("contextmenu"');
     expect(source).toContain("private openCellContextMenu(");
@@ -308,7 +310,6 @@ describe("table typst generation", () => {
     expect(source).toContain("private copySelection(");
     expect(source).toContain("private pasteSelection(");
     expect(source).toContain('readText, writeText');
-    expect(source).toContain("private openTableMenu(");
     expect(source).toContain('"Merge cells"');
     expect(source).toContain('this.deps.showPreviewMessage?.("Select more than one cell to merge.");');
     expect(source).toContain("this.draggingSelection = true");
@@ -320,8 +321,6 @@ describe("table typst generation", () => {
     expect(source).toContain("private undo(): void");
     expect(source).toContain("private redo(): void");
     expect(source).toContain("private commitHistory(): void");
-    expect(source).toContain("private refreshTableMenu(): void");
-    expect(source).toContain('item.addEventListener("click", () => onSelect())');
   });
 
   test("uses Excel-style navigation and editing states", async () => {

@@ -3044,64 +3044,34 @@ body.table-tools-active #code-render-pane {
   color: var(--ui-header-text);
   font-size: 11px;
 }
-.table-tool-menubar {
+/* Shared toolbar controls, reused by the editor and the table builder. */
+.app-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin: 6px 0;
-}
-.table-tool-menubar > button {
-  display: inline-flex;
-  align-items: center;
   gap: 4px;
-  min-height: 26px;
-  padding: 0 9px;
-  border: 1px solid var(--ui-border);
-  border-radius: 0;
-  color: var(--ui-text);
-  background: var(--ui-bg);
-  font: 11px var(--font-family-sans);
-  cursor: pointer;
 }
-.table-tool-menubar > button:hover { background: var(--ui-hover); }
-.table-tool-menu-caret { opacity: 0.65; }
-.table-tool-format-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+.table-tool-menubar { margin: 6px 0; }
+.app-toolbar-separator {
+  width: 1px;
+  align-self: stretch;
+  min-height: 18px;
+  margin: 0 4px;
+  background: var(--ui-border);
 }
-.table-tool-format-group button {
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--ui-header-text);
-  background: transparent;
-  cursor: pointer;
-}
-.table-tool-format-group button:hover:not(:disabled) { background: var(--ui-hover); color: var(--ui-text); }
-.table-tool-format-group button.active {
-  border-color: var(--ui-accent-color);
-  color: var(--ui-accent-color);
-  background: var(--ui-select);
-}
-.table-tool-format-group button:disabled { opacity: 0.45; cursor: default; }
-.table-tool-menu .dropdown-item { gap: 8px; }
-.table-tool-menu-icon { flex: none; color: var(--ui-header-text); }
-.table-tool-menu-label { flex: 1; }
-.table-tool-inline {
+.app-toolbar-caret { opacity: 0.65; }
+.app-toolbar-select {
   display: flex;
   align-items: center;
   gap: 4px;
   color: var(--ui-header-text);
   font-size: 11px;
 }
-.table-tool-menu {
+.toolbar-button.active {
+  color: var(--ui-accent-color);
+  background: var(--ui-select);
+}
+.app-menu {
   position: fixed;
   display: block;
   top: auto;
@@ -3115,20 +3085,23 @@ body.table-tools-active #code-render-pane {
   border-radius: 4px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
-.table-tool-menu-heading {
+.app-menu .dropdown-item { gap: 8px; }
+.app-menu-icon { flex: none; color: var(--ui-header-text); }
+.app-menu-label { flex: 1; }
+.app-menu-heading {
   padding: 5px 16px 2px;
   color: var(--ui-muted-text);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
-.table-tool-menu-choices {
+.app-menu-choices {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: 2px 12px 6px;
 }
-.table-tool-menu-choices button {
+.app-menu-choices button {
   min-height: 24px;
   padding: 0 8px;
   border: 1px solid var(--ui-border);
@@ -3138,13 +3111,13 @@ body.table-tools-active #code-render-pane {
   font: 11px var(--font-family-sans);
   cursor: pointer;
 }
-.table-tool-menu-choices button:hover { background: var(--ui-hover); }
-.table-tool-menu-choices button.active {
+.app-menu-choices button:hover { background: var(--ui-hover); }
+.app-menu-choices button.active {
   border-color: var(--ui-accent-color);
   color: var(--ui-accent-color);
 }
-.table-tool-menu-color { padding: 2px 12px 8px; }
-.table-tool-menu-color input { width: 100%; height: 26px; padding: 0; cursor: pointer; }
+.app-menu-color { padding: 2px 12px 8px; }
+.app-menu-color input { width: 100%; height: 26px; padding: 0; cursor: pointer; }
 .table-tool-grid-host { overflow-x: auto; padding: 8px 4px; }
 .table-tool-grid {
   display: grid;
