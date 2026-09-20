@@ -17,6 +17,7 @@ import type {
   StoredTableCaptionAlign,
   StoredTableCaptionPosition,
   StoredTableEmphasis,
+  StoredTableRule,
   StoredTableStyle,
   StoredTableVerticalAlignment,
 } from "../workspace/workspaceStateStore";
@@ -109,6 +110,12 @@ function normalizeTrackSize(value: string): string | null {
   const trimmed = value.trim();
   if (trimmed === "" || trimmed === "auto") return "";
   return TRACK_SIZE_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+function describeRule(rule: StoredTableRule): string {
+  const axis = rule.axis === "horizontal" ? "H" : "V";
+  const span = rule.end === null ? `from ${rule.start}` : `${rule.start}–${rule.end}`;
+  return `Remove ${axis} rule at ${rule.position} (${span})`;
 }
 
 /** Labels reference figures: keep only characters valid inside `<...>`. */
@@ -847,6 +854,7 @@ export class TableToolController {
               this.emitChange();
             },
           },
+          ...this.ruleRemovalEntries(table),
         ],
       },
       {
@@ -1459,6 +1467,24 @@ export class TableToolController {
     this.emitChange();
   }
 
+  private ruleRemovalEntries(table: StoredTable): ToolbarMenuEntry[] {
+    if (table.rules.length === 0) return [];
+    const entries: ToolbarMenuEntry[] = [{ kind: "heading", label: "Remove rule" }];
+    table.rules.slice(0, 12).forEach((rule, index) => {
+      entries.push({
+        kind: "item",
+        label: describeRule(rule),
+        icon: "minus",
+        onSelect: () => {
+          table.rules.splice(index, 1);
+          this.updateCode(table);
+          this.emitChange();
+        },
+      });
+    });
+    return entries;
+  }
+
   private addRuleFromSelection(
     table: StoredTable,
     axis: "horizontal" | "vertical",
@@ -2062,16 +2088,16 @@ export class TableToolController {
       this.deps.showPreviewMessage?.("Reorder rows after splitting merged cells.");
       return;
     }
-    if (table.rules.length > 0) {
-      this.deps.showPreviewMessage?.("Reorder rows after clearing rules.");
-      return;
-    }
     const range = this.selectionRange();
     if (!range) return;
-    const target = range.minRow + direction;
+    const from = range.minRow;
+    const target = from + direction;
     if (target < 0 || target >= table.rows.length) return;
-    [table.rows[range.minRow], table.rows[target]] = [table.rows[target], table.rows[range.minRow]];
-    [table.rowSizes[range.minRow], table.rowSizes[target]] = [table.rowSizes[target], table.rowSizes[range.minRow]];
+    [table.rows[from], table.rows[target]] = [table.rows[target], table.rows[from]];
+    [table.rowSizes[from], table.rowSizes[target]] = [table.rowSizes[target], table.rowSizes[from]];
+    // Reordering is a remove + insert; move explicit rules along with it.
+    this.shiftRulesForDelete("row", from);
+    this.shiftRulesForInsert("row", target);
     this.selectionAnchor = { row: target, column: this.selectionAnchor?.column ?? 0 };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);
@@ -2083,10 +2109,6 @@ export class TableToolController {
       this.deps.showPreviewMessage?.("Reorder columns after splitting merged cells.");
       return;
     }
-    if (table.rules.length > 0) {
-      this.deps.showPreviewMessage?.("Reorder columns after clearing rules.");
-      return;
-    }
     const range = this.selectionRange();
     if (!range) return;
     const column = range.minColumn;
@@ -2096,6 +2118,8 @@ export class TableToolController {
       [row[column], row[target]] = [row[target], row[column]];
     }
     [table.columnSizes[column], table.columnSizes[target]] = [table.columnSizes[target], table.columnSizes[column]];
+    this.shiftRulesForDelete("column", column);
+    this.shiftRulesForInsert("column", target);
     this.selectionAnchor = { row: this.selectionAnchor?.row ?? 0, column: target };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);

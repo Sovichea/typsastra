@@ -546,6 +546,11 @@ describe("table typst generation", () => {
     expect(source).toContain('label: "Keep together"');
     expect(source).toContain('label: "Break across pages"');
     expect(source).toContain("private addRuleFromSelection(");
+    expect(source).toContain("private ruleRemovalEntries(");
+    expect(source).toContain('label: "Remove rule"');
+    // Reordering now shifts rules instead of blocking.
+    expect(source).toContain('this.shiftRulesForDelete("row", from)');
+    expect(source).toContain('this.shiftRulesForDelete("column", column)');
     expect(source).toContain("private shiftRulesForInsert(");
     expect(source).toContain("private shiftRulesForDelete(");
     expect(source).toContain('label: "Rule below"');
