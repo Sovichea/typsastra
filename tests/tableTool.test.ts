@@ -13,7 +13,19 @@ import {
 } from "../src/workspace/workspaceStateStore";
 
 function cell(text: string, align: StoredTableAlignment | null = null): StoredTableCell {
-  return { text, align, verticalAlign: null, emphasis: null, colspan: 1, rowspan: 1, covered: false, borders: null };
+  return {
+    text,
+    align,
+    verticalAlign: null,
+    emphasis: null,
+    colspan: 1,
+    rowspan: 1,
+    covered: false,
+    borders: null,
+    fill: null,
+    inset: null,
+    raw: false,
+  };
 }
 
 const table: StoredTable = {
@@ -29,6 +41,11 @@ const table: StoredTable = {
   caption: "",
   captionPosition: "bottom",
   captionAlign: "left",
+  columnSizes: ["", ""],
+  gutter: 0,
+  label: "",
+  alt: "",
+  footerRow: false,
   rows: [
     [cell("Name"), cell("Value")],
     [cell("Alpha"), cell("1*2", "right")],
@@ -174,8 +191,61 @@ describe("table typst generation", () => {
     );
   });
 
-  test("omits the figure when there is no caption", () => {
+  test("omits the figure when there is no caption, alt, or label", () => {
     expect(generateTableTypst(table)).not.toContain("#figure(");
+  });
+
+  test("passes raw Typst content through and escapes text otherwise", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [[
+        { ...cell('#link("https://example.com")[site]'), raw: true },
+        cell("a*b"),
+      ]],
+    });
+
+    expect(generated).toContain('[#link("https://example.com")[site]], [a\\*b],');
+  });
+
+  test("emits per-cell fill and inset over banding", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      style: "banded-rows",
+      rows: [
+        [{ ...cell("A"), fill: "#eef2f7" }, { ...cell("B"), inset: 2 }],
+        [cell("C"), cell("D")],
+      ],
+    });
+
+    expect(generated).toContain("  fill: (x, y) => if (x == 0 and y == 0) {");
+    expect(generated).toContain('    rgb("#eef2f7")');
+    expect(generated).toContain("    if calc.odd(y) { luma(245) }");
+    expect(generated).toContain("  inset: (x, y) => if (x == 1 and y == 0) {");
+    expect(generated).toContain("    2pt");
+  });
+
+  test("emits column tracks, gutter, footer, alt, and label", () => {
+    const generated = generateTableTypst({
+      ...table,
+      columnSizes: ["1fr", "2fr"],
+      gutter: 4,
+      footerRow: true,
+      label: "tab:results",
+      alt: "Totals by month",
+      rows: [
+        [cell("Name"), cell("Value")],
+        [cell("Alpha"), cell("1")],
+        [cell("Total"), cell("1")],
+      ],
+    });
+
+    expect(generated).toContain("  columns: (1fr, 2fr),");
+    expect(generated).toContain("  gutter: 4pt,");
+    expect(generated).toContain("  table.footer([Total], [1]),");
+    expect(generated).toContain('  alt: "Totals by month",');
+    expect(generated.endsWith(") <tab:results>")).toBe(true);
   });
 
   test("escapes Typst markup characters", () => {
@@ -337,6 +407,21 @@ describe("table typst generation", () => {
     expect(source).toContain('id: "caption-position"');
     expect(source).toContain('id: "caption-center"');
     expect(source).toContain("private applyCaptionAlign(");
+    // Tier 1 controls.
+    expect(source).toContain("private applyRaw(");
+    expect(source).toContain("private applyFill(");
+    expect(source).toContain("private applyInset(");
+    expect(source).toContain("private applyColumnSize(");
+    expect(source).toContain("private copiedFormats: StoredCellFormat[][] | null = null");
+    expect(source).toContain("private copyFormatting(");
+    expect(source).toContain("private pasteFormatting(");
+    expect(source).toContain('"Copy formatting"');
+    expect(source).toContain('"Paste formatting"');
+    expect(source).toContain('label: "Typst content"');
+    expect(source).toContain('label: "Column width"');
+    expect(source).toContain('label: "Footer row"');
+    expect(source).toContain('data-field="table-label"');
+    expect(source).toContain('data-field="table-alt"');
     // Text boxes reuse the editor's caret field and font.
     expect(source).toContain('from "../ui/editorCaretInput"');
     expect(source).toContain('wrapEditorCaretInput(field, { shellClass: "table-tool-field-shell" })');
@@ -383,8 +468,15 @@ describe("table typst generation", () => {
     expect(source).toContain("input.value = this.editStartValue");
     // A second click on the active cell enters editing.
     expect(source).toContain("if (isFocus && !this.editingCell)");
+    // Standard clipboard shortcuts work in navigation state.
+    expect(source).toContain('if (key === "c") {');
+    expect(source).toContain("this.copySelection(table, false)");
+    expect(source).toContain('if (key === "v") {');
+    expect(source).toContain("this.pasteSelection(table)");
     // Highlight classes belong on the cell, not the inner caret shell.
     expect(source).toContain('input.closest<HTMLElement>(".table-tool-cell-wrap")');
+    // Re-rendering keeps keyboard focus on the active cell.
+    expect(source).toContain("const restoreFocus = host.contains(document.activeElement);");
     // Shift+arrows move DOM focus, so the next keydown extends from the focus
     // cell instead of recomputing from the anchor cell.
     expect(source).toContain(
@@ -455,8 +547,13 @@ describe("stored table normalization", () => {
             caption: "Totals",
             captionPosition: "top",
             captionAlign: "center",
+            columnSizes: ["1fr", "bogus", ""],
+            gutter: 99,
+            label: "tab:summary",
+            alt: "Summary",
+            footerRow: true,
             rows: [[
-              { text: "a", align: "left", emphasis: "bold" },
+              { text: "a", align: "left", emphasis: "bold", fill: "#ABCDEF", inset: 3, raw: true },
               { text: "b", emphasis: "bogus" },
               { text: "c", align: "bogus" },
             ]],
@@ -489,6 +586,17 @@ describe("stored table normalization", () => {
     expect(first.strokeColor).toBe("#000000");
     expect(first.rows[0].map(entry => entry.align)).toEqual(["left", null, null]);
     expect(first.rows[0].map(entry => entry.emphasis)).toEqual(["bold", null, null]);
+    expect(first.columnSizes).toEqual(["1fr", "", ""]);
+    expect(first.gutter).toBe(20);
+    expect(first.label).toBe("tab:summary");
+    expect(first.alt).toBe("Summary");
+    expect(first.footerRow).toBe(true);
+    expect(first.rows[0][0].fill).toBe("#abcdef");
+    expect(first.rows[0][0].inset).toBe(3);
+    expect(first.rows[0][0].raw).toBe(true);
+    expect(second.columnSizes).toEqual([""]);
+    expect(second.gutter).toBe(0);
+    expect(second.footerRow).toBe(false);
     expect(first.rows[0][0]).toMatchObject({
       colspan: 1,
       rowspan: 1,
@@ -505,6 +613,9 @@ describe("stored table normalization", () => {
       rowspan: 1,
       covered: false,
       borders: null,
+      fill: null,
+      inset: null,
+      raw: false,
     }]]);
   });
 

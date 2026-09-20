@@ -54,6 +54,12 @@ export type StoredTableCell = {
   covered: boolean;
   /** Explicit side overrides; null inherits the table stroke. */
   borders: StoredTableCellBorders | null;
+  /** `#rrggbb` cell background; null inherits the table/banding fill. */
+  fill: string | null;
+  /** Cell padding in points; null inherits the table inset. */
+  inset: number | null;
+  /** When true, `text` is emitted as Typst content instead of escaped markup. */
+  raw: boolean;
 };
 
 export type StoredTableStroke = "none" | "solid";
@@ -80,6 +86,16 @@ export type StoredTable = {
   caption: string;
   captionPosition: StoredTableCaptionPosition;
   captionAlign: StoredTableCaptionAlign;
+  /** Per-column Typst track sizes ("" = auto); length always equals `columns`. */
+  columnSizes: string[];
+  /** Gap between rows and columns in points; 0 omits the option. */
+  gutter: number;
+  /** Figure label for `@ref` (without angle brackets); "" omits it. */
+  label: string;
+  /** Figure alternative description; "" omits it. */
+  alt: string;
+  /** Renders the last row with `table.footer` (repeats across pages). */
+  footerRow: boolean;
   rows: StoredTableCell[][];
 };
 
@@ -333,6 +349,38 @@ function normalizeTableEmphasis(value: unknown): StoredTableEmphasis | null {
   return value === "regular" || value === "bold" || value === "italic" ? value : null;
 }
 
+const TABLE_TRACK_PATTERN = /^(?:auto|[0-9]+(?:\.[0-9]+)?(?:fr|pt|em))$/u;
+
+function normalizeColumnSizes(value: unknown, columns: number): string[] {
+  const entries = Array.isArray(value) ? value : [];
+  return Array.from({ length: columns }, (_entry, index) => {
+    const size = entries[index];
+    return typeof size === "string" && TABLE_TRACK_PATTERN.test(size.trim()) ? size.trim() : "";
+  });
+}
+
+function normalizeTableGutter(value: unknown): number {
+  const gutter = numberOr(value, 0);
+  return Math.max(0, Math.min(Math.round(gutter * 100) / 100, 20));
+}
+
+function normalizeTableLabel(value: unknown): string {
+  return typeof value === "string" && /^[A-Za-z0-9_.:-]{0,64}$/u.test(value) ? value : "";
+}
+
+function normalizeTableAlt(value: unknown): string {
+  return typeof value === "string" ? value.slice(0, 300) : "";
+}
+
+function normalizeCellFill(value: unknown): string | null {
+  return typeof value === "string" && HEX_COLOR_PATTERN.test(value) ? value.toLowerCase() : null;
+}
+
+function normalizeCellInset(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(Math.round(value * 100) / 100, 50));
+}
+
 function normalizeTableStyle(value: unknown): StoredTableStyle {
   return value === "banded-rows" || value === "banded-columns" || value === "booktabs"
     ? value
@@ -427,6 +475,9 @@ function normalizeTables(value: unknown): StoredTable[] {
             rowspan: 1,
             covered: true,
             borders: null,
+            fill: null,
+            inset: null,
+            raw: false,
           });
           continue;
         }
@@ -449,6 +500,9 @@ function normalizeTables(value: unknown): StoredTable[] {
           rowspan,
           covered: false,
           borders: normalizeCellBorders(cell.borders),
+          fill: normalizeCellFill(cell.fill),
+          inset: normalizeCellInset(cell.inset),
+          raw: cell.raw === true,
         });
       }
       rows.push(row);
@@ -469,6 +523,11 @@ function normalizeTables(value: unknown): StoredTable[] {
       caption: typeof record.caption === "string" ? record.caption.slice(0, 200) : "",
       captionPosition: normalizeCaptionPosition(record.captionPosition),
       captionAlign: normalizeCaptionAlign(record.captionAlign),
+      columnSizes: normalizeColumnSizes(record.columnSizes, columns),
+      gutter: normalizeTableGutter(record.gutter),
+      label: normalizeTableLabel(record.label),
+      alt: normalizeTableAlt(record.alt),
+      footerRow: record.footerRow === true,
       rows,
     });
   }

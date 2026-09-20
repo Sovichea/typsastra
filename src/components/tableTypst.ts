@@ -260,7 +260,7 @@ function groupCells<Value>(
   collectSlots(table).forEach(slot => {
     const cell = table.rows[slot.row][slot.column];
     const value = valueOf(slot, cell);
-    if (value === null) return;
+    if (value === null || value === undefined) return;
     const key = keyOf(value);
     const group = groups.get(key);
     if (group) group.slots.push(slot);
@@ -339,14 +339,50 @@ function strokeArgument(table: StoredTable, groups: Array<CellGroup<SideOverride
   return lines.join("\n");
 }
 
+function bandFillExpression(table: StoredTable): string {
+  if (table.style === "banded-rows") return `if calc.odd(y) { ${BAND_FILL} }`;
+  if (table.style === "banded-columns") return `if calc.odd(x) { ${BAND_FILL} }`;
+  return "none";
+}
+
 function fillArgument(table: StoredTable): string | null {
-  if (table.style === "banded-rows") {
-    return `  fill: (x, y) => if calc.odd(y) { ${BAND_FILL} },`;
+  const band = bandFillExpression(table);
+  const groups = groupCells(table, (_slot, cell) => cell.fill, value => value);
+  if (groups.length === 0) {
+    return band === "none" ? null : `  fill: (x, y) => ${band},`;
   }
-  if (table.style === "banded-columns") {
-    return `  fill: (x, y) => if calc.odd(x) { ${BAND_FILL} },`;
-  }
-  return null;
+  const lines: string[] = [];
+  conditionalArgument(
+    lines,
+    "fill",
+    groups.map(group => ({
+      predicate: coordinatePredicate(table, group.slots),
+      value: `rgb("${group.value}")`,
+    })),
+    band,
+  );
+  return lines.join("\n");
+}
+
+function insetArgument(table: StoredTable): string | null {
+  const groups = groupCells(table, (_slot, cell) => cell.inset, value => String(value));
+  if (groups.length === 0) return null;
+  const lines: string[] = [];
+  conditionalArgument(
+    lines,
+    "inset",
+    groups.map(group => ({
+      predicate: coordinatePredicate(table, group.slots),
+      value: `${formatPoints(group.value)}pt`,
+    })),
+    "5pt",
+  );
+  return lines.join("\n");
+}
+
+/** A Typst string literal for figure `alt` text. */
+function typstString(value: string): string {
+  return `"${value.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"').replace(/\r?\n/gu, " ")}"`;
 }
 
 function alignArgument(table: StoredTable, groups: Array<CellGroup<string>>): string {
@@ -361,7 +397,8 @@ function alignArgument(table: StoredTable, groups: Array<CellGroup<string>>): st
 }
 
 function cellBody(cell: StoredTableCell): string {
-  const text = escapeTableText(cell.text);
+  // Raw cells carry author-written Typst (links, footnotes, lists, ...).
+  const text = cell.raw ? cell.text : escapeTableText(cell.text);
   if (cell.emphasis === "bold") return `#strong[${text}]`;
   if (cell.emphasis === "italic") return `#emph[${text}]`;
   // "Regular" must also win over an inherited bold/italic show rule.
@@ -390,55 +427,73 @@ export function generateTableTypst(table: StoredTable): string {
     return overrideKey(overrides) === "" ? null : overrides;
   }, overrideKey);
   const alignGroups = groupCells(table, (_slot, cell) => alignmentValue(cell), value => value);
+  const hasTracks = table.columnSizes.some(size => size !== "");
   const lines: string[] = [
     "#table(",
-    `  columns: ${table.columns},`,
-    strokeArgument(table, strokeGroups),
+    hasTracks
+      ? `  columns: (${table.columnSizes.map(size => size || "auto").join(", ")}),`
+      : `  columns: ${table.columns},`,
   ];
+  if (table.gutter > 0) lines.push(`  gutter: ${formatPoints(table.gutter)}pt,`);
+  lines.push(strokeArgument(table, strokeGroups));
   const fill = fillArgument(table);
   if (fill) lines.push(fill);
+  const inset = insetArgument(table);
+  if (inset) lines.push(inset);
   if (alignGroups.length > 0) lines.push(alignArgument(table, alignGroups));
+  const lastRow = table.rows.length - 1;
   table.rows.forEach((row, rowIndex) => {
     const isHeaderRow = table.headerRow && rowIndex === 0;
+    const isFooterRow = table.footerRow && rowIndex === lastRow && !isHeaderRow;
     const cells = row
       .map((cell, columnIndex) => ({ cell, columnIndex }))
       .filter(({ cell }) => !cell.covered)
       .map(({ cell, columnIndex }) => {
         const source = cellSource(cell);
-        return table.headerColumn && !isHeaderRow && columnIndex === 0
+        return table.headerColumn && !isHeaderRow && !isFooterRow && columnIndex === 0
           ? `table.header(${source})`
           : source;
       });
     if (cells.length === 0) return;
     const body = cells.join(", ");
-    lines.push(isHeaderRow ? `  table.header(${body}),` : `  ${body},`);
+    lines.push(
+      isFooterRow
+        ? `  table.footer(${body}),`
+        : isHeaderRow
+          ? `  table.header(${body}),`
+          : `  ${body},`,
+    );
   });
   lines.push(")");
   const code = lines.join("\n");
   const caption = (table.caption ?? "").trim();
-  if (!caption) return code;
-  // A caption makes the table a figure; `kind` is auto-detected as table. The
-  // figure stays in flow (no `placement`, which would float the whole figure),
-  // and the caption's position comes from `figure.caption(position: ...)`.
+  const alt = (table.alt ?? "").trim();
+  const label = (table.label ?? "").trim();
+  if (!caption && !alt && !label) return code;
+  // A caption, alt, or label requires a figure; `kind` auto-detects as table and
+  // the figure stays in flow (no `placement`, which would float it to a page
+  // edge). The caption's side comes from `figure.caption(position: ...)`.
   const body = code
     .split("\n")
     .map(line => `  ${line}`)
     .join("\n")
     .replace(/^ {2}#table\(/u, "  table(");
-  // Captions are left-justified unless centered; right alignment is not offered
-  // because it is not a conventional caption style.
-  const captionBody = table.captionAlign === "center"
-    ? `align(center)[${escapeTableText(caption)}]`
-    : `[${escapeTableText(caption)}]`;
-  const captionArg = table.captionPosition === "top"
-    ? `figure.caption(position: top, ${captionBody})`
-    : captionBody;
-  return [
-    "#figure(",
-    `${body},`,
-    `  caption: ${captionArg},`,
-    ")",
-  ].join("\n");
+  const figureLines = ["#figure(", `${body},`];
+  if (alt) figureLines.push(`  alt: ${typstString(alt)},`);
+  if (caption) {
+    // Captions are left-justified unless centered; right alignment is not
+    // offered because it is not a conventional caption style.
+    const captionBody = table.captionAlign === "center"
+      ? `align(center)[${escapeTableText(caption)}]`
+      : `[${escapeTableText(caption)}]`;
+    const captionArg = table.captionPosition === "top"
+      ? `figure.caption(position: top, ${captionBody})`
+      : captionBody;
+    figureLines.push(`  caption: ${captionArg},`);
+  }
+  figureLines.push(")");
+  const figure = figureLines.join("\n");
+  return label ? `${figure} <${label}>` : figure;
 }
 
 /**

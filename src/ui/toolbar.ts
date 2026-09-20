@@ -11,10 +11,10 @@ export type ToolbarMenuEntry =
   | { kind: "heading"; label: string }
   | {
       kind: "choices";
-      values: readonly number[];
-      current: () => number;
-      format?: (value: number) => string;
-      onSelect: (value: number) => void;
+      values: readonly (string | number)[];
+      current: () => string | number;
+      format?: (value: string | number) => string;
+      onSelect: (value: string | number) => void;
     }
   | { kind: "color"; value: string; onInput: (value: string) => void };
 

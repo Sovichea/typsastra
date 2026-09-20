@@ -37,7 +37,20 @@ export function wrapEditorCaretInput(
   let updateFrame: number | null = null;
   let steadyCaretTimer: number | null = null;
 
+  // The measure must use the field's exact typography, otherwise modifiers like
+  // bold header cells shift the caret off the text.
+  const applyFieldFont = () => {
+    const style = window.getComputedStyle(field);
+    measure.style.fontFamily = style.fontFamily;
+    measure.style.fontSize = style.fontSize;
+    measure.style.fontWeight = style.fontWeight;
+    measure.style.fontStyle = style.fontStyle;
+    measure.style.letterSpacing = style.letterSpacing;
+    measure.style.textTransform = style.textTransform;
+  };
+
   const updateCaret = () => {
+    applyFieldFont();
     const selection = field.selectionStart ?? 0;
     const selectionEnd = field.selectionEnd ?? selection;
     caret.style.visibility = selection === selectionEnd ? "visible" : "hidden";

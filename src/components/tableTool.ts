@@ -43,6 +43,16 @@ export type TableSummary = {
 type Slot = { row: number; column: number };
 type SelectionRange = { minRow: number; maxRow: number; minColumn: number; maxColumn: number };
 
+/** The visual formatting of a cell, copied and pasted as a unit. */
+type StoredCellFormat = {
+  align: StoredTableAlignment | null;
+  verticalAlign: StoredTableVerticalAlignment | null;
+  emphasis: StoredTableEmphasis | null;
+  fill: string | null;
+  inset: number | null;
+  borders: StoredTableCellBorders | null;
+};
+
 const MAX_COLUMNS = 32;
 const MAX_ROWS = 500;
 const BORDER_SIDES: Array<keyof StoredTableCellBorders> = ["top", "right", "bottom", "left"];
@@ -56,6 +66,7 @@ const OPPOSITE_SIDE: Record<keyof StoredTableCellBorders, keyof StoredTableCellB
 function cloneTable(table: StoredTable): StoredTable {
   return {
     ...table,
+    columnSizes: [...table.columnSizes],
     rows: table.rows.map(row => row.map(cell => ({
       ...cell,
       borders: cell.borders ? { ...cell.borders } : null,
@@ -73,11 +84,22 @@ function emptyCell(): StoredTableCell {
     rowspan: 1,
     covered: false,
     borders: null,
+    fill: null,
+    inset: null,
+    raw: false,
   };
 }
 
 function emptyRow(columns: number): StoredTableCell[] {
   return Array.from({ length: columns }, emptyCell);
+}
+
+/** Labels reference figures: keep only characters valid inside `<...>`. */
+function sanitizeTableLabel(value: string): string {
+  return value
+    .replace(/^[<\s]+/u, "")
+    .replace(/[>\s]+$/u, "")
+    .replace(/[^A-Za-z0-9_.:-]/gu, "");
 }
 
 /** Returns the origin slot of the cell covering a grid slot, if any. */
@@ -118,6 +140,8 @@ export class TableToolController {
   private borderMode = false;
   private borderWidth = 0.5;
   private borderColor = "#000000";
+  private fillColor = "#eef2f7";
+  private copiedFormats: StoredCellFormat[][] | null = null;
   private draggingSelection = false;
   private editingCell: Slot | null = null;
   private editStartValue = "";
@@ -201,6 +225,11 @@ export class TableToolController {
       caption: "",
       captionPosition: "bottom",
       captionAlign: "left",
+      columnSizes: ["", ""],
+      gutter: 0,
+      label: "",
+      alt: "",
+      footerRow: false,
       rows: [emptyRow(2), emptyRow(2)],
     };
     this.tables.push(table);
@@ -447,6 +476,8 @@ export class TableToolController {
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
       `<div class="table-tool-grid-host"></div>` +
       `<label class="table-tool-name table-tool-caption">Caption <input class="table-tool-field" data-field="table-caption" type="text" maxlength="200" placeholder="Optional caption" /></label>` +
+      `<label class="table-tool-name">Label <input class="table-tool-field" data-field="table-label" type="text" maxlength="64" placeholder="e.g. tab:results" /></label>` +
+      `<label class="table-tool-name">Alt text <input class="table-tool-field" data-field="table-alt" type="text" maxlength="300" placeholder="Optional description" /></label>` +
       `</section>` +
       `<section class="image-tool-section"><h3>Generated Typst</h3>` +
       `<div class="image-tool-actions"><button type="button" data-action="copy" class="primary"><span data-field="copy-label">Copy code</span></button></div>` +
@@ -477,6 +508,24 @@ export class TableToolController {
     caption.value = table.caption;
     caption.addEventListener("input", () => {
       table.caption = caption.value.slice(0, 200);
+      this.updateCode(table);
+      this.emitChange();
+    });
+
+    const label = this.inspector.querySelector<HTMLInputElement>('[data-field="table-label"]')!;
+    label.value = table.label;
+    label.addEventListener("input", () => {
+      const cleaned = sanitizeTableLabel(label.value);
+      if (cleaned !== label.value) label.value = cleaned;
+      table.label = cleaned;
+      this.updateCode(table);
+      this.emitChange();
+    });
+
+    const alt = this.inspector.querySelector<HTMLInputElement>('[data-field="table-alt"]')!;
+    alt.value = table.alt;
+    alt.addEventListener("input", () => {
+      table.alt = alt.value.slice(0, 300);
       this.updateCode(table);
       this.emitChange();
     });
@@ -561,6 +610,7 @@ export class TableToolController {
               if (table.columns >= MAX_COLUMNS) return;
               table.columns += 1;
               for (const row of table.rows) row.push(emptyCell());
+              table.columnSizes.push("");
               this.refreshGrid(table);
               this.emitChange();
             },
@@ -577,10 +627,20 @@ export class TableToolController {
               }
               table.columns -= 1;
               for (const row of table.rows) row.length = table.columns;
+              table.columnSizes.length = table.columns;
               this.resetSelection();
               this.refreshGrid(table);
               this.emitChange();
             },
+          },
+          { kind: "separator" },
+          { kind: "heading", label: "Column width" },
+          {
+            kind: "choices",
+            values: ["", "1fr", "2fr", "3fr"],
+            current: () => this.selectionColumnSize(table),
+            format: value => (value === "" ? "Auto" : String(value)),
+            onSelect: value => this.applyColumnSize(table, String(value)),
           },
         ],
       },
@@ -591,6 +651,33 @@ export class TableToolController {
         entries: () => [
           { kind: "item", label: "Merge cells", onSelect: () => this.mergeSelection(table) },
           { kind: "item", label: "Split cells", onSelect: () => this.splitSelection(table) },
+          { kind: "separator" },
+          {
+            kind: "toggle",
+            label: "Typst content",
+            checked: this.selectionIsRaw(table),
+            onSelect: () => this.applyRaw(table, !this.selectionIsRaw(table)),
+          },
+          { kind: "heading", label: "Fill" },
+          { kind: "color", value: this.fillColor, onInput: value => { this.fillColor = value; this.applyFill(table, value); } },
+          { kind: "item", label: "No fill", icon: "x", onSelect: () => this.applyFill(table, null) },
+          { kind: "heading", label: "Inset" },
+          {
+            kind: "choices",
+            values: [0, 2, 4, 8],
+            current: () => this.selectionInset(table) ?? 5,
+            format: value => `${value}pt`,
+            onSelect: value => this.applyInset(table, Number(value)),
+          },
+          { kind: "separator" },
+          { kind: "item", label: "Copy formatting", icon: "copy", onSelect: () => this.copyFormatting(table) },
+          {
+            kind: "item",
+            label: "Paste formatting",
+            icon: "clipboardPaste",
+            disabled: !this.copiedFormats,
+            onSelect: () => this.pasteFormatting(table),
+          },
         ],
       },
       {
@@ -618,8 +705,9 @@ export class TableToolController {
             kind: "choices",
             values: [0.25, 0.5, 1, 2],
             current: () => this.borderWidth,
+            format: value => `${value}pt`,
             onSelect: value => {
-              this.borderWidth = value;
+              this.borderWidth = Number(value);
               this.emitChange();
             },
           },
@@ -668,8 +756,9 @@ export class TableToolController {
             kind: "choices",
             values: [0.25, 0.5, 1, 2],
             current: () => table.strokeWidth,
+            format: value => `${value}pt`,
             onSelect: value => {
-              table.strokeWidth = value;
+              table.strokeWidth = Number(value);
               this.renderGrid(table);
               this.emitChange();
             },
@@ -680,6 +769,29 @@ export class TableToolController {
             value: table.strokeColor,
             onInput: value => {
               table.strokeColor = value;
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          { kind: "separator" },
+          {
+            kind: "toggle",
+            label: "Footer row",
+            checked: table.footerRow,
+            onSelect: () => {
+              table.footerRow = !table.footerRow;
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          { kind: "heading", label: `Gutter (${table.gutter}pt)` },
+          {
+            kind: "choices",
+            values: [0, 2, 4, 8],
+            current: () => table.gutter,
+            format: value => `${value}pt`,
+            onSelect: value => {
+              table.gutter = Number(value);
               this.renderGrid(table);
               this.emitChange();
             },
@@ -774,6 +886,9 @@ export class TableToolController {
   private renderGrid(table: StoredTable): void {
     const host = this.inspector.querySelector<HTMLElement>(".table-tool-grid-host");
     if (!host) return;
+    // Rebuilding replaces the focused cell; remember to restore focus so
+    // keyboard navigation (arrows, clipboard) keeps working after a change.
+    const restoreFocus = host.contains(document.activeElement);
     this.commitEdit();
     this.cellInputs.clear();
     const grid = document.createElement("div");
@@ -814,6 +929,8 @@ export class TableToolController {
         if (cell.align) input.classList.add(`align-${cell.align}`);
         if (cell.emphasis === "bold") input.classList.add("emphasis-bold");
         if (cell.emphasis === "italic") input.classList.add("emphasis-italic");
+        if (cell.fill) input.style.setProperty("--cell-fill", cell.fill);
+        if (cell.raw) input.classList.add("is-raw");
         input.value = cell.text;
         input.readOnly = true;
         input.addEventListener("input", () => {
@@ -906,6 +1023,9 @@ export class TableToolController {
       });
     });
     host.replaceChildren(grid);
+    if (restoreFocus && this.selectionFocus) {
+      this.cellInputs.get(`${this.selectionFocus.row}:${this.selectionFocus.column}`)?.focus();
+    }
     this.syncSelectionSummary();
   }
 
@@ -930,6 +1050,24 @@ export class TableToolController {
       return;
     }
     if (event.key === "Escape") return;
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        event.preventDefault();
+        this.copySelection(table, false);
+        return;
+      }
+      if (key === "x") {
+        event.preventDefault();
+        this.copySelection(table, true);
+        return;
+      }
+      if (key === "v") {
+        event.preventDefault();
+        this.pasteSelection(table);
+        return;
+      }
+    }
     if (event.key === "Enter" || event.key === "F2") {
       event.preventDefault();
       this.enterEditMode(table, { row, column });
@@ -1147,6 +1285,97 @@ export class TableToolController {
     this.emitChange();
   }
 
+  private forEachSelectionOrigin(
+    table: StoredTable,
+    visit: (cell: StoredTableCell, key: string) => void,
+  ): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    const visited = new Set<string>();
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+        const origin = tableCellOrigin(table, row, column);
+        if (!origin) continue;
+        const key = `${origin.row}:${origin.column}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        visit(table.rows[origin.row][origin.column], key);
+      }
+    }
+  }
+
+  private selectionIsRaw(table: StoredTable): boolean {
+    let any = false;
+    let all = true;
+    this.forEachSelectionOrigin(table, cell => {
+      any = true;
+      if (!cell.raw) all = false;
+    });
+    return any && all;
+  }
+
+  private selectionInset(table: StoredTable): number | null {
+    let any = false;
+    let value: number | null = null;
+    let mixed = false;
+    this.forEachSelectionOrigin(table, cell => {
+      if (!any) {
+        any = true;
+        value = cell.inset;
+      } else if (cell.inset !== value) {
+        mixed = true;
+      }
+    });
+    return any && !mixed ? value : null;
+  }
+
+  private selectionColumnSize(table: StoredTable): string {
+    const range = this.selectionRange();
+    if (!range) return "";
+    let size: string | null = null;
+    for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+      const current = table.columnSizes[column] ?? "";
+      if (size === null) size = current;
+      else if (size !== current) return "";
+    }
+    return size ?? "";
+  }
+
+  private applyRaw(table: StoredTable, raw: boolean): void {
+    this.forEachSelectionOrigin(table, cell => { cell.raw = raw; });
+    this.renderGrid(table);
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyFill(table: StoredTable, fill: string | null): void {
+    this.forEachSelectionOrigin(table, (cell, key) => {
+      cell.fill = fill;
+      const input = this.cellInputs.get(key);
+      if (!input) return;
+      if (fill) input.style.setProperty("--cell-fill", fill);
+      else input.style.removeProperty("--cell-fill");
+    });
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyInset(table: StoredTable, inset: number | null): void {
+    this.forEachSelectionOrigin(table, cell => { cell.inset = inset; });
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyColumnSize(table: StoredTable, size: string): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+      if (column >= 0 && column < table.columnSizes.length) table.columnSizes[column] = size;
+    }
+    this.renderGrid(table);
+    this.emitChange();
+  }
+
   private applyEmphasis(table: StoredTable, emphasis: StoredTableEmphasis | null): void {
     const range = this.selectionRange();
     if (!range) return;
@@ -1202,6 +1431,15 @@ export class TableToolController {
       { kind: "item", label: "Copy", icon: "copy", onSelect: () => this.copySelection(table, false) },
       { kind: "item", label: "Paste", icon: "clipboardPaste", onSelect: () => this.pasteSelection(table) },
       { kind: "separator" },
+      { kind: "item", label: "Copy formatting", icon: "copy", onSelect: () => this.copyFormatting(table) },
+      {
+        kind: "item",
+        label: "Paste formatting",
+        icon: "clipboardPaste",
+        disabled: !this.copiedFormats,
+        onSelect: () => this.pasteFormatting(table),
+      },
+      { kind: "separator" },
       { kind: "item", label: "Insert row above", icon: "arrowUp", onSelect: () => this.insertRow(table, row) },
       { kind: "item", label: "Insert row below", icon: "arrowDown", onSelect: () => this.insertRow(table, row + cell.rowspan) },
       { kind: "item", label: "Insert column left", icon: "chevronLeft", onSelect: () => this.insertColumn(table, column) },
@@ -1253,6 +1491,7 @@ export class TableToolController {
       row.splice(index, 0, covered ? this.coveredCell() : emptyCell());
     });
     table.columns += 1;
+    table.columnSizes.splice(index, 0, "");
     const row = Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1);
     this.selectionAnchor = { row, column: index };
     this.selectionFocus = { ...this.selectionAnchor };
@@ -1282,9 +1521,86 @@ export class TableToolController {
     }
     table.columns -= 1;
     for (const row of table.rows) row.splice(index, 1);
+    table.columnSizes.splice(index, 1);
     this.selectionAnchor = { row: Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1), column: Math.min(index, table.columns - 1) };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private cellFormatOf(cell: StoredTableCell): StoredCellFormat {
+    return {
+      align: cell.align,
+      verticalAlign: cell.verticalAlign,
+      emphasis: cell.emphasis,
+      fill: cell.fill,
+      inset: cell.inset,
+      borders: cell.borders
+        ? { top: cell.borders.top, right: cell.borders.right, bottom: cell.borders.bottom, left: cell.borders.left }
+        : null,
+    };
+  }
+
+  private copyFormatting(table: StoredTable): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    const block: StoredCellFormat[][] = [];
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      const line: StoredCellFormat[] = [];
+      for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+        const origin = tableCellOrigin(table, row, column);
+        const cell = origin ? table.rows[origin.row][origin.column] : null;
+        line.push(cell
+          ? this.cellFormatOf(cell)
+          : { align: null, verticalAlign: null, emphasis: null, fill: null, inset: null, borders: null });
+      }
+      block.push(line);
+    }
+    this.copiedFormats = block;
+    this.deps.showPreviewMessage?.("Cell formatting copied. Select cells and paste formatting.");
+  }
+
+  private pasteFormatting(table: StoredTable): void {
+    const block = this.copiedFormats;
+    const range = this.selectionRange();
+    if (!block || !range) return;
+    const height = block.length;
+    const width = block[0]?.length ?? 0;
+    if (height === 0 || width === 0) return;
+    const visited = new Set<string>();
+    const apply = (slotRow: number, slotColumn: number, format: StoredCellFormat) => {
+      const origin = tableCellOrigin(table, slotRow, slotColumn);
+      if (!origin) return;
+      const key = `${origin.row}:${origin.column}`;
+      if (visited.has(key)) return;
+      visited.add(key);
+      const cell = table.rows[origin.row][origin.column];
+      cell.align = format.align;
+      cell.verticalAlign = format.verticalAlign;
+      cell.emphasis = format.emphasis;
+      cell.fill = format.fill;
+      cell.inset = format.inset;
+      cell.borders = format.borders
+        ? { top: format.borders.top, right: format.borders.right, bottom: format.borders.bottom, left: format.borders.left }
+        : null;
+    };
+    const single = range.minRow === range.maxRow && range.minColumn === range.maxColumn;
+    if (single) {
+      // Pasting onto one cell drops the whole copied block from that corner.
+      for (let row = 0; row < height; row += 1) {
+        for (let column = 0; column < width; column += 1) {
+          apply(range.minRow + row, range.minColumn + column, block[row][column]);
+        }
+      }
+    } else {
+      for (let row = range.minRow; row <= range.maxRow; row += 1) {
+        for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+          apply(row, column, block[(row - range.minRow) % height][(column - range.minColumn) % width]);
+        }
+      }
+    }
+    this.renderGrid(table);
+    this.updateCode(table);
     this.emitChange();
   }
 
@@ -1443,6 +1759,7 @@ export class TableToolController {
     for (const row of table.rows) {
       [row[column], row[target]] = [row[target], row[column]];
     }
+    [table.columnSizes[column], table.columnSizes[target]] = [table.columnSizes[target], table.columnSizes[column]];
     this.selectionAnchor = { row: this.selectionAnchor?.row ?? 0, column: target };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);
