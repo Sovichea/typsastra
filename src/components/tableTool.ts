@@ -67,6 +67,7 @@ function cloneTable(table: StoredTable): StoredTable {
   return {
     ...table,
     columnSizes: [...table.columnSizes],
+    rowSizes: [...table.rowSizes],
     rows: table.rows.map(row => row.map(cell => ({
       ...cell,
       borders: cell.borders ? { ...cell.borders } : null,
@@ -92,6 +93,17 @@ function emptyCell(): StoredTableCell {
 
 function emptyRow(columns: number): StoredTableCell[] {
   return Array.from({ length: columns }, emptyCell);
+}
+
+// Track sizes accept a length unit (pt/mm/cm/in/em/%) or a fraction; a bare
+// number is only meaningful as the scalar `columns: N` count.
+const TRACK_SIZE_PATTERN = /^(?:auto|[0-9]+(?:\.[0-9]+)?(?:pt|mm|cm|in|em|%|fr))$/u;
+
+/** Parses a track-size input; returns "" for auto, null when invalid. */
+function normalizeTrackSize(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === "" || trimmed === "auto") return "";
+  return TRACK_SIZE_PATTERN.test(trimmed) ? trimmed : null;
 }
 
 /** Labels reference figures: keep only characters valid inside `<...>`. */
@@ -217,7 +229,9 @@ export class TableToolController {
       name: `Table ${this.tables.length + 1}`,
       columns: 2,
       headerRow: true,
+      headerRowCount: 1,
       headerColumn: false,
+      headerRepeat: true,
       stroke: "solid",
       strokeWidth: 0.5,
       strokeColor: "#000000",
@@ -226,10 +240,12 @@ export class TableToolController {
       captionPosition: "bottom",
       captionAlign: "left",
       columnSizes: ["", ""],
+      rowSizes: ["", ""],
       gutter: 0,
       label: "",
       alt: "",
       footerRow: false,
+      footerRepeat: true,
       rows: [emptyRow(2), emptyRow(2)],
     };
     this.tables.push(table);
@@ -572,6 +588,7 @@ export class TableToolController {
             onSelect: () => {
               if (table.rows.length >= MAX_ROWS) return;
               table.rows.push(emptyRow(table.columns));
+              table.rowSizes.push("");
               this.refreshGrid(table);
               this.emitChange();
             },
@@ -587,10 +604,27 @@ export class TableToolController {
                 return;
               }
               table.rows.pop();
+              table.rowSizes.length = table.rows.length;
               this.resetSelection();
               this.refreshGrid(table);
               this.emitChange();
             },
+          },
+          { kind: "separator" },
+          { kind: "heading", label: "Row height" },
+          {
+            kind: "choices",
+            values: ["", "40pt", "60pt"],
+            current: () => this.selectionRowSize(table),
+            format: value => (value === "" ? "Auto" : String(value)),
+            onSelect: value => this.applyRowSize(table, String(value)),
+          },
+          {
+            kind: "field",
+            value: this.selectionRowSize(table),
+            placeholder: "e.g. 40pt or 1fr",
+            ariaLabel: "Custom row height",
+            onCommit: value => this.applyRowSize(table, value),
           },
         ],
       },
@@ -641,6 +675,13 @@ export class TableToolController {
             current: () => this.selectionColumnSize(table),
             format: value => (value === "" ? "Auto" : String(value)),
             onSelect: value => this.applyColumnSize(table, String(value)),
+          },
+          {
+            kind: "field",
+            value: this.selectionColumnSize(table),
+            placeholder: "e.g. 80pt or 2fr",
+            ariaLabel: "Custom column width",
+            onCommit: value => this.applyColumnSize(table, value),
           },
         ],
       },
@@ -726,7 +767,25 @@ export class TableToolController {
             checked: table.headerRow,
             onSelect: () => {
               table.headerRow = !table.headerRow;
+              if (table.headerRow && table.headerRowCount < 1) table.headerRowCount = 1;
               this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          { kind: "heading", label: "Header rows" },
+          {
+            kind: "choices",
+            values: [1, 2, 3],
+            current: () => Math.max(1, table.headerRowCount || 1),
+            format: value => String(value),
+            onSelect: value => this.applyHeaderRows(table, Number(value)),
+          },
+          {
+            kind: "toggle",
+            label: "Repeat header",
+            checked: table.headerRepeat,
+            onSelect: () => {
+              table.headerRepeat = !table.headerRepeat;
               this.emitChange();
             },
           },
@@ -781,6 +840,15 @@ export class TableToolController {
             onSelect: () => {
               table.footerRow = !table.footerRow;
               this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          {
+            kind: "toggle",
+            label: "Repeat footer",
+            checked: table.footerRepeat,
+            onSelect: () => {
+              table.footerRepeat = !table.footerRepeat;
               this.emitChange();
             },
           },
@@ -903,7 +971,9 @@ export class TableToolController {
         wrap.className = "table-tool-cell-wrap";
         wrap.style.gridRow = `${rowIndex + 1} / span ${cell.rowspan}`;
         wrap.style.gridColumn = `${columnIndex + 1} / span ${cell.colspan}`;
-        if (table.headerRow && rowIndex === 0) wrap.classList.add("is-header-row");
+        if (table.headerRow && rowIndex < Math.max(1, table.headerRowCount)) {
+          wrap.classList.add("is-header-row");
+        }
         if (table.headerColumn && columnIndex === 0) wrap.classList.add("is-header-column");
         const banded = table.style === "banded-rows"
           ? rowIndex % 2 === 1
@@ -1329,6 +1399,42 @@ export class TableToolController {
     return any && !mixed ? value : null;
   }
 
+  private selectionRowSize(table: StoredTable): string {
+    const range = this.selectionRange();
+    if (!range) return "";
+    let size: string | null = null;
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      const current = table.rowSizes[row] ?? "";
+      if (size === null) size = current;
+      else if (size !== current) return "";
+    }
+    return size ?? "";
+  }
+
+  private applyHeaderRows(table: StoredTable, count: number): void {
+    table.headerRow = true;
+    table.headerRowCount = Math.max(1, Math.min(count, table.rows.length));
+    this.renderGrid(table);
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyRowSize(table: StoredTable, value: string): void {
+    const size = normalizeTrackSize(value);
+    if (size === null) {
+      this.deps.showPreviewMessage?.("Enter a track size like 40pt, 2fr, or auto.");
+      return;
+    }
+    const range = this.selectionRange();
+    if (!range) return;
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      if (row >= 0 && row < table.rowSizes.length) table.rowSizes[row] = size;
+    }
+    this.renderGrid(table);
+    this.updateCode(table);
+    this.emitChange();
+  }
+
   private selectionColumnSize(table: StoredTable): string {
     const range = this.selectionRange();
     if (!range) return "";
@@ -1366,13 +1472,19 @@ export class TableToolController {
     this.emitChange();
   }
 
-  private applyColumnSize(table: StoredTable, size: string): void {
+  private applyColumnSize(table: StoredTable, value: string): void {
+    const size = normalizeTrackSize(value);
+    if (size === null) {
+      this.deps.showPreviewMessage?.("Enter a track size like 80pt, 2fr, or auto.");
+      return;
+    }
     const range = this.selectionRange();
     if (!range) return;
     for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
       if (column >= 0 && column < table.columnSizes.length) table.columnSizes[column] = size;
     }
     this.renderGrid(table);
+    this.updateCode(table);
     this.emitChange();
   }
 
@@ -1471,6 +1583,7 @@ export class TableToolController {
       { length: table.columns },
       (_value, column) => spanned.has(column) ? this.coveredCell() : emptyCell(),
     ));
+    table.rowSizes.splice(index, 0, "");
     const column = Math.min(this.selectionAnchor?.column ?? 0, table.columns - 1);
     this.selectionAnchor = { row: index, column };
     this.selectionFocus = { ...this.selectionAnchor };
@@ -1506,6 +1619,7 @@ export class TableToolController {
       return;
     }
     table.rows.splice(index, 1);
+    table.rowSizes.splice(index, 1);
     const row = Math.min(index, table.rows.length - 1);
     this.selectionAnchor = { row, column: Math.min(this.selectionAnchor?.column ?? 0, table.columns - 1) };
     this.selectionFocus = { ...this.selectionAnchor };
@@ -1740,6 +1854,7 @@ export class TableToolController {
     const target = range.minRow + direction;
     if (target < 0 || target >= table.rows.length) return;
     [table.rows[range.minRow], table.rows[target]] = [table.rows[target], table.rows[range.minRow]];
+    [table.rowSizes[range.minRow], table.rowSizes[target]] = [table.rowSizes[target], table.rowSizes[range.minRow]];
     this.selectionAnchor = { row: target, column: this.selectionAnchor?.column ?? 0 };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);

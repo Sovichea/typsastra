@@ -131,6 +131,12 @@ const BAND_FILL = "luma(245)";
 const BOOKTABS_OUTER_RULE = 1.5;
 const BOOKTABS_HEADER_RULE = 0.75;
 
+/** The number of leading rows treated as the table header. */
+function headerRowCountFor(table: StoredTable): number {
+  if (!table.headerRow) return 0;
+  return Math.max(1, Math.min(table.headerRowCount ?? 1, table.rows.length));
+}
+
 /** The stroke a style gives each cell side before any explicit override. */
 function baselineRecord(table: StoredTable, slot: CellSlot): Record<SideKey, string> {
   const record = {} as Record<SideKey, string>;
@@ -141,7 +147,7 @@ function baselineRecord(table: StoredTable, slot: CellSlot): Record<SideKey, str
   }
   CELL_BORDER_SIDES.forEach(side => { record[side] = "none"; });
   if (slot.row === 0) record.top = typstStroke(BOOKTABS_OUTER_RULE, table.strokeColor);
-  if (table.headerRow && slot.row === 0) {
+  if (slot.row === headerRowCountFor(table) - 1) {
     record.bottom = typstStroke(BOOKTABS_HEADER_RULE, table.strokeColor);
   }
   const cell = table.rows[slot.row]?.[slot.column];
@@ -428,12 +434,16 @@ export function generateTableTypst(table: StoredTable): string {
   }, overrideKey);
   const alignGroups = groupCells(table, (_slot, cell) => alignmentValue(cell), value => value);
   const hasTracks = table.columnSizes.some(size => size !== "");
+  const hasRowTracks = table.rowSizes.some(size => size !== "");
   const lines: string[] = [
     "#table(",
     hasTracks
       ? `  columns: (${table.columnSizes.map(size => size || "auto").join(", ")}),`
       : `  columns: ${table.columns},`,
   ];
+  if (hasRowTracks) {
+    lines.push(`  rows: (${table.rowSizes.map(size => size || "auto").join(", ")}),`);
+  }
   if (table.gutter > 0) lines.push(`  gutter: ${formatPoints(table.gutter)}pt,`);
   lines.push(strokeArgument(table, strokeGroups));
   const fill = fillArgument(table);
@@ -441,29 +451,41 @@ export function generateTableTypst(table: StoredTable): string {
   const inset = insetArgument(table);
   if (inset) lines.push(inset);
   if (alignGroups.length > 0) lines.push(alignArgument(table, alignGroups));
+  const headerCount = headerRowCountFor(table);
   const lastRow = table.rows.length - 1;
-  table.rows.forEach((row, rowIndex) => {
-    const isHeaderRow = table.headerRow && rowIndex === 0;
-    const isFooterRow = table.footerRow && rowIndex === lastRow && !isHeaderRow;
+  const footerIndex = table.footerRow && lastRow >= headerCount ? lastRow : -1;
+  const rowSource = (row: StoredTableCell[], rowIndex: number): string | null => {
     const cells = row
       .map((cell, columnIndex) => ({ cell, columnIndex }))
       .filter(({ cell }) => !cell.covered)
       .map(({ cell, columnIndex }) => {
         const source = cellSource(cell);
-        return table.headerColumn && !isHeaderRow && !isFooterRow && columnIndex === 0
+        return table.headerColumn && rowIndex >= headerCount && rowIndex !== footerIndex && columnIndex === 0
           ? `table.header(${source})`
           : source;
       });
-    if (cells.length === 0) return;
-    const body = cells.join(", ");
-    lines.push(
-      isFooterRow
-        ? `  table.footer(${body}),`
-        : isHeaderRow
-          ? `  table.header(${body}),`
-          : `  ${body},`,
-    );
-  });
+    return cells.length === 0 ? null : cells.join(", ");
+  };
+  if (headerCount > 0) {
+    const bodies = table.rows
+      .slice(0, headerCount)
+      .map((row, rowIndex) => rowSource(row, rowIndex))
+      .filter((body): body is string => body !== null);
+    if (bodies.length > 0) {
+      const repeat = table.headerRepeat === false ? "repeat: false, " : "";
+      lines.push(`  table.header(${repeat}${bodies.join(", ")}),`);
+    }
+  }
+  for (let rowIndex = headerCount; rowIndex < table.rows.length; rowIndex += 1) {
+    const body = rowSource(table.rows[rowIndex], rowIndex);
+    if (body === null) continue;
+    if (rowIndex === footerIndex) {
+      const repeat = table.footerRepeat === false ? "repeat: false, " : "";
+      lines.push(`  table.footer(${repeat}${body}),`);
+    } else {
+      lines.push(`  ${body},`);
+    }
+  }
   lines.push(")");
   const code = lines.join("\n");
   const caption = (table.caption ?? "").trim();

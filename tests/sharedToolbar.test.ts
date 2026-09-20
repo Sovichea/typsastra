@@ -10,6 +10,7 @@ describe("shared toolbar", () => {
     expect(source).toContain('kind: "toggle"');
     expect(source).toContain('kind: "select"');
     expect(source).toContain('kind: "menu"');
+    expect(source).toContain('kind: "field"');
     expect(source).toContain("setActive(id: string, active: boolean)");
     expect(source).toContain("setDisabled(id: string, disabled: boolean)");
     expect(source).toContain("setSelectValue(id: string, value: string)");

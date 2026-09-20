@@ -33,7 +33,9 @@ const table: StoredTable = {
   name: "Results",
   columns: 2,
   headerRow: true,
+  headerRowCount: 1,
   headerColumn: false,
+  headerRepeat: true,
   stroke: "solid",
   strokeWidth: 0.5,
   strokeColor: "#000000",
@@ -42,10 +44,12 @@ const table: StoredTable = {
   captionPosition: "bottom",
   captionAlign: "left",
   columnSizes: ["", ""],
+  rowSizes: ["", ""],
   gutter: 0,
   label: "",
   alt: "",
   footerRow: false,
+  footerRepeat: true,
   rows: [
     [cell("Name"), cell("Value")],
     [cell("Alpha"), cell("1*2", "right")],
@@ -224,6 +228,30 @@ describe("table typst generation", () => {
     expect(generated).toContain("    if calc.odd(y) { luma(245) }");
     expect(generated).toContain("  inset: (x, y) => if (x == 1 and y == 0) {");
     expect(generated).toContain("    2pt");
+  });
+
+  test("wraps multiple header rows and honors repeat flags", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRowCount: 2,
+      headerRepeat: false,
+      footerRow: true,
+      footerRepeat: false,
+      rows: [
+        [cell("Group"), cell("")],
+        [cell("A"), cell("B")],
+        [cell("1"), cell("2")],
+        [cell("Total"), cell("3")],
+      ],
+    });
+
+    expect(generated).toContain("  table.header(repeat: false, [Group], [], [A], [B]),");
+    expect(generated).toContain("  table.footer(repeat: false, [Total], [3]),");
+  });
+
+  test("emits row tracks", () => {
+    const generated = generateTableTypst({ ...table, rowSizes: ["", "40pt"] });
+    expect(generated).toContain("  rows: (auto, 40pt),");
   });
 
   test("emits column tracks, gutter, footer, alt, and label", () => {
@@ -412,6 +440,17 @@ describe("table typst generation", () => {
     expect(source).toContain("private applyFill(");
     expect(source).toContain("private applyInset(");
     expect(source).toContain("private applyColumnSize(");
+    expect(source).toContain("private applyHeaderRows(");
+    expect(source).toContain("private applyRowSize(");
+    expect(source).toContain('label: "Header rows"');
+    expect(source).toContain('label: "Repeat header"');
+    expect(source).toContain('label: "Repeat footer"');
+    expect(source).toContain('label: "Row height"');
+    // Custom track sizes in addition to the presets.
+    expect(source).toContain("function normalizeTrackSize(");
+    expect(source).toContain('kind: "field"');
+    expect(source).toContain("Custom row height");
+    expect(source).toContain("Custom column width");
     expect(source).toContain("private copiedFormats: StoredCellFormat[][] | null = null");
     expect(source).toContain("private copyFormatting(");
     expect(source).toContain("private pasteFormatting(");
@@ -547,11 +586,15 @@ describe("stored table normalization", () => {
             caption: "Totals",
             captionPosition: "top",
             captionAlign: "center",
-            columnSizes: ["1fr", "bogus", ""],
+            columnSizes: ["1fr", "0.5cm", "bogus"],
+            rowSizes: ["40pt"],
+            headerRowCount: 5,
+            headerRepeat: false,
             gutter: 99,
             label: "tab:summary",
             alt: "Summary",
             footerRow: true,
+            footerRepeat: false,
             rows: [[
               { text: "a", align: "left", emphasis: "bold", fill: "#ABCDEF", inset: 3, raw: true },
               { text: "b", emphasis: "bogus" },
@@ -586,7 +629,11 @@ describe("stored table normalization", () => {
     expect(first.strokeColor).toBe("#000000");
     expect(first.rows[0].map(entry => entry.align)).toEqual(["left", null, null]);
     expect(first.rows[0].map(entry => entry.emphasis)).toEqual(["bold", null, null]);
-    expect(first.columnSizes).toEqual(["1fr", "", ""]);
+    expect(first.columnSizes).toEqual(["1fr", "0.5cm", ""]);
+    expect(first.rowSizes).toEqual(["40pt"]);
+    expect(first.headerRowCount).toBe(1);
+    expect(first.headerRepeat).toBe(false);
+    expect(first.footerRepeat).toBe(false);
     expect(first.gutter).toBe(20);
     expect(first.label).toBe("tab:summary");
     expect(first.alt).toBe("Summary");

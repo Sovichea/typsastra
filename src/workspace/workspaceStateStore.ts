@@ -78,7 +78,11 @@ export type StoredTable = {
   name: string;
   columns: number;
   headerRow: boolean;
+  /** Number of leading header rows when `headerRow`; 0 when there is none. */
+  headerRowCount: number;
   headerColumn: boolean;
+  /** Whether the header repeats on every page. */
+  headerRepeat: boolean;
   stroke: StoredTableStroke;
   strokeWidth: number;
   strokeColor: string;
@@ -88,14 +92,18 @@ export type StoredTable = {
   captionAlign: StoredTableCaptionAlign;
   /** Per-column Typst track sizes ("" = auto); length always equals `columns`. */
   columnSizes: string[];
+  /** Per-row Typst track sizes ("" = auto); length always equals the row count. */
+  rowSizes: string[];
   /** Gap between rows and columns in points; 0 omits the option. */
   gutter: number;
   /** Figure label for `@ref` (without angle brackets); "" omits it. */
   label: string;
   /** Figure alternative description; "" omits it. */
   alt: string;
-  /** Renders the last row with `table.footer` (repeats across pages). */
+  /** Renders the last row with `table.footer`. */
   footerRow: boolean;
+  /** Whether the footer repeats on every page. */
+  footerRepeat: boolean;
   rows: StoredTableCell[][];
 };
 
@@ -349,11 +357,13 @@ function normalizeTableEmphasis(value: unknown): StoredTableEmphasis | null {
   return value === "regular" || value === "bold" || value === "italic" ? value : null;
 }
 
-const TABLE_TRACK_PATTERN = /^(?:auto|[0-9]+(?:\.[0-9]+)?(?:fr|pt|em))$/u;
+// Array track sizes: `auto`, a length (pt/mm/cm/in/em/%), or a fraction. A bare
+// number is only valid as the scalar `columns: N`, not inside an array.
+const TABLE_TRACK_PATTERN = /^(?:auto|[0-9]+(?:\.[0-9]+)?(?:pt|mm|cm|in|em|%|fr))$/u;
 
-function normalizeColumnSizes(value: unknown, columns: number): string[] {
+function normalizeTrackSizes(value: unknown, count: number): string[] {
   const entries = Array.isArray(value) ? value : [];
-  return Array.from({ length: columns }, (_entry, index) => {
+  return Array.from({ length: count }, (_entry, index) => {
     const size = entries[index];
     return typeof size === "string" && TABLE_TRACK_PATTERN.test(size.trim()) ? size.trim() : "";
   });
@@ -510,12 +520,18 @@ function normalizeTables(value: unknown): StoredTable[] {
     const name = typeof record.name === "string" && record.name.trim()
       ? record.name.trim().slice(0, 80)
       : id;
+    const headerRow = record.headerRow !== false;
+    const headerRowCount = headerRow
+      ? Math.max(1, Math.min(Math.round(numberOr(record.headerRowCount, 1)), rowCount))
+      : 0;
     byId.set(id, {
       id,
       name,
       columns,
-      headerRow: record.headerRow !== false,
+      headerRow,
+      headerRowCount,
       headerColumn: record.headerColumn === true,
+      headerRepeat: record.headerRepeat !== false,
       stroke: record.stroke === "none" ? "none" : "solid",
       strokeWidth: normalizeStrokeWidth(record.strokeWidth),
       strokeColor: normalizeStrokeColor(record.strokeColor),
@@ -523,11 +539,13 @@ function normalizeTables(value: unknown): StoredTable[] {
       caption: typeof record.caption === "string" ? record.caption.slice(0, 200) : "",
       captionPosition: normalizeCaptionPosition(record.captionPosition),
       captionAlign: normalizeCaptionAlign(record.captionAlign),
-      columnSizes: normalizeColumnSizes(record.columnSizes, columns),
+      columnSizes: normalizeTrackSizes(record.columnSizes, columns),
+      rowSizes: normalizeTrackSizes(record.rowSizes, rowCount),
       gutter: normalizeTableGutter(record.gutter),
       label: normalizeTableLabel(record.label),
       alt: normalizeTableAlt(record.alt),
       footerRow: record.footerRow === true,
+      footerRepeat: record.footerRepeat !== false,
       rows,
     });
   }

@@ -16,7 +16,8 @@ export type ToolbarMenuEntry =
       format?: (value: string | number) => string;
       onSelect: (value: string | number) => void;
     }
-  | { kind: "color"; value: string; onInput: (value: string) => void };
+  | { kind: "color"; value: string; onInput: (value: string) => void }
+  | { kind: "field"; value: string; placeholder?: string; ariaLabel?: string; onCommit: (value: string) => void };
 
 /** A control placed directly on a toolbar. */
 export type ToolbarEntry =
@@ -118,6 +119,31 @@ function buildMenu(
       input.type = "color";
       input.value = entry.value;
       input.addEventListener("input", () => entry.onInput(input.value));
+      row.appendChild(input);
+      menu.appendChild(row);
+      return;
+    }
+    if (entry.kind === "field") {
+      const row = document.createElement("div");
+      row.className = "app-menu-field";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = entry.value;
+      if (entry.placeholder) input.placeholder = entry.placeholder;
+      input.setAttribute("aria-label", entry.ariaLabel ?? entry.placeholder ?? "Value");
+      let committed = false;
+      const commit = () => {
+        if (committed) return;
+        committed = true;
+        entry.onCommit(input.value);
+      };
+      input.addEventListener("keydown", event => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        commit();
+        afterSelect();
+      });
+      input.addEventListener("blur", commit);
       row.appendChild(input);
       menu.appendChild(row);
       return;
