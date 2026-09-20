@@ -3121,7 +3121,7 @@ body.table-tools-active #code-render-pane {
   border-radius: 5px;
   background: #fff;
 }
-.table-sample-thumb svg { display: block; width: 100%; height: auto; max-height: 108px; }
+.table-sample-image { display: block; max-width: 100%; max-height: 108px; object-fit: contain; }
 .table-sample-placeholder { color: var(--ui-header-text); font-size: 11px; }
 .table-sample-name { font-size: 12px; font-weight: 600; }
 .table-sample-desc { color: var(--ui-header-text); font-size: 11px; line-height: 1.4; }

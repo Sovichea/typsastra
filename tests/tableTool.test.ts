@@ -23,6 +23,7 @@ function cell(text: string, align: StoredTableAlignment | null = null): StoredTa
     covered: false,
     borders: null,
     fill: null,
+    textColor: null,
     inset: null,
     raw: false,
   };
@@ -74,10 +75,11 @@ describe("table typst generation", () => {
     ].join("\n"));
   });
 
-  test("marks each row's first cell for a header column", () => {
-    expect(generateTableTypst({ ...table, headerColumn: true, headerRow: false })).toContain(
-      "  table.header([Alpha]), [1\\*2],",
-    );
+  test("keeps header-column cells as regular cells", () => {
+    const generated = generateTableTypst({ ...table, headerColumn: true, headerRow: false });
+    // `table.header` marks a repeatable header section, not a header column.
+    expect(generated).not.toContain("table.header([Alpha])");
+    expect(generated).toContain("  [Alpha], [1\\*2],");
   });
 
   test("collapses row-wide border overrides into a y condition", () => {
@@ -128,10 +130,13 @@ describe("table typst generation", () => {
 
   test("renders banded row and column styles with a fill function", () => {
     expect(generateTableTypst({ ...table, style: "banded-rows" })).toContain(
-      "  fill: (x, y) => if calc.odd(y) { luma(245) },",
+      '  fill: (x, y) => if y < 1 { rgb("#dbe4f0") } else if calc.odd(y) { rgb("#eef3f9") },',
     );
     expect(generateTableTypst({ ...table, style: "banded-columns" })).toContain(
-      "  fill: (x, y) => if calc.odd(x) { luma(245) },",
+      '  fill: (x, y) => if y < 1 { rgb("#dbe4f0") } else if calc.odd(x) { rgb("#eef3f9") },',
+    );
+    expect(generateTableTypst({ ...table, headerRow: false, style: "banded-rows" })).toContain(
+      '  fill: (x, y) => if calc.odd(y) { rgb("#eef3f9") },',
     );
     expect(generateTableTypst({ ...table, style: "default" })).not.toContain("fill:");
   });
@@ -226,7 +231,7 @@ describe("table typst generation", () => {
 
     expect(generated).toContain("  fill: (x, y) => if (x == 0 and y == 0) {");
     expect(generated).toContain('    rgb("#eef2f7")');
-    expect(generated).toContain("    if calc.odd(y) { luma(245) }");
+    expect(generated).toContain("    if calc.odd(y) { rgb(\"#eef3f9\") }");
     expect(generated).toContain("  inset: (x, y) => if (x == 1 and y == 0) {");
     expect(generated).toContain("    2pt");
   });
@@ -263,11 +268,24 @@ describe("table typst generation", () => {
 
     expect(generated).toContain("  stroke: none,");
     expect(generated).toContain(
-      '  fill: (x, y) => if y < 1 { rgb("#e8eef1") } else if calc.odd(y) { luma(245) },',
+      '  fill: (x, y) => if y < 1 { rgb("#dbe4f0") } else if calc.odd(y) { rgb("#eef3f9") },',
     );
     expect(generated).toContain('  table.hline(y: 0, stroke: 1.5pt + rgb("#000000")),');
     expect(generated).toContain('  table.hline(y: 1, stroke: 0.75pt + rgb("#000000")),');
     expect(generated).toContain('  table.hline(y: 3, stroke: 1.5pt + rgb("#000000")),');
+  });
+
+  test("colors cell text", () => {
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [[
+        { ...cell("A"), fill: "#3f4759", textColor: "#ffffff", emphasis: "bold" },
+        cell("B"),
+      ]],
+    });
+
+    expect(generated).toContain('[#strong[#text(fill: rgb("#ffffff"))[A]]], [B],');
   });
 
   test("emits explicit rules before the footer", () => {
@@ -477,9 +495,14 @@ describe("table typst generation", () => {
     expect(source).toContain("private toggleEmphasis(");
     // New-table picker with rendered thumbnails.
     expect(source).toContain("private openSamplesDialog(");
-    expect(source).toContain("renderSampleThumbnails(");
+    // Thumbnails are static images, not compiled on every open.
+    expect(source).toContain('class="table-sample-image"');
+    expect(source).toContain("src=\"/table-samples/");
+    expect(source).not.toContain("renderSampleThumbnails");
     expect(source).toContain('this.openSamplesDialog()');
-    expect(source).toContain("table-samples-overlay");
+    // Uses the shared modal structure so the global focus trap applies.
+    expect(source).toContain('"settings-overlay table-samples-overlay"');
+    expect(source).toContain('role="dialog" aria-modal="true" aria-label="New table"');
     expect(source).toContain("private createFromSample(");
     expect(source).toContain('data-field="table-caption"');
     expect(source).toContain('id: "caption-position"');
@@ -656,7 +679,7 @@ describe("stored table normalization", () => {
               { axis: "bogus" },
             ],
             rows: [[
-              { text: "a", align: "left", emphasis: "bold", fill: "#ABCDEF", inset: 3, raw: true },
+              { text: "a", align: "left", emphasis: "bold", fill: "#ABCDEF", textColor: "#112233", inset: 3, raw: true },
               { text: "b", emphasis: "bogus" },
               { text: "c", align: "bogus" },
             ]],
@@ -702,6 +725,7 @@ describe("stored table normalization", () => {
     expect(first.rules[0]).toMatchObject({ axis: "horizontal", position: 1, start: 0, end: null, color: "#abcdef" });
     expect(first.rules[1]).toMatchObject({ axis: "vertical", position: 3, start: 0, end: null });
     expect(first.rows[0][0].fill).toBe("#abcdef");
+    expect(first.rows[0][0].textColor).toBe("#112233");
     expect(first.rows[0][0].inset).toBe(3);
     expect(first.rows[0][0].raw).toBe(true);
     expect(second.columnSizes).toEqual([""]);
@@ -724,6 +748,7 @@ describe("stored table normalization", () => {
       covered: false,
       borders: null,
       fill: null,
+      textColor: null,
       inset: null,
       raw: false,
     }]]);

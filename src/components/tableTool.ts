@@ -88,6 +88,7 @@ function emptyCell(): StoredTableCell {
     covered: false,
     borders: null,
     fill: null,
+    textColor: null,
     inset: null,
     raw: false,
   };
@@ -155,6 +156,7 @@ export class TableToolController {
   private borderWidth = 0.5;
   private borderColor = "#000000";
   private fillColor = "#eef2f7";
+  private textColor = "#ffffff";
   private copiedFormats: StoredCellFormat[][] | null = null;
   private draggingSelection = false;
   private editingCell: Slot | null = null;
@@ -174,7 +176,6 @@ export class TableToolController {
   private previewDirty = false;
   private sampleDialog: HTMLElement | null = null;
   private sampleDialogCleanup: (() => void) | null = null;
-  private readonly sampleThumbnails = new Map<string, string>();
 
   public constructor(
     private readonly list: HTMLElement,
@@ -259,13 +260,13 @@ export class TableToolController {
   /** Offers ready-made tables (with rendered thumbnails) when creating one. */
   private openSamplesDialog(): void {
     this.closeSamplesDialog();
+    // Use the shared modal conventions (`.settings-overlay` + an inner
+    // `[aria-modal]` dialog) so the app's focus trap keeps Tab inside.
     const overlay = document.createElement("div");
-    overlay.className = "table-samples-overlay";
-    overlay.setAttribute("role", "dialog");
-    overlay.setAttribute("aria-modal", "true");
-    overlay.setAttribute("aria-label", "New table");
+    overlay.className = "settings-overlay table-samples-overlay";
+    overlay.setAttribute("role", "presentation");
     overlay.innerHTML =
-      `<div class="table-samples-dialog">` +
+      `<div class="table-samples-dialog" role="dialog" aria-modal="true" aria-label="New table">` +
       `<header class="table-samples-header"><div><h2>New Table</h2>` +
       `<p>Start from a sample or an empty table.</p></div>` +
       `<button type="button" class="table-samples-close settings-icon-button" aria-label="Close">✕</button>` +
@@ -276,9 +277,11 @@ export class TableToolController {
       card.type = "button";
       card.className = "table-sample-card";
       card.dataset.sample = sample.id;
+      // Thumbnails are pre-rendered static images (see `samples:render`).
       card.innerHTML =
-        `<span class="table-sample-thumb" data-thumb="${sample.id}">` +
-        `<span class="table-sample-placeholder">Rendering…</span></span>` +
+        `<span class="table-sample-thumb">` +
+        `<img class="table-sample-image" src="/table-samples/${sample.id}.svg" ` +
+        `alt="" loading="lazy" draggable="false" /></span>` +
         `<span class="table-sample-name"></span><span class="table-sample-desc"></span>`;
       card.querySelector<HTMLElement>(".table-sample-name")!.textContent = sample.name;
       card.querySelector<HTMLElement>(".table-sample-desc")!.textContent = sample.description;
@@ -297,7 +300,6 @@ export class TableToolController {
     document.body.appendChild(overlay);
     this.sampleDialog = overlay;
     grid.querySelector<HTMLElement>(".table-sample-card")?.focus();
-    void this.renderSampleThumbnails();
   }
 
   private closeSamplesDialog(): void {
@@ -305,37 +307,6 @@ export class TableToolController {
     this.sampleDialogCleanup = null;
     this.sampleDialog?.remove();
     this.sampleDialog = null;
-  }
-
-  private async renderSampleThumbnails(): Promise<void> {
-    const compile = this.deps.compilePreview;
-    for (const sample of TABLE_SAMPLES) {
-      const host = this.sampleDialog?.querySelector<HTMLElement>(`[data-thumb="${sample.id}"]`);
-      if (!host) return; // The dialog was closed.
-      const cached = this.sampleThumbnails.get(sample.id);
-      if (cached) {
-        host.innerHTML = cached;
-        continue;
-      }
-      if (!compile) {
-        host.innerHTML = `<span class="table-sample-placeholder">Preview unavailable</span>`;
-        continue;
-      }
-      try {
-        const pages = await compile(sample.build());
-        if (!this.sampleDialog) return;
-        const svg = pages[0] ?? "";
-        if (!svg) {
-          host.innerHTML = `<span class="table-sample-placeholder">Preview unavailable</span>`;
-          continue;
-        }
-        this.sampleThumbnails.set(sample.id, svg);
-        host.innerHTML = svg;
-      } catch (error) {
-        host.innerHTML = `<span class="table-sample-placeholder">Preview failed</span>`;
-        this.deps.log?.("warning", `Could not render sample "${sample.id}": ${String(error)}`);
-      }
-    }
   }
 
   public selectTable(id: string): void {
@@ -786,6 +757,9 @@ export class TableToolController {
           { kind: "heading", label: "Fill" },
           { kind: "color", value: this.fillColor, onInput: value => { this.fillColor = value; this.applyFill(table, value); } },
           { kind: "item", label: "No fill", icon: "x", onSelect: () => this.applyFill(table, null) },
+          { kind: "heading", label: "Text color" },
+          { kind: "color", value: this.textColor, onInput: value => { this.textColor = value; this.applyTextColor(table, value); } },
+          { kind: "item", label: "Default text color", icon: "x", onSelect: () => this.applyTextColor(table, null) },
           { kind: "heading", label: "Inset" },
           {
             kind: "choices",
@@ -1644,6 +1618,12 @@ export class TableToolController {
       if (fill) input.style.setProperty("--cell-fill", fill);
       else input.style.removeProperty("--cell-fill");
     });
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyTextColor(table: StoredTable, color: string | null): void {
+    this.forEachSelectionOrigin(table, cell => { cell.textColor = color; });
     this.updateCode(table);
     this.emitChange();
   }

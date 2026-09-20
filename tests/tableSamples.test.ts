@@ -20,6 +20,16 @@ describe("table samples", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  test("the grade book sample styles a dark header and colored cells", () => {
+    const grades = TABLE_SAMPLES.find(sample => sample.id === "grades")!.build();
+    const code = generateTableTypst(grades);
+    expect(grades.stroke).toBe("none");
+    expect(grades.headerColumn).toBe(true);
+    expect(grades.rows[0][0].fill).toBe("#3f4759");
+    expect(grades.rows[0][0].textColor).toBe("#ffffff");
+    expect(code).toContain('#text(fill: rgb("#ffffff"))');
+  });
+
   test("the grouped sample exercises merges, headers, and a footer", () => {
     const grouped = TABLE_SAMPLES.find(sample => sample.id === "grouped")!.build();
     expect(grouped.headerRowCount).toBe(2);

@@ -11,6 +11,7 @@ function cell(text: string, init: Partial<StoredTableCell> = {}): StoredTableCel
     covered: false,
     borders: null,
     fill: null,
+    textColor: null,
     inset: null,
     raw: false,
     ...init,
@@ -151,6 +152,33 @@ export const TABLE_SAMPLES: TableSample[] = [
         ],
       ],
     }),
+  },
+  {
+    id: "grades",
+    name: "Grade book",
+    description: "The reference’s exam table: dark header, colored cells, no grid.",
+    build: () => {
+      const dark = "#3f4759";
+      const green = "#99cc99";
+      const aqua = "#99ffff";
+      const head = (text: string) => cell(text, { fill: dark, textColor: "#ffffff", emphasis: "bold" });
+      const row = (name: string) => cell(name, { fill: dark, textColor: "#ffffff", emphasis: "bold" });
+      const grade = (text: string, fill: string) => cell(text, { fill });
+      return table({
+        id: "sample_grades",
+        name: "Grade book",
+        columns: 4,
+        headerColumn: true,
+        stroke: "none",
+        gutter: 2,
+        rows: [
+          [head(""), head("Exam 1"), head("Exam 2"), head("Exam 3")],
+          [row("John"), grade("N/A", "#f2f2f2"), grade("A", green), grade("N/A", "#f2f2f2")],
+          [row("Mary"), grade("N/A", "#f2f2f2"), grade("A", green), grade("A", green)],
+          [row("Robert"), grade("B", aqua), grade("A", green), grade("B", aqua)],
+        ],
+      });
+    },
   },
   {
     id: "booktabs",

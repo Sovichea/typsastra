@@ -128,7 +128,8 @@ function neighborSlots(
   return neighbors;
 }
 
-const BAND_FILL = "luma(245)";
+const BAND_FILL = 'rgb("#eef3f9")';
+const HEADER_FILL = 'rgb("#dbe4f0")';
 const BOOKTABS_OUTER_RULE = 1.5;
 const BOOKTABS_HEADER_RULE = 0.75;
 
@@ -196,7 +197,7 @@ function styleRules(table: StoredTable): StoredTableRule[] {
   return rules;
 }
 
-const REPORT_HEADER_FILL = 'rgb("#e8eef1")';
+
 
 /**
  * Typst resolves coincident cell sides in favor of the lower or right cell, so
@@ -382,13 +383,16 @@ function strokeArgument(table: StoredTable, groups: Array<CellGroup<SideOverride
 }
 
 function bandFillExpression(table: StoredTable): string {
-  if (table.style === "banded-rows") return `if calc.odd(y) { ${BAND_FILL} }`;
-  if (table.style === "banded-columns") return `if calc.odd(x) { ${BAND_FILL} }`;
-  // The report preset shades the header and zebra-stripes the body.
-  if (table.style === "report") {
-    const headerCount = Math.max(1, headerRowCountFor(table));
-    return `if y < ${headerCount} { ${REPORT_HEADER_FILL} } else if calc.odd(y) { ${BAND_FILL} }`;
-  }
+  // Preset styles shade the header rows and stripe the body so the result
+  // reads as styled rather than a plain grid.
+  const headerCount = headerRowCountFor(table);
+  const header = headerCount > 0 ? `y < ${headerCount}` : "";
+  const withHeader = (band: string) => header
+    ? `if ${header} { ${HEADER_FILL} } else if ${band} { ${BAND_FILL} }`
+    : `if ${band} { ${BAND_FILL} }`;
+  if (table.style === "banded-rows") return withHeader("calc.odd(y)");
+  if (table.style === "banded-columns") return withHeader("calc.odd(x)");
+  if (table.style === "report") return withHeader("calc.odd(y)");
   return "none";
 }
 
@@ -445,7 +449,8 @@ function alignArgument(table: StoredTable, groups: Array<CellGroup<string>>): st
 
 function cellBody(cell: StoredTableCell): string {
   // Raw cells carry author-written Typst (links, footnotes, lists, ...).
-  const text = cell.raw ? cell.text : escapeTableText(cell.text);
+  let text = cell.raw ? cell.text : escapeTableText(cell.text);
+  if (cell.textColor) text = `#text(fill: rgb("${cell.textColor}"))[${text}]`;
   if (cell.emphasis === "bold") return `#strong[${text}]`;
   if (cell.emphasis === "italic") return `#emph[${text}]`;
   // "Regular" must also win over an inherited bold/italic show rule.
@@ -505,22 +510,17 @@ export function generateTableTypst(table: StoredTable): string {
   const headerCount = headerRowCountFor(table);
   const lastRow = table.rows.length - 1;
   const footerIndex = table.footerRow && lastRow >= headerCount ? lastRow : -1;
-  const rowSource = (row: StoredTableCell[], rowIndex: number): string | null => {
-    const cells = row
-      .map((cell, columnIndex) => ({ cell, columnIndex }))
-      .filter(({ cell }) => !cell.covered)
-      .map(({ cell, columnIndex }) => {
-        const source = cellSource(cell);
-        return table.headerColumn && rowIndex >= headerCount && rowIndex !== footerIndex && columnIndex === 0
-          ? `table.header(${source})`
-          : source;
-      });
+  const rowSource = (row: StoredTableCell[]): string | null => {
+    // The first column is styled in the builder; it is not a `table.header`
+    // section (the docs say that is unsuitable for header columns and it breaks
+    // row layout when repeated).
+    const cells = row.filter(cell => !cell.covered).map(cellSource);
     return cells.length === 0 ? null : cells.join(", ");
   };
   if (headerCount > 0) {
     const bodies = table.rows
       .slice(0, headerCount)
-      .map((row, rowIndex) => rowSource(row, rowIndex))
+      .map(row => rowSource(row))
       .filter((body): body is string => body !== null);
     if (bodies.length > 0) {
       const repeat = table.headerRepeat === false ? "repeat: false, " : "";
@@ -529,7 +529,7 @@ export function generateTableTypst(table: StoredTable): string {
   }
   const ruleLines = [...styleRules(table), ...table.rules].map(ruleSource);
   for (let rowIndex = headerCount; rowIndex < table.rows.length; rowIndex += 1) {
-    const body = rowSource(table.rows[rowIndex], rowIndex);
+    const body = rowSource(table.rows[rowIndex]);
     if (body === null) continue;
     if (rowIndex === footerIndex) {
       // Explicit rules cannot follow a footer, so emit them just before it.

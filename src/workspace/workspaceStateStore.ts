@@ -56,6 +56,8 @@ export type StoredTableCell = {
   borders: StoredTableCellBorders | null;
   /** `#rrggbb` cell background; null inherits the table/banding fill. */
   fill: string | null;
+  /** `#rrggbb` cell text color; null inherits the document text color. */
+  textColor: string | null;
   /** Cell padding in points; null inherits the table inset. */
   inset: number | null;
   /** When true, `text` is emitted as Typst content instead of escaped markup. */
@@ -531,6 +533,7 @@ function normalizeTables(value: unknown): StoredTable[] {
             covered: true,
             borders: null,
             fill: null,
+            textColor: null,
             inset: null,
             raw: false,
           });
@@ -556,6 +559,7 @@ function normalizeTables(value: unknown): StoredTable[] {
           covered: false,
           borders: normalizeCellBorders(cell.borders),
           fill: normalizeCellFill(cell.fill),
+          textColor: normalizeCellFill(cell.textColor),
           inset: normalizeCellInset(cell.inset),
           raw: cell.raw === true,
         });
