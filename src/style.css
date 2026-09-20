@@ -3177,6 +3177,8 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-cell-shell .typsastra-caret-measure { font: inherit; }
 .table-tool-cell-shell .typsastra-input-caret { height: 1.5em; }
+/* Selecting a cell is not editing it: show the caret only in edit mode. */
+.table-tool-cell-wrap .table-tool-cell-shell:not(.is-editing) .typsastra-input-caret { display: none; }
 .table-tool-cell-wrap.band-fill .table-tool-cell {
   background: color-mix(in srgb, var(--ui-bg) 94%, var(--ui-hover));
 }

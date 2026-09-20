@@ -342,6 +342,7 @@ describe("table typst generation", () => {
     expect(source).toContain('wrapEditorCaretInput(field, { shellClass: "table-tool-field-shell" })');
     expect(source).toContain('class="table-tool-field"');
     expect(source).toContain('wrapEditorCaretInput(input, { shellClass: "table-tool-cell-shell" })');
+    expect(source).toContain("private markCellEditing(");
     expect(source).toContain('createAppIcon("copy"');
     expect(source).toContain('input.addEventListener("contextmenu"');
     expect(source).toContain("private openCellContextMenu(");

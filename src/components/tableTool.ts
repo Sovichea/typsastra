@@ -980,6 +980,12 @@ export class TableToolController {
     this.syncSelectionSummary();
   }
 
+  /** The editor caret only appears while a cell is actually being edited. */
+  private markCellEditing(input: HTMLInputElement, editing: boolean): void {
+    input.classList.toggle("is-editing", editing);
+    input.closest(".table-tool-cell-shell")?.classList.toggle("is-editing", editing);
+  }
+
   private enterEditMode(table: StoredTable, origin: Slot, typedCharacter?: string): void {
     const cell = table.rows[origin.row]?.[origin.column];
     const input = this.cellInputs.get(`${origin.row}:${origin.column}`);
@@ -997,7 +1003,7 @@ export class TableToolController {
     if (typedCharacter !== undefined) cell.text = typedCharacter;
     input.readOnly = false;
     input.value = cell.text;
-    input.classList.add("is-editing");
+    this.markCellEditing(input, true);
     input.focus();
     const caret = input.value.length;
     input.setSelectionRange(caret, caret);
@@ -1016,7 +1022,7 @@ export class TableToolController {
     const input = this.cellInputs.get(`${origin.row}:${origin.column}`);
     if (input) {
       input.readOnly = true;
-      input.classList.remove("is-editing");
+      this.markCellEditing(input, false);
     }
     // The content is final now, so the deferred render can run.
     this.schedulePreview();
@@ -1030,7 +1036,7 @@ export class TableToolController {
     input.value = this.editStartValue;
     this.editingCell = null;
     input.readOnly = true;
-    input.classList.remove("is-editing");
+    this.markCellEditing(input, false);
     // A cancelled edit must not remain in history or the persisted model.
     if (this.historyTimer !== null) {
       window.clearTimeout(this.historyTimer);
