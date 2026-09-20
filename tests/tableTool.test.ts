@@ -148,18 +148,30 @@ describe("table typst generation", () => {
     );
   });
 
-  test("wraps a captioned table in a figure", () => {
+  test("wraps a captioned table in an in-flow figure", () => {
     const bottom = generateTableTypst({ ...table, caption: "Results * summary" });
     expect(bottom.startsWith("#figure(\n  table(")).toBe(true);
-    expect(bottom).toContain("  kind: table,\n  placement: bottom,");
+    // No `placement`: that would float the whole figure to a page edge.
+    expect(bottom).not.toContain("placement:");
     expect(bottom).toContain("  caption: [Results \\* summary],");
     expect(bottom.endsWith("\n)")).toBe(true);
 
+    // `figure.caption(position: top)` moves only the caption, not the figure.
     const top = generateTableTypst({ ...table, caption: "Results", captionPosition: "top" });
-    expect(top).toContain("  placement: top,");
+    expect(top).toContain("  caption: figure.caption(position: top, [Results]),");
 
     const centered = generateTableTypst({ ...table, caption: "Results", captionAlign: "center" });
     expect(centered).toContain("  caption: align(center)[Results],");
+
+    const topCentered = generateTableTypst({
+      ...table,
+      caption: "Results",
+      captionPosition: "top",
+      captionAlign: "center",
+    });
+    expect(topCentered).toContain(
+      "  caption: figure.caption(position: top, align(center)[Results]),",
+    );
   });
 
   test("omits the figure when there is no caption", () => {
