@@ -3374,6 +3374,7 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-list-item {
   width: 100%;
+  padding-left: 10px;
   border: 0;
   background: transparent;
   color: inherit;

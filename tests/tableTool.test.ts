@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  autoTextColorForFill,
   findTableDirectiveBlocks,
   generateTableTypst,
   tableDirectiveBlock,
 } from "../src/components/tableTypst";
-import { tableCellOrigin } from "../src/components/tableTool";
+import { compareCellText, tableCellOrigin } from "../src/components/tableTool";
 import {
   normalizeWorkspaceMetadata,
   type StoredTable,
@@ -278,6 +279,24 @@ describe("table typst generation", () => {
     expect(generated).toContain('  table.hline(y: 3, stroke: 1.5pt + rgb("#000000")),');
   });
 
+  test("auto-contrasts text on filled cells", () => {
+    expect(autoTextColorForFill("#3f4759")).toBe("#ffffff");
+    expect(autoTextColorForFill("#99cc99")).toBe("#000000");
+
+    const generated = generateTableTypst({
+      ...table,
+      headerRow: false,
+      rows: [[
+        { ...cell("Dark"), fill: "#3f4759" },
+        { ...cell("Light"), fill: "#99cc99" },
+      ]],
+    });
+
+    expect(generated).toContain('[#text(fill: rgb("#ffffff"))[Dark]]');
+    // A light fill keeps Typst's default black text (no redundant wrapper).
+    expect(generated).toContain("[Light]");
+  });
+
   test("colors cell text", () => {
     const generated = generateTableTypst({
       ...table,
@@ -469,6 +488,13 @@ describe("table typst generation", () => {
     expect(generated).toContain("  [A], [B],");
   });
 
+  test("compares cell text numerically and alphabetically", () => {
+    expect(compareCellText("2", "10")).toBeLessThan(0);
+    expect(compareCellText("1,240", "980")).toBeGreaterThan(0);
+    expect(compareCellText("apple", "Banana")).toBeLessThan(0);
+    expect(compareCellText("tie", "tie")).toBe(0);
+  });
+
   test("maps covered slots to their merged origin", () => {
     const merged: StoredTable = {
       ...table,
@@ -546,6 +572,15 @@ describe("table typst generation", () => {
     expect(source).toContain('label: "Keep together"');
     expect(source).toContain('label: "Break across pages"');
     expect(source).toContain("private addRuleFromSelection(");
+    // Destructive removals always confirm first.
+    expect(source).toContain("async function confirmDelete(");
+    expect(source).toContain("private async deleteTable(");
+    expect(source).toContain("private async deleteRow(");
+    expect(source).toContain("private async deleteColumn(");
+    expect(source).toContain("private sortByColumn(");
+    expect(source).toContain("private transpose(");
+    expect(source).toContain('label: "Sort ascending"');
+    expect(source).toContain('label: "Transpose"');
     expect(source).toContain("private ruleRemovalEntries(");
     expect(source).toContain('label: "Remove rule"');
     // Reordering now shifts rules instead of blocking.
@@ -583,11 +618,14 @@ describe("table typst generation", () => {
     expect(source).toContain("private markCellEditing(");
     expect(source).toContain('createAppIcon("copy"');
     expect(source).toContain('input.addEventListener("contextmenu"');
+    // Tables are deleted from the explorer, not the Table menu.
+    expect(source).toContain('item.addEventListener("contextmenu"');
+    expect(source).toContain('label: "Delete table"');
     expect(source).toContain("private openCellContextMenu(");
     expect(source).toContain("private insertRow(");
     expect(source).toContain("private insertColumn(");
-    expect(source).toContain("private deleteRow(");
-    expect(source).toContain("private deleteColumn(");
+    expect(source).toContain("private async deleteRow(");
+    expect(source).toContain("private async deleteColumn(");
     expect(source).toContain("private copySelection(");
     expect(source).toContain("private pasteSelection(");
     expect(source).toContain('readText, writeText');

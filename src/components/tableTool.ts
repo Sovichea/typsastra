@@ -1,3 +1,4 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { TABLE_SAMPLES, type TableSample } from "./tableSamples";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
@@ -21,7 +22,7 @@ import type {
   StoredTableStyle,
   StoredTableVerticalAlignment,
 } from "../workspace/workspaceStateStore";
-import { generateTableTypst } from "./tableTypst";
+import { autoTextColorForFill, generateTableTypst } from "./tableTypst";
 
 export type TableToolDependencies = {
   /** Writes the current tables back to the portable project config. */
@@ -34,6 +35,8 @@ export type TableToolDependencies = {
   showPreview?(pages: readonly string[]): void;
   /** Shows a plain-text status in the preview pane. */
   showPreviewMessage?(message: string): void;
+  /** Shows the app's shared context menu (used by the table explorer list). */
+  showContextMenu?(items: ReadonlyArray<{ label: string; onSelect: () => void }>, x: number, y: number): void;
   log?(kind: "info" | "warning", message: string): void;
 };
 
@@ -110,6 +113,28 @@ function normalizeTrackSize(value: string): string | null {
   const trimmed = value.trim();
   if (trimmed === "" || trimmed === "auto") return "";
   return TRACK_SIZE_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+/** Confirm destructive removals with the app's shared dialog style. */
+async function confirmDelete(message: string): Promise<boolean> {
+  return confirm(message, { title: "Confirm Delete", kind: "warning" });
+}
+
+/** Leading header rows, matching generation. */
+function headerRowCountOf(table: StoredTable): number {
+  return table.headerRow ? Math.max(1, Math.min(table.headerRowCount, table.rows.length)) : 0;
+}
+
+/** Numbers sort numerically; everything else sorts case-insensitively. */
+export function compareCellText(a: string, b: string): number {
+  const asNumber = (value: string) => {
+    const cleaned = value.replace(/[^0-9.eE+-]/gu, "");
+    return cleaned !== "" && Number.isFinite(Number(cleaned)) ? Number(cleaned) : null;
+  };
+  const left = asNumber(a);
+  const right = asNumber(b);
+  if (left !== null && right !== null) return left - right;
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
 function describeRule(rule: StoredTableRule): string {
@@ -519,6 +544,17 @@ export class TableToolController {
       meta.textContent = `${table.rows.length}×${table.columns}`;
       item.append(icon, text, meta);
       item.addEventListener("click", () => this.selectTable(table.id));
+      // Tables are managed from the explorer: right-click to delete.
+      item.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.selectTable(table.id);
+        const name = this.inspector.querySelector<HTMLInputElement>('[data-field="table-name"]');
+        this.deps.showContextMenu?.([
+          { label: "Rename", onSelect: () => name?.focus() },
+          { label: "Delete table", onSelect: () => this.deleteTable(table) },
+        ], event.clientX, event.clientY);
+      });
       this.list.appendChild(item);
     }
   }
@@ -657,20 +693,7 @@ export class TableToolController {
             kind: "item",
             label: "Remove row",
             icon: "minus",
-            onSelect: () => {
-              if (table.rows.length <= 1) return;
-              if (tableHasSpans(table)) {
-                this.deps.showPreviewMessage?.("Remove rows after splitting merged cells.");
-                return;
-              }
-              const removedRow = table.rows.length - 1;
-              table.rows.pop();
-              table.rowSizes.length = table.rows.length;
-              this.shiftRulesForDelete("row", removedRow);
-              this.resetSelection();
-              this.refreshGrid(table);
-              this.emitChange();
-            },
+            onSelect: () => void this.deleteRow(table, table.rows.length - 1),
           },
           { kind: "separator" },
           { kind: "heading", label: "Row height" },
@@ -715,21 +738,7 @@ export class TableToolController {
             kind: "item",
             label: "Remove column",
             icon: "minus",
-            onSelect: () => {
-              if (table.columns <= 1) return;
-              if (tableHasSpans(table)) {
-                this.deps.showPreviewMessage?.("Remove columns after splitting merged cells.");
-                return;
-              }
-              const removedColumn = table.columns - 1;
-              table.columns -= 1;
-              for (const row of table.rows) row.length = table.columns;
-              table.columnSizes.length = table.columns;
-              this.shiftRulesForDelete("column", removedColumn);
-              this.resetSelection();
-              this.refreshGrid(table);
-              this.emitChange();
-            },
+            onSelect: () => void this.deleteColumn(table, table.columns - 1),
           },
           { kind: "separator" },
           { kind: "heading", label: "Column width" },
@@ -747,6 +756,9 @@ export class TableToolController {
             ariaLabel: "Custom column width",
             onCommit: value => this.applyColumnSize(table, value),
           },
+          { kind: "separator" },
+          { kind: "item", label: "Sort ascending", icon: "arrowUp", onSelect: () => this.sortByColumn(table, 1) },
+          { kind: "item", label: "Sort descending", icon: "arrowDown", onSelect: () => this.sortByColumn(table, -1) },
         ],
       },
       {
@@ -976,7 +988,7 @@ export class TableToolController {
             },
           },
           { kind: "separator" },
-          { kind: "item", label: "Delete table", icon: "x", onSelect: () => this.deleteTable(table) },
+          { kind: "item", label: "Transpose", onSelect: () => this.transpose(table) },
         ],
       },
       { kind: "separator" },
@@ -1052,9 +1064,11 @@ export class TableToolController {
     this.syncCellSelects(table);
   }
 
-  private deleteTable(table: StoredTable): void {
+  private async deleteTable(table: StoredTable): Promise<void> {
     const index = this.tables.findIndex(candidate => candidate.id === table.id);
     if (index === -1) return;
+    const accepted = await confirmDelete(`Delete the table "${table.name}"? This cannot be undone.`);
+    if (!accepted) return;
     this.tables.splice(index, 1);
     this.selectedId = this.tables[Math.min(index, this.tables.length - 1)]?.id ?? null;
     this.resetSelection();
@@ -1111,7 +1125,7 @@ export class TableToolController {
         if (cell.align) input.classList.add(`align-${cell.align}`);
         if (cell.emphasis === "bold") input.classList.add("emphasis-bold");
         if (cell.emphasis === "italic") input.classList.add("emphasis-italic");
-        if (cell.fill) input.style.setProperty("--cell-fill", cell.fill);
+        this.applyInputAppearance(input, cell);
         if (cell.raw) input.classList.add("is-raw");
         input.value = cell.text;
         input.readOnly = true;
@@ -1671,13 +1685,20 @@ export class TableToolController {
     this.emitChange();
   }
 
+  /** Reflects a cell's fill/text color on its builder input. */
+  private applyInputAppearance(input: HTMLInputElement, cell: StoredTableCell): void {
+    if (cell.fill) input.style.setProperty("--cell-fill", cell.fill);
+    else input.style.removeProperty("--cell-fill");
+    const color = cell.textColor ?? (cell.fill ? autoTextColorForFill(cell.fill) : null);
+    if (color) input.style.color = color;
+    else input.style.removeProperty("color");
+  }
+
   private applyFill(table: StoredTable, fill: string | null): void {
     this.forEachSelectionOrigin(table, (cell, key) => {
       cell.fill = fill;
       const input = this.cellInputs.get(key);
-      if (!input) return;
-      if (fill) input.style.setProperty("--cell-fill", fill);
-      else input.style.removeProperty("--cell-fill");
+      if (input) this.applyInputAppearance(input, cell);
     });
     this.updateCode(table);
     this.emitChange();
@@ -1696,7 +1717,11 @@ export class TableToolController {
   }
 
   private applyTextColor(table: StoredTable, color: string | null): void {
-    this.forEachSelectionOrigin(table, cell => { cell.textColor = color; });
+    this.forEachSelectionOrigin(table, (cell, key) => {
+      cell.textColor = color;
+      const input = this.cellInputs.get(key);
+      if (input) this.applyInputAppearance(input, cell);
+    });
     this.updateCode(table);
     this.emitChange();
   }
@@ -1849,12 +1874,14 @@ export class TableToolController {
     this.emitChange();
   }
 
-  private deleteRow(table: StoredTable, index: number): void {
+  private async deleteRow(table: StoredTable, index: number): Promise<void> {
     if (table.rows.length <= 1) return;
     if (tableHasSpans(table)) {
       this.deps.showPreviewMessage?.("Delete rows after splitting merged cells.");
       return;
     }
+    const accepted = await confirmDelete(`Delete row ${index + 1}? This cannot be undone.`);
+    if (!accepted) return;
     table.rows.splice(index, 1);
     table.rowSizes.splice(index, 1);
     this.shiftRulesForDelete("row", index);
@@ -1865,12 +1892,14 @@ export class TableToolController {
     this.emitChange();
   }
 
-  private deleteColumn(table: StoredTable, index: number): void {
+  private async deleteColumn(table: StoredTable, index: number): Promise<void> {
     if (table.columns <= 1) return;
     if (tableHasSpans(table)) {
       this.deps.showPreviewMessage?.("Delete columns after splitting merged cells.");
       return;
     }
+    const accepted = await confirmDelete(`Delete column ${index + 1}? This cannot be undone.`);
+    if (!accepted) return;
     table.columns -= 1;
     for (const row of table.rows) row.splice(index, 1);
     table.columnSizes.splice(index, 1);
@@ -2079,6 +2108,68 @@ export class TableToolController {
       this.deps.showPreviewMessage?.("Select a merged cell to split it.");
       return;
     }
+    this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private sortByColumn(table: StoredTable, direction: 1 | -1): void {
+    if (tableHasSpans(table)) {
+      this.deps.showPreviewMessage?.("Sort after splitting merged cells.");
+      return;
+    }
+    const range = this.selectionRange();
+    const column = range ? range.minColumn : this.selectionFocus?.column ?? 0;
+    if (column < 0 || column >= table.columns) return;
+    const headerCount = headerRowCountOf(table);
+    const footerCount = table.footerRow && table.rows.length > headerCount ? 1 : 0;
+    const end = table.rows.length - footerCount;
+    const body = table.rows.slice(headerCount, end).map((row, index) => ({
+      row,
+      size: table.rowSizes[headerCount + index] ?? "",
+    }));
+    if (body.length < 2) return;
+    body.sort((a, b) =>
+      direction * compareCellText(a.row[column]?.text ?? "", b.row[column]?.text ?? ""));
+    body.forEach((entry, index) => {
+      table.rows[headerCount + index] = entry.row;
+      table.rowSizes[headerCount + index] = entry.size;
+    });
+    this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private transpose(table: StoredTable): void {
+    if (tableHasSpans(table)) {
+      this.deps.showPreviewMessage?.("Transpose after splitting merged cells.");
+      return;
+    }
+    if (table.rules.length > 0) {
+      this.deps.showPreviewMessage?.("Transpose after clearing rules.");
+      return;
+    }
+    const rows = table.rows;
+    const rowCount = rows.length;
+    const columnCount = table.columns;
+    const next: StoredTableCell[][] = [];
+    for (let column = 0; column < columnCount; column += 1) {
+      const row: StoredTableCell[] = [];
+      for (let source = 0; source < rowCount; source += 1) {
+        row.push({ ...rows[source][column], colspan: 1, rowspan: 1, covered: false });
+      }
+      next.push(row);
+    }
+    const oldColumnSizes = [...table.columnSizes];
+    const oldRowSizes = [...table.rowSizes];
+    table.rows = next;
+    table.columns = rowCount;
+    table.columnSizes = Array.from({ length: rowCount }, (_value, index) => oldRowSizes[index] ?? "");
+    table.rowSizes = Array.from({ length: columnCount }, (_value, index) => oldColumnSizes[index] ?? "");
+    const previousHeaderRow = table.headerRow;
+    table.headerRow = table.headerColumn;
+    table.headerColumn = previousHeaderRow;
+    table.headerRowCount = table.headerRow ? 1 : 0;
+    this.selectionAnchor = { row: 0, column: 0 };
+    this.selectionFocus = { row: 0, column: 0 };
     this.refreshGrid(table);
     this.emitChange();
   }

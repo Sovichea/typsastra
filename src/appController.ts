@@ -778,6 +778,7 @@ export class TypsastraWorkspaceController {
       },
       showPreview: pages => this.showTablePreview(pages),
       showPreviewMessage: message => this.showTablePreviewMessage(message),
+      showContextMenu: (items, x, y) => this.contextMenuController.showCustomMenu(items, x, y),
       log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
     },
   );

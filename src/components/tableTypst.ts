@@ -447,10 +447,24 @@ function alignArgument(table: StoredTable, groups: Array<CellGroup<string>>): st
   return lines.join("\n");
 }
 
+/** Picks black or white text for readable contrast on a fill color. */
+export function autoTextColorForFill(fill: string): string {
+  const hex = fill.replace(/[^0-9a-fA-F]/gu, "").padEnd(6, "0").slice(0, 6);
+  const channel = (offset: number) => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  return luminance > 0.5 ? "#000000" : "#ffffff";
+}
+
 function cellBody(cell: StoredTableCell): string {
   // Raw cells carry author-written Typst (links, footnotes, lists, ...).
   let text = cell.raw ? cell.text : escapeTableText(cell.text);
-  if (cell.textColor) text = `#text(fill: rgb("${cell.textColor}"))[${text}]`;
+  // Explicit color wins; a filled cell otherwise gets a readable contrast color
+  // (black is Typst's default, so only the dark-fill white override is emitted).
+  const color = cell.textColor ?? (cell.fill ? autoTextColorForFill(cell.fill) : null);
+  if (color && color !== "#000000") text = `#text(fill: rgb("${color}"))[${text}]`;
   if (cell.emphasis === "bold") text = `#strong[${text}]`;
   else if (cell.emphasis === "italic") text = `#emph[${text}]`;
   // "Regular" must also win over an inherited bold/italic show rule.
