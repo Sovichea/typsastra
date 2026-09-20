@@ -1183,7 +1183,7 @@ export class TableToolController {
     const range = this.selectionRange();
     if (!range) return;
     if (range.minRow === range.maxRow && range.minColumn === range.maxColumn) {
-      this.deps.log?.("info", "Select more than one cell to merge.");
+      this.deps.showPreviewMessage?.("Select more than one cell to merge.");
       return;
     }
     for (let row = range.minRow; row <= range.maxRow; row += 1) {

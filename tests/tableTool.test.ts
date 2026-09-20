@@ -310,6 +310,7 @@ describe("table typst generation", () => {
     expect(source).toContain('readText, writeText');
     expect(source).toContain("private openTableMenu(");
     expect(source).toContain('"Merge cells"');
+    expect(source).toContain('this.deps.showPreviewMessage?.("Select more than one cell to merge.");');
     expect(source).toContain("this.draggingSelection = true");
     expect(source).toContain('input.addEventListener("pointerenter"');
     expect(source).toContain('this.applyBorderToSelection(table, "outline")');
