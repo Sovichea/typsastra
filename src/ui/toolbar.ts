@@ -55,7 +55,7 @@ export type SharedToolbar = {
   dispose(): void;
 };
 
-function buildMenuItem(entry: Extract<ToolbarMenuEntry, { kind: "item" | "toggle" }>, rebuild: () => void): HTMLElement {
+function buildMenuItem(entry: Extract<ToolbarMenuEntry, { kind: "item" | "toggle" }>, afterSelect: () => void): HTMLElement {
   const item = document.createElement("div");
   item.className = "dropdown-item app-menu-item";
   item.setAttribute("role", "menuitem");
@@ -68,7 +68,7 @@ function buildMenuItem(entry: Extract<ToolbarMenuEntry, { kind: "item" | "toggle
   if (entry.kind !== "item" || !entry.disabled) {
     item.addEventListener("click", () => {
       entry.onSelect();
-      rebuild();
+      afterSelect();
     });
   }
   return item;
@@ -77,7 +77,7 @@ function buildMenuItem(entry: Extract<ToolbarMenuEntry, { kind: "item" | "toggle
 function buildMenu(
   menu: HTMLElement,
   entries: readonly ToolbarMenuEntry[],
-  rebuild: () => void,
+  afterSelect: () => void,
 ): void {
   menu.replaceChildren();
   entries.forEach(entry => {
@@ -104,7 +104,7 @@ function buildMenu(
         if (entry.current() === value) button.classList.add("active");
         button.addEventListener("click", () => {
           entry.onSelect(value);
-          rebuild();
+          afterSelect();
         });
         row.appendChild(button);
       });
@@ -122,7 +122,7 @@ function buildMenu(
       menu.appendChild(row);
       return;
     }
-    menu.appendChild(buildMenuItem(entry, rebuild));
+    menu.appendChild(buildMenuItem(entry, afterSelect));
   });
 }
 
@@ -164,12 +164,15 @@ export function createToolbar(options: {
     position: { left: number; top: number },
     entries: () => readonly ToolbarMenuEntry[],
     anchor: HTMLElement | null,
+    closeOnSelect: boolean,
   ): void => {
     closeMenus();
     const menu = document.createElement("div");
     menu.className = "dropdown-menu app-menu";
     menu.setAttribute("role", "menu");
-    buildMenu(menu, entries(), rebuild);
+    // Toolbar dropdowns stay open so several options can be applied; a context
+    // menu is a one-time action and closes after the pick.
+    buildMenu(menu, entries(), closeOnSelect ? closeMenus : rebuild);
     document.body.appendChild(menu);
     menu.style.left = `${Math.max(8, Math.min(position.left, window.innerWidth - menu.offsetWidth - 8))}px`;
     menu.style.top = `${Math.max(8, Math.min(position.top, window.innerHeight - menu.offsetHeight - 8))}px`;
@@ -247,7 +250,7 @@ export function createToolbar(options: {
           return;
         }
         const rect = button.getBoundingClientRect();
-        showMenu({ left: rect.left, top: rect.bottom + 4 }, entry.entries, button);
+        showMenu({ left: rect.left, top: rect.bottom + 4 }, entry.entries, button, false);
       });
     } else {
       button.classList.toggle("active", entry.active === true);
@@ -275,7 +278,7 @@ export function createToolbar(options: {
       if (select) select.value = value;
     },
     openMenuAt(position, entries) {
-      showMenu(position, entries, null);
+      showMenu(position, entries, null, true);
     },
     closeMenus,
     dispose() {

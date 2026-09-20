@@ -14,9 +14,12 @@ describe("shared toolbar", () => {
     expect(source).toContain("setDisabled(id: string, disabled: boolean)");
     expect(source).toContain("setSelectValue(id: string, value: string)");
     expect(source).toContain("openMenuAt(");
-    // Menus stay open after a pick and rebuild so checks/choices stay current.
+    // Toolbar dropdowns stay open after a pick and rebuild their state, while
+    // a context menu is a one-time action that closes.
     expect(source).toContain("entry.onSelect();");
-    expect(source).toContain("rebuild();");
+    expect(source).toContain("afterSelect();");
+    expect(source).toContain("showMenu({ left: rect.left, top: rect.bottom + 4 }, entry.entries, button, false);");
+    expect(source).toContain("showMenu(position, entries, null, true);");
   });
 
   test("table editor consumes the shared toolbar with only its own entries", async () => {
