@@ -580,6 +580,12 @@ describe("table typst generation", () => {
     expect(source).toContain("private readCellsFromDocument(");
     expect(source).toContain('label: "Read cells from document"');
     expect(source).toContain("this.deps.readBlock?.");
+    // Reopening a table refreshes it from the linked block when code diverged.
+    expect(source).toContain("public readLinkedCells(id: string): void");
+    expect(source).toContain("this.deps.getBlockSource?.");
+    // Builder changes write back to the linked blocks automatically.
+    expect(source).toContain("private scheduleBlockSync(");
+    expect(source).toContain("private flushBlockSync(");
     // Link status mirrors the image tool's reference list.
     expect(source).toContain("private renderLinkStatus(");
     expect(source).toContain("this.deps.getLink?.");
@@ -795,6 +801,7 @@ describe("table preview compilation", () => {
     expect(app).toContain("private renameTableDirectiveBlock(previousId: string, nextId: string): void");
     expect(app).toContain("private readTableDirectiveBlock(id: string)");
     expect(app).toContain("private navigateToTableTool(tableId: string): void");
+    expect(app).toContain("this.tableToolController.readLinkedCells(tableId);");
     expect(app).toContain("syncTableDirectiveContent(");
     expect(app).toContain("private tableLinkFor(");
     expect(app).toContain("private async openTableLink(id: string): Promise<void>");

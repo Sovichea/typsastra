@@ -3,7 +3,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { dirname, join } from "@tauri-apps/api/path";
-import { EditorState, type Extension, type Text } from "@codemirror/state";
+import { EditorState, Transaction, type Extension, type Text } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { undo, redo, selectAll, undoDepth } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
@@ -785,7 +785,10 @@ export class TypsastraWorkspaceController {
       });
       return;
     }
-    view.dispatch({ changes: { from: 0, to: current.length, insert: next }, userEvent: "input" });
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: next },
+      annotations: Transaction.addToHistory.of(false),
+    });
   }
 
   /** Location of a table's `//@table:` directive among the open documents. */
@@ -840,14 +843,19 @@ export class TypsastraWorkspaceController {
     this.editorInstance.focus();
   }
 
-  /** Cell contents of a linked block in the active document, or null. */
-  private readTableDirectiveBlock(id: string): ReadonlyArray<string> | null {
+  /** Raw source between a linked block's markers in the active document. */
+  private tableDirectiveSource(id: string): string | null {
     const path = this.activeFilePath;
     if (!path || !isTypstDocumentPath(path)) return null;
     const text = this.editorInstance.state.doc.toString();
     const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === id);
-    if (!block) return null;
-    return extractTableCells(text.slice(block.contentFrom, block.contentTo));
+    return block ? text.slice(block.contentFrom, block.contentTo) : null;
+  }
+
+  /** Cell contents of a linked block in the active document, or null. */
+  private readTableDirectiveBlock(id: string): ReadonlyArray<string> | null {
+    const source = this.tableDirectiveSource(id);
+    return source === null ? null : extractTableCells(source);
   }
 
   /** Updates a linked block's `//@table:` anchor after a table id change. */
@@ -862,7 +870,7 @@ export class TypsastraWorkspaceController {
     const anchorEnd = lineEnd === -1 ? text.length : lineEnd;
     view.dispatch({
       changes: { from: block.from, to: anchorEnd, insert: `//@table:${nextId}` },
-      userEvent: "input",
+      annotations: Transaction.addToHistory.of(false),
     });
   }
 
@@ -897,6 +905,7 @@ export class TypsastraWorkspaceController {
       syncBlocks: blocks => this.syncTableDirectiveBlocks(blocks),
       renameBlock: (previousId, nextId) => this.renameTableDirectiveBlock(previousId, nextId),
       readBlock: id => this.readTableDirectiveBlock(id),
+      getBlockSource: id => this.tableDirectiveSource(id),
       getLink: id => this.tableLinkFor(id),
       openLink: id => void this.openTableLink(id),
       log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
@@ -2121,6 +2130,8 @@ export class TypsastraWorkspaceController {
     this.sidebarController.setTool("tables");
     this.tableToolController.show();
     this.tableToolController.selectTable(tableId);
+    // Pick up any cell edits made in the linked block.
+    this.tableToolController.readLinkedCells(tableId);
   }
 
   private async handleImageToolFilesWritten(

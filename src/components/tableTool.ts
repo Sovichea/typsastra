@@ -45,6 +45,8 @@ export type TableToolDependencies = {
   renameBlock?(previousId: string, nextId: string): void;
   /** Reads cell contents from a linked block in the active document. */
   readBlock?(id: string): ReadonlyArray<string> | null;
+  /** Raw source between a block's markers, for change detection. */
+  getBlockSource?(id: string): string | null;
   /** Where the table's `//@table:` directive lives, for the link status. */
   getLink?(id: string): { path: string; line: number; column: number; label: string } | null;
   /** Opens the linked directive in the code editor. */
@@ -229,6 +231,7 @@ export class TableToolController {
   private persistTimer: number | null = null;
   private previewTimer: number | null = null;
   private renameTimer: number | null = null;
+  private blockSyncTimer: number | null = null;
   private previewGeneration = 0;
   private previewCompiling = false;
   private previewDirty = false;
@@ -277,6 +280,11 @@ export class TableToolController {
     if (this.renameTimer !== null) {
       window.clearTimeout(this.renameTimer);
       this.renameTimer = null;
+    }
+    if (this.blockSyncTimer !== null) {
+      window.clearTimeout(this.blockSyncTimer);
+      this.blockSyncTimer = null;
+      this.flushBlockSync();
     }
     this.closeSamplesDialog();
     this.closeImportDialog();
@@ -570,6 +578,23 @@ export class TableToolController {
     this.deps.tablesChanged?.(this.tables);
     this.schedulePersist();
     if (options.preview !== false) this.schedulePreview();
+    this.scheduleBlockSync();
+  }
+
+  /** Writes builder changes back to the linked blocks (debounced). */
+  private scheduleBlockSync(): void {
+    if (!this.deps.syncBlocks) return;
+    if (this.blockSyncTimer !== null) window.clearTimeout(this.blockSyncTimer);
+    this.blockSyncTimer = window.setTimeout(() => {
+      this.blockSyncTimer = null;
+      this.flushBlockSync();
+    }, 400);
+  }
+
+  private flushBlockSync(): void {
+    this.deps.syncBlocks?.(
+      this.tables.map(table => ({ id: table.id, code: generateTableTypst(table) })),
+    );
   }
 
   private recordHistoryBurst(): void {
@@ -1962,21 +1987,22 @@ export class TableToolController {
    * builder emphasis/text color/rotation are cleared since the content now
    * carries them.
    */
-  private readCellsFromDocument(table: StoredTable): void {
+  private readCellsFromDocument(table: StoredTable, options: { silent?: boolean } = {}): boolean {
+    const notify = (message: string) => {
+      if (!options.silent) this.deps.showPreviewMessage?.(message);
+    };
     const cells = this.deps.readBlock?.(table.id);
     if (!cells) {
-      this.deps.showPreviewMessage?.("No linked table block was found in the active document.");
-      return;
+      notify("No linked table block was found in the active document.");
+      return false;
     }
     const origins: StoredTableCell[] = [];
     table.rows.forEach(row => row.forEach(cell => {
       if (!cell.covered) origins.push(cell);
     }));
     if (cells.length !== origins.length) {
-      this.deps.showPreviewMessage?.(
-        `The linked block has ${cells.length} cells but the table has ${origins.length}. Sync it first.`,
-      );
-      return;
+      notify(`The linked block has ${cells.length} cells but the table has ${origins.length}. Sync it first.`);
+      return false;
     }
     origins.forEach((cell, index) => {
       cell.text = cells[index];
@@ -1987,6 +2013,21 @@ export class TableToolController {
     });
     this.refreshGrid(table);
     this.emitChange();
+    return true;
+  }
+
+  /**
+   * Refreshes the table from its linked block when the code has diverged from
+   * the builder (so navigating back shows code edits, without clobbering an
+   * in-sync model on every visit).
+   */
+  public readLinkedCells(id: string): void {
+    const table = this.tables.find(candidate => candidate.id === id);
+    if (!table) return;
+    const source = this.deps.getBlockSource?.(id);
+    if (source === null || source === undefined) return;
+    if (source.trim() === generateTableTypst(table).trim()) return;
+    this.readCellsFromDocument(table, { silent: true });
   }
 
   private applyRotate(table: StoredTable, rotate: boolean): void {
