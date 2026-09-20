@@ -129,6 +129,12 @@ export type StoredTable = {
   footerRepeat: boolean;
   /** Lets a captioned (figure) table break across pages. */
   breakable: boolean;
+  /**
+   * When set, body rows are read from this CSV file at compile time
+   * (`..csv("path").map(row => row.map(cell => [cell])).flatten()`) instead of
+   * the literal grid rows.
+   */
+  dataFile: string;
   /** Explicit rules drawn with `table.hline`/`table.vline`. */
   rules: StoredTableRule[];
   rows: StoredTableCell[][];
@@ -401,6 +407,10 @@ function normalizeTableGutter(value: unknown): number {
   return Math.max(0, Math.min(Math.round(gutter * 100) / 100, 20));
 }
 
+function normalizeDataFile(value: unknown): string {
+  return typeof value === "string" && !/[\r\n\0]/u.test(value) ? value.slice(0, 260) : "";
+}
+
 function normalizeTableLabel(value: unknown): string {
   return typeof value === "string" && /^[A-Za-z0-9_.:-]{0,64}$/u.test(value) ? value : "";
 }
@@ -606,6 +616,7 @@ function normalizeTables(value: unknown): StoredTable[] {
       footerRow: record.footerRow === true,
       footerRepeat: record.footerRepeat !== false,
       breakable: record.breakable === true,
+      dataFile: normalizeDataFile(record.dataFile),
       rules: normalizeTableRules(record.rules, rowCount, columns),
       rows,
     });

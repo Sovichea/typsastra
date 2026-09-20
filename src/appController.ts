@@ -746,8 +746,11 @@ export class TypsastraWorkspaceController {
    * Give such tables a definite width so fractional tracks render as intended.
    */
   private tablePreviewSource(table: StoredTable): string {
-    const code = generateTableTypst(table);
-    const usesFractions = table.columnSizes.some(size => size.endsWith("fr"));
+    // A CSV source path cannot resolve from the snippet cache directory, so the
+    // preview shows the design-time rows; generated/copied code still reads it.
+    const preview = table.dataFile ? { ...table, dataFile: "" } : table;
+    const code = generateTableTypst(preview);
+    const usesFractions = preview.columnSizes.some(size => size.endsWith("fr"));
     return usesFractions ? `#block(width: 480pt)[\n${code}\n]` : code;
   }
 

@@ -372,16 +372,27 @@ export class TableToolController {
       `<div class="table-import-body"><textarea class="table-import-text" spellcheck="false" ` +
       `placeholder="Name, Score, Grade&#10;Ada, 95, A"></textarea>` +
       `<label class="table-import-option"><input type="checkbox" class="table-import-transpose" /> ` +
-      `Transpose rows and columns</label></div>` +
+      `Transpose rows and columns</label>` +
+      `<fieldset class="table-import-mode"><legend>Import as</legend>` +
+      `<label class="table-import-option"><input type="radio" name="table-import-mode" ` +
+      `class="table-import-flatten" checked /> Individual rows</label>` +
+      `<label class="table-import-option"><input type="radio" name="table-import-mode" ` +
+      `class="table-import-map" disabled /> Linked CSV (read at compile time)</label>` +
+      `</fieldset></div>` +
       `<footer class="table-import-footer">` +
       `<button type="button" class="table-import-file">Choose file…</button>` +
       `<button type="button" class="table-import-cancel">Cancel</button>` +
       `<button type="button" class="table-import-confirm primary">Import</button></footer></div>`;
     const close = () => this.closeImportDialog();
+    let chosenPath = "";
     overlay.querySelector(".table-import-close")?.addEventListener("click", close);
     overlay.querySelector(".table-import-cancel")?.addEventListener("click", close);
     overlay.querySelector(".table-import-file")?.addEventListener("click", () => {
-      void this.chooseImportFile(overlay);
+      void this.chooseImportFile(overlay, path => {
+        chosenPath = path;
+        const map = overlay.querySelector<HTMLInputElement>(".table-import-map");
+        if (map) map.disabled = false;
+      });
     });
     overlay.addEventListener("pointerdown", event => {
       if (event.target === overlay) close();
@@ -394,7 +405,11 @@ export class TableToolController {
         return;
       }
       const transpose = overlay.querySelector<HTMLInputElement>(".table-import-transpose")?.checked;
-      this.createTableFromRows(transpose ? transposeRows(parsed) : parsed);
+      const linked = overlay.querySelector<HTMLInputElement>(".table-import-map")?.checked;
+      this.createTableFromRows(
+        transpose ? transposeRows(parsed) : parsed,
+        linked && chosenPath ? chosenPath : "",
+      );
       this.closeImportDialog();
     });
     const onKeyDown = (event: KeyboardEvent) => {
@@ -414,7 +429,10 @@ export class TableToolController {
     this.importDialog = null;
   }
 
-  private async chooseImportFile(overlay: HTMLElement): Promise<void> {
+  private async chooseImportFile(
+    overlay: HTMLElement,
+    onSelected: (path: string) => void,
+  ): Promise<void> {
     try {
       const selected = await open({
         multiple: false,
@@ -428,14 +446,16 @@ export class TableToolController {
         textarea.value = text;
         textarea.focus();
       }
+      onSelected(path);
     } catch (error) {
       this.deps.log?.("warning", `Could not read the selected table file: ${String(error)}`);
     }
   }
 
-  private createTableFromRows(rows: string[][]): void {
+  private createTableFromRows(rows: string[][], dataFile = ""): void {
     const id = this.nextTableId();
     const table = tableFromRows(rows, id, this.uniqueTableName("Imported table"));
+    table.dataFile = dataFile;
     this.tables.push(table);
     this.selectedId = id;
     this.selectionAnchor = { row: 0, column: 0 };
@@ -1078,6 +1098,15 @@ export class TableToolController {
               this.updateCode(table);
               this.emitChange();
             },
+          },
+          { kind: "separator" },
+          { kind: "heading", label: "CSV data source" },
+          {
+            kind: "field",
+            value: table.dataFile,
+            placeholder: "path (e.g. data/results.csv)",
+            ariaLabel: "CSV data file",
+            onCommit: value => this.applyDataFile(table, value),
           },
           { kind: "heading", label: `Gutter (${table.gutter}pt)` },
           {
@@ -1804,6 +1833,17 @@ export class TableToolController {
       const input = this.cellInputs.get(key);
       if (input) this.applyInputAppearance(input, cell);
     });
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  private applyDataFile(table: StoredTable, value: string): void {
+    const file = value.trim();
+    if (file && tableHasSpans(table)) {
+      this.deps.showPreviewMessage?.("CSV data needs a table without merged cells.");
+      return;
+    }
+    table.dataFile = file;
     this.updateCode(table);
     this.emitChange();
   }

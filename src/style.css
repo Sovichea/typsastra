@@ -3150,6 +3150,18 @@ body.table-tools-active #code-render-pane {
   font-size: 12px;
   cursor: pointer;
 }
+.table-import-mode {
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+.table-import-mode legend {
+  padding: 0;
+  color: var(--ui-header-text);
+  font-size: 11px;
+}
+.table-import-mode .table-import-option { margin-top: 6px; }
+.table-import-mode .table-import-option:has(input:disabled) { opacity: 0.5; cursor: default; }
 .table-import-footer {
   display: flex;
   justify-content: flex-end;

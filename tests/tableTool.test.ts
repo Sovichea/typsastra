@@ -55,6 +55,7 @@ const table: StoredTable = {
   footerRow: false,
   footerRepeat: true,
   breakable: false,
+  dataFile: "",
   rules: [],
   rows: [
     [cell("Name"), cell("Value")],
@@ -334,6 +335,15 @@ describe("table typst generation", () => {
     expect(generateTableTypst({ ...table, breakable: true })).toMatch(/^#table\(/u);
   });
 
+  test("reads the body from a linked CSV file", () => {
+    const generated = generateTableTypst({ ...table, dataFile: "data/results.csv" });
+    expect(generated).toContain("  table.header([Name], [Value]),");
+    expect(generated).toContain('  ..csv("data/results.csv").map(row => row.map(cell => [cell])).flatten(),');
+    // Windows separators are normalized for Typst.
+    expect(generateTableTypst({ ...table, dataFile: "data\\results.csv" }))
+      .toContain('..csv("data/results.csv")');
+  });
+
   test("emits explicit rules before the footer", () => {
     const generated = generateTableTypst({
       ...table,
@@ -565,7 +575,9 @@ describe("table typst generation", () => {
     expect(source).toContain("readTextFile(path)");
     expect(source).toContain('extensions: ["csv", "tsv"]');
     expect(source).toContain('class="table-import-transpose"');
-    expect(source).toContain("transpose ? transposeRows(parsed) : parsed");
+    expect(source).toContain("transpose ? transposeRows(parsed) : parsed,");
+    expect(source).toContain('class="table-import-map"');
+    expect(source).toContain('class="table-import-flatten"');
     expect(source).toContain('data-field="table-caption"');
     expect(source).toContain('id: "caption-position"');
     expect(source).toContain('id: "caption-center"');
@@ -576,6 +588,8 @@ describe("table typst generation", () => {
     expect(source).toContain("private applyInset(");
     expect(source).toContain("private applyColumnSize(");
     expect(source).toContain("private applyRotate(");
+    expect(source).toContain("private applyDataFile(");
+    expect(source).toContain('label: "CSV data source"');
     expect(source).toContain("private applyCellBreakable(");
     expect(source).toContain('label: "Rotate content"');
     expect(source).toContain('label: "Keep together"');
@@ -757,6 +771,7 @@ describe("stored table normalization", () => {
             alt: "Summary",
             footerRow: true,
             footerRepeat: false,
+            dataFile: "data/results.csv",
             rules: [
               { axis: "horizontal", position: 1, start: 0, end: 3, width: 1, color: "#ABCDEF" },
               { axis: "vertical", position: 99, width: 0.5 },
@@ -803,6 +818,7 @@ describe("stored table normalization", () => {
     expect(first.footerRepeat).toBe(false);
     expect(first.gutter).toBe(20);
     expect(first.label).toBe("tab:summary");
+    expect(first.dataFile).toBe("data/results.csv");
     expect(first.alt).toBe("Summary");
     expect(first.footerRow).toBe(true);
     expect(first.rules).toHaveLength(2);

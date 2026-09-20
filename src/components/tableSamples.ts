@@ -47,6 +47,7 @@ function table(init: Partial<StoredTable> & { columns: number; rows: StoredTable
     footerRow: false,
     footerRepeat: true,
     breakable: false,
+    dataFile: "",
     rules: [],
     rows,
     ...overrides,

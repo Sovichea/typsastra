@@ -431,6 +431,12 @@ function insetArgument(table: StoredTable): string | null {
   return lines.join("\n");
 }
 
+/** A Typst string literal for a file path (forward slashes, escaped). */
+function typstPath(value: string): string {
+  const normalized = value.replace(/\\/gu, "/").replace(/\r?\n/gu, "").replace(/"/gu, '\\"');
+  return `"${normalized}"`;
+}
+
 /** A Typst string literal for figure `alt` text. */
 function typstString(value: string): string {
   return `"${value.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"').replace(/\r?\n/gu, " ")}"`;
@@ -545,19 +551,32 @@ export function generateTableTypst(table: StoredTable): string {
     }
   }
   const ruleLines = [...styleRules(table), ...table.rules].map(ruleSource);
-  for (let rowIndex = headerCount; rowIndex < table.rows.length; rowIndex += 1) {
-    const body = rowSource(table.rows[rowIndex]);
-    if (body === null) continue;
-    if (rowIndex === footerIndex) {
-      // Explicit rules cannot follow a footer, so emit them just before it.
-      lines.push(...ruleLines);
+  const dataFile = (table.dataFile ?? "").trim();
+  if (dataFile) {
+    // Data-driven body: the grid stays for design/headers, but rows are read
+    // from the CSV at compile time. Coordinates still style by position.
+    lines.push(...ruleLines);
+    lines.push(`  ..csv(${typstPath(dataFile)}).map(row => row.map(cell => [cell])).flatten(),`);
+    if (footerIndex >= 0) {
       const repeat = table.footerRepeat === false ? "repeat: false, " : "";
-      lines.push(`  table.footer(${repeat}${body}),`);
-    } else {
-      lines.push(`  ${body},`);
+      const footerBody = rowSource(table.rows[footerIndex]);
+      if (footerBody !== null) lines.push(`  table.footer(${repeat}${footerBody}),`);
     }
+  } else {
+    for (let rowIndex = headerCount; rowIndex < table.rows.length; rowIndex += 1) {
+      const body = rowSource(table.rows[rowIndex]);
+      if (body === null) continue;
+      if (rowIndex === footerIndex) {
+        // Explicit rules cannot follow a footer, so emit them just before it.
+        lines.push(...ruleLines);
+        const repeat = table.footerRepeat === false ? "repeat: false, " : "";
+        lines.push(`  table.footer(${repeat}${body}),`);
+      } else {
+        lines.push(`  ${body},`);
+      }
+    }
+    if (footerIndex < 0) lines.push(...ruleLines);
   }
-  if (footerIndex < 0) lines.push(...ruleLines);
   lines.push(")");
   const code = lines.join("\n");
   const caption = (table.caption ?? "").trim();

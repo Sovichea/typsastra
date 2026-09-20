@@ -103,6 +103,7 @@ export function tableFromRows(rows: string[][], id: string, name: string): Store
     footerRow: false,
     footerRepeat: true,
     breakable: false,
+    dataFile: "",
     rules: [],
     rows: grid,
   };
