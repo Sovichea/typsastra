@@ -29,6 +29,7 @@ export interface PreviewContentDependencies {
   markdownPreview: MarkdownPreviewFrame;
   setMarkdownPreviewActive(active: boolean): void;
   isImageToolActive(): boolean;
+  isTableToolActive(): boolean;
   getActiveFilePath(): string | null;
   getPinnedMainFilePath(): string | null;
   getWorkspaceRootPath(): string | null;
@@ -124,7 +125,8 @@ export class PreviewContentController {
 
   public async refreshActivePreviewRoot(forceRender = false): Promise<void> {
     const request = this.refreshRequests.begin("preview");
-    if (this.deps.isImageToolActive()) return;
+    // A tool surface owns the preview pane; the document must not reclaim it.
+    if (this.deps.isImageToolActive() || this.deps.isTableToolActive()) return;
     const path = this.deps.getActiveFilePath();
     if (!path) return;
     const activeTab = this.deps.getActiveTab();

@@ -1106,7 +1106,10 @@ export class TypsastraWorkspaceController {
     updatePinnedMain: (path, force) => this.updatePinnedMain(path, force),
     recheckActiveDocumentAfterPin: text => this.recheckActiveDocumentAfterPin(text),
     resetSourceMap: () => this.sourceMapSessionController.reset({ retry: false }),
-    setPreviewLoading: text => this.previewFrame.setLoading(text),
+    setPreviewLoading: text => {
+      if (this.sidebarController.activeTool === "tables") return;
+      this.previewFrame.setLoading(text);
+    },
     appendLog: (kind, source, text) => {
       if (kind === "error") {
         this.appendLspLog({ kind, source, message: text });
@@ -1641,6 +1644,7 @@ export class TypsastraWorkspaceController {
     markdownPreview: this.markdownPreviewFrame,
     setMarkdownPreviewActive: active => this.setMarkdownPreviewActive(active),
     isImageToolActive: () => this.sidebarController.activeTool === "images",
+    isTableToolActive: () => this.sidebarController.activeTool === "tables",
     getActiveFilePath: () => this.activeFilePath,
     getPinnedMainFilePath: () => this.pinnedMainFilePath,
     getWorkspaceRootPath: () => this.workspaceRootPath,
@@ -2600,6 +2604,9 @@ export class TypsastraWorkspaceController {
   }
 
   private renderPdfPreview(contents: string, force = false): Promise<void> {
+    // While the table tool owns the preview pane, the document preview must
+    // not render over it; switching back restores the preview.
+    if (this.sidebarController.activeTool === "tables") return Promise.resolve();
     return this.pdfPreviewRenderController.render(contents, force);
   }
 
