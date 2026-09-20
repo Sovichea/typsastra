@@ -337,6 +337,10 @@ describe("table typst generation", () => {
     expect(source).toContain('id: "caption-position"');
     expect(source).toContain('id: "caption-center"');
     expect(source).toContain("private applyCaptionAlign(");
+    // Text boxes reuse the editor's caret field and font.
+    expect(source).toContain('from "../ui/editorCaretInput"');
+    expect(source).toContain('wrapEditorCaretInput(field, { shellClass: "table-tool-field-shell" })');
+    expect(source).toContain('class="table-tool-field"');
     expect(source).toContain('createAppIcon("copy"');
     expect(source).toContain('input.addEventListener("contextmenu"');
     expect(source).toContain("private openCellContextMenu(");

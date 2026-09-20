@@ -1,4 +1,5 @@
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import { createAppIcon } from "../ui/icons";
 import {
   createToolbar,
@@ -441,15 +442,23 @@ export class TableToolController {
     this.inspector.innerHTML =
       `<div class="image-tool-inspector-header"><div><h2 data-field="table-heading"></h2><div class="image-tool-path" data-field="table-id"></div></div><span class="image-tool-status current-document">Table</span></div>` +
       `<section class="image-tool-section"><h3>Structure</h3>` +
-      `<label class="table-tool-name">Name <input data-field="table-name" type="text" maxlength="80" /></label>` +
+      `<label class="table-tool-name">Name <input class="table-tool-field" data-field="table-name" type="text" maxlength="80" /></label>` +
       `<div class="table-tool-menubar-host"></div>` +
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
       `<div class="table-tool-grid-host"></div>` +
-      `<label class="table-tool-name table-tool-caption">Caption <input data-field="table-caption" type="text" maxlength="200" placeholder="Optional caption" /></label>` +
+      `<label class="table-tool-name table-tool-caption">Caption <input class="table-tool-field" data-field="table-caption" type="text" maxlength="200" placeholder="Optional caption" /></label>` +
       `</section>` +
       `<section class="image-tool-section"><h3>Generated Typst</h3>` +
       `<div class="image-tool-actions"><button type="button" data-action="copy" class="primary"><span data-field="copy-label">Copy code</span></button></div>` +
       `<pre class="table-tool-code" data-field="code"></pre></section>`;
+
+    // Reuse the editor's caret text field so Khmer text renders in the same font
+    // and the caret behaves like the code editor's.
+    this.inspector.querySelectorAll<HTMLInputElement>("input.table-tool-field").forEach(field => {
+      const marker = document.createComment("table-field");
+      field.replaceWith(marker);
+      marker.replaceWith(wrapEditorCaretInput(field, { shellClass: "table-tool-field-shell" }));
+    });
 
     const heading = this.inspector.querySelector<HTMLElement>('[data-field="table-heading"]')!;
     heading.textContent = table.name;

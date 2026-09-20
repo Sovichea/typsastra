@@ -3053,6 +3053,38 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-menubar { margin: 6px 0; }
 .table-tool-caption { margin-top: 6px; }
+/* Table text boxes reuse the editor's caret field: same font (with the Khmer
+   fallback stack), sizing, and caret. */
+.table-tool-field-shell {
+  --editor-input-horizontal-inset: 10px;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.table-tool-field {
+  width: 100%;
+  box-sizing: border-box;
+  height: calc(var(--editor-line-height-px, 23.8px) + 10px);
+  padding: 4px var(--editor-input-horizontal-inset);
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  outline: none;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font-family: var(--editor-code-font);
+  font-size: var(--editor-font-size, 14px);
+  line-height: var(--editor-line-height-px, 23.8px);
+  caret-color: transparent;
+}
+.table-tool-field:focus { border-color: var(--ui-accent-color); }
+.table-tool-field-shell .typsastra-caret-measure {
+  font-family: var(--editor-code-font);
+  font-size: var(--editor-font-size, 14px);
+  line-height: var(--editor-line-height-px, 23.8px);
+}
+.table-tool-field-shell .typsastra-input-caret {
+  height: var(--editor-line-height-px, 23.8px);
+}
 .app-toolbar-separator {
   width: 1px;
   align-self: stretch;
