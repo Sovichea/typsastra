@@ -148,19 +148,22 @@ describe("table typst generation", () => {
     );
   });
 
-  test("renders a caption below by default and above when chosen", () => {
+  test("wraps a captioned table in a figure", () => {
     const bottom = generateTableTypst({ ...table, caption: "Results * summary" });
-    expect(bottom.endsWith("#align(left)[Results \\* summary]")).toBe(true);
+    expect(bottom.startsWith("#figure(\n  table(")).toBe(true);
+    expect(bottom).toContain("  kind: table,\n  placement: bottom,");
+    expect(bottom).toContain("  caption: [Results \\* summary],");
+    expect(bottom.endsWith("\n)")).toBe(true);
 
     const top = generateTableTypst({ ...table, caption: "Results", captionPosition: "top" });
-    expect(top.startsWith("#align(left)[Results]")).toBe(true);
+    expect(top).toContain("  placement: top,");
 
     const centered = generateTableTypst({ ...table, caption: "Results", captionAlign: "center" });
-    expect(centered.endsWith("#align(center)[Results]")).toBe(true);
+    expect(centered).toContain("  caption: align(center)[Results],");
   });
 
-  test("omits the caption block when there is no caption", () => {
-    expect(generateTableTypst(table)).not.toContain("#align(");
+  test("omits the figure when there is no caption", () => {
+    expect(generateTableTypst(table)).not.toContain("#figure(");
   });
 
   test("escapes Typst markup characters", () => {

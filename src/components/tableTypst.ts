@@ -417,13 +417,25 @@ export function generateTableTypst(table: StoredTable): string {
   const code = lines.join("\n");
   const caption = (table.caption ?? "").trim();
   if (!caption) return code;
-  // Table captions are left-justified unless centered; right alignment is not
-  // offered because it is not a conventional caption style.
-  const alignment = table.captionAlign === "center" ? "center" : "left";
-  const captionSource = `#align(${alignment})[${escapeTableText(caption)}]`;
-  return table.captionPosition === "top"
-    ? `${captionSource}\n\n${code}`
-    : `${code}\n\n${captionSource}`;
+  // A caption makes the table a figure, so it can be placed above or below and
+  // referenced later. Captions are left-justified unless centered; right
+  // alignment is not offered because it is not a conventional caption style.
+  const body = code
+    .split("\n")
+    .map(line => `  ${line}`)
+    .join("\n")
+    .replace(/^ {2}#table\(/u, "  table(");
+  const captionContent = table.captionAlign === "center"
+    ? `align(center)[${escapeTableText(caption)}]`
+    : `[${escapeTableText(caption)}]`;
+  return [
+    "#figure(",
+    `${body},`,
+    "  kind: table,",
+    `  placement: ${table.captionPosition},`,
+    `  caption: ${captionContent},`,
+    ")",
+  ].join("\n");
 }
 
 /**
