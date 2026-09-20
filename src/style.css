@@ -3091,6 +3091,7 @@ body.table-tools-active #code-render-pane {
   background: var(--ui-select);
 }
 .table-tool-format-group button:disabled { opacity: 0.45; cursor: default; }
+.table-tool-menu .dropdown-item { gap: 8px; }
 .table-tool-menu-icon { flex: none; color: var(--ui-header-text); }
 .table-tool-menu-label { flex: 1; }
 .table-tool-inline {
