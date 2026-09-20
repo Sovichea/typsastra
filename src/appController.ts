@@ -120,6 +120,7 @@ import { WorkspaceResumeController } from "./platform/workspaceResumeController"
 import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativeAppMenu";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
+import { createAppIcon } from "./ui/icons";
 import { generateTableTypst } from "./components/tableTypst";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
@@ -740,6 +741,7 @@ export class TypsastraWorkspaceController {
     },
   );
   private lastTablePreviewPages: string | null = null;
+  private tablePreviewNoticeTimer: number | null = null;
   private readonly tableToolController = new TableToolController(
     document.getElementById("tables-sidebar-list")!,
     document.getElementById("table-tool-inspector")!,
@@ -3099,6 +3101,7 @@ export class TypsastraWorkspaceController {
       this.showTablePreviewMessage("Create or select a table to preview it.");
       return;
     }
+    this.clearTablePreviewNoticeTimer();
     this.lastTablePreviewPages = pages
       .map(svg => `<div class="table-tool-preview-page">${svg}</div>`)
       .join("");
@@ -3113,12 +3116,16 @@ export class TypsastraWorkspaceController {
       '"': "&quot;",
     }[character] ?? character));
     if (this.lastTablePreviewPages !== null) {
-      // Keep the rendered table on screen and float the notice over it, so the
-      // user never loses the preview to a transient message.
+      // Keep the rendered table on screen and show the notice as a dismissible
+      // breadcrumb bar above it, so the preview is never lost to a message.
       this.previewFrame.setMessage(
-        `<div class="table-tool-preview"><div class="table-tool-preview-toast" role="status">${escaped}</div>` +
-        `${this.lastTablePreviewPages}</div>`,
+        `<div class="table-tool-preview">` +
+        `<div class="table-tool-preview-notice" role="status">` +
+        `<span class="table-tool-preview-notice-msg">${escaped}</span>` +
+        `<button type="button" class="table-tool-preview-notice-close" aria-label="Dismiss notification" title="Dismiss"></button>` +
+        `</div>${this.lastTablePreviewPages}</div>`,
       );
+      this.armTablePreviewNotice();
       return;
     }
     this.previewFrame.setMessage(
@@ -3126,6 +3133,29 @@ export class TypsastraWorkspaceController {
       `<div class="preview-disabled-title preview-accent-title">Table Preview</div>` +
       `<div class="preview-disabled-msg">${escaped}</div></div></div>`,
     );
+  }
+
+  private armTablePreviewNotice(): void {
+    this.clearTablePreviewNoticeTimer();
+    const close = this.previewPane.querySelector<HTMLButtonElement>(".table-tool-preview-notice-close");
+    if (close) {
+      close.appendChild(createAppIcon("x", { size: 13 }));
+      close.addEventListener("click", () => this.dismissTablePreviewNotice());
+    }
+    if (this.previewPane.querySelector(".table-tool-preview-notice")) {
+      this.tablePreviewNoticeTimer = window.setTimeout(() => this.dismissTablePreviewNotice(), 5_000);
+    }
+  }
+
+  private dismissTablePreviewNotice(): void {
+    this.clearTablePreviewNoticeTimer();
+    this.previewPane.querySelector<HTMLElement>(".table-tool-preview-notice")?.remove();
+  }
+
+  private clearTablePreviewNoticeTimer(): void {
+    if (this.tablePreviewNoticeTimer === null) return;
+    window.clearTimeout(this.tablePreviewNoticeTimer);
+    this.tablePreviewNoticeTimer = null;
   }
 
   private renderInteractiveImageViewer(

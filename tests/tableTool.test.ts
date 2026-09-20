@@ -385,7 +385,10 @@ describe("table preview compilation", () => {
     expect(app).toContain("sourceCode: generateTableTypst(table)");
     expect(app).toContain("table-tool-preview");
     // Transient notices float over the rendered table instead of replacing it.
-    expect(app).toContain("table-tool-preview-toast");
+    expect(app).toContain("table-tool-preview-notice");
+    expect(app).toContain("table-tool-preview-notice-close");
+    expect(app).toContain("private armTablePreviewNotice(");
+    expect(app).toContain("5_000");
     expect(app).toContain("lastTablePreviewPages");
     expect(native).toContain("async fn compile_typst_snippet_svg(");
     expect(native).toContain('"page-{p}.svg"');
