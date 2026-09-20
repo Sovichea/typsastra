@@ -1055,7 +1055,8 @@ export class TableToolController {
     if (!table) return;
     const range = this.selectionRange();
     for (const [key, input] of this.cellInputs) {
-      const wrap = input.parentElement;
+      // The input is wrapped by the editor caret shell, so walk up to the cell.
+      const wrap = input.closest<HTMLElement>(".table-tool-cell-wrap");
       if (!wrap) continue;
       const [row, column] = key.split(":").map(Number);
       const selected = range

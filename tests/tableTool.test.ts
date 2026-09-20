@@ -383,6 +383,8 @@ describe("table typst generation", () => {
     expect(source).toContain("input.value = this.editStartValue");
     // A second click on the active cell enters editing.
     expect(source).toContain("if (isFocus && !this.editingCell)");
+    // Highlight classes belong on the cell, not the inner caret shell.
+    expect(source).toContain('input.closest<HTMLElement>(".table-tool-cell-wrap")');
     // Shift+arrows move DOM focus, so the next keydown extends from the focus
     // cell instead of recomputing from the anchor cell.
     expect(source).toContain(
