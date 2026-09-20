@@ -4,6 +4,7 @@ import {
   findTableDirectiveBlocks,
   generateTableTypst,
   replaceTableDirectiveContent,
+  syncTableDirectiveContent,
   tableDirectiveBlock,
 } from "../src/components/tableTypst";
 import { compareCellText, tableCellOrigin, tableIdFromName } from "../src/components/tableTool";
@@ -574,10 +575,18 @@ describe("table typst generation", () => {
     expect(source).toContain("this.deps.renameBlock?.");
     expect(source).toContain('name.addEventListener("change"');
     expect(source).toContain("this.renameTimer = window.setTimeout(");
-    expect(source).toContain('label: "Insert into document"');
     expect(source).toContain('label: "Sync linked blocks"');
-    expect(source).toContain("this.deps.insertBlock?.");
     expect(source).toContain("this.deps.syncBlocks?.");
+    expect(source).toContain("private readCellsFromDocument(");
+    expect(source).toContain('label: "Read cells from document"');
+    expect(source).toContain("this.deps.readBlock?.");
+    // Link status mirrors the image tool's reference list.
+    expect(source).toContain("private renderLinkStatus(");
+    expect(source).toContain("this.deps.getLink?.");
+    expect(source).toContain("this.deps.openLink?.");
+    expect(source).toContain('class="image-tool-references" data-field="table-link"');
+    expect(source).toContain('button.className = "image-tool-reference"');
+    expect(source).toContain("image-tool-empty-reference");
     // Uses the shared modal structure so the global focus trap applies.
     expect(source).toContain('"settings-overlay table-samples-overlay"');
     expect(source).toContain('role="dialog" aria-modal="true" aria-label="New table"');
@@ -738,6 +747,20 @@ describe("table typst generation", () => {
     expect(tableIdFromName("តារាង")).toBe("table");
   });
 
+  test("syncs a bare directive by inserting a managed block", () => {
+    const document = "= Chapter\n\n//@table:revenue_report\n\nAfter.";
+    const synced = syncTableDirectiveContent(document, "revenue_report", "#table(columns: 1)");
+    expect(synced).toContain(
+      "//@table:revenue_report\n//@generated-table-start\n#table(columns: 1)\n//@generated-table-end",
+    );
+    const [found] = findTableDirectiveBlocks(synced!);
+    expect(synced!.slice(found.contentFrom, found.contentTo)).toBe("#table(columns: 1)");
+    // Re-syncing replaces the block instead of nesting markers.
+    const again = syncTableDirectiveContent(synced!, "revenue_report", "#table(columns: 2)");
+    expect((again!.match(/generated-table-start/gu) ?? []).length).toBe(1);
+    expect(syncTableDirectiveContent(document, "missing", "#table(columns: 1)")).toBeNull();
+  });
+
   test("replaces a linked block's content in place", () => {
     const document = `= Chapter\n\n${tableDirectiveBlock(table)}\n\nAfter.`;
     const replaced = replaceTableDirectiveContent(document, "table_1", "#table(columns: 1)");
@@ -771,6 +794,14 @@ describe("table preview compilation", () => {
     expect(app).toContain("sourceCode: this.tablePreviewSource(table)");
     expect(app).toContain("private tablePreviewSource(table: StoredTable): string");
     expect(app).toContain("private renameTableDirectiveBlock(previousId: string, nextId: string): void");
+    expect(app).toContain("private readTableDirectiveBlock(id: string)");
+    expect(app).toContain("private navigateToTableTool(tableId: string): void");
+    expect(app).toContain("syncTableDirectiveContent(");
+    expect(app).toContain("private tableLinkFor(");
+    expect(app).toContain("private async openTableLink(id: string): Promise<void>");
+    // Navigating back must reveal the code editor again.
+    expect(app).toContain('this.sidebarController.setTool("explorer");');
+    expect(app).toContain("extractTableCells(");
     expect(app).toContain("table-tool-preview");
     // Transient notices float over the rendered table instead of replacing it.
     expect(app).toContain("table-tool-preview-notice");

@@ -640,6 +640,22 @@ export function replaceTableDirectiveContent(
   return text.slice(0, block.contentFrom) + code + text.slice(block.contentTo);
 }
 
+/**
+ * Writes a table's generated code into the document: replaces an existing
+ * managed block's content, or inserts a managed block after a bare
+ * `//@table:<id>` directive line. Returns null when no directive exists.
+ */
+export function syncTableDirectiveContent(text: string, tableId: string, code: string): string | null {
+  const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === tableId);
+  if (block) return text.slice(0, block.contentFrom) + code + text.slice(block.contentTo);
+  const lines = text.split("\n");
+  const directive = `${TABLE_DIRECTIVE_PREFIX}${tableId}`;
+  const index = lines.findIndex(line => line.trim() === directive);
+  if (index === -1) return null;
+  lines.splice(index + 1, 0, TABLE_MANAGED_START, code, TABLE_MANAGED_END);
+  return lines.join("\n");
+}
+
 export type TableDirectiveBlockRange = {
   tableId: string;
   /** Start of the anchor directive line. */

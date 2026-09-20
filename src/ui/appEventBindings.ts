@@ -27,6 +27,7 @@ export interface AppEventActions {
   handlePdfPreviewClick: (point: PreviewClickPoint) => Promise<void> | void;
   drainPendingProjectImports: () => Promise<void> | void;
   navigateToImageTool: (imagePath: string) => Promise<void> | void;
+  navigateToTableTool: (tableId: string) => Promise<void> | void;
   beforeUnload: () => void;
 
   dismissSpellcheckTyping: () => void;
@@ -293,6 +294,11 @@ export function bindAppEvents(actions: AppEventActions): void {
   window.addEventListener("typsastra-open-image-tool", event => {
     const imagePath = (event as CustomEvent<{ imagePath?: string }>).detail?.imagePath;
     if (imagePath) void actions.navigateToImageTool(imagePath);
+  });
+
+  window.addEventListener("typsastra-open-table-tool", event => {
+    const tableId = (event as CustomEvent<{ tableId?: string }>).detail?.tableId;
+    if (tableId) void actions.navigateToTableTool(tableId);
   });
 
   import("@tauri-apps/api/event").then(({ listen: listenEvent, emit: emitEvent }) => {

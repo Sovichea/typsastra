@@ -39,12 +39,16 @@ export type TableToolDependencies = {
   showPreviewMessage?(message: string): void;
   /** Shows the app's shared context menu (used by the table explorer list). */
   showContextMenu?(items: ReadonlyArray<{ label: string; onSelect: () => void }>, x: number, y: number): void;
-  /** Inserts a linked table block at the cursor in the active document. */
-  insertBlock?(block: string): void;
   /** Rewrites the linked blocks for these tables in the open document(s). */
   syncBlocks?(blocks: ReadonlyArray<{ id: string; code: string }>): void;
   /** Renames a linked block's anchor when a table's id changes. */
   renameBlock?(previousId: string, nextId: string): void;
+  /** Reads cell contents from a linked block in the active document. */
+  readBlock?(id: string): ReadonlyArray<string> | null;
+  /** Where the table's `//@table:` directive lives, for the link status. */
+  getLink?(id: string): { path: string; line: number; column: number; label: string } | null;
+  /** Opens the linked directive in the code editor. */
+  openLink?(id: string): void;
   log?(kind: "info" | "warning", message: string): void;
 };
 
@@ -747,6 +751,28 @@ export class TableToolController {
     }
   }
 
+  /** Shows where the table is linked in code, mirroring the image tool. */
+  private renderLinkStatus(table: StoredTable): void {
+    const host = this.inspector.querySelector<HTMLElement>('[data-field="table-link"]');
+    if (!host) return;
+    host.replaceChildren();
+    const link = this.deps.getLink?.(table.id);
+    if (!link) {
+      const empty = document.createElement("div");
+      empty.className = "image-tool-empty-reference";
+      empty.textContent = "Not linked in the open documents.";
+      host.appendChild(empty);
+      return;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "image-tool-reference";
+    button.textContent = `${link.label} · Ln ${link.line}, Col ${link.column}`;
+    button.title = "Open this table in the code editor";
+    button.addEventListener("click", () => this.deps.openLink?.(table.id));
+    host.appendChild(button);
+  }
+
   private selectionRange(): SelectionRange | null {
     if (!this.selectionAnchor || !this.selectionFocus) return null;
     return {
@@ -773,7 +799,11 @@ export class TableToolController {
       return;
     }
     this.inspector.innerHTML =
-      `<div class="image-tool-inspector-header"><div><h2 data-field="table-heading"></h2><div class="image-tool-path" data-field="table-id"></div></div><span class="image-tool-status current-document">Table</span></div>` +
+      `<div class="image-tool-inspector-header"><div><h2 data-field="table-heading"></h2>` +
+      `<div class="image-tool-path" data-field="table-id"></div></div>` +
+      `<span class="image-tool-status current-document">Table</span></div>` +
+      `<section class="image-tool-section"><h3>Linked from</h3>` +
+      `<div class="image-tool-references" data-field="table-link"></div></section>` +
       `<section class="image-tool-section"><h3>Structure</h3>` +
       `<label class="table-tool-name">Name <input class="table-tool-field" data-field="table-name" type="text" maxlength="80" /></label>` +
       `<div class="table-tool-menubar-host"></div>` +
@@ -798,6 +828,7 @@ export class TableToolController {
     const heading = this.inspector.querySelector<HTMLElement>('[data-field="table-heading"]')!;
     heading.textContent = table.name;
     this.inspector.querySelector<HTMLElement>('[data-field="table-id"]')!.textContent = table.id;
+    this.renderLinkStatus(table);
 
     const name = this.inspector.querySelector<HTMLInputElement>('[data-field="table-name"]')!;
     name.value = table.name;
@@ -1195,16 +1226,15 @@ export class TableToolController {
           { kind: "heading", label: "Document" },
           {
             kind: "item",
-            label: "Insert into document",
-            icon: "plus",
-            onSelect: () => this.deps.insertBlock?.(tableDirectiveBlock(table)),
-          },
-          {
-            kind: "item",
             label: "Sync linked blocks",
             onSelect: () => this.deps.syncBlocks?.(
               this.tables.map(candidate => ({ id: candidate.id, code: generateTableTypst(candidate) })),
             ),
+          },
+          {
+            kind: "item",
+            label: "Read cells from document",
+            onSelect: () => this.readCellsFromDocument(table),
           },
           { kind: "heading", label: `Gutter (${table.gutter}pt)` },
           {
@@ -1932,6 +1962,39 @@ export class TableToolController {
       if (input) this.applyInputAppearance(input, cell);
     });
     this.updateCode(table);
+    this.emitChange();
+  }
+
+  /**
+   * Pulls cell contents edited in the linked block back into the model. The
+   * cells are stored as raw Typst (so wrappers/math/raw survive verbatim) and
+   * builder emphasis/text color/rotation are cleared since the content now
+   * carries them.
+   */
+  private readCellsFromDocument(table: StoredTable): void {
+    const cells = this.deps.readBlock?.(table.id);
+    if (!cells) {
+      this.deps.showPreviewMessage?.("No linked table block was found in the active document.");
+      return;
+    }
+    const origins: StoredTableCell[] = [];
+    table.rows.forEach(row => row.forEach(cell => {
+      if (!cell.covered) origins.push(cell);
+    }));
+    if (cells.length !== origins.length) {
+      this.deps.showPreviewMessage?.(
+        `The linked block has ${cells.length} cells but the table has ${origins.length}. Sync it first.`,
+      );
+      return;
+    }
+    origins.forEach((cell, index) => {
+      cell.text = cells[index];
+      cell.raw = true;
+      cell.emphasis = null;
+      cell.textColor = null;
+      cell.rotate = false;
+    });
+    this.refreshGrid(table);
     this.emitChange();
   }
 

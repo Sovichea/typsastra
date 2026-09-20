@@ -1022,7 +1022,8 @@ function tableDirectiveCompletion(
       label: `${TABLE_DIRECTIVE_PREFIX}${directive.id}`,
       detail: directive.name,
       type: "keyword",
-      apply: directive.block,
+      // The user calls the table from code; the builder writes the block.
+      apply: `${TABLE_DIRECTIVE_PREFIX}${directive.id}`,
     })),
   };
 }

@@ -5606,6 +5606,28 @@ button.welcome-item:disabled {
   height: 18px;
 }
 
+.cm-table-directive-gutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cm-table-directive-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  color: color-mix(in srgb, #3794ff 78%, var(--ui-header-text));
+  cursor: pointer;
+}
+.cm-table-directive-marker:hover { color: #3794ff; }
+.cm-table-directive-marker-spacer {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
 .settings-language-provider-controls {
   display: grid;
   grid-template-columns: auto auto;

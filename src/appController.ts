@@ -124,8 +124,9 @@ import { createAppIcon } from "./ui/icons";
 import {
   findTableDirectiveBlocks,
   generateTableTypst,
-  replaceTableDirectiveContent,
+  syncTableDirectiveContent,
 } from "./components/tableTypst";
+import { extractTableCells } from "./components/tableParse";
 import type { StoredTable } from "./workspace/workspaceStateStore";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
@@ -758,27 +759,6 @@ export class TypsastraWorkspaceController {
     return usesFractions ? `#block(width: 480pt)[\n${code}\n]` : code;
   }
 
-  /** Inserts a linked `//@table:` managed block at the editor cursor. */
-  private insertTableDirectiveBlock(block: string): void {
-    const path = this.activeFilePath;
-    if (!path || !isTypstDocumentPath(path)) {
-      this.appendDeveloperLog({
-        kind: "warning",
-        source: "table tool",
-        message: "Open a Typst document to insert a table block.",
-      });
-      return;
-    }
-    const view = this.editorInstance;
-    const position = view.state.selection.main.head;
-    view.dispatch({
-      changes: { from: position, insert: `${block}\n` },
-      selection: { anchor: position + block.length + 1 },
-      userEvent: "input",
-    });
-    view.focus();
-  }
-
   /** Rewrites the linked blocks for these tables in the active document. */
   private syncTableDirectiveBlocks(blocks: ReadonlyArray<{ id: string; code: string }>): void {
     const path = this.activeFilePath;
@@ -794,7 +774,7 @@ export class TypsastraWorkspaceController {
     const current = view.state.doc.toString();
     let next = current;
     for (const block of blocks) {
-      const replaced = replaceTableDirectiveContent(next, block.id, block.code);
+      const replaced = syncTableDirectiveContent(next, block.id, block.code);
       if (replaced !== null) next = replaced;
     }
     if (next === current) {
@@ -806,6 +786,68 @@ export class TypsastraWorkspaceController {
       return;
     }
     view.dispatch({ changes: { from: 0, to: current.length, insert: next }, userEvent: "input" });
+  }
+
+  /** Location of a table's `//@table:` directive among the open documents. */
+  private tableLinkFor(
+    id: string,
+  ): { path: string; line: number; column: number; label: string } | null {
+    const directive = `//@table:${id}`;
+    for (const tab of this.openTabs) {
+      if (!isTypstDocumentPath(tab.path)) continue;
+      const text = tab.path === this.activeFilePath
+        ? this.editorInstance.state.doc.toString()
+        : tab.content;
+      const lines = text.split("\n");
+      const index = lines.findIndex(line => line.trim() === directive);
+      if (index === -1) continue;
+      return {
+        path: tab.path,
+        line: index + 1,
+        column: lines[index].indexOf("//@table:") + 1,
+        label: this.relativeWorkspacePath(tab.path),
+      };
+    }
+    return null;
+  }
+
+  private relativeWorkspacePath(path: string): string {
+    const root = this.workspaceRootPath;
+    if (!root) return path;
+    const normalizedRoot = root.replace(/\\/gu, "/").replace(/\/$/u, "");
+    const normalizedPath = path.replace(/\\/gu, "/");
+    return normalizedPath.toLowerCase().startsWith(`${normalizedRoot.toLowerCase()}/`)
+      ? normalizedPath.slice(normalizedRoot.length + 1)
+      : normalizedPath;
+  }
+
+  /** Opens the linked directive in the code editor at its line. */
+  private async openTableLink(id: string): Promise<void> {
+    const link = this.tableLinkFor(id);
+    if (!link) return;
+    // Leave the Tables tool so the code editor pane is visible again.
+    this.sidebarController.setTool("explorer");
+    if (filePathKey(link.path) !== filePathKey(this.activeFilePath ?? "")) {
+      await this.loadFile(link.path, { focusEditor: false });
+    }
+    if (!this.getActiveTab()?.contentLoaded) return;
+    const doc = this.editorInstance.state.doc;
+    const line = doc.line(Math.max(1, Math.min(link.line, doc.lines)));
+    this.editorInstance.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+    });
+    this.editorInstance.focus();
+  }
+
+  /** Cell contents of a linked block in the active document, or null. */
+  private readTableDirectiveBlock(id: string): ReadonlyArray<string> | null {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path)) return null;
+    const text = this.editorInstance.state.doc.toString();
+    const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === id);
+    if (!block) return null;
+    return extractTableCells(text.slice(block.contentFrom, block.contentTo));
   }
 
   /** Updates a linked block's `//@table:` anchor after a table id change. */
@@ -852,9 +894,11 @@ export class TypsastraWorkspaceController {
       showPreview: pages => this.showTablePreview(pages),
       showPreviewMessage: message => this.showTablePreviewMessage(message),
       showContextMenu: (items, x, y) => this.contextMenuController.showCustomMenu(items, x, y),
-      insertBlock: block => this.insertTableDirectiveBlock(block),
       syncBlocks: blocks => this.syncTableDirectiveBlocks(blocks),
       renameBlock: (previousId, nextId) => this.renameTableDirectiveBlock(previousId, nextId),
+      readBlock: id => this.readTableDirectiveBlock(id),
+      getLink: id => this.tableLinkFor(id),
+      openLink: id => void this.openTableLink(id),
       log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
     },
   );
@@ -2070,6 +2114,13 @@ export class TypsastraWorkspaceController {
   private async navigateToImageTool(imagePath: string): Promise<void> {
     this.sidebarController.setTool("images");
     await this.imageToolsController.selectImage(imagePath);
+  }
+
+  /** Opens the Table tool and selects the table linked by a directive. */
+  private navigateToTableTool(tableId: string): void {
+    this.sidebarController.setTool("tables");
+    this.tableToolController.show();
+    this.tableToolController.selectTable(tableId);
   }
 
   private async handleImageToolFilesWritten(
@@ -3377,6 +3428,7 @@ export class TypsastraWorkspaceController {
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),
       drainPendingProjectImports: () => this.drainPendingProjectImports(),
       navigateToImageTool: imagePath => this.navigateToImageTool(imagePath),
+      navigateToTableTool: tableId => this.navigateToTableTool(tableId),
       beforeUnload: () => {
         this.systemResumeMonitor.stop();
         if (this.sourceMapSessionController.registeredTaskId && this.lspClient) {
