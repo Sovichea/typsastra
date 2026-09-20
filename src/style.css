@@ -3165,6 +3165,18 @@ body.table-tools-active #code-render-pane {
   padding: 6px;
 }
 .table-tool-cell-wrap { position: relative; display: grid; }
+.table-tool-cell-shell {
+  --editor-input-horizontal-inset: 6px;
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 26px;
+  min-width: 0;
+  font: 12px var(--font-family-sans);
+}
+.table-tool-cell-shell .typsastra-caret-measure { font: inherit; }
+.table-tool-cell-shell .typsastra-input-caret { height: 1.5em; }
 .table-tool-cell-wrap.band-fill .table-tool-cell {
   background: color-mix(in srgb, var(--ui-bg) 94%, var(--ui-hover));
 }
@@ -3179,6 +3191,8 @@ body.table-tools-active #code-render-pane {
   color: var(--ui-text);
   background: var(--ui-bg);
   font: 12px var(--font-family-sans);
+  /* The wrapped editor caret replaces the native one. */
+  caret-color: transparent;
 }
 .table-tool-cell:focus { outline: 1px solid var(--ui-accent-color); outline-offset: -1px; }
 .table-tool-cell[readonly] {

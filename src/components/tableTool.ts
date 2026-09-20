@@ -881,7 +881,9 @@ export class TableToolController {
           this.handleCellKeydown(event, table, rowIndex, columnIndex, cell, input));
         input.addEventListener("contextmenu", event =>
           this.openCellContextMenu(event, table, rowIndex, columnIndex));
-        wrap.appendChild(input);
+        // Cells share the editor's caret so the active cell shows the same
+        // blinking/steady cursor while navigating and editing.
+        wrap.appendChild(wrapEditorCaretInput(input, { shellClass: "table-tool-cell-shell" }));
         // Always draw the model's strokes; the edge strips become clickable
         // handles only while border mode is active.
         for (const side of BORDER_SIDES) {
