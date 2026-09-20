@@ -24,7 +24,7 @@ import type {
   StoredTableStyle,
   StoredTableVerticalAlignment,
 } from "../workspace/workspaceStateStore";
-import { autoTextColorForFill, generateTableTypst } from "./tableTypst";
+import { autoTextColorForFill, generateTableTypst, tableDirectiveBlock } from "./tableTypst";
 
 export type TableToolDependencies = {
   /** Writes the current tables back to the portable project config. */
@@ -39,6 +39,12 @@ export type TableToolDependencies = {
   showPreviewMessage?(message: string): void;
   /** Shows the app's shared context menu (used by the table explorer list). */
   showContextMenu?(items: ReadonlyArray<{ label: string; onSelect: () => void }>, x: number, y: number): void;
+  /** Inserts a linked table block at the cursor in the active document. */
+  insertBlock?(block: string): void;
+  /** Rewrites the linked blocks for these tables in the open document(s). */
+  syncBlocks?(blocks: ReadonlyArray<{ id: string; code: string }>): void;
+  /** Renames a linked block's anchor when a table's id changes. */
+  renameBlock?(previousId: string, nextId: string): void;
   log?(kind: "info" | "warning", message: string): void;
 };
 
@@ -145,6 +151,17 @@ function describeRule(rule: StoredTableRule): string {
   return `Remove ${axis} rule at ${rule.position} (${span})`;
 }
 
+/** Slugifies a table name into an id: "Revenue Report" -> "revenue_report". */
+export function tableIdFromName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "_")
+    .replace(/^_+|_+$/gu, "")
+    .slice(0, 64);
+  if (!slug) return "table";
+  return /^[a-z]/u.test(slug) ? slug : `t_${slug}`;
+}
+
 /** Labels reference figures: keep only characters valid inside `<...>`. */
 function sanitizeTableLabel(value: string): string {
   return value
@@ -207,6 +224,7 @@ export class TableToolController {
   private applyingHistory = false;
   private persistTimer: number | null = null;
   private previewTimer: number | null = null;
+  private renameTimer: number | null = null;
   private previewGeneration = 0;
   private previewCompiling = false;
   private previewDirty = false;
@@ -252,6 +270,10 @@ export class TableToolController {
   }
 
   public hide(): void {
+    if (this.renameTimer !== null) {
+      window.clearTimeout(this.renameTimer);
+      this.renameTimer = null;
+    }
     this.closeSamplesDialog();
     this.closeImportDialog();
     this.toolbar?.closeMenus();
@@ -268,6 +290,15 @@ export class TableToolController {
     return this.tables.map(table => ({ id: table.id, name: table.name }));
   }
 
+  /** Directive completions: each inserts a linked managed block. */
+  public tableCompletions(): ReadonlyArray<{ id: string; name: string; block: string }> {
+    return this.tables.map(table => ({
+      id: table.id,
+      name: table.name,
+      block: tableDirectiveBlock(table),
+    }));
+  }
+
   public createTable(): void {
     this.createFromSample(TABLE_SAMPLES[0]);
   }
@@ -281,9 +312,10 @@ export class TableToolController {
   }
 
   private createFromSample(sample: TableSample): void {
-    const id = this.nextTableId();
+    const name = this.uniqueTableName(sample.name);
+    const id = this.nextTableId(name);
     const built = sample.build();
-    const table: StoredTable = { ...built, id, name: this.uniqueTableName(sample.name) };
+    const table: StoredTable = { ...built, id, name };
     this.tables.push(table);
     this.selectedId = id;
     this.selectionAnchor = { row: 0, column: 0 };
@@ -453,8 +485,9 @@ export class TableToolController {
   }
 
   private createTableFromRows(rows: string[][], dataFile = ""): void {
-    const id = this.nextTableId();
-    const table = tableFromRows(rows, id, this.uniqueTableName("Imported table"));
+    const name = this.uniqueTableName("Imported table");
+    const id = this.nextTableId(name);
+    const table = tableFromRows(rows, id, name);
     table.dataFile = dataFile;
     this.tables.push(table);
     this.selectedId = id;
@@ -483,10 +516,41 @@ export class TableToolController {
     this.borderMode = false;
   }
 
-  private nextTableId(): string {
-    let index = this.tables.length + 1;
-    while (this.tables.some(table => table.id === `table_${index}`)) index += 1;
-    return `table_${index}`;
+  private nextTableId(name: string): string {
+    const base = tableIdFromName(name);
+    if (!this.tables.some(table => table.id === base)) return base;
+    let index = 2;
+    while (this.tables.some(table => table.id === `${base}_${index}`)) index += 1;
+    return `${base}_${index}`;
+  }
+
+  private uniqueIdFor(table: StoredTable, name: string): string {
+    const base = tableIdFromName(name);
+    const taken = (id: string) => this.tables.some(candidate => candidate !== table && candidate.id === id);
+    if (!taken(base)) return base;
+    let index = 2;
+    while (taken(`${base}_${index}`)) index += 1;
+    return `${base}_${index}`;
+  }
+
+  private renameTable(table: StoredTable, rawName: string): void {
+    const name = rawName.trim().slice(0, 80) || table.name;
+    table.name = name;
+    const nextId = this.uniqueIdFor(table, name);
+    if (nextId === table.id) {
+      this.emitChange();
+      return;
+    }
+    const previousId = table.id;
+    table.id = nextId;
+    this.selectedId = nextId;
+    this.deps.renameBlock?.(previousId, nextId);
+    this.resetHistory(table);
+    this.renderSidebar();
+    // Update the id label in place; re-rendering would drop the name field.
+    const idLabel = this.inspector.querySelector<HTMLElement>('[data-field="table-id"]');
+    if (idLabel && this.selectedId === nextId) idLabel.textContent = nextId;
+    this.emitChange();
   }
 
   private selected(): StoredTable | null {
@@ -694,6 +758,10 @@ export class TableToolController {
   }
 
   private renderInspector(): void {
+    if (this.renameTimer !== null) {
+      window.clearTimeout(this.renameTimer);
+      this.renameTimer = null;
+    }
     this.toolbar?.dispose();
     this.toolbar = null;
     const table = this.selected();
@@ -738,6 +806,21 @@ export class TableToolController {
       heading.textContent = table.name;
       this.renderSidebar();
       this.emitChange();
+      // The id follows the name; debounce so the anchor is not renamed on every
+      // keystroke, and commit even if the field never blurs (cell clicks call
+      // preventDefault, which suppresses blur/change).
+      if (this.renameTimer !== null) window.clearTimeout(this.renameTimer);
+      this.renameTimer = window.setTimeout(() => {
+        this.renameTimer = null;
+        this.renameTable(table, name.value);
+      }, 500);
+    });
+    name.addEventListener("change", () => {
+      if (this.renameTimer !== null) {
+        window.clearTimeout(this.renameTimer);
+        this.renameTimer = null;
+      }
+      this.renameTable(table, name.value);
     });
 
     const caption = this.inspector.querySelector<HTMLInputElement>('[data-field="table-caption"]')!;
@@ -1107,6 +1190,21 @@ export class TableToolController {
             placeholder: "path (e.g. data/results.csv)",
             ariaLabel: "CSV data file",
             onCommit: value => this.applyDataFile(table, value),
+          },
+          { kind: "separator" },
+          { kind: "heading", label: "Document" },
+          {
+            kind: "item",
+            label: "Insert into document",
+            icon: "plus",
+            onSelect: () => this.deps.insertBlock?.(tableDirectiveBlock(table)),
+          },
+          {
+            kind: "item",
+            label: "Sync linked blocks",
+            onSelect: () => this.deps.syncBlocks?.(
+              this.tables.map(candidate => ({ id: candidate.id, code: generateTableTypst(candidate) })),
+            ),
           },
           { kind: "heading", label: `Gutter (${table.gutter}pt)` },
           {

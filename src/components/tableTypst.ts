@@ -626,6 +626,20 @@ export function tableDirectiveBlock(table: StoredTable): string {
   ].join("\n");
 }
 
+/**
+ * Replaces a linked block's generated content with `code`. Returns null when no
+ * block with that table id exists, so callers can leave the text untouched.
+ */
+export function replaceTableDirectiveContent(
+  text: string,
+  tableId: string,
+  code: string,
+): string | null {
+  const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === tableId);
+  if (!block) return null;
+  return text.slice(0, block.contentFrom) + code + text.slice(block.contentTo);
+}
+
 export type TableDirectiveBlockRange = {
   tableId: string;
   /** Start of the anchor directive line. */

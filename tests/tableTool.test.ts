@@ -3,9 +3,10 @@ import {
   autoTextColorForFill,
   findTableDirectiveBlocks,
   generateTableTypst,
+  replaceTableDirectiveContent,
   tableDirectiveBlock,
 } from "../src/components/tableTypst";
-import { compareCellText, tableCellOrigin } from "../src/components/tableTool";
+import { compareCellText, tableCellOrigin, tableIdFromName } from "../src/components/tableTool";
 import {
   normalizeWorkspaceMetadata,
   type StoredTable,
@@ -563,6 +564,20 @@ describe("table typst generation", () => {
     expect(source).toContain("src=\"/table-samples/");
     expect(source).not.toContain("renderSampleThumbnails");
     expect(source).toContain('this.openSamplesDialog()');
+    // Linked-table document actions.
+    expect(source).toContain("public tableCompletions()");
+    expect(source).toContain("private nextTableId(name: string): string");
+    expect(source).toContain("export function tableIdFromName(");
+    // Renaming a table updates its id and linked anchor.
+    expect(source).toContain("private renameTable(");
+    expect(source).toContain("private uniqueIdFor(");
+    expect(source).toContain("this.deps.renameBlock?.");
+    expect(source).toContain('name.addEventListener("change"');
+    expect(source).toContain("this.renameTimer = window.setTimeout(");
+    expect(source).toContain('label: "Insert into document"');
+    expect(source).toContain('label: "Sync linked blocks"');
+    expect(source).toContain("this.deps.insertBlock?.");
+    expect(source).toContain("this.deps.syncBlocks?.");
     // Uses the shared modal structure so the global focus trap applies.
     expect(source).toContain('"settings-overlay table-samples-overlay"');
     expect(source).toContain('role="dialog" aria-modal="true" aria-label="New table"');
@@ -716,6 +731,26 @@ describe("table typst generation", () => {
     expect(document.slice(found.contentFrom, found.contentTo)).toBe(generateTableTypst(table));
   });
 
+  test("derives table ids from names", () => {
+    expect(tableIdFromName("Revenue Report")).toBe("revenue_report");
+    expect(tableIdFromName("  Q1 — Sales! ")).toBe("q1_sales");
+    expect(tableIdFromName("2x2")).toBe("t_2x2");
+    expect(tableIdFromName("តារាង")).toBe("table");
+  });
+
+  test("replaces a linked block's content in place", () => {
+    const document = `= Chapter\n\n${tableDirectiveBlock(table)}\n\nAfter.`;
+    const replaced = replaceTableDirectiveContent(document, "table_1", "#table(columns: 1)");
+    expect(replaced).not.toBeNull();
+    expect(replaced).toContain(
+      "//@table:table_1\n//@generated-table-start\n#table(columns: 1)\n//@generated-table-end",
+    );
+    const [found] = findTableDirectiveBlocks(replaced!);
+    expect(replaced!.slice(found.contentFrom, found.contentTo)).toBe("#table(columns: 1)");
+    // Unknown ids are left untouched.
+    expect(replaceTableDirectiveContent(document, "table_9", "#table(columns: 1)")).toBeNull();
+  });
+
   test("ignores a bare directive without a managed block", () => {
     expect(findTableDirectiveBlocks("//@table:table_1\n= Chapter")).toEqual([]);
   });
@@ -735,6 +770,7 @@ describe("table preview compilation", () => {
     expect(app).toContain('invoke<string[]>("compile_typst_snippet_svg"');
     expect(app).toContain("sourceCode: this.tablePreviewSource(table)");
     expect(app).toContain("private tablePreviewSource(table: StoredTable): string");
+    expect(app).toContain("private renameTableDirectiveBlock(previousId: string, nextId: string): void");
     expect(app).toContain("table-tool-preview");
     // Transient notices float over the rendered table instead of replacing it.
     expect(app).toContain("table-tool-preview-notice");

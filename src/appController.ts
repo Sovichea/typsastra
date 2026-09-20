@@ -121,7 +121,11 @@ import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativ
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
 import { createAppIcon } from "./ui/icons";
-import { generateTableTypst } from "./components/tableTypst";
+import {
+  findTableDirectiveBlocks,
+  generateTableTypst,
+  replaceTableDirectiveContent,
+} from "./components/tableTypst";
 import type { StoredTable } from "./workspace/workspaceStateStore";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
@@ -754,6 +758,72 @@ export class TypsastraWorkspaceController {
     return usesFractions ? `#block(width: 480pt)[\n${code}\n]` : code;
   }
 
+  /** Inserts a linked `//@table:` managed block at the editor cursor. */
+  private insertTableDirectiveBlock(block: string): void {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path)) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "table tool",
+        message: "Open a Typst document to insert a table block.",
+      });
+      return;
+    }
+    const view = this.editorInstance;
+    const position = view.state.selection.main.head;
+    view.dispatch({
+      changes: { from: position, insert: `${block}\n` },
+      selection: { anchor: position + block.length + 1 },
+      userEvent: "input",
+    });
+    view.focus();
+  }
+
+  /** Rewrites the linked blocks for these tables in the active document. */
+  private syncTableDirectiveBlocks(blocks: ReadonlyArray<{ id: string; code: string }>): void {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path)) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "table tool",
+        message: "Open a Typst document to sync table blocks.",
+      });
+      return;
+    }
+    const view = this.editorInstance;
+    const current = view.state.doc.toString();
+    let next = current;
+    for (const block of blocks) {
+      const replaced = replaceTableDirectiveContent(next, block.id, block.code);
+      if (replaced !== null) next = replaced;
+    }
+    if (next === current) {
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "table tool",
+        message: "No linked table blocks found in the active document.",
+      });
+      return;
+    }
+    view.dispatch({ changes: { from: 0, to: current.length, insert: next }, userEvent: "input" });
+  }
+
+  /** Updates a linked block's `//@table:` anchor after a table id change. */
+  private renameTableDirectiveBlock(previousId: string, nextId: string): void {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path)) return;
+    const view = this.editorInstance;
+    const text = view.state.doc.toString();
+    const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === previousId);
+    if (!block) return;
+    const lineEnd = text.indexOf("\n", block.from);
+    const anchorEnd = lineEnd === -1 ? text.length : lineEnd;
+    view.dispatch({
+      changes: { from: block.from, to: anchorEnd, insert: `//@table:${nextId}` },
+      userEvent: "input",
+    });
+  }
+
   private lastTablePreviewPages: string | null = null;
   private tablePreviewNoticeTimer: number | null = null;
   private readonly tableToolController = new TableToolController(
@@ -782,6 +852,9 @@ export class TypsastraWorkspaceController {
       showPreview: pages => this.showTablePreview(pages),
       showPreviewMessage: message => this.showTablePreviewMessage(message),
       showContextMenu: (items, x, y) => this.contextMenuController.showCustomMenu(items, x, y),
+      insertBlock: block => this.insertTableDirectiveBlock(block),
+      syncBlocks: blocks => this.syncTableDirectiveBlocks(blocks),
+      renameBlock: (previousId, nextId) => this.renameTableDirectiveBlock(previousId, nextId),
       log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
     },
   );
@@ -2313,6 +2386,7 @@ export class TypsastraWorkspaceController {
       message => this.appendDeveloperLog({ kind: "info", source: "lsp autocomplete", message }),
       () => this.settingsController.value.editor.userDictionary,
       editor.typstCompletionMode,
+      () => this.tableToolController.tableCompletions(),
     );
   }
 

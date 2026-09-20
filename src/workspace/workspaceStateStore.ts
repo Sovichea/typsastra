@@ -376,7 +376,8 @@ function normalizeScriptLanguages(value: unknown): StoredScriptLanguageAssignmen
   return [...assignments.values()].reverse();
 }
 
-export const TABLE_ID_PATTERN = /^table_[0-9]+$/u;
+/** Table ids are slugs derived from the table name (e.g. `revenue_report`). */
+export const TABLE_ID_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
 
 function normalizeTableAlignment(value: unknown): StoredTableAlignment | null {
   return value === "left" || value === "center" || value === "right" ? value : null;

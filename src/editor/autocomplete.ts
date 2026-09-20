@@ -1,6 +1,7 @@
 import {
   autocompletion,
   CompletionContext,
+  CompletionResult,
   snippetCompletion,
   Completion,
   startCompletion
@@ -11,6 +12,7 @@ import type { LanguageProviderCapabilities } from "../languageSupport";
 import { invoke } from "@tauri-apps/api/core";
 import type { CompletionProviderSelection } from "./languageScopes";
 import type { TypstCompletionMode } from "../settings";
+import { TABLE_DIRECTIVE_PREFIX } from "../components/tableTypst";
 import {
   staticTypstFieldCompletions,
   staticTypstGlobalCompletions,
@@ -1003,6 +1005,28 @@ export function innermostTypstArgumentFieldName(
 
 export type ProviderCapabilities = LanguageProviderCapabilities;
 
+/** `//@table:` completion: each option inserts a linked managed block. */
+function tableDirectiveCompletion(
+  context: CompletionContext,
+  getDirectives: () => readonly { id: string; name: string; block: string }[]
+): CompletionResult | null {
+  const line = context.state.doc.lineAt(context.pos);
+  const before = context.state.sliceDoc(line.from, context.pos);
+  const match = /\/\/@table:([A-Za-z0-9_]*)$/u.exec(before);
+  if (!match) return null;
+  const directives = getDirectives();
+  if (directives.length === 0) return null;
+  return {
+    from: context.pos - match[1].length - TABLE_DIRECTIVE_PREFIX.length,
+    options: directives.map(directive => ({
+      label: `${TABLE_DIRECTIVE_PREFIX}${directive.id}`,
+      detail: directive.name,
+      type: "keyword",
+      apply: directive.block,
+    })),
+  };
+}
+
 export function createTypstAutocomplete(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
@@ -1015,10 +1039,13 @@ export function createTypstAutocomplete(
   onTypstCompletionTrace?: (message: string) => void,
   getUserDictionary: () => readonly string[] = () => [],
   typstCompletionMode: TypstCompletionMode = "on-type",
+  getTableDirectives: () => readonly { id: string; name: string; block: string }[] = () => [],
 ) {
   return autocompletion({
     override: [
       async (context: CompletionContext) => {
+        const directiveCompletion = tableDirectiveCompletion(context, getTableDirectives);
+        if (directiveCompletion) return directiveCompletion;
         const insideTypstFunctionArguments = isInsideTypstFunctionArgumentsAt(
           context.state.doc,
           context.pos
