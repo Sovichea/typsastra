@@ -414,7 +414,16 @@ export function generateTableTypst(table: StoredTable): string {
     lines.push(isHeaderRow ? `  table.header(${body}),` : `  ${body},`);
   });
   lines.push(")");
-  return lines.join("\n");
+  const code = lines.join("\n");
+  const caption = (table.caption ?? "").trim();
+  if (!caption) return code;
+  // Table captions are left-justified unless centered; right alignment is not
+  // offered because it is not a conventional caption style.
+  const alignment = table.captionAlign === "center" ? "center" : "left";
+  const captionSource = `#align(${alignment})[${escapeTableText(caption)}]`;
+  return table.captionPosition === "top"
+    ? `${captionSource}\n\n${code}`
+    : `${code}\n\n${captionSource}`;
 }
 
 /**

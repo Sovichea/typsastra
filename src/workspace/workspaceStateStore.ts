@@ -60,6 +60,8 @@ export type StoredTableStroke = "none" | "solid";
 
 /** A predefined look; `default` follows the stroke settings. */
 export type StoredTableStyle = "default" | "banded-rows" | "banded-columns" | "booktabs";
+export type StoredTableCaptionPosition = "top" | "bottom";
+export type StoredTableCaptionAlign = "left" | "center";
 
 /**
  * A project-owned table reference. Tables are internal assignments: they live
@@ -75,6 +77,9 @@ export type StoredTable = {
   strokeWidth: number;
   strokeColor: string;
   style: StoredTableStyle;
+  caption: string;
+  captionPosition: StoredTableCaptionPosition;
+  captionAlign: StoredTableCaptionAlign;
   rows: StoredTableCell[][];
 };
 
@@ -334,6 +339,14 @@ function normalizeTableStyle(value: unknown): StoredTableStyle {
     : "default";
 }
 
+function normalizeCaptionPosition(value: unknown): StoredTableCaptionPosition {
+  return value === "top" ? "top" : "bottom";
+}
+
+function normalizeCaptionAlign(value: unknown): StoredTableCaptionAlign {
+  return value === "center" ? "center" : "left";
+}
+
 function tableSpanOverlaps(
   occupied: boolean[][],
   row: number,
@@ -453,6 +466,9 @@ function normalizeTables(value: unknown): StoredTable[] {
       strokeWidth: normalizeStrokeWidth(record.strokeWidth),
       strokeColor: normalizeStrokeColor(record.strokeColor),
       style: normalizeTableStyle(record.style),
+      caption: typeof record.caption === "string" ? record.caption.slice(0, 200) : "",
+      captionPosition: normalizeCaptionPosition(record.captionPosition),
+      captionAlign: normalizeCaptionAlign(record.captionAlign),
       rows,
     });
   }

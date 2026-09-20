@@ -26,6 +26,9 @@ const table: StoredTable = {
   strokeWidth: 0.5,
   strokeColor: "#000000",
   style: "default",
+  caption: "",
+  captionPosition: "bottom",
+  captionAlign: "left",
   rows: [
     [cell("Name"), cell("Value")],
     [cell("Alpha"), cell("1*2", "right")],
@@ -143,6 +146,21 @@ describe("table typst generation", () => {
     expect(generated).toContain(
       '    (top: 0.75pt + rgb("#000000"), right: 2pt + rgb("#ff0000"), rest: none)',
     );
+  });
+
+  test("renders a caption below by default and above when chosen", () => {
+    const bottom = generateTableTypst({ ...table, caption: "Results * summary" });
+    expect(bottom.endsWith("#align(left)[Results \\* summary]")).toBe(true);
+
+    const top = generateTableTypst({ ...table, caption: "Results", captionPosition: "top" });
+    expect(top.startsWith("#align(left)[Results]")).toBe(true);
+
+    const centered = generateTableTypst({ ...table, caption: "Results", captionAlign: "center" });
+    expect(centered.endsWith("#align(center)[Results]")).toBe(true);
+  });
+
+  test("omits the caption block when there is no caption", () => {
+    expect(generateTableTypst(table)).not.toContain("#align(");
   });
 
   test("escapes Typst markup characters", () => {
@@ -300,6 +318,10 @@ describe("table typst generation", () => {
     expect(source).toContain('id: "italic"');
     expect(source).toContain("private applyEmphasis(");
     expect(source).toContain("private toggleEmphasis(");
+    expect(source).toContain('data-field="table-caption"');
+    expect(source).toContain('id: "caption-position"');
+    expect(source).toContain('id: "caption-center"');
+    expect(source).toContain("private applyCaptionAlign(");
     expect(source).toContain('createAppIcon("copy"');
     expect(source).toContain('input.addEventListener("contextmenu"');
     expect(source).toContain("private openCellContextMenu(");
@@ -407,6 +429,9 @@ describe("stored table normalization", () => {
             name: "  Summary  ",
             columns: 3,
             headerColumn: true,
+            caption: "Totals",
+            captionPosition: "top",
+            captionAlign: "center",
             rows: [[
               { text: "a", align: "left", emphasis: "bold" },
               { text: "b", emphasis: "bogus" },
@@ -426,6 +451,12 @@ describe("stored table normalization", () => {
     const [first, second, third] = metadata.project.tables;
     expect(first.name).toBe("Summary");
     expect(first.style).toBe("default");
+    expect(first.caption).toBe("Totals");
+    expect(first.captionPosition).toBe("top");
+    expect(first.captionAlign).toBe("center");
+    expect(second.caption).toBe("");
+    expect(second.captionPosition).toBe("bottom");
+    expect(second.captionAlign).toBe("left");
     expect(second.style).toBe("booktabs");
     expect(third.style).toBe("default");
     expect(first.headerRow).toBe(true);

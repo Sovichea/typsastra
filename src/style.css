@@ -3052,6 +3052,7 @@ body.table-tools-active #code-render-pane {
   gap: 4px;
 }
 .table-tool-menubar { margin: 6px 0; }
+.table-tool-caption { margin-top: 6px; }
 .app-toolbar-separator {
   width: 1px;
   align-self: stretch;

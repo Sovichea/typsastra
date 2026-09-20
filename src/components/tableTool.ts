@@ -12,6 +12,8 @@ import type {
   StoredTableCell,
   StoredTableCellBorders,
   StoredTableAlignment,
+  StoredTableCaptionAlign,
+  StoredTableCaptionPosition,
   StoredTableEmphasis,
   StoredTableStyle,
   StoredTableVerticalAlignment,
@@ -195,6 +197,9 @@ export class TableToolController {
       strokeWidth: 0.5,
       strokeColor: "#000000",
       style: "default",
+      caption: "",
+      captionPosition: "bottom",
+      captionAlign: "left",
       rows: [emptyRow(2), emptyRow(2)],
     };
     this.tables.push(table);
@@ -439,7 +444,9 @@ export class TableToolController {
       `<label class="table-tool-name">Name <input data-field="table-name" type="text" maxlength="80" /></label>` +
       `<div class="table-tool-menubar-host"></div>` +
       `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
-      `<div class="table-tool-grid-host"></div></section>` +
+      `<div class="table-tool-grid-host"></div>` +
+      `<label class="table-tool-name table-tool-caption">Caption <input data-field="table-caption" type="text" maxlength="200" placeholder="Optional caption" /></label>` +
+      `</section>` +
       `<section class="image-tool-section"><h3>Generated Typst</h3>` +
       `<div class="image-tool-actions"><button type="button" data-action="copy" class="primary"><span data-field="copy-label">Copy code</span></button></div>` +
       `<pre class="table-tool-code" data-field="code"></pre></section>`;
@@ -454,6 +461,14 @@ export class TableToolController {
       table.name = name.value.slice(0, 80);
       heading.textContent = table.name;
       this.renderSidebar();
+      this.emitChange();
+    });
+
+    const caption = this.inspector.querySelector<HTMLInputElement>('[data-field="table-caption"]')!;
+    caption.value = table.caption;
+    caption.addEventListener("input", () => {
+      table.caption = caption.value.slice(0, 200);
+      this.updateCode(table);
       this.emitChange();
     });
 
@@ -703,6 +718,25 @@ export class TableToolController {
           { value: "bottom", label: "Bottom" },
         ],
         onChange: value => this.applyVerticalAlignment(table, (value || null) as StoredTableVerticalAlignment | null),
+      },
+      { kind: "separator" },
+      {
+        kind: "select",
+        id: "caption-position",
+        label: "Caption",
+        value: table.captionPosition,
+        options: [
+          { value: "bottom", label: "Below" },
+          { value: "top", label: "Above" },
+        ],
+        onChange: value => this.applyCaptionPosition(table, value as StoredTableCaptionPosition),
+      },
+      {
+        kind: "toggle",
+        id: "caption-center",
+        title: "Center caption",
+        icon: "alignCenter",
+        onSelect: () => this.applyCaptionAlign(table, table.captionAlign === "center" ? "left" : "center"),
       },
       { kind: "separator" },
       { kind: "toggle", id: "bold", title: "Bold", icon: "bold", onSelect: () => this.toggleEmphasis(table, "bold") },
@@ -1037,6 +1071,20 @@ export class TableToolController {
   private applyTableStyle(table: StoredTable, style: StoredTableStyle): void {
     table.style = style;
     this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private applyCaptionPosition(table: StoredTable, position: StoredTableCaptionPosition): void {
+    table.captionPosition = position;
+    this.refreshGrid(table);
+    this.syncCellSelects(table);
+    this.emitChange();
+  }
+
+  private applyCaptionAlign(table: StoredTable, align: StoredTableCaptionAlign): void {
+    table.captionAlign = align;
+    this.refreshGrid(table);
+    this.syncCellSelects(table);
     this.emitChange();
   }
 
@@ -1453,6 +1501,8 @@ export class TableToolController {
     this.toolbar?.setActive("italic", cell?.emphasis === "italic");
     this.toolbar?.setDisabled("bold", !focus);
     this.toolbar?.setDisabled("italic", !focus);
+    this.toolbar?.setSelectValue("caption-position", table.captionPosition);
+    this.toolbar?.setActive("caption-center", table.captionAlign === "center");
   }
 
   private updateCode(table: StoredTable): void {
