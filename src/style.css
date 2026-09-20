@@ -3125,6 +3125,55 @@ body.table-tools-active #code-render-pane {
 .table-sample-placeholder { color: var(--ui-header-text); font-size: 11px; }
 .table-sample-name { font-size: 12px; font-weight: 600; }
 .table-sample-desc { color: var(--ui-header-text); font-size: 11px; line-height: 1.4; }
+.table-sample-import-thumb { background: color-mix(in srgb, var(--ui-bg) 90%, var(--ui-accent-color)); }
+.table-import-dialog { width: min(560px, 100%); height: auto; }
+.table-import-body { padding: 14px 18px; }
+.table-import-text {
+  width: 100%;
+  min-height: 180px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font: 12px/1.5 var(--editor-code-font);
+}
+.table-import-text:focus { border-color: var(--ui-accent-color); outline: none; }
+.table-import-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--ui-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.table-import-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--ui-border);
+}
+.table-import-footer button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 5px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font: 12px var(--font-family-sans);
+  cursor: pointer;
+}
+.table-import-footer button:hover { background: var(--ui-hover); }
+.table-import-footer .table-import-file { margin-right: auto; }
+.table-import-footer button.primary {
+  color: var(--ui-accent-foreground);
+  background: var(--ui-accent-color);
+  border-color: var(--ui-accent-color);
+}
 /* Table text boxes reuse the editor's caret field: same font (with the Khmer
    fallback stack), sizing, and caret. */
 .table-tool-field-shell {

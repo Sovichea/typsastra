@@ -1,6 +1,8 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { TABLE_SAMPLES, type TableSample } from "./tableSamples";
+import { parseDelimitedText, tableFromRows, transposeRows } from "./tableImport";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import { createAppIcon } from "../ui/icons";
 import {
@@ -210,6 +212,8 @@ export class TableToolController {
   private previewDirty = false;
   private sampleDialog: HTMLElement | null = null;
   private sampleDialogCleanup: (() => void) | null = null;
+  private importDialog: HTMLElement | null = null;
+  private importDialogCleanup: (() => void) | null = null;
 
   public constructor(
     private readonly list: HTMLElement,
@@ -249,6 +253,7 @@ export class TableToolController {
 
   public hide(): void {
     this.closeSamplesDialog();
+    this.closeImportDialog();
     this.toolbar?.closeMenus();
     this.flushPersist();
     if (this.previewTimer !== null) {
@@ -322,6 +327,16 @@ export class TableToolController {
       card.addEventListener("click", () => this.createFromSample(sample));
       grid.appendChild(card);
     }
+    const importCard = document.createElement("button");
+    importCard.type = "button";
+    importCard.className = "table-sample-card table-sample-import";
+    importCard.innerHTML =
+      `<span class="table-sample-thumb table-sample-import-thumb">` +
+      `<span class="table-sample-placeholder">Paste CSV / TSV</span></span>` +
+      `<span class="table-sample-name">Import data</span>` +
+      `<span class="table-sample-desc">Paste comma- or tab-separated rows.</span>`;
+    importCard.addEventListener("click", () => this.openImportDialog());
+    grid.appendChild(importCard);
     overlay.querySelector(".table-samples-close")?.addEventListener("click", () => this.closeSamplesDialog());
     overlay.addEventListener("pointerdown", event => {
       if (event.target === overlay) this.closeSamplesDialog();
@@ -341,6 +356,95 @@ export class TableToolController {
     this.sampleDialogCleanup = null;
     this.sampleDialog?.remove();
     this.sampleDialog = null;
+  }
+
+  /** Paste CSV/TSV to build a new table (first row becomes the header). */
+  private openImportDialog(): void {
+    this.closeSamplesDialog();
+    const overlay = document.createElement("div");
+    overlay.className = "settings-overlay table-import-overlay";
+    overlay.setAttribute("role", "presentation");
+    overlay.innerHTML =
+      `<div class="table-samples-dialog table-import-dialog" role="dialog" aria-modal="true" aria-label="Import table data">` +
+      `<header class="table-samples-header"><div><h2>Import data</h2>` +
+      `<p>Paste comma- or tab-separated rows, or choose a .csv / .tsv file.</p></div>` +
+      `<button type="button" class="table-import-close settings-icon-button" aria-label="Close">✕</button></header>` +
+      `<div class="table-import-body"><textarea class="table-import-text" spellcheck="false" ` +
+      `placeholder="Name, Score, Grade&#10;Ada, 95, A"></textarea>` +
+      `<label class="table-import-option"><input type="checkbox" class="table-import-transpose" /> ` +
+      `Transpose rows and columns</label></div>` +
+      `<footer class="table-import-footer">` +
+      `<button type="button" class="table-import-file">Choose file…</button>` +
+      `<button type="button" class="table-import-cancel">Cancel</button>` +
+      `<button type="button" class="table-import-confirm primary">Import</button></footer></div>`;
+    const close = () => this.closeImportDialog();
+    overlay.querySelector(".table-import-close")?.addEventListener("click", close);
+    overlay.querySelector(".table-import-cancel")?.addEventListener("click", close);
+    overlay.querySelector(".table-import-file")?.addEventListener("click", () => {
+      void this.chooseImportFile(overlay);
+    });
+    overlay.addEventListener("pointerdown", event => {
+      if (event.target === overlay) close();
+    });
+    overlay.querySelector(".table-import-confirm")?.addEventListener("click", () => {
+      const text = overlay.querySelector<HTMLTextAreaElement>(".table-import-text")?.value ?? "";
+      const parsed = parseDelimitedText(text);
+      if (parsed.every(row => row.every(value => value === ""))) {
+        this.deps.showPreviewMessage?.("Paste some comma- or tab-separated rows first.");
+        return;
+      }
+      const transpose = overlay.querySelector<HTMLInputElement>(".table-import-transpose")?.checked;
+      this.createTableFromRows(transpose ? transposeRows(parsed) : parsed);
+      this.closeImportDialog();
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    this.importDialogCleanup = () => document.removeEventListener("keydown", onKeyDown, true);
+    document.body.appendChild(overlay);
+    this.importDialog = overlay;
+    overlay.querySelector<HTMLTextAreaElement>(".table-import-text")?.focus();
+  }
+
+  private closeImportDialog(): void {
+    this.importDialogCleanup?.();
+    this.importDialogCleanup = null;
+    this.importDialog?.remove();
+    this.importDialog = null;
+  }
+
+  private async chooseImportFile(overlay: HTMLElement): Promise<void> {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Table data", extensions: ["csv", "tsv"] }],
+      });
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return;
+      const text = await readTextFile(path);
+      const textarea = overlay.querySelector<HTMLTextAreaElement>(".table-import-text");
+      if (textarea && this.importDialog === overlay) {
+        textarea.value = text;
+        textarea.focus();
+      }
+    } catch (error) {
+      this.deps.log?.("warning", `Could not read the selected table file: ${String(error)}`);
+    }
+  }
+
+  private createTableFromRows(rows: string[][]): void {
+    const id = this.nextTableId();
+    const table = tableFromRows(rows, id, this.uniqueTableName("Imported table"));
+    this.tables.push(table);
+    this.selectedId = id;
+    this.selectionAnchor = { row: 0, column: 0 };
+    this.selectionFocus = { row: 0, column: 0 };
+    this.resetHistory(table);
+    this.emitChange();
+    this.renderSidebar();
+    this.renderInspector();
+    this.schedulePreview();
   }
 
   public selectTable(id: string): void {

@@ -557,6 +557,15 @@ describe("table typst generation", () => {
     expect(source).toContain('"settings-overlay table-samples-overlay"');
     expect(source).toContain('role="dialog" aria-modal="true" aria-label="New table"');
     expect(source).toContain("private createFromSample(");
+    // CSV/TSV import from the picker.
+    expect(source).toContain("private openImportDialog(");
+    expect(source).toContain("private createTableFromRows(");
+    // Imports can come from a filtered system file picker.
+    expect(source).toContain("private async chooseImportFile(");
+    expect(source).toContain("readTextFile(path)");
+    expect(source).toContain('extensions: ["csv", "tsv"]');
+    expect(source).toContain('class="table-import-transpose"');
+    expect(source).toContain("transpose ? transposeRows(parsed) : parsed");
     expect(source).toContain('data-field="table-caption"');
     expect(source).toContain('id: "caption-position"');
     expect(source).toContain('id: "caption-center"');
