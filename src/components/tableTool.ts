@@ -1,4 +1,4 @@
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { createAppIcon, type AppIconName } from "../ui/icons";
 import type {
   StoredTable,
@@ -113,7 +113,7 @@ export class TableToolController {
   private editingCell: Slot | null = null;
   private editStartValue = "";
   private activeMenu: HTMLElement | null = null;
-  private activeMenuAnchor: HTMLButtonElement | null = null;
+  private activeMenuAnchor: HTMLElement | null = null;
   private menuBuild: ((menu: HTMLElement) => void) | null = null;
   private menuCleanup: (() => void) | null = null;
   private readonly cellInputs = new Map<string, HTMLInputElement>();
@@ -685,7 +685,11 @@ export class TableToolController {
           this.syncSelectionSummary();
         });
         input.addEventListener("mousedown", event => {
-          if (event.button !== 0) return;
+          if (event.button !== 0) {
+            // Right-click must not move focus and collapse an existing range.
+            if (event.button === 2) event.preventDefault();
+            return;
+          }
           // Navigation and editing are separate states: the first click only
           // selects a cell, a second click (or typing) starts editing.
           event.preventDefault();
@@ -724,6 +728,8 @@ export class TableToolController {
         });
         input.addEventListener("keydown", event =>
           this.handleCellKeydown(event, table, rowIndex, columnIndex, cell, input));
+        input.addEventListener("contextmenu", event =>
+          this.openCellContextMenu(event, table, rowIndex, columnIndex));
         wrap.appendChild(input);
         // Always draw the model's strokes; the edge strips become clickable
         // handles only while border mode is active.
@@ -991,6 +997,188 @@ export class TableToolController {
     this.emitChange();
   }
 
+  private coveredCell(): StoredTableCell {
+    return { ...emptyCell(), covered: true };
+  }
+
+  private openCellContextMenu(
+    event: MouseEvent,
+    table: StoredTable,
+    row: number,
+    column: number,
+  ): void {
+    // Own the gesture: suppress the native menu and the generic editor menu.
+    event.preventDefault();
+    event.stopPropagation();
+    this.commitEdit();
+    const range = this.selectionRange();
+    const inside = Boolean(range
+      && row >= range.minRow && row <= range.maxRow
+      && column >= range.minColumn && column <= range.maxColumn);
+    if (!inside) {
+      this.selectionAnchor = { row, column };
+      this.selectionFocus = { row, column };
+      this.syncSelectionHighlight();
+      this.syncCellSelects(table);
+      this.syncSelectionSummary();
+    }
+    const cell = table.rows[row][column];
+    this.showTableMenu({ left: event.clientX, top: event.clientY }, menu => {
+      this.appendMenuItem(menu, "Cut", () => this.copySelection(table, true), { icon: "scissors" });
+      this.appendMenuItem(menu, "Copy", () => this.copySelection(table, false), { icon: "copy" });
+      this.appendMenuItem(menu, "Paste", () => this.pasteSelection(table), { icon: "clipboardPaste" });
+      this.appendMenuSeparator(menu);
+      this.appendMenuItem(menu, "Insert row above", () => this.insertRow(table, row), { icon: "arrowUp" });
+      this.appendMenuItem(menu, "Insert row below", () => this.insertRow(table, row + cell.rowspan), { icon: "arrowDown" });
+      this.appendMenuItem(menu, "Insert column left", () => this.insertColumn(table, column), { icon: "chevronLeft" });
+      this.appendMenuItem(menu, "Insert column right", () => this.insertColumn(table, column + cell.colspan), { icon: "chevronRight" });
+      this.appendMenuItem(menu, "Delete row", () => this.deleteRow(table, row), { icon: "minus" });
+      this.appendMenuItem(menu, "Delete column", () => this.deleteColumn(table, column), { icon: "minus" });
+      this.appendMenuSeparator(menu);
+      this.appendMenuItem(menu, "Merge cells", () => this.mergeSelection(table));
+      this.appendMenuItem(menu, "Split cells", () => this.splitSelection(table));
+      this.appendMenuSeparator(menu);
+      this.appendMenuItem(menu, "Copy table code", () => this.copyTableCode(table), { icon: "copy" });
+    }, null);
+  }
+
+  private insertRow(table: StoredTable, index: number): void {
+    if (table.rows.length >= MAX_ROWS) return;
+    const spanned = new Set<number>();
+    for (let row = 0; row < index; row += 1) {
+      for (let column = 0; column < table.columns; column += 1) {
+        const cell = table.rows[row][column];
+        if (cell.covered || row + cell.rowspan <= index) continue;
+        // A span crossing the new row absorbs it.
+        cell.rowspan += 1;
+        for (let c = column; c < column + cell.colspan; c += 1) spanned.add(c);
+      }
+    }
+    table.rows.splice(index, 0, Array.from(
+      { length: table.columns },
+      (_value, column) => spanned.has(column) ? this.coveredCell() : emptyCell(),
+    ));
+    const column = Math.min(this.selectionAnchor?.column ?? 0, table.columns - 1);
+    this.selectionAnchor = { row: index, column };
+    this.selectionFocus = { ...this.selectionAnchor };
+    this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private insertColumn(table: StoredTable, index: number): void {
+    if (table.columns >= MAX_COLUMNS) return;
+    table.rows.forEach(row => {
+      let covered = false;
+      for (let column = 0; column < index; column += 1) {
+        const cell = row[column];
+        if (cell.covered || column + cell.colspan <= index) continue;
+        cell.colspan += 1;
+        covered = true;
+      }
+      row.splice(index, 0, covered ? this.coveredCell() : emptyCell());
+    });
+    table.columns += 1;
+    const row = Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1);
+    this.selectionAnchor = { row, column: index };
+    this.selectionFocus = { ...this.selectionAnchor };
+    this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private deleteRow(table: StoredTable, index: number): void {
+    if (table.rows.length <= 1) return;
+    if (tableHasSpans(table)) {
+      this.deps.showPreviewMessage?.("Delete rows after splitting merged cells.");
+      return;
+    }
+    table.rows.splice(index, 1);
+    const row = Math.min(index, table.rows.length - 1);
+    this.selectionAnchor = { row, column: Math.min(this.selectionAnchor?.column ?? 0, table.columns - 1) };
+    this.selectionFocus = { ...this.selectionAnchor };
+    this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private deleteColumn(table: StoredTable, index: number): void {
+    if (table.columns <= 1) return;
+    if (tableHasSpans(table)) {
+      this.deps.showPreviewMessage?.("Delete columns after splitting merged cells.");
+      return;
+    }
+    table.columns -= 1;
+    for (const row of table.rows) row.splice(index, 1);
+    this.selectionAnchor = { row: Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1), column: Math.min(index, table.columns - 1) };
+    this.selectionFocus = { ...this.selectionAnchor };
+    this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private copySelection(table: StoredTable, cut: boolean): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    const lines: string[] = [];
+    for (let row = range.minRow; row <= range.maxRow; row += 1) {
+      const values: string[] = [];
+      for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+        const origin = tableCellOrigin(table, row, column);
+        if (!origin) continue;
+        if (origin.row === row && origin.column === column) {
+          values.push(table.rows[origin.row][origin.column].text);
+        }
+      }
+      lines.push(values.join("\t"));
+    }
+    if (cut) {
+      const visited = new Set<string>();
+      for (let row = range.minRow; row <= range.maxRow; row += 1) {
+        for (let column = range.minColumn; column <= range.maxColumn; column += 1) {
+          const origin = tableCellOrigin(table, row, column);
+          if (!origin) continue;
+          const key = `${origin.row}:${origin.column}`;
+          if (visited.has(key)) continue;
+          visited.add(key);
+          table.rows[origin.row][origin.column].text = "";
+        }
+      }
+      this.refreshGrid(table);
+      this.emitChange();
+    }
+    void writeText(lines.join("\n"))
+      .catch(error => this.deps.log?.("warning", `Could not copy table cells: ${String(error)}`));
+  }
+
+  private pasteSelection(table: StoredTable): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    void readText()
+      .then(text => {
+        if (typeof text !== "string" || text.length === 0) return;
+        const visited = new Set<string>();
+        text.replace(/\r\n?/gu, "\n").split("\n").forEach((line, rowOffset) => {
+          line.split("\t").forEach((value, columnOffset) => {
+            const row = range.minRow + rowOffset;
+            const column = range.minColumn + columnOffset;
+            if (row >= table.rows.length || column >= table.columns) return;
+            const origin = tableCellOrigin(table, row, column);
+            if (!origin) return;
+            const key = `${origin.row}:${origin.column}`;
+            if (visited.has(key)) return;
+            visited.add(key);
+            table.rows[origin.row][origin.column].text = value;
+          });
+        });
+        this.refreshGrid(table);
+        this.emitChange();
+      })
+      .catch(error => this.deps.log?.("warning", `Could not paste into the table: ${String(error)}`));
+  }
+
+  private copyTableCode(table: StoredTable): void {
+    void writeText(generateTableTypst(table))
+      .then(() => this.deps.log?.("info", "Table code copied to the clipboard."))
+      .catch(error => this.deps.log?.("warning", `Could not copy table code: ${String(error)}`));
+  }
+
   private mergeSelection(table: StoredTable): void {
     const range = this.selectionRange();
     if (!range) return;
@@ -1150,6 +1338,15 @@ export class TableToolController {
       this.closeTableMenu();
       return;
     }
+    const rect = anchor.getBoundingClientRect();
+    this.showTableMenu({ left: rect.left, top: rect.bottom + 4 }, build, anchor);
+  }
+
+  private showTableMenu(
+    position: { left: number; top: number },
+    build: (menu: HTMLElement) => void,
+    anchor: HTMLElement | null,
+  ): void {
     this.closeTableMenu();
     const menu = document.createElement("div");
     menu.className = "dropdown-menu table-tool-menu";
@@ -1158,9 +1355,8 @@ export class TableToolController {
     this.menuBuild = build;
     this.activeMenuAnchor = anchor;
     document.body.appendChild(menu);
-    const rect = anchor.getBoundingClientRect();
-    menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, Math.min(position.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(position.top, window.innerHeight - menu.offsetHeight - 8))}px`;
     this.activeMenu = menu;
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node
@@ -1211,7 +1407,7 @@ export class TableToolController {
     const emphasisIcons: Record<StoredTableEmphasis, AppIconName> = {
       bold: "bold",
       italic: "italic",
-      regular: "caseSensitive",
+      regular: "removeFormatting",
     };
     this.inspector.querySelectorAll<HTMLButtonElement>("[data-emphasis]")
       .forEach(button => {

@@ -299,6 +299,15 @@ describe("table typst generation", () => {
     expect(source).toContain("private applyEmphasis(");
     expect(source).toContain('createAppIcon("chevronDown"');
     expect(source).toContain('createAppIcon("copy"');
+    expect(source).toContain('input.addEventListener("contextmenu"');
+    expect(source).toContain("private openCellContextMenu(");
+    expect(source).toContain("private insertRow(");
+    expect(source).toContain("private insertColumn(");
+    expect(source).toContain("private deleteRow(");
+    expect(source).toContain("private deleteColumn(");
+    expect(source).toContain("private copySelection(");
+    expect(source).toContain("private pasteSelection(");
+    expect(source).toContain('readText, writeText');
     expect(source).toContain("private openTableMenu(");
     expect(source).toContain('"Merge cells"');
     expect(source).toContain("this.draggingSelection = true");
