@@ -65,9 +65,26 @@ export type StoredTableCell = {
 export type StoredTableStroke = "none" | "solid";
 
 /** A predefined look; `default` follows the stroke settings. */
-export type StoredTableStyle = "default" | "banded-rows" | "banded-columns" | "booktabs";
+export type StoredTableStyle = "default" | "banded-rows" | "banded-columns" | "booktabs" | "report";
 export type StoredTableCaptionPosition = "top" | "bottom";
 export type StoredTableCaptionAlign = "left" | "center";
+
+/**
+ * An explicit table rule (`table.hline`/`table.vline`). Unlike per-cell borders
+ * it can span a partial range and cross gutters.
+ */
+export type StoredTableRule = {
+  axis: "horizontal" | "vertical";
+  /** Row boundary (horizontal) or column boundary (vertical), grid-coordinate. */
+  position: number;
+  /** Inclusive start along the other axis. */
+  start: number;
+  /** Exclusive end along the other axis; null runs to the end. */
+  end: number | null;
+  width: number;
+  /** `#rrggbb`. */
+  color: string;
+};
 
 /**
  * A project-owned table reference. Tables are internal assignments: they live
@@ -104,6 +121,8 @@ export type StoredTable = {
   footerRow: boolean;
   /** Whether the footer repeats on every page. */
   footerRepeat: boolean;
+  /** Explicit rules drawn with `table.hline`/`table.vline`. */
+  rules: StoredTableRule[];
   rows: StoredTableCell[][];
 };
 
@@ -391,8 +410,34 @@ function normalizeCellInset(value: unknown): number | null {
   return Math.max(0, Math.min(Math.round(value * 100) / 100, 50));
 }
 
+function normalizeTableRules(value: unknown, rowCount: number, columns: number): StoredTableRule[] {
+  if (!Array.isArray(value)) return [];
+  const rules: StoredTableRule[] = [];
+  for (const item of value.slice(0, 200)) {
+    const record = objectValue(item);
+    const axis = record.axis === "vertical" ? "vertical" : record.axis === "horizontal" ? "horizontal" : null;
+    if (!axis) continue;
+    const limit = axis === "horizontal" ? rowCount : columns;
+    const span = axis === "horizontal" ? columns : rowCount;
+    const position = Math.max(0, Math.min(Math.round(numberOr(record.position, 0)), limit));
+    const start = Math.max(0, Math.min(Math.round(numberOr(record.start, 0)), span));
+    const rawEnd = typeof record.end === "number" && Number.isFinite(record.end)
+      ? Math.max(start + 1, Math.min(Math.round(record.end), span))
+      : null;
+    rules.push({
+      axis,
+      position,
+      start,
+      end: rawEnd !== null && start === 0 && rawEnd >= span ? null : rawEnd,
+      width: normalizeStrokeWidth(record.width),
+      color: normalizeStrokeColor(record.color),
+    });
+  }
+  return rules;
+}
+
 function normalizeTableStyle(value: unknown): StoredTableStyle {
-  return value === "banded-rows" || value === "banded-columns" || value === "booktabs"
+  return value === "banded-rows" || value === "banded-columns" || value === "booktabs" || value === "report"
     ? value
     : "default";
 }
@@ -546,6 +591,7 @@ function normalizeTables(value: unknown): StoredTable[] {
       alt: normalizeTableAlt(record.alt),
       footerRow: record.footerRow === true,
       footerRepeat: record.footerRepeat !== false,
+      rules: normalizeTableRules(record.rules, rowCount, columns),
       rows,
     });
   }

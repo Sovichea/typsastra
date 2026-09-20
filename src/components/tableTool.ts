@@ -1,4 +1,5 @@
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { TABLE_SAMPLES, type TableSample } from "./tableSamples";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import { createAppIcon } from "../ui/icons";
 import {
@@ -68,6 +69,7 @@ function cloneTable(table: StoredTable): StoredTable {
     ...table,
     columnSizes: [...table.columnSizes],
     rowSizes: [...table.rowSizes],
+    rules: table.rules.map(rule => ({ ...rule })),
     rows: table.rows.map(row => row.map(cell => ({
       ...cell,
       borders: cell.borders ? { ...cell.borders } : null,
@@ -170,13 +172,16 @@ export class TableToolController {
   private previewGeneration = 0;
   private previewCompiling = false;
   private previewDirty = false;
+  private sampleDialog: HTMLElement | null = null;
+  private sampleDialogCleanup: (() => void) | null = null;
+  private readonly sampleThumbnails = new Map<string, string>();
 
   public constructor(
     private readonly list: HTMLElement,
     private readonly inspector: HTMLElement,
     private readonly deps: TableToolDependencies,
   ) {
-    document.getElementById("tables-new-button")?.addEventListener("click", () => this.createTable());
+    document.getElementById("tables-new-button")?.addEventListener("click", () => this.openSamplesDialog());
     window.addEventListener("pointerup", () => { this.draggingSelection = false; });
     this.inspector.addEventListener("keydown", event => {
       if (!(event.ctrlKey || event.metaKey)) return;
@@ -208,6 +213,7 @@ export class TableToolController {
   }
 
   public hide(): void {
+    this.closeSamplesDialog();
     this.toolbar?.closeMenus();
     this.flushPersist();
     if (this.previewTimer !== null) {
@@ -223,31 +229,21 @@ export class TableToolController {
   }
 
   public createTable(): void {
+    this.createFromSample(TABLE_SAMPLES[0]);
+  }
+
+  private uniqueTableName(base: string): string {
+    const names = new Set(this.tables.map(table => table.name));
+    if (!names.has(base)) return base;
+    let index = 2;
+    while (names.has(`${base} ${index}`)) index += 1;
+    return `${base} ${index}`;
+  }
+
+  private createFromSample(sample: TableSample): void {
     const id = this.nextTableId();
-    const table: StoredTable = {
-      id,
-      name: `Table ${this.tables.length + 1}`,
-      columns: 2,
-      headerRow: true,
-      headerRowCount: 1,
-      headerColumn: false,
-      headerRepeat: true,
-      stroke: "solid",
-      strokeWidth: 0.5,
-      strokeColor: "#000000",
-      style: "default",
-      caption: "",
-      captionPosition: "bottom",
-      captionAlign: "left",
-      columnSizes: ["", ""],
-      rowSizes: ["", ""],
-      gutter: 0,
-      label: "",
-      alt: "",
-      footerRow: false,
-      footerRepeat: true,
-      rows: [emptyRow(2), emptyRow(2)],
-    };
+    const built = sample.build();
+    const table: StoredTable = { ...built, id, name: this.uniqueTableName(sample.name) };
     this.tables.push(table);
     this.selectedId = id;
     this.selectionAnchor = { row: 0, column: 0 };
@@ -256,6 +252,90 @@ export class TableToolController {
     this.emitChange();
     this.renderSidebar();
     this.renderInspector();
+    this.schedulePreview();
+    this.closeSamplesDialog();
+  }
+
+  /** Offers ready-made tables (with rendered thumbnails) when creating one. */
+  private openSamplesDialog(): void {
+    this.closeSamplesDialog();
+    const overlay = document.createElement("div");
+    overlay.className = "table-samples-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "New table");
+    overlay.innerHTML =
+      `<div class="table-samples-dialog">` +
+      `<header class="table-samples-header"><div><h2>New Table</h2>` +
+      `<p>Start from a sample or an empty table.</p></div>` +
+      `<button type="button" class="table-samples-close settings-icon-button" aria-label="Close">✕</button>` +
+      `</header><div class="table-samples-grid"></div></div>`;
+    const grid = overlay.querySelector<HTMLElement>(".table-samples-grid")!;
+    for (const sample of TABLE_SAMPLES) {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "table-sample-card";
+      card.dataset.sample = sample.id;
+      card.innerHTML =
+        `<span class="table-sample-thumb" data-thumb="${sample.id}">` +
+        `<span class="table-sample-placeholder">Rendering…</span></span>` +
+        `<span class="table-sample-name"></span><span class="table-sample-desc"></span>`;
+      card.querySelector<HTMLElement>(".table-sample-name")!.textContent = sample.name;
+      card.querySelector<HTMLElement>(".table-sample-desc")!.textContent = sample.description;
+      card.addEventListener("click", () => this.createFromSample(sample));
+      grid.appendChild(card);
+    }
+    overlay.querySelector(".table-samples-close")?.addEventListener("click", () => this.closeSamplesDialog());
+    overlay.addEventListener("pointerdown", event => {
+      if (event.target === overlay) this.closeSamplesDialog();
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") this.closeSamplesDialog();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    this.sampleDialogCleanup = () => document.removeEventListener("keydown", onKeyDown, true);
+    document.body.appendChild(overlay);
+    this.sampleDialog = overlay;
+    grid.querySelector<HTMLElement>(".table-sample-card")?.focus();
+    void this.renderSampleThumbnails();
+  }
+
+  private closeSamplesDialog(): void {
+    this.sampleDialogCleanup?.();
+    this.sampleDialogCleanup = null;
+    this.sampleDialog?.remove();
+    this.sampleDialog = null;
+  }
+
+  private async renderSampleThumbnails(): Promise<void> {
+    const compile = this.deps.compilePreview;
+    for (const sample of TABLE_SAMPLES) {
+      const host = this.sampleDialog?.querySelector<HTMLElement>(`[data-thumb="${sample.id}"]`);
+      if (!host) return; // The dialog was closed.
+      const cached = this.sampleThumbnails.get(sample.id);
+      if (cached) {
+        host.innerHTML = cached;
+        continue;
+      }
+      if (!compile) {
+        host.innerHTML = `<span class="table-sample-placeholder">Preview unavailable</span>`;
+        continue;
+      }
+      try {
+        const pages = await compile(sample.build());
+        if (!this.sampleDialog) return;
+        const svg = pages[0] ?? "";
+        if (!svg) {
+          host.innerHTML = `<span class="table-sample-placeholder">Preview unavailable</span>`;
+          continue;
+        }
+        this.sampleThumbnails.set(sample.id, svg);
+        host.innerHTML = svg;
+      } catch (error) {
+        host.innerHTML = `<span class="table-sample-placeholder">Preview failed</span>`;
+        this.deps.log?.("warning", `Could not render sample "${sample.id}": ${String(error)}`);
+      }
+    }
   }
 
   public selectTable(id: string): void {
@@ -603,8 +683,10 @@ export class TableToolController {
                 this.deps.showPreviewMessage?.("Remove rows after splitting merged cells.");
                 return;
               }
+              const removedRow = table.rows.length - 1;
               table.rows.pop();
               table.rowSizes.length = table.rows.length;
+              this.shiftRulesForDelete("row", removedRow);
               this.resetSelection();
               this.refreshGrid(table);
               this.emitChange();
@@ -659,9 +741,11 @@ export class TableToolController {
                 this.deps.showPreviewMessage?.("Remove columns after splitting merged cells.");
                 return;
               }
+              const removedColumn = table.columns - 1;
               table.columns -= 1;
               for (const row of table.rows) row.length = table.columns;
               table.columnSizes.length = table.columns;
+              this.shiftRulesForDelete("column", removedColumn);
               this.resetSelection();
               this.refreshGrid(table);
               this.emitChange();
@@ -754,6 +838,23 @@ export class TableToolController {
           },
           { kind: "heading", label: "Color" },
           { kind: "color", value: this.borderColor, onInput: value => { this.borderColor = value; this.emitChange(); } },
+          { kind: "separator" },
+          { kind: "heading", label: `Rules (${table.rules.length})` },
+          { kind: "item", label: "Rule below", onSelect: () => this.addRuleFromSelection(table, "horizontal", "after") },
+          { kind: "item", label: "Rule above", onSelect: () => this.addRuleFromSelection(table, "horizontal", "before") },
+          { kind: "item", label: "Rule right", onSelect: () => this.addRuleFromSelection(table, "vertical", "after") },
+          { kind: "item", label: "Rule left", onSelect: () => this.addRuleFromSelection(table, "vertical", "before") },
+          {
+            kind: "item",
+            label: "Clear rules",
+            icon: "x",
+            disabled: table.rules.length === 0,
+            onSelect: () => {
+              table.rules = [];
+              this.updateCode(table);
+              this.emitChange();
+            },
+          },
         ],
       },
       {
@@ -876,6 +977,7 @@ export class TableToolController {
         value: table.style,
         options: [
           { value: "default", label: "Default" },
+          { value: "report", label: "Report" },
           { value: "banded-rows", label: "Banded rows" },
           { value: "banded-columns", label: "Banded columns" },
           { value: "booktabs", label: "Booktabs" },
@@ -1355,6 +1457,86 @@ export class TableToolController {
     this.emitChange();
   }
 
+  private addRuleFromSelection(
+    table: StoredTable,
+    axis: "horizontal" | "vertical",
+    where: "before" | "after",
+  ): void {
+    const range = this.selectionRange();
+    if (!range) return;
+    let position: number;
+    let start: number;
+    let end: number;
+    if (axis === "horizontal") {
+      position = where === "before" ? range.minRow : range.maxRow + 1;
+      start = range.minColumn;
+      end = range.maxColumn + 1;
+    } else {
+      position = where === "before" ? range.minColumn : range.maxColumn + 1;
+      start = range.minRow;
+      end = range.maxRow + 1;
+    }
+    const full = start === 0 && end >= (axis === "horizontal" ? table.columns : table.rows.length);
+    const normalizedEnd = full ? null : end;
+    const index = table.rules.findIndex(rule =>
+      rule.axis === axis && rule.position === position && rule.start === start && rule.end === normalizedEnd);
+    if (index >= 0) {
+      table.rules.splice(index, 1);
+    } else {
+      table.rules.push({
+        axis,
+        position,
+        start,
+        end: normalizedEnd,
+        width: this.borderWidth,
+        color: this.borderColor,
+      });
+    }
+    this.updateCode(table);
+    this.emitChange();
+  }
+
+  /** Keeps explicit rules aligned when a row/column is inserted. */
+  private shiftRulesForInsert(insertedAxis: "row" | "column", index: number): void {
+    const table = this.selected();
+    if (!table) return;
+    const positionAxis = insertedAxis === "row" ? "horizontal" : "vertical";
+    for (const rule of table.rules) {
+      if (rule.axis === positionAxis) {
+        if (rule.position >= index) rule.position += 1;
+      } else if (index <= rule.start) {
+        rule.start += 1;
+        if (rule.end !== null) rule.end += 1;
+      } else if (rule.end !== null && index < rule.end) {
+        rule.end += 1;
+      }
+    }
+  }
+
+  /** Keeps explicit rules aligned when a row/column is removed. */
+  private shiftRulesForDelete(insertedAxis: "row" | "column", index: number): void {
+    const table = this.selected();
+    if (!table) return;
+    const positionAxis = insertedAxis === "row" ? "horizontal" : "vertical";
+    table.rules = table.rules.filter(rule => {
+      if (rule.axis === positionAxis) {
+        if (rule.position === index) return false;
+        if (rule.position > index) rule.position -= 1;
+        return true;
+      }
+      if (index < rule.start) {
+        rule.start -= 1;
+        if (rule.end !== null) rule.end -= 1;
+        return true;
+      }
+      if (rule.end !== null && index < rule.end) {
+        rule.end -= 1;
+        if (rule.end <= rule.start) return false;
+      }
+      return true;
+    });
+  }
+
   private forEachSelectionOrigin(
     table: StoredTable,
     visit: (cell: StoredTableCell, key: string) => void,
@@ -1584,6 +1766,7 @@ export class TableToolController {
       (_value, column) => spanned.has(column) ? this.coveredCell() : emptyCell(),
     ));
     table.rowSizes.splice(index, 0, "");
+    this.shiftRulesForInsert("row", index);
     const column = Math.min(this.selectionAnchor?.column ?? 0, table.columns - 1);
     this.selectionAnchor = { row: index, column };
     this.selectionFocus = { ...this.selectionAnchor };
@@ -1605,6 +1788,7 @@ export class TableToolController {
     });
     table.columns += 1;
     table.columnSizes.splice(index, 0, "");
+    this.shiftRulesForInsert("column", index);
     const row = Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1);
     this.selectionAnchor = { row, column: index };
     this.selectionFocus = { ...this.selectionAnchor };
@@ -1620,6 +1804,7 @@ export class TableToolController {
     }
     table.rows.splice(index, 1);
     table.rowSizes.splice(index, 1);
+    this.shiftRulesForDelete("row", index);
     const row = Math.min(index, table.rows.length - 1);
     this.selectionAnchor = { row, column: Math.min(this.selectionAnchor?.column ?? 0, table.columns - 1) };
     this.selectionFocus = { ...this.selectionAnchor };
@@ -1636,6 +1821,7 @@ export class TableToolController {
     table.columns -= 1;
     for (const row of table.rows) row.splice(index, 1);
     table.columnSizes.splice(index, 1);
+    this.shiftRulesForDelete("column", index);
     this.selectionAnchor = { row: Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1), column: Math.min(index, table.columns - 1) };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);
@@ -1849,6 +2035,10 @@ export class TableToolController {
       this.deps.showPreviewMessage?.("Reorder rows after splitting merged cells.");
       return;
     }
+    if (table.rules.length > 0) {
+      this.deps.showPreviewMessage?.("Reorder rows after clearing rules.");
+      return;
+    }
     const range = this.selectionRange();
     if (!range) return;
     const target = range.minRow + direction;
@@ -1864,6 +2054,10 @@ export class TableToolController {
   private moveColumn(table: StoredTable, direction: -1 | 1): void {
     if (tableHasSpans(table)) {
       this.deps.showPreviewMessage?.("Reorder columns after splitting merged cells.");
+      return;
+    }
+    if (table.rules.length > 0) {
+      this.deps.showPreviewMessage?.("Reorder columns after clearing rules.");
       return;
     }
     const range = this.selectionRange();

@@ -122,6 +122,7 @@ import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
 import { createAppIcon } from "./ui/icons";
 import { generateTableTypst } from "./components/tableTypst";
+import type { StoredTable } from "./workspace/workspaceStateStore";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
 import { DocumentFormattingController } from "./editor/documentFormattingController";
@@ -740,6 +741,16 @@ export class TypsastraWorkspaceController {
       clear: () => this.imagePreviewController.clearCropOverlay(),
     },
   );
+  /**
+   * Snippets compile on an auto-sized page, where `fr` tracks cannot resolve.
+   * Give such tables a definite width so fractional tracks render as intended.
+   */
+  private tablePreviewSource(table: StoredTable): string {
+    const code = generateTableTypst(table);
+    const usesFractions = table.columnSizes.some(size => size.endsWith("fr"));
+    return usesFractions ? `#block(width: 480pt)[\n${code}\n]` : code;
+  }
+
   private lastTablePreviewPages: string | null = null;
   private tablePreviewNoticeTimer: number | null = null;
   private readonly tableToolController = new TableToolController(
@@ -762,7 +773,7 @@ export class TypsastraWorkspaceController {
           workspaceRootPath,
           cacheRootPath,
           name: table.id,
-          sourceCode: generateTableTypst(table),
+          sourceCode: this.tablePreviewSource(table),
         });
       },
       showPreview: pages => this.showTablePreview(pages),

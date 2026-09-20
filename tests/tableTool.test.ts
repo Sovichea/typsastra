@@ -50,6 +50,7 @@ const table: StoredTable = {
   alt: "",
   footerRow: false,
   footerRepeat: true,
+  rules: [],
   rows: [
     [cell("Name"), cell("Value")],
     [cell("Alpha"), cell("1*2", "right")],
@@ -249,6 +250,49 @@ describe("table typst generation", () => {
     expect(generated).toContain("  table.footer(repeat: false, [Total], [3]),");
   });
 
+  test("renders the report preset with header fill, banding, and rules", () => {
+    const generated = generateTableTypst({
+      ...table,
+      style: "report",
+      rows: [
+        [cell("Name"), cell("Value")],
+        [cell("A"), cell("1")],
+        [cell("B"), cell("2")],
+      ],
+    });
+
+    expect(generated).toContain("  stroke: none,");
+    expect(generated).toContain(
+      '  fill: (x, y) => if y < 1 { rgb("#e8eef1") } else if calc.odd(y) { luma(245) },',
+    );
+    expect(generated).toContain('  table.hline(y: 0, stroke: 1.5pt + rgb("#000000")),');
+    expect(generated).toContain('  table.hline(y: 1, stroke: 0.75pt + rgb("#000000")),');
+    expect(generated).toContain('  table.hline(y: 3, stroke: 1.5pt + rgb("#000000")),');
+  });
+
+  test("emits explicit rules before the footer", () => {
+    const generated = generateTableTypst({
+      ...table,
+      footerRow: true,
+      rules: [
+        { axis: "horizontal", position: 1, start: 0, end: null, width: 1, color: "#9caec8" },
+        { axis: "horizontal", position: 2, start: 1, end: 2, width: 0.5, color: "#000000" },
+        { axis: "vertical", position: 1, start: 0, end: 1, width: 0.5, color: "#000000" },
+      ],
+      rows: [
+        [cell("A"), cell("B")],
+        [cell("1"), cell("2")],
+        [cell("Total"), cell("3")],
+      ],
+    });
+
+    expect(generated).toContain('  table.hline(y: 1, stroke: 1pt + rgb("#9caec8")),');
+    expect(generated).toContain('  table.hline(y: 2, start: 1, end: 2, stroke: 0.5pt + rgb("#000000")),');
+    expect(generated).toContain('  table.vline(x: 1, end: 1, stroke: 0.5pt + rgb("#000000")),');
+    // Rules cannot follow a footer.
+    expect(generated.indexOf("table.hline")).toBeLessThan(generated.indexOf("table.footer"));
+  });
+
   test("emits row tracks", () => {
     const generated = generateTableTypst({ ...table, rowSizes: ["", "40pt"] });
     expect(generated).toContain("  rows: (auto, 40pt),");
@@ -431,6 +475,12 @@ describe("table typst generation", () => {
     expect(source).toContain('id: "italic"');
     expect(source).toContain("private applyEmphasis(");
     expect(source).toContain("private toggleEmphasis(");
+    // New-table picker with rendered thumbnails.
+    expect(source).toContain("private openSamplesDialog(");
+    expect(source).toContain("renderSampleThumbnails(");
+    expect(source).toContain('this.openSamplesDialog()');
+    expect(source).toContain("table-samples-overlay");
+    expect(source).toContain("private createFromSample(");
     expect(source).toContain('data-field="table-caption"');
     expect(source).toContain('id: "caption-position"');
     expect(source).toContain('id: "caption-center"');
@@ -440,6 +490,10 @@ describe("table typst generation", () => {
     expect(source).toContain("private applyFill(");
     expect(source).toContain("private applyInset(");
     expect(source).toContain("private applyColumnSize(");
+    expect(source).toContain("private addRuleFromSelection(");
+    expect(source).toContain("private shiftRulesForInsert(");
+    expect(source).toContain("private shiftRulesForDelete(");
+    expect(source).toContain('label: "Rule below"');
     expect(source).toContain("private applyHeaderRows(");
     expect(source).toContain("private applyRowSize(");
     expect(source).toContain('label: "Header rows"');
@@ -558,7 +612,8 @@ describe("table preview compilation", () => {
     expect(controller).toContain("private schedulePreview(): void");
     expect(controller).toContain("await compile(snapshot)");
     expect(app).toContain('invoke<string[]>("compile_typst_snippet_svg"');
-    expect(app).toContain("sourceCode: generateTableTypst(table)");
+    expect(app).toContain("sourceCode: this.tablePreviewSource(table)");
+    expect(app).toContain("private tablePreviewSource(table: StoredTable): string");
     expect(app).toContain("table-tool-preview");
     // Transient notices float over the rendered table instead of replacing it.
     expect(app).toContain("table-tool-preview-notice");
@@ -595,6 +650,11 @@ describe("stored table normalization", () => {
             alt: "Summary",
             footerRow: true,
             footerRepeat: false,
+            rules: [
+              { axis: "horizontal", position: 1, start: 0, end: 3, width: 1, color: "#ABCDEF" },
+              { axis: "vertical", position: 99, width: 0.5 },
+              { axis: "bogus" },
+            ],
             rows: [[
               { text: "a", align: "left", emphasis: "bold", fill: "#ABCDEF", inset: 3, raw: true },
               { text: "b", emphasis: "bogus" },
@@ -638,6 +698,9 @@ describe("stored table normalization", () => {
     expect(first.label).toBe("tab:summary");
     expect(first.alt).toBe("Summary");
     expect(first.footerRow).toBe(true);
+    expect(first.rules).toHaveLength(2);
+    expect(first.rules[0]).toMatchObject({ axis: "horizontal", position: 1, start: 0, end: null, color: "#abcdef" });
+    expect(first.rules[1]).toMatchObject({ axis: "vertical", position: 3, start: 0, end: null });
     expect(first.rows[0][0].fill).toBe("#abcdef");
     expect(first.rows[0][0].inset).toBe(3);
     expect(first.rows[0][0].raw).toBe(true);

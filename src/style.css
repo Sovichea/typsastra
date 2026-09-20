@@ -3053,6 +3053,78 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-menubar { margin: 6px 0; }
 .table-tool-caption { margin-top: 6px; }
+/* New-table picker: sample cards with compiled thumbnails. */
+.table-samples-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 14, 20, 0.55);
+  backdrop-filter: blur(3px);
+}
+.table-samples-dialog {
+  width: min(900px, 100%);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.38);
+}
+.table-samples-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.table-samples-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.table-samples-header p { margin: 3px 0 0; color: var(--ui-header-text); font-size: 11px; }
+.table-samples-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+  overflow: auto;
+}
+.table-sample-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.table-sample-card:hover { border-color: var(--ui-accent-color); background: var(--ui-hover); }
+.table-sample-card:focus-visible { outline: 2px solid var(--ui-accent-color); outline-offset: 1px; }
+.table-sample-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  overflow: hidden;
+  padding: 6px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border);
+  border-radius: 5px;
+  background: #fff;
+}
+.table-sample-thumb svg { display: block; width: 100%; height: auto; max-height: 108px; }
+.table-sample-placeholder { color: var(--ui-header-text); font-size: 11px; }
+.table-sample-name { font-size: 12px; font-weight: 600; }
+.table-sample-desc { color: var(--ui-header-text); font-size: 11px; line-height: 1.4; }
 /* Table text boxes reuse the editor's caret field: same font (with the Khmer
    fallback stack), sizing, and caret. */
 .table-tool-field-shell {

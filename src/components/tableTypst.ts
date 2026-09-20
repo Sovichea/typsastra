@@ -2,6 +2,7 @@ import type {
   StoredTable,
   StoredTableCell,
   StoredTableCellBorders,
+  StoredTableRule,
 } from "../workspace/workspaceStateStore";
 
 export const TABLE_DIRECTIVE_PREFIX = "//@table:";
@@ -140,9 +141,14 @@ function headerRowCountFor(table: StoredTable): number {
 /** The stroke a style gives each cell side before any explicit override. */
 function baselineRecord(table: StoredTable, slot: CellSlot): Record<SideKey, string> {
   const record = {} as Record<SideKey, string>;
-  if (table.style !== "booktabs") {
+  // Styles that draw explicit rules leave the cell grid unstroked.
+  if (table.style !== "booktabs" && table.style !== "report") {
     const stroke = defaultStroke(table);
     CELL_BORDER_SIDES.forEach(side => { record[side] = stroke; });
+    return record;
+  }
+  if (table.style === "report") {
+    CELL_BORDER_SIDES.forEach(side => { record[side] = "none"; });
     return record;
   }
   CELL_BORDER_SIDES.forEach(side => { record[side] = "none"; });
@@ -159,8 +165,38 @@ function baselineRecord(table: StoredTable, slot: CellSlot): Record<SideKey, str
 
 /** The stroke argument shared by every cell that has no override. */
 function strokeFallback(table: StoredTable): string {
-  return table.style === "booktabs" ? "none" : defaultStroke(table);
+  return table.style === "booktabs" || table.style === "report" ? "none" : defaultStroke(table);
 }
+
+/** Extra rules a preset style draws (before any user-defined rules). */
+function styleRules(table: StoredTable): StoredTableRule[] {
+  if (table.style !== "report") return [];
+  const rules: StoredTableRule[] = [
+    { axis: "horizontal", position: 0, start: 0, end: null, width: BOOKTABS_OUTER_RULE, color: table.strokeColor },
+  ];
+  const headerCount = headerRowCountFor(table);
+  if (headerCount > 0) {
+    rules.push({
+      axis: "horizontal",
+      position: headerCount,
+      start: 0,
+      end: null,
+      width: BOOKTABS_HEADER_RULE,
+      color: table.strokeColor,
+    });
+  }
+  rules.push({
+    axis: "horizontal",
+    position: table.rows.length,
+    start: 0,
+    end: null,
+    width: BOOKTABS_OUTER_RULE,
+    color: table.strokeColor,
+  });
+  return rules;
+}
+
+const REPORT_HEADER_FILL = 'rgb("#e8eef1")';
 
 /**
  * Typst resolves coincident cell sides in favor of the lower or right cell, so
@@ -348,6 +384,11 @@ function strokeArgument(table: StoredTable, groups: Array<CellGroup<SideOverride
 function bandFillExpression(table: StoredTable): string {
   if (table.style === "banded-rows") return `if calc.odd(y) { ${BAND_FILL} }`;
   if (table.style === "banded-columns") return `if calc.odd(x) { ${BAND_FILL} }`;
+  // The report preset shades the header and zebra-stripes the body.
+  if (table.style === "report") {
+    const headerCount = Math.max(1, headerRowCountFor(table));
+    return `if y < ${headerCount} { ${REPORT_HEADER_FILL} } else if calc.odd(y) { ${BAND_FILL} }`;
+  }
   return "none";
 }
 
@@ -422,6 +463,16 @@ function cellSource(cell: StoredTableCell): string {
     : `[${body}]`;
 }
 
+/** An explicit `table.hline`/`table.vline` child. */
+function ruleSource(rule: StoredTableRule): string {
+  const horizontal = rule.axis === "horizontal";
+  const parts = [`${horizontal ? "y" : "x"}: ${rule.position}`];
+  if (rule.start > 0) parts.push(`start: ${rule.start}`);
+  if (rule.end !== null) parts.push(`end: ${rule.end}`);
+  parts.push(`stroke: ${typstStroke(rule.width, rule.color)}`);
+  return `  table.${horizontal ? "hline" : "vline"}(${parts.join(", ")}),`;
+}
+
 /** Generates the managed Typst `table` call for a project table. */
 export function generateTableTypst(table: StoredTable): string {
   const fallback = strokeFallback(table);
@@ -476,16 +527,20 @@ export function generateTableTypst(table: StoredTable): string {
       lines.push(`  table.header(${repeat}${bodies.join(", ")}),`);
     }
   }
+  const ruleLines = [...styleRules(table), ...table.rules].map(ruleSource);
   for (let rowIndex = headerCount; rowIndex < table.rows.length; rowIndex += 1) {
     const body = rowSource(table.rows[rowIndex], rowIndex);
     if (body === null) continue;
     if (rowIndex === footerIndex) {
+      // Explicit rules cannot follow a footer, so emit them just before it.
+      lines.push(...ruleLines);
       const repeat = table.footerRepeat === false ? "repeat: false, " : "";
       lines.push(`  table.footer(${repeat}${body}),`);
     } else {
       lines.push(`  ${body},`);
     }
   }
+  if (footerIndex < 0) lines.push(...ruleLines);
   lines.push(")");
   const code = lines.join("\n");
   const caption = (table.caption ?? "").trim();
