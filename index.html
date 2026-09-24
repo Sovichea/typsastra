@@ -291,6 +291,9 @@
                     <button type="button" id="sidebar-images-button" class="sidebar-activity-button" title="Images" aria-label="Show Images" aria-pressed="false">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
                     </button>
+                    <button type="button" id="sidebar-tables-button" class="sidebar-activity-button" title="Tables" aria-label="Show Tables" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16"/><path d="M3 9h18M3 14h18M9 4v16M15 4v16"/></svg>
+                    </button>
                 </nav>
                 <aside id="explorer-sidebar" aria-label="Project sidebar">
                     <div id="explorer-sidebar-content" class="sidebar-tool-content">
@@ -334,6 +337,13 @@
                     <div id="image-tools-sidebar-content" class="sidebar-tool-content hidden">
                         <div class="sidebar-section-header"><span id="image-tools-sidebar-title">IMAGES</span></div>
                         <div id="image-tools-sidebar" class="sidebar-section-content"></div>
+                    </div>
+                    <div id="tables-sidebar-content" class="sidebar-tool-content hidden">
+                        <div class="sidebar-section-header">
+                            <span>TABLES</span>
+                            <button type="button" id="tables-new-button" class="sidebar-section-action" title="New table">+ New</button>
+                        </div>
+                        <div id="tables-sidebar-list" class="sidebar-section-content"></div>
                     </div>
                 </aside>
                 <div class="resizer" id="explorer-resizer"></div>
@@ -1689,6 +1699,7 @@
                                 <div id="image-viewer-info" style="margin-top:12px;font-size:12px;font-family:var(--font-family-sans);color:var(--ui-header-text);text-align:center;"></div>
                             </div>
                             <div id="image-tools-inspector" class="image-tools-inspector hidden"></div>
+                            <div id="table-tool-inspector" class="table-tools-inspector hidden"></div>
                         </div>
                         <!-- WYSIWYM editor pane disabled for this release.
                         <div

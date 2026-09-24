@@ -5849,7 +5849,7 @@ fn copy_low_memory_sync_tree(
 /// Resolves the machine-local render cache and verifies it belongs to the
 /// active project. Low-memory compilation and indexing must use the same cache
 /// root as the normal preview mirror.
-fn resolve_low_memory_cache_root(
+fn resolve_managed_workspace_cache_root(
     app_local_data_dir: &Path,
     workspace_root: &Path,
     cache_root_path: &str,
@@ -5879,7 +5879,8 @@ async fn prepare_low_memory_sync_instrumentation(
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("Failed to get app data directory: {error}"))?;
-    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let render_root = dunce::canonicalize(cache_root.join("render"))
         .map_err(|error| format!("Unable to resolve prepared render root: {error}"))?;
     let input = dunce::canonicalize(&input_path)
@@ -6039,7 +6040,8 @@ async fn restore_low_memory_preview_cache(
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("Failed to get app data directory: {error}"))?;
-    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
     let key = low_memory_preview_cache_key(&root, &preview_root)?;
@@ -6101,7 +6103,8 @@ async fn persist_low_memory_preview_cache(
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("Failed to get app data directory: {error}"))?;
-    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
     let source = PathBuf::from(pdf_path)
@@ -6165,7 +6168,8 @@ async fn save_low_memory_sync_index(
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("Failed to get app data directory: {error}"))?;
-    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
     let directory = low_memory_preview_cache_directory(&cache_root);
@@ -6196,7 +6200,8 @@ async fn load_low_memory_sync_index(
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("Failed to get app data directory: {error}"))?;
-    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
     let path = low_memory_sync_index_path(&cache_root, &root, &preview_root)?;
@@ -6209,7 +6214,7 @@ async fn load_low_memory_sync_index(
 
 #[cfg(test)]
 mod low_memory_cache_root_tests {
-    use super::{resolve_low_memory_cache_root, workspace_render_cache_root};
+    use super::{resolve_managed_workspace_cache_root, workspace_render_cache_root};
 
     #[test]
     fn accepts_the_managed_cache_root_and_rejects_foreign_roots() {
@@ -6218,7 +6223,7 @@ mod low_memory_cache_root_tests {
         let cache_root = workspace_render_cache_root(app_data.path(), workspace.path());
         std::fs::create_dir_all(cache_root.join("render")).expect("create render mirror");
 
-        let resolved = resolve_low_memory_cache_root(
+        let resolved = resolve_managed_workspace_cache_root(
             app_data.path(),
             workspace.path(),
             cache_root.to_str().unwrap(),
@@ -6230,7 +6235,7 @@ mod low_memory_cache_root_tests {
         );
 
         let foreign = tempfile::tempdir().expect("create foreign cache");
-        let error = resolve_low_memory_cache_root(
+        let error = resolve_managed_workspace_cache_root(
             app_data.path(),
             workspace.path(),
             foreign.path().to_str().unwrap(),
@@ -6254,7 +6259,8 @@ async fn compile_tinymist_pdf_once(
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("Failed to get app data directory: {error}"))?;
-    let cache_root = resolve_low_memory_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let render_root = dunce::canonicalize(cache_root.join("render"))
         .map_err(|error| format!("Unable to resolve prepared render root: {error}"))?;
     let input = dunce::canonicalize(&input_path)
@@ -6331,6 +6337,113 @@ async fn compile_tinymist_pdf_once(
         pdf_path: output.to_string_lossy().into_owned(),
         diagnostics: String::from_utf8_lossy(&result.stderr).trim().to_string(),
     })
+}
+
+/// Compiles a standalone Typst snippet (for example a generated table) into
+/// SVG pages with the active Tinymist toolchain.
+#[tauri::command]
+async fn compile_typst_snippet_svg(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+    cache_root_path: String,
+    name: String,
+    source_code: String,
+) -> Result<Vec<String>, String> {
+    let root = dunce::canonicalize(&workspace_root_path)
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let safe_name: String = name
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+        .take(64)
+        .collect();
+    if safe_name.is_empty() {
+        return Err("The preview snippet needs a valid name.".into());
+    }
+    let work_dir = cache_root.join("snippet-preview").join(&safe_name);
+    if work_dir.exists() {
+        let _ = std::fs::remove_dir_all(&work_dir);
+    }
+    std::fs::create_dir_all(&work_dir)
+        .map_err(|error| format!("Unable to prepare the snippet preview directory: {error}"))?;
+
+    // Auto-size the page around the snippet so the preview stays compact.
+    let document = format!(
+        "#set page(width: auto, height: auto, margin: 12pt)\n#set text(size: 11pt)\n{source_code}\n"
+    );
+    let entry = work_dir.join("preview.typ");
+    std::fs::write(&entry, document)
+        .map_err(|error| format!("Unable to write the snippet preview source: {error}"))?;
+
+    let executable = active_tinymist(&app_local_data_dir)
+        .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
+    let mut command = tokio::process::Command::new(executable);
+    command
+        .arg("compile")
+        .current_dir(&work_dir)
+        .arg("preview.typ")
+        .arg("page-{p}.svg")
+        .arg("--root")
+        .arg(".")
+        .kill_on_drop(true);
+    let font_paths = compiler_font_directories(&app_handle, &app_local_data_dir, &root);
+    if !font_paths.is_empty() {
+        if let Ok(value) = std::env::join_paths(font_paths) {
+            command.env("TYPST_FONT_PATHS", value);
+        }
+    }
+    configure_background_compiler(&mut command);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let result = command
+        .output()
+        .await
+        .map_err(|error| format!("Failed to start the snippet compiler: {error}"))?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("Snippet compilation failed with {}.", result.status)
+        } else {
+            stderr
+        });
+    }
+
+    let mut pages: Vec<(u32, std::path::PathBuf)> = Vec::new();
+    for entry in std::fs::read_dir(&work_dir)
+        .map_err(|error| format!("Unable to read the snippet preview output: {error}"))?
+        .flatten()
+    {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let Some(number) = file_name
+            .strip_prefix("page-")
+            .and_then(|rest| rest.strip_suffix(".svg"))
+            .and_then(|value| value.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        pages.push((number, path));
+    }
+    pages.sort_by_key(|(number, _)| *number);
+    if pages.is_empty() {
+        return Err("The snippet compiler did not produce any pages.".into());
+    }
+    let mut contents = Vec::with_capacity(pages.len());
+    for (_, path) in pages {
+        contents.push(
+            std::fs::read_to_string(&path)
+                .map_err(|error| format!("Unable to read a snippet preview page: {error}"))?,
+        );
+    }
+    Ok(contents)
 }
 
 #[tauri::command]
@@ -7288,6 +7401,7 @@ pub fn run() {
             image_tool_generate_preview,
             image_tool_save_copy,
             image_tool_update_references,
+            compile_typst_snippet_svg,
             ensure_toolchain,
             get_toolchain_status,
             list_system_fonts,

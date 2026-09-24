@@ -1,9 +1,10 @@
-import { message } from "@tauri-apps/plugin-dialog";
+import { message, open, save } from "@tauri-apps/plugin-dialog";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { dirname, join } from "@tauri-apps/api/path";
-import { EditorState, type Extension, type Text } from "@codemirror/state";
+import { EditorState, Transaction, type Extension, type Text } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { undo, redo, selectAll, undoDepth } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
@@ -43,7 +44,7 @@ import { PreviewSyncController } from "./preview/previewSyncController";
 import { LowMemorySyncIndexController } from "./preview/lowMemorySyncIndexController";
 import { buildLowMemorySyncIndex } from "./preview/lowMemorySyncIndexBuilder";
 import { PreviewSourceNavigationController } from "./preview/previewSourceNavigationController";
-import { PreviewUiController } from "./preview/previewUiController";
+import { PreviewUiController, type TablePreviewZoom } from "./preview/previewUiController";
 import { PreviewContentController } from "./preview/previewContentController";
 import {
   PreviewWindowController,
@@ -119,6 +120,15 @@ import { SystemResumeMonitor } from "./platform/systemResume";
 import { WorkspaceResumeController } from "./platform/workspaceResumeController";
 import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativeAppMenu";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
+import { TableToolController } from "./components/tableTool";
+import { createAppIcon } from "./ui/icons";
+import {
+  findTableDirectiveBlocks,
+  generateTableTypst,
+  syncTableDirectiveContent,
+} from "./components/tableTypst";
+import { extractTableCells } from "./components/tableParse";
+import type { StoredTable } from "./workspace/workspaceStateStore";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
 import { DocumentFormattingController } from "./editor/documentFormattingController";
@@ -737,6 +747,218 @@ export class TypsastraWorkspaceController {
       clear: () => this.imagePreviewController.clearCropOverlay(),
     },
   );
+  /**
+   * Snippets compile on an auto-sized page, where `fr` tracks cannot resolve.
+   * Give such tables a definite width so fractional tracks render as intended.
+   */
+  private tablePreviewSource(table: StoredTable): string {
+    // A CSV source path cannot resolve from the snippet cache directory, so the
+    // preview shows the design-time rows; generated/copied code still reads it.
+    const preview = table.dataFile ? { ...table, dataFile: "" } : table;
+    const code = generateTableTypst(preview);
+    const usesFractions = preview.columnSizes.some(size => size.endsWith("fr"));
+    return usesFractions ? `#block(width: 480pt)[\n${code}\n]` : code;
+  }
+
+  /** Rewrites the linked blocks for these tables in the active document. */
+  private syncTableDirectiveBlocks(blocks: ReadonlyArray<{ id: string; code: string }>): void {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path)) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "table tool",
+        message: "Open a Typst document to sync table blocks.",
+      });
+      return;
+    }
+    const view = this.editorInstance;
+    const current = view.state.doc.toString();
+    let next = current;
+    for (const block of blocks) {
+      const replaced = syncTableDirectiveContent(next, block.id, block.code);
+      if (replaced !== null) next = replaced;
+    }
+    if (next === current) {
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "table tool",
+        message: "No linked table blocks found in the active document.",
+      });
+      return;
+    }
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: next },
+      annotations: Transaction.addToHistory.of(false),
+    });
+  }
+
+  /** Location of a table's `//@table:` directive among the open documents. */
+  private tableLinkFor(
+    id: string,
+  ): { path: string; line: number; column: number; label: string } | null {
+    const directive = `//@table:${id}`;
+    for (const tab of this.openTabs) {
+      if (!isTypstDocumentPath(tab.path)) continue;
+      const text = tab.path === this.activeFilePath
+        ? this.editorInstance.state.doc.toString()
+        : tab.content;
+      const lines = text.split("\n");
+      const index = lines.findIndex(line => line.trim() === directive);
+      if (index === -1) continue;
+      return {
+        path: tab.path,
+        line: index + 1,
+        column: lines[index].indexOf("//@table:") + 1,
+        label: this.relativeWorkspacePath(tab.path),
+      };
+    }
+    return null;
+  }
+
+  private relativeWorkspacePath(path: string): string {
+    const root = this.workspaceRootPath;
+    if (!root) return path;
+    const normalizedRoot = root.replace(/\\/gu, "/").replace(/\/$/u, "");
+    const normalizedPath = path.replace(/\\/gu, "/");
+    return normalizedPath.toLowerCase().startsWith(`${normalizedRoot.toLowerCase()}/`)
+      ? normalizedPath.slice(normalizedRoot.length + 1)
+      : normalizedPath;
+  }
+
+  private async saveTableExport(suggestedName: string, content: string): Promise<void> {
+    try {
+      const path = await save({
+        defaultPath: suggestedName,
+        filters: [{ name: "Typst", extensions: ["typ"] }],
+      });
+      if (!path) return;
+      await writeTextFile(path, content);
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "table tool",
+        message: `Could not export the table: ${String(error)}`,
+      });
+    }
+  }
+
+  private async pickTableImport(): Promise<string | null> {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Typst", extensions: ["typ"] }],
+      });
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return null;
+      return await readTextFile(path);
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "table tool",
+        message: `Could not read the table file: ${String(error)}`,
+      });
+      return null;
+    }
+  }
+
+  /** Opens the linked directive in the code editor at its line. */
+  private async openTableLink(id: string): Promise<void> {
+    const link = this.tableLinkFor(id);
+    if (!link) return;
+    // Leave the Tables tool so the code editor pane is visible again.
+    this.sidebarController.setTool("explorer");
+    if (filePathKey(link.path) !== filePathKey(this.activeFilePath ?? "")) {
+      await this.loadFile(link.path, { focusEditor: false });
+    }
+    if (!this.getActiveTab()?.contentLoaded) return;
+    const doc = this.editorInstance.state.doc;
+    const line = doc.line(Math.max(1, Math.min(link.line, doc.lines)));
+    this.editorInstance.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+    });
+    this.editorInstance.focus();
+  }
+
+  /** Raw source between a linked block's markers in the active document. */
+  private tableDirectiveSource(id: string): string | null {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path)) return null;
+    const text = this.editorInstance.state.doc.toString();
+    const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === id);
+    return block ? text.slice(block.contentFrom, block.contentTo) : null;
+  }
+
+  /** Cell contents of a linked block in the active document, or null. */
+  private readTableDirectiveBlock(id: string): ReadonlyArray<string> | null {
+    const source = this.tableDirectiveSource(id);
+    return source === null ? null : extractTableCells(source);
+  }
+
+  /** Updates a linked block's `//@table:` anchor after a table id change. */
+  private renameTableDirectiveBlock(previousId: string, nextId: string): void {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path)) return;
+    const view = this.editorInstance;
+    const text = view.state.doc.toString();
+    const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === previousId);
+    if (!block) return;
+    const lineEnd = text.indexOf("\n", block.from);
+    const anchorEnd = lineEnd === -1 ? text.length : lineEnd;
+    view.dispatch({
+      changes: { from: block.from, to: anchorEnd, insert: `//@table:${nextId}` },
+      annotations: Transaction.addToHistory.of(false),
+    });
+  }
+
+  private lastTablePreviewPages: string | null = null;
+  private tablePreviewScale = 1;
+  private tablePreviewFit = true;
+  private tablePreviewResizeObserver: ResizeObserver | null = null;
+  private readonly tablePreviewZoom: TablePreviewZoom = {
+    zoomIn: () => this.zoomTablePreview(1.2),
+    zoomOut: () => this.zoomTablePreview(1 / 1.2),
+    zoomToFit: () => this.fitTablePreview(),
+    zoomPercent: () => (this.tableZoomElement() ? this.tablePreviewScale : null),
+    isFit: () => (this.tableZoomElement() ? this.tablePreviewFit : null),
+  };
+  private readonly tableToolController = new TableToolController(
+    document.getElementById("tables-sidebar-list")!,
+    document.getElementById("table-tool-inspector")!,
+    {
+      persist: tables => {
+        if (!this.workspaceMetadata) return;
+        this.workspaceMetadata.project.tables = tables.map(table => ({
+          ...table,
+          rows: table.rows.map(row => row.map(cell => ({ ...cell }))),
+        }));
+        void this.saveWorkspaceState();
+      },
+      compilePreview: async table => {
+        const workspaceRootPath = this.workspaceRootPath;
+        const cacheRootPath = this.getCacheRootPath();
+        if (!workspaceRootPath || !cacheRootPath) return [];
+        return invoke<string[]>("compile_typst_snippet_svg", {
+          workspaceRootPath,
+          cacheRootPath,
+          name: table.id,
+          sourceCode: this.tablePreviewSource(table),
+        });
+      },
+      showPreview: pages => this.showTablePreview(pages),
+      showPreviewMessage: message => this.showTablePreviewMessage(message),
+      showContextMenu: (items, x, y) => this.contextMenuController.showCustomMenu(items, x, y),
+      syncBlocks: blocks => this.syncTableDirectiveBlocks(blocks),
+      renameBlock: (previousId, nextId) => this.renameTableDirectiveBlock(previousId, nextId),
+      readBlock: id => this.readTableDirectiveBlock(id),
+      getBlockSource: id => this.tableDirectiveSource(id),
+      getLink: id => this.tableLinkFor(id),
+      openLink: id => void this.openTableLink(id),
+      exportTable: (suggestedName, content) => void this.saveTableExport(suggestedName, content),
+      importTable: () => this.pickTableImport(),
+      log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
+    },
+  );
   private readonly sidebarController = new SidebarController({
     hasWorkspace: () => !!this.workspaceRootPath,
     isWorkspaceLoading: () => this.workspaceLoading,
@@ -754,6 +976,8 @@ export class TypsastraWorkspaceController {
       this.imageToolsController.show();
     },
     hideImageTools: () => this.imageToolsController.hide(),
+    showTableTools: () => this.tableToolController.show(),
+    hideTableTools: () => this.tableToolController.hide(),
     showRestoringPreview: () => this.previewFrame.setMessage(
       `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
       `<div class="preview-disabled-title preview-accent-title">Restoring Preview</div>` +
@@ -1073,7 +1297,10 @@ export class TypsastraWorkspaceController {
     updatePinnedMain: (path, force) => this.updatePinnedMain(path, force),
     recheckActiveDocumentAfterPin: text => this.recheckActiveDocumentAfterPin(text),
     resetSourceMap: () => this.sourceMapSessionController.reset({ retry: false }),
-    setPreviewLoading: text => this.previewFrame.setLoading(text),
+    setPreviewLoading: text => {
+      if (this.sidebarController.activeTool === "tables") return;
+      this.previewFrame.setLoading(text);
+    },
     appendLog: (kind, source, text) => {
       if (kind === "error") {
         this.appendLspLog({ kind, source, message: text });
@@ -1595,6 +1822,7 @@ export class TypsastraWorkspaceController {
     markdownPreviewFrame: this.markdownPreviewFrame,
     draftPreview: this.draftPreviewController,
     imagePreview: this.imagePreviewController,
+    tablePreview: this.tablePreviewZoom,
     getActiveFilePath: () => this.activeFilePath,
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
     setMarkdownPreviewActive: active => this.setMarkdownPreviewActive(active),
@@ -1608,6 +1836,7 @@ export class TypsastraWorkspaceController {
     markdownPreview: this.markdownPreviewFrame,
     setMarkdownPreviewActive: active => this.setMarkdownPreviewActive(active),
     isImageToolActive: () => this.sidebarController.activeTool === "images",
+    isTableToolActive: () => this.sidebarController.activeTool === "tables",
     getActiveFilePath: () => this.activeFilePath,
     getPinnedMainFilePath: () => this.pinnedMainFilePath,
     getWorkspaceRootPath: () => this.workspaceRootPath,
@@ -1945,6 +2174,15 @@ export class TypsastraWorkspaceController {
     await this.imageToolsController.selectImage(imagePath);
   }
 
+  /** Opens the Table tool and selects the table linked by a directive. */
+  private navigateToTableTool(tableId: string): void {
+    this.sidebarController.setTool("tables");
+    this.tableToolController.show();
+    this.tableToolController.selectTable(tableId);
+    // Pick up any cell edits made in the linked block.
+    this.tableToolController.readLinkedCells(tableId);
+  }
+
   private async handleImageToolFilesWritten(
     paths: readonly string[],
     phase: "before" | "after",
@@ -2259,6 +2497,7 @@ export class TypsastraWorkspaceController {
       message => this.appendDeveloperLog({ kind: "info", source: "lsp autocomplete", message }),
       () => this.settingsController.value.editor.userDictionary,
       editor.typstCompletionMode,
+      () => this.tableToolController.tableCompletions(),
     );
   }
 
@@ -2567,6 +2806,9 @@ export class TypsastraWorkspaceController {
   }
 
   private renderPdfPreview(contents: string, force = false): Promise<void> {
+    // While the table tool owns the preview pane, the document preview must
+    // not render over it; switching back restores the preview.
+    if (this.sidebarController.activeTool === "tables") return Promise.resolve();
     return this.pdfPreviewRenderController.render(contents, force);
   }
 
@@ -3053,6 +3295,144 @@ export class TypsastraWorkspaceController {
     this.previewContentController.renderImageToolPreview(source, imagePath);
   }
 
+  private showTablePreview(pages: readonly string[]): void {
+    if (pages.length === 0) {
+      this.lastTablePreviewPages = null;
+      this.showTablePreviewMessage("Create or select a table to preview it.");
+      return;
+    }
+    this.lastTablePreviewPages = pages
+      .map(svg => `<div class="table-tool-preview-page">${svg}</div>`)
+      .join("");
+    this.tablePreviewScale = 1;
+    this.tablePreviewFit = true;
+    this.previewFrame.setMessage(
+      `<div class="table-tool-preview">` +
+      `<div class="table-tool-preview-zoom" data-table-zoom>${this.lastTablePreviewPages}</div></div>`,
+    );
+    this.armTablePreviewZoom();
+  }
+
+  private showTablePreviewMessage(message: string): void {
+    const escaped = message.replace(/[&<>"]/gu, character => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+    }[character] ?? character));
+    if (this.lastTablePreviewPages !== null) {
+      // Keep the rendered table on screen and show the notice as a dismissible
+      // breadcrumb bar above it, so the preview is never lost to a message.
+      this.previewFrame.setMessage(
+        `<div class="table-tool-preview">` +
+        `<div class="table-tool-preview-notice" role="status">` +
+        `<span class="table-tool-preview-notice-msg">${escaped}</span>` +
+        `<button type="button" class="table-tool-preview-notice-close" aria-label="Dismiss notification" title="Dismiss"></button>` +
+        `</div><div class="table-tool-preview-zoom" data-table-zoom>${this.lastTablePreviewPages}</div></div>`,
+      );
+      this.armTablePreviewNotice();
+      this.armTablePreviewZoom();
+      return;
+    }
+    this.previewFrame.setMessage(
+      `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
+      `<div class="preview-disabled-title preview-accent-title">Table Preview</div>` +
+      `<div class="preview-disabled-msg">${escaped}</div></div></div>`,
+    );
+  }
+
+  /**
+   * Arms the table preview: fit-to-width by default, ctrl+wheel zoom, and a
+   * resize observer so it stays fitted as the pane or table changes.
+   */
+  private armTablePreviewZoom(): void {
+    const container = this.previewPane.querySelector<HTMLElement>(".table-tool-preview");
+    const wrapper = this.tableZoomElement();
+    if (!container || !wrapper) return;
+    this.tablePreviewScale = 1;
+    this.tablePreviewFit = true;
+    wrapper.style.setProperty("zoom", "1");
+    const applyFit = () => {
+      if (!this.tablePreviewFit || !container.isConnected) return;
+      const scale = this.computeTableFitScale(container, wrapper);
+      if (scale === null) return;
+      this.setTablePreviewScale(scale, true);
+    };
+    requestAnimationFrame(applyFit);
+    this.tablePreviewResizeObserver?.disconnect();
+    if (typeof ResizeObserver !== "undefined") {
+      this.tablePreviewResizeObserver = new ResizeObserver(() => {
+        if (this.tablePreviewFit) applyFit();
+      });
+      this.tablePreviewResizeObserver.observe(container);
+    }
+    container.addEventListener("wheel", event => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      this.zoomTablePreview(event.deltaY < 0 ? 1.1 : 1 / 1.1);
+    }, { passive: false });
+  }
+
+  private computeTableFitScale(container: HTMLElement, wrapper: HTMLElement): number | null {
+    const pages = wrapper.querySelectorAll<SVGSVGElement>("svg");
+    if (pages.length === 0) return null;
+    // `getBoundingClientRect` reflects the current zoom, so normalize it away.
+    const currentZoom = this.tablePreviewScale || 1;
+    let widest = 0;
+    pages.forEach(svg => {
+      widest = Math.max(widest, svg.getBoundingClientRect().width / currentZoom);
+    });
+    if (widest <= 0) return null;
+    const page = wrapper.querySelector<HTMLElement>(".table-tool-preview-page");
+    const pageStyle = page ? window.getComputedStyle(page) : null;
+    const padding = pageStyle
+      ? parseFloat(pageStyle.paddingLeft) + parseFloat(pageStyle.paddingRight)
+      : 0;
+    const available = container.clientWidth - padding;
+    if (available <= 0) return null;
+    return Math.min(Math.max(available / widest, 0.1), 8);
+  }
+
+  private tableZoomElement(): HTMLElement | null {
+    return this.previewPane.querySelector<HTMLElement>("[data-table-zoom]");
+  }
+
+  private setTablePreviewScale(scale: number, fit: boolean): void {
+    const element = this.tableZoomElement();
+    if (!element) return;
+    this.tablePreviewScale = scale;
+    this.tablePreviewFit = fit;
+    element.style.setProperty("zoom", String(scale));
+    this.updatePreviewZoomLabel(scale);
+  }
+
+  private zoomTablePreview(factor: number): boolean {
+    if (!this.tableZoomElement()) return false;
+    const scale = Math.min(Math.max(this.tablePreviewScale * factor, 0.25), 8);
+    this.setTablePreviewScale(scale, false);
+    return true;
+  }
+
+  private fitTablePreview(): boolean {
+    if (!this.tableZoomElement()) return false;
+    this.setTablePreviewScale(1, true);
+    return true;
+  }
+
+  private armTablePreviewNotice(): void {
+    // The notice stays until the reader dismisses it: long messages need more
+    // than a fixed timeout, and the close button is always available.
+    const close = this.previewPane.querySelector<HTMLButtonElement>(".table-tool-preview-notice-close");
+    if (close) {
+      close.appendChild(createAppIcon("x", { size: 13 }));
+      close.addEventListener("click", () => this.dismissTablePreviewNotice());
+    }
+  }
+
+  private dismissTablePreviewNotice(): void {
+    this.previewPane.querySelector<HTMLElement>(".table-tool-preview-notice")?.remove();
+  }
+
   private renderInteractiveImageViewer(
     src: string,
     previewPath = this.activeFilePath ?? "preview.png",
@@ -3183,6 +3563,7 @@ export class TypsastraWorkspaceController {
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),
       drainPendingProjectImports: () => this.drainPendingProjectImports(),
       navigateToImageTool: imagePath => this.navigateToImageTool(imagePath),
+      navigateToTableTool: tableId => this.navigateToTableTool(tableId),
       beforeUnload: () => {
         this.systemResumeMonitor.stop();
         if (this.sourceMapSessionController.registeredTaskId && this.lspClient) {

@@ -22,6 +22,124 @@ export type StoredScriptLanguageAssignment = {
   languageTag: string;
 };
 
+export type StoredTableAlignment = "left" | "center" | "right";
+export type StoredTableVerticalAlignment = "top" | "center" | "bottom";
+export type StoredTableEmphasis = "regular" | "bold" | "italic";
+
+/** A per-side border override; null inherits the table stroke. */
+export type StoredTableBorderSide = {
+  enabled: boolean;
+  /** Stroke thickness in points. */
+  width: number;
+  /** `#rrggbb`. */
+  color: string;
+} | null;
+
+export type StoredTableCellBorders = {
+  top: StoredTableBorderSide;
+  right: StoredTableBorderSide;
+  bottom: StoredTableBorderSide;
+  left: StoredTableBorderSide;
+};
+
+export type StoredTableCell = {
+  text: string;
+  align: StoredTableAlignment | null;
+  verticalAlign: StoredTableVerticalAlignment | null;
+  emphasis: StoredTableEmphasis | null;
+  /** Grid span of the origin cell; covered slots inherit it. */
+  colspan: number;
+  rowspan: number;
+  /** True for slots covered by another cell's span; they hold no content. */
+  covered: boolean;
+  /** Explicit side overrides; null inherits the table stroke. */
+  borders: StoredTableCellBorders | null;
+  /** `#rrggbb` cell background; null inherits the table/banding fill. */
+  fill: string | null;
+  /** `#rrggbb` cell text color; null inherits the document text color. */
+  textColor: string | null;
+  /** Rotates the cell content 90° counter-clockwise (vertical headers). */
+  rotate: boolean;
+  /** Whether the cell may split across pages; null uses the default. */
+  breakable: boolean | null;
+  /** Cell padding in points; null inherits the table inset. */
+  inset: number | null;
+  /** When true, `text` is emitted as Typst content instead of escaped markup. */
+  raw: boolean;
+};
+
+export type StoredTableStroke = "none" | "solid";
+
+/** A predefined look; `default` follows the stroke settings. */
+export type StoredTableStyle = "default" | "banded-rows" | "banded-columns" | "booktabs" | "report";
+export type StoredTableCaptionPosition = "top" | "bottom";
+export type StoredTableCaptionAlign = "left" | "center";
+
+/**
+ * An explicit table rule (`table.hline`/`table.vline`). Unlike per-cell borders
+ * it can span a partial range and cross gutters.
+ */
+export type StoredTableRule = {
+  axis: "horizontal" | "vertical";
+  /** Row boundary (horizontal) or column boundary (vertical), grid-coordinate. */
+  position: number;
+  /** Inclusive start along the other axis. */
+  start: number;
+  /** Exclusive end along the other axis; null runs to the end. */
+  end: number | null;
+  width: number;
+  /** `#rrggbb`. */
+  color: string;
+};
+
+/**
+ * A project-owned table reference. Tables are internal assignments: they live
+ * in the portable project config and never create their own `.typ` files.
+ */
+export type StoredTable = {
+  id: string;
+  name: string;
+  columns: number;
+  headerRow: boolean;
+  /** Number of leading header rows when `headerRow`; 0 when there is none. */
+  headerRowCount: number;
+  headerColumn: boolean;
+  /** Whether the header repeats on every page. */
+  headerRepeat: boolean;
+  stroke: StoredTableStroke;
+  strokeWidth: number;
+  strokeColor: string;
+  style: StoredTableStyle;
+  caption: string;
+  captionPosition: StoredTableCaptionPosition;
+  captionAlign: StoredTableCaptionAlign;
+  /** Per-column Typst track sizes ("" = auto); length always equals `columns`. */
+  columnSizes: string[];
+  /** Per-row Typst track sizes ("" = auto); length always equals the row count. */
+  rowSizes: string[];
+  /** Gap between rows and columns in points; 0 omits the option. */
+  gutter: number;
+  /** Figure label for `@ref` (without angle brackets); "" omits it. */
+  label: string;
+  /** Figure alternative description; "" omits it. */
+  alt: string;
+  /** Renders the last row with `table.footer`. */
+  footerRow: boolean;
+  /** Whether the footer repeats on every page. */
+  footerRepeat: boolean;
+  /** Lets a captioned (figure) table break across pages. */
+  breakable: boolean;
+  /**
+   * When set, body rows are read from this CSV file at compile time
+   * (`..csv("path").map(row => row.map(cell => [cell])).flatten()`) instead of
+   * the literal grid rows.
+   */
+  dataFile: string;
+  /** Explicit rules drawn with `table.hline`/`table.vline`. */
+  rules: StoredTableRule[];
+  rows: StoredTableCell[][];
+};
+
 export type StoredProjectState = {
   schemaVersion: 2;
   projectId: string;
@@ -29,6 +147,7 @@ export type StoredProjectState = {
   recommendedToolchain: StoredWorkspaceToolchain | null;
   terminology: TerminologyEntry[];
   scriptLanguages: StoredScriptLanguageAssignment[];
+  tables: StoredTable[];
 };
 
 export type StoredWorkspaceState = {
@@ -40,7 +159,7 @@ export type StoredWorkspaceState = {
     inputContainerWidthPct: number;
     explorerSidebarWidthPx: number;
     sidebarVisible: boolean;
-    activeSidebarTool: "explorer" | "images";
+    activeSidebarTool: "explorer" | "images" | "tables";
   };
   selectedToolchain: StoredWorkspaceToolchain | null;
   previewContentMode: "normal" | "draft";
@@ -125,7 +244,8 @@ export function normalizeWorkspaceMetadata(
       mainFile: safeRelativeWorkspacePath(project.mainFile),
       recommendedToolchain: toolchainOrNull(project.recommendedToolchain),
       terminology: normalizeProjectTerminology(project.terminology),
-      scriptLanguages: normalizeScriptLanguages(project.scriptLanguages)
+      scriptLanguages: normalizeScriptLanguages(project.scriptLanguages),
+      tables: normalizeTables(project.tables)
     },
     workspace: {
       schemaVersion: 2,
@@ -138,7 +258,9 @@ export function normalizeWorkspaceMetadata(
         inputContainerWidthPct: numberOr(layout.inputContainerWidthPct, 50),
         explorerSidebarWidthPx: numberOr(layout.explorerSidebarWidthPx, 250),
         sidebarVisible: typeof layout.sidebarVisible === "boolean" ? layout.sidebarVisible : true,
-        activeSidebarTool: layout.activeSidebarTool === "images" ? "images" : "explorer"
+        activeSidebarTool: layout.activeSidebarTool === "images"
+          ? "images"
+          : layout.activeSidebarTool === "tables" ? "tables" : "explorer"
       },
       selectedToolchain: toolchainOrNull(workspace.selectedToolchain),
       previewContentMode: workspace.previewContentMode === "draft" ? "draft" : "normal",
@@ -252,6 +374,255 @@ function normalizeScriptLanguages(value: unknown): StoredScriptLanguageAssignmen
     });
   }
   return [...assignments.values()].reverse();
+}
+
+/** Table ids are slugs derived from the table name (e.g. `revenue_report`). */
+export const TABLE_ID_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
+
+function normalizeTableAlignment(value: unknown): StoredTableAlignment | null {
+  return value === "left" || value === "center" || value === "right" ? value : null;
+}
+
+function normalizeTableVerticalAlignment(value: unknown): StoredTableVerticalAlignment | null {
+  return value === "top" || value === "center" || value === "bottom" ? value : null;
+}
+
+function normalizeTableEmphasis(value: unknown): StoredTableEmphasis | null {
+  return value === "regular" || value === "bold" || value === "italic" ? value : null;
+}
+
+// Array track sizes: `auto`, a length (pt/mm/cm/in/em/%), or a fraction. A bare
+// number is only valid as the scalar `columns: N`, not inside an array.
+const TABLE_TRACK_PATTERN = /^(?:auto|[0-9]+(?:\.[0-9]+)?(?:pt|mm|cm|in|em|%|fr))$/u;
+
+function normalizeTrackSizes(value: unknown, count: number): string[] {
+  const entries = Array.isArray(value) ? value : [];
+  return Array.from({ length: count }, (_entry, index) => {
+    const size = entries[index];
+    return typeof size === "string" && TABLE_TRACK_PATTERN.test(size.trim()) ? size.trim() : "";
+  });
+}
+
+function normalizeTableGutter(value: unknown): number {
+  const gutter = numberOr(value, 0);
+  return Math.max(0, Math.min(Math.round(gutter * 100) / 100, 20));
+}
+
+function normalizeDataFile(value: unknown): string {
+  return typeof value === "string" && !/[\r\n\0]/u.test(value) ? value.slice(0, 260) : "";
+}
+
+function normalizeTableLabel(value: unknown): string {
+  return typeof value === "string" && /^[A-Za-z0-9_.:-]{0,64}$/u.test(value) ? value : "";
+}
+
+function normalizeTableAlt(value: unknown): string {
+  return typeof value === "string" ? value.slice(0, 300) : "";
+}
+
+function normalizeCellFill(value: unknown): string | null {
+  return typeof value === "string" && HEX_COLOR_PATTERN.test(value) ? value.toLowerCase() : null;
+}
+
+function normalizeCellInset(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(Math.round(value * 100) / 100, 50));
+}
+
+function normalizeTableRules(value: unknown, rowCount: number, columns: number): StoredTableRule[] {
+  if (!Array.isArray(value)) return [];
+  const rules: StoredTableRule[] = [];
+  for (const item of value.slice(0, 200)) {
+    const record = objectValue(item);
+    const axis = record.axis === "vertical" ? "vertical" : record.axis === "horizontal" ? "horizontal" : null;
+    if (!axis) continue;
+    const limit = axis === "horizontal" ? rowCount : columns;
+    const span = axis === "horizontal" ? columns : rowCount;
+    const position = Math.max(0, Math.min(Math.round(numberOr(record.position, 0)), limit));
+    const start = Math.max(0, Math.min(Math.round(numberOr(record.start, 0)), span));
+    const rawEnd = typeof record.end === "number" && Number.isFinite(record.end)
+      ? Math.max(start + 1, Math.min(Math.round(record.end), span))
+      : null;
+    rules.push({
+      axis,
+      position,
+      start,
+      end: rawEnd !== null && start === 0 && rawEnd >= span ? null : rawEnd,
+      width: normalizeStrokeWidth(record.width),
+      color: normalizeStrokeColor(record.color),
+    });
+  }
+  return rules;
+}
+
+function normalizeTableStyle(value: unknown): StoredTableStyle {
+  return value === "banded-rows" || value === "banded-columns" || value === "booktabs" || value === "report"
+    ? value
+    : "default";
+}
+
+function normalizeCaptionPosition(value: unknown): StoredTableCaptionPosition {
+  return value === "top" ? "top" : "bottom";
+}
+
+function normalizeCaptionAlign(value: unknown): StoredTableCaptionAlign {
+  return value === "center" ? "center" : "left";
+}
+
+function tableSpanOverlaps(
+  occupied: boolean[][],
+  row: number,
+  column: number,
+  colspan: number,
+  rowspan: number,
+): boolean {
+  for (let r = row; r < row + rowspan; r += 1) {
+    for (let c = column; c < column + colspan; c += 1) {
+      if (r === row && c === column) continue;
+      if (occupied[r]?.[c]) return true;
+    }
+  }
+  return false;
+}
+
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/u;
+export const DEFAULT_TABLE_STROKE_WIDTH = 0.5;
+export const DEFAULT_TABLE_STROKE_COLOR = "#000000";
+
+function normalizeStrokeWidth(value: unknown): number {
+  const width = numberOr(value, DEFAULT_TABLE_STROKE_WIDTH);
+  return Math.max(0.1, Math.min(Math.round(width * 100) / 100, 10));
+}
+
+function normalizeStrokeColor(value: unknown): string {
+  return typeof value === "string" && HEX_COLOR_PATTERN.test(value)
+    ? value.toLowerCase()
+    : DEFAULT_TABLE_STROKE_COLOR;
+}
+
+function normalizeBorderSide(value: unknown): StoredTableBorderSide {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = objectValue(value);
+  return {
+    enabled: record.enabled !== false,
+    width: normalizeStrokeWidth(record.width),
+    color: normalizeStrokeColor(record.color),
+  };
+}
+
+function normalizeCellBorders(value: unknown): StoredTableCellBorders | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = objectValue(value);
+  const borders: StoredTableCellBorders = {
+    top: normalizeBorderSide(record.top),
+    right: normalizeBorderSide(record.right),
+    bottom: normalizeBorderSide(record.bottom),
+    left: normalizeBorderSide(record.left),
+  };
+  return borders.top || borders.right || borders.bottom || borders.left ? borders : null;
+}
+
+function normalizeTables(value: unknown): StoredTable[] {
+  if (!Array.isArray(value)) return [];
+  const byId = new Map<string, StoredTable>();
+  for (const item of value.slice(0, 200)) {
+    const record = objectValue(item);
+    const id = typeof record.id === "string" && TABLE_ID_PATTERN.test(record.id) ? record.id : null;
+    if (!id || byId.has(id)) continue;
+    const columns = Math.max(1, Math.min(Math.round(numberOr(record.columns, 1)), 32));
+    const rawRows = Array.isArray(record.rows) ? record.rows.slice(0, 500) : [];
+    const rowCount = Math.max(1, rawRows.length);
+    const occupied: boolean[][] = Array.from({ length: rowCount }, () =>
+      Array.from({ length: columns }, () => false));
+    const rows: StoredTableCell[][] = [];
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const rawRow = Array.isArray(rawRows[rowIndex]) ? rawRows[rowIndex] as unknown[] : [];
+      const row: StoredTableCell[] = [];
+      for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+        if (occupied[rowIndex][columnIndex]) {
+          row.push({
+            text: "",
+            align: null,
+            verticalAlign: null,
+            emphasis: null,
+            colspan: 1,
+            rowspan: 1,
+            covered: true,
+            borders: null,
+            fill: null,
+            textColor: null,
+            rotate: false,
+            breakable: null,
+            inset: null,
+            raw: false,
+          });
+          continue;
+        }
+        const cell = objectValue(rawRow[columnIndex]);
+        let colspan = Math.max(1, Math.min(Math.round(numberOr(cell.colspan, 1)), columns - columnIndex));
+        let rowspan = Math.max(1, Math.min(Math.round(numberOr(cell.rowspan, 1)), rowCount - rowIndex));
+        while ((colspan > 1 || rowspan > 1) && tableSpanOverlaps(occupied, rowIndex, columnIndex, colspan, rowspan)) {
+          if (colspan > 1) colspan -= 1;
+          else rowspan -= 1;
+        }
+        for (let r = rowIndex; r < rowIndex + rowspan; r += 1) {
+          for (let c = columnIndex; c < columnIndex + colspan; c += 1) occupied[r][c] = true;
+        }
+        row.push({
+          text: typeof cell.text === "string" ? cell.text.slice(0, 2_000) : "",
+          align: normalizeTableAlignment(cell.align),
+          verticalAlign: normalizeTableVerticalAlignment(cell.verticalAlign),
+          emphasis: normalizeTableEmphasis(cell.emphasis),
+          colspan,
+          rowspan,
+          covered: false,
+          borders: normalizeCellBorders(cell.borders),
+          fill: normalizeCellFill(cell.fill),
+          textColor: normalizeCellFill(cell.textColor),
+          rotate: cell.rotate === true,
+          breakable: typeof cell.breakable === "boolean" ? cell.breakable : null,
+          inset: normalizeCellInset(cell.inset),
+          raw: cell.raw === true,
+        });
+      }
+      rows.push(row);
+    }
+    const name = typeof record.name === "string" && record.name.trim()
+      ? record.name.trim().slice(0, 80)
+      : id;
+    const headerRow = record.headerRow !== false;
+    const headerRowCount = headerRow
+      ? Math.max(1, Math.min(Math.round(numberOr(record.headerRowCount, 1)), rowCount))
+      : 0;
+    byId.set(id, {
+      id,
+      name,
+      columns,
+      headerRow,
+      headerRowCount,
+      headerColumn: record.headerColumn === true,
+      headerRepeat: record.headerRepeat !== false,
+      stroke: record.stroke === "none" ? "none" : "solid",
+      strokeWidth: normalizeStrokeWidth(record.strokeWidth),
+      strokeColor: normalizeStrokeColor(record.strokeColor),
+      style: normalizeTableStyle(record.style),
+      caption: typeof record.caption === "string" ? record.caption.slice(0, 200) : "",
+      captionPosition: normalizeCaptionPosition(record.captionPosition),
+      captionAlign: normalizeCaptionAlign(record.captionAlign),
+      columnSizes: normalizeTrackSizes(record.columnSizes, columns),
+      rowSizes: normalizeTrackSizes(record.rowSizes, rowCount),
+      gutter: normalizeTableGutter(record.gutter),
+      label: normalizeTableLabel(record.label),
+      alt: normalizeTableAlt(record.alt),
+      footerRow: record.footerRow === true,
+      footerRepeat: record.footerRepeat !== false,
+      breakable: record.breakable === true,
+      dataFile: normalizeDataFile(record.dataFile),
+      rules: normalizeTableRules(record.rules, rowCount, columns),
+      rows,
+    });
+  }
+  return [...byId.values()];
 }
 
 function normalizeProjectTerminology(value: unknown): TerminologyEntry[] {

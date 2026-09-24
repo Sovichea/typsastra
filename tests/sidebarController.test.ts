@@ -45,9 +45,12 @@ function createController(): { controller: SidebarController; elements: Map<stri
     ["sidebar-toggle-button", fakeElement()],
     ["explorer-sidebar-content", fakeElement()],
     ["image-tools-sidebar-content", fakeElement()],
+    ["tables-sidebar-content", fakeElement()],
     ["sidebar-explorer-button", fakeElement()],
     ["sidebar-images-button", fakeElement()],
+    ["sidebar-tables-button", fakeElement()],
     ["image-viewer-pane", fakeElement()],
+    ["table-tool-inspector", fakeElement()],
   ]);
   Object.defineProperty(globalThis, "document", {
     configurable: true,
@@ -63,6 +66,8 @@ function createController(): { controller: SidebarController; elements: Map<stri
     invalidatePreview: () => {},
     showImageTools: () => {},
     hideImageTools: () => {},
+    showTableTools: () => {},
+    hideTableTools: () => {},
     showRestoringPreview: () => {},
     restoreDocumentPreview: () => {},
     setMainPreviewVisibleWhileUndocked: () => {},
@@ -92,6 +97,19 @@ describe("sidebar visibility persistence", () => {
 
     expect(controller.visible).toBe(true);
     expect(elements.get("explorer-sidebar")!.classList.contains("hidden")).toBe(false);
+  });
+
+  test("activates the Tables tool and hides the other tool content", () => {
+    const { controller, elements } = createController();
+
+    controller.setTool("tables");
+
+    expect(controller.activeTool).toBe("tables");
+    expect(elements.get("tables-sidebar-content")!.classList.contains("hidden")).toBe(false);
+    expect(elements.get("image-tools-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("explorer-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("table-tool-inspector")!.classList.contains("hidden")).toBe(false);
+    expect((elements.get("sidebar-tables-button") as HTMLButtonElement).classList.contains("active")).toBe(true);
   });
 
   test("keeps visibility unchanged when switching between Explorer and Images", () => {

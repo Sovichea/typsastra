@@ -27,6 +27,7 @@ export interface AppEventActions {
   handlePdfPreviewClick: (point: PreviewClickPoint) => Promise<void> | void;
   drainPendingProjectImports: () => Promise<void> | void;
   navigateToImageTool: (imagePath: string) => Promise<void> | void;
+  navigateToTableTool: (tableId: string) => Promise<void> | void;
   beforeUnload: () => void;
 
   dismissSpellcheckTyping: () => void;
@@ -62,7 +63,7 @@ export interface AppEventActions {
   foldCurrentFile: () => void;
   unfoldCurrentFile: () => void;
   toggleSidebar: () => void;
-  setSidebarTool: (tool: "explorer" | "images") => void;
+  setSidebarTool: (tool: "explorer" | "images" | "tables") => void;
   restoreDefaultLayout: () => void;
   toggleEditorToolbar: () => void;
   toggleLogConsole: () => void;
@@ -295,6 +296,11 @@ export function bindAppEvents(actions: AppEventActions): void {
     if (imagePath) void actions.navigateToImageTool(imagePath);
   });
 
+  window.addEventListener("typsastra-open-table-tool", event => {
+    const tableId = (event as CustomEvent<{ tableId?: string }>).detail?.tableId;
+    if (tableId) void actions.navigateToTableTool(tableId);
+  });
+
   import("@tauri-apps/api/event").then(({ listen: listenEvent, emit: emitEvent }) => {
     void listenEvent("preview-window-ready", () => {
       const update = actions.previewWindowUpdate();
@@ -382,6 +388,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("sidebar-toggle-button")?.addEventListener("click", actions.toggleSidebar);
   document.getElementById("sidebar-explorer-button")?.addEventListener("click", () => actions.setSidebarTool("explorer"));
   document.getElementById("sidebar-images-button")?.addEventListener("click", () => actions.setSidebarTool("images"));
+  document.getElementById("sidebar-tables-button")?.addEventListener("click", () => actions.setSidebarTool("tables"));
   document.getElementById("action-restore-default-layout")?.addEventListener("click", actions.restoreDefaultLayout);
   document.getElementById("action-toggle-editor-toolbar")?.addEventListener("click", actions.toggleEditorToolbar);
   document.getElementById("action-clear-logs")?.addEventListener("click", actions.clearLogs);

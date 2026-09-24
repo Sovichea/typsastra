@@ -35,7 +35,8 @@ describe("workspace state store", () => {
         mainFile: "chapters/main.typ",
         recommendedToolchain: null,
         terminology: [],
-        scriptLanguages: []
+        scriptLanguages: [],
+        tables: []
       },
       workspace: {
         schemaVersion: 2,

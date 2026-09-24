@@ -14,7 +14,10 @@ describe("preview content controller", () => {
     expect(source).toContain("public renderImageToolPreview(");
     expect(source).toContain("public renderInteractiveImageViewer(");
     expect(source).toContain('setLoading("Preparing image preview…", false)');
+    expect(source).toContain("isTableToolActive(): boolean;");
     expect(source).toContain("public async refreshActivePreviewRoot(");
+    // A tool surface owns the pane, so the document preview must not reclaim it.
+    expect(source).toContain("if (this.deps.isImageToolActive() || this.deps.isTableToolActive()) return;");
     expect(source).toContain('invoke<PreviewTarget>("resolve_preview_main"');
     expect(source).not.toContain(": any");
     expect(source).not.toContain("host: object");
@@ -30,6 +33,9 @@ describe("preview content controller", () => {
     expect(source).toContain("return this.previewContentController.noMainFileMessage();");
     expect(source).toContain("this.previewContentController.renderImageToolPreview(source, imagePath);");
     expect(source).toContain("return this.previewContentController.refreshActivePreviewRoot(forceRender);");
+    expect(source).toContain("isTableToolActive: () => this.sidebarController.activeTool === \"tables\",");
+    // Document preview rendering is blocked while the table tool owns the pane.
+    expect(source).toContain("if (this.sidebarController.activeTool === \"tables\") return Promise.resolve();");
   });
 
   test("shows image loading before lazy editor and image-tool decoding", async () => {

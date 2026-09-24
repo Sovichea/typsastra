@@ -54,6 +54,21 @@ describe("language word completion context", () => {
     expect(source).toContain("userDictionary: [...getUserDictionary()]");
   });
 
+  test("offers linked table blocks for //@table:", async () => {
+    const source = await Bun.file(new URL("../src/editor/autocomplete.ts", import.meta.url)).text();
+    expect(source).toContain("function tableDirectiveCompletion(");
+    expect(source).toContain("TABLE_DIRECTIVE_PREFIX");
+    expect(source).toContain("getTableDirectives");
+  });
+
+  test("marks //@table: directives with a clickable gutter icon", async () => {
+    const directives = await Bun.file(new URL("../src/editor/tableDirectives.ts", import.meta.url)).text();
+    const extensions = await Bun.file(new URL("../src/editor/extensions.ts", import.meta.url)).text();
+    expect(directives).toContain("tableDirectiveGutterExtension");
+    expect(directives).toContain('"typsastra-open-table-tool"');
+    expect(extensions).toContain("tableDirectiveGutterExtension");
+  });
+
   test("mounts editor tooltips above preview overlays", async () => {
     const source = await Bun.file(new URL("../src/editor/extensions.ts", import.meta.url)).text();
     const css = await Bun.file(new URL("../src/style.css", import.meta.url)).text();

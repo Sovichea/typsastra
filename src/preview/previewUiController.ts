@@ -5,11 +5,21 @@ import type { ImagePreviewController } from "./imagePreviewController";
 import type { MarkdownPreviewFrame } from "./markdownPreviewFrame";
 import type { PreviewFrame, PreviewInteractionStatus, PreviewPageStatus } from "./previewFrame";
 
+/** Zoom bridge for the table tool's preview surface. */
+export interface TablePreviewZoom {
+  zoomIn(): boolean;
+  zoomOut(): boolean;
+  zoomToFit(): boolean;
+  zoomPercent(): number | null;
+  isFit(): boolean | null;
+}
+
 export interface PreviewUiDependencies {
   previewFrame: PreviewFrame;
   markdownPreviewFrame: MarkdownPreviewFrame;
   draftPreview: DraftPreviewController;
   imagePreview: ImagePreviewController;
+  tablePreview: TablePreviewZoom;
   getActiveFilePath(): string | null;
   isInternallySupportedPath(path: string): boolean;
   setMarkdownPreviewActive(active: boolean): void;
@@ -32,9 +42,14 @@ export class PreviewUiController {
 
     const imageZoomPercent = this.deps.imagePreview.zoomPercent;
     const imageIsFit = this.deps.imagePreview.isFit;
+    const tableZoomPercent = this.deps.tablePreview.zoomPercent();
+    const tableIsFit = this.deps.tablePreview.isFit();
     if (imageZoomPercent !== null && imageIsFit !== null) {
       const pct = Math.round((zoomPercent ?? imageZoomPercent) * 100);
       label.textContent = imageIsFit ? "Fit" : `${pct}%`;
+    } else if (tableZoomPercent !== null && tableIsFit !== null) {
+      const pct = Math.round((zoomPercent ?? tableZoomPercent) * 100);
+      label.textContent = tableIsFit ? "Fit" : `${pct}%`;
     } else {
       const pct = zoomPercent ?? this.deps.previewFrame.currentZoomPercent;
       label.textContent = this.deps.previewFrame.isFitMode ? "Fit" : `${pct}%`;
@@ -130,21 +145,21 @@ export class PreviewUiController {
   }
 
   public zoomIn(): void {
-    if (!this.deps.imagePreview.zoomIn()) {
+    if (!this.deps.imagePreview.zoomIn() && !this.deps.tablePreview.zoomIn()) {
       this.deps.previewFrame.zoomIn();
       this.updateZoomLabel();
     }
   }
 
   public zoomOut(): void {
-    if (!this.deps.imagePreview.zoomOut()) {
+    if (!this.deps.imagePreview.zoomOut() && !this.deps.tablePreview.zoomOut()) {
       this.deps.previewFrame.zoomOut();
       this.updateZoomLabel();
     }
   }
 
   public zoomToFit(): void {
-    if (!this.deps.imagePreview.zoomToFit()) {
+    if (!this.deps.imagePreview.zoomToFit() && !this.deps.tablePreview.zoomToFit()) {
       this.deps.previewFrame.zoomToFit();
       this.updateZoomLabel();
     }

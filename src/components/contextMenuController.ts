@@ -106,6 +106,7 @@ export class ContextMenuController {
   private contextExplorer: WorkspaceExplorer | null = null;
   private surroundSelection: { from: number; to: number } | null = null;
   private surroundSelectionIndex = 0;
+  private readonly customMenuActions = new Map<string, () => void>();
   private readonly surroundOverlay = document.getElementById("surround-with-overlay");
   private readonly surroundSearch = document.getElementById("surround-with-search") as HTMLInputElement | null;
   private readonly surroundList = document.getElementById("surround-with-list");
@@ -131,6 +132,12 @@ export class ContextMenuController {
       }
       const action = (event.target as HTMLElement).closest<HTMLElement>(".dropdown-item")?.id;
       if (action) {
+        const custom = this.customMenuActions.get(action);
+        if (custom) {
+          this.customMenuActions.delete(action);
+          custom();
+          return;
+        }
         const restoreExplorerFocus = this.contextMenuOpenedFromExplorer;
         void this.execute(action).finally(() => {
           if (restoreExplorerFocus) (this.contextExplorer ?? this.dependencies.getExplorer()).focus();
@@ -660,6 +667,24 @@ export class ContextMenuController {
     this.hide();
   }
 
+  /**
+   * Shows arbitrary items in the shared context menu, so tool surfaces match
+   * the explorer/editor menus. Handlers are cleared on hide.
+   */
+  public showCustomMenu(
+    items: ReadonlyArray<{ label: string; onSelect: () => void }>,
+    x: number,
+    y: number
+  ): void {
+    this.customMenuActions.clear();
+    const html = items.map((item, index) => {
+      const id = `ctx-custom-${index}`;
+      this.customMenuActions.set(id, item.onSelect);
+      return `<div class="dropdown-item" id="${id}">${this.escapeHtml(item.label)}</div>`;
+    }).join("");
+    this.show(html, x, y);
+  }
+
   private show(
     items: string,
     x: number,
@@ -681,6 +706,7 @@ export class ContextMenuController {
   }
 
   private hide(): void {
+    this.customMenuActions.clear();
     this.menu.style.display = "none";
     this.menu.querySelectorAll<HTMLElement>(".submenu-open")
       .forEach(submenu => submenu.classList.remove("submenu-open"));

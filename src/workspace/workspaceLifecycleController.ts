@@ -92,7 +92,7 @@ export interface WorkspaceLifecycleServices {
   };
   sidebarController: {
     activeTool: string;
-    restore(state: { visible: boolean; activeTool: "explorer" | "images" }): void;
+    restore(state: { visible: boolean; activeTool: "explorer" | "images" | "tables" }): void;
     reset(): void;
   };
   workspaceController: {
@@ -122,6 +122,7 @@ export interface WorkspaceLifecycleServices {
     clearWorkspace(): void;
   };
   imageToolsController: { setWorkspace(root: string | null, main: string | null): Promise<void>; show(): void };
+  tableToolController: { setWorkspace(tables: readonly import("./workspaceStateStore").StoredTable[]): void; show(): void };
   recentProjectsController: { add(path: string): void };
   editorFontManager: { ready(): Promise<void>; updateDocument(text: string): void };
   editorController: { updateCaretMarker(): void };
@@ -384,6 +385,8 @@ export class WorkspaceLifecycleController {
       await this.restore(selected, app.workspaceMetadata);
       await app.imageToolsController.setWorkspace(selected, app.pinnedMainFilePath);
       if (app.sidebarController.activeTool === "images") app.imageToolsController.show();
+      app.tableToolController.setWorkspace(app.workspaceMetadata.project.tables);
+      if (app.sidebarController.activeTool === "tables") app.tableToolController.show();
       if (app.activeFilePath) await app.explorer.revealPath(app.activeFilePath);
       await app.saveWorkspaceState();
       await app.explorer.loadWorkspace(selected);
@@ -688,8 +691,9 @@ export class WorkspaceLifecycleController {
     app.workspaceRootPath = null;
     app.renderCacheRootPath = null;
     app.sidebarController.reset();
-    document.body.classList.remove("image-tools-active");
+    document.body.classList.remove("image-tools-active", "table-tools-active");
     void app.imageToolsController.setWorkspace(null, null);
+    app.tableToolController.setWorkspace([]);
     app.workspaceMetadata = null;
     app.settingsController.setWorkspacePreviewRenderMode(null);
     app.lastPreviewRenderMode = app.settingsController.value.preview.renderMode;
