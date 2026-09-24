@@ -143,18 +143,35 @@ export class LayoutController {
     );
   }
 
+  public isPreviewUndocked(): boolean {
+    return this.previewUndocked;
+  }
+
+  /**
+   * Ensures the docked preview layout is visible when the editor is shown.
+   * Unlike {@link dockPreview}, this never closes an intentionally undocked
+   * window (for example when activating a tab during inverse sync).
+   */
+  public ensureDockedPreviewVisible(): void {
+    if (this.previewUndocked) return;
+    this.applyDockedPreviewLayout();
+  }
+
   public dockPreview(): void {
     this.previewUndocked = false;
-    const previewWrapper = document.getElementById("preview-container-wrapper");
-    const resizer = document.getElementById("editor-preview-resizer");
-    const input = document.getElementById("input-container-wrapper");
-    
     import("@tauri-apps/api/webviewWindow").then(async ({ WebviewWindow }) => {
       const win = await WebviewWindow.getByLabel("preview");
       if (win) {
         await win.close();
       }
     }).catch(err => console.error("Error closing preview window", err));
+    this.applyDockedPreviewLayout();
+  }
+
+  private applyDockedPreviewLayout(): void {
+    const previewWrapper = document.getElementById("preview-container-wrapper");
+    const resizer = document.getElementById("editor-preview-resizer");
+    const input = document.getElementById("input-container-wrapper");
 
     const before = previewWrapper
       ? `before class="${previewWrapper.className}", inline="${previewWrapper.style.display}", computed="${getComputedStyle(previewWrapper).display}"`

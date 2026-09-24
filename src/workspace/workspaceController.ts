@@ -47,7 +47,7 @@ export interface WorkspaceViewportInput {
 }
 
 export interface WorkspaceControllerPort {
-  dockPreview(): void;
+  ensureDockedPreviewVisible(): void;
   applySidebarVisibility(): void;
   pathKey(path: string): string;
   handleWorkspaceChange(change: WorkspaceChange): Promise<void>;
@@ -200,7 +200,9 @@ export class WorkspaceController {
     inputWrapper?.classList.toggle("hidden", !viewport.showEditor);
     previewWrapper?.classList.toggle("hidden", !viewport.showEditor);
     resizer?.classList.toggle("hidden", !viewport.showEditor);
-    if (viewport.showEditor) this.port.dockPreview();
+    // Never auto-dock here: an intentionally undocked preview window must stay
+    // open when a tab activates (for example during inverse sync).
+    if (viewport.showEditor) this.port.ensureDockedPreviewVisible();
 
     if (viewport.showWorkspaceChrome) {
       sidebarActivityBar?.classList.remove("hidden");

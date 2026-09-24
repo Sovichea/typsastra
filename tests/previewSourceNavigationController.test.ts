@@ -25,6 +25,31 @@ describe("preview source navigation controller", () => {
     expect(source).toContain("return this.previewSourceNavigationController.handlePdfPreviewClick(point);");
   });
 
+  test("does not forward-sync the preview after an inverse-sync click", async () => {
+    const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const start = source.indexOf("handlePreviewSourceLocation: (line, column)");
+    expect(start).toBeGreaterThan(-1);
+    const handler = source.slice(start, start + 700);
+
+    // Clicking the live preview jumps the editor (inverse sync) and must not
+    // forward-sync back into the preview, which made the page jump.
+    expect(handler).toContain("suppressOnce()");
+    expect(handler).not.toContain("renderAtCursor");
+    expect(handler).toContain("this.inverseSyncSelectionInProgress = true;");
+  });
+
+  test("flags the inverse-sync selection so the outline does not scroll the PDF", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/previewSourceNavigationController.ts", import.meta.url),
+    ).text();
+
+    const start = source.indexOf("private async applyInverseSyncSelection(");
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start, start + 700);
+    expect(body).toContain("this.deps.setInverseSyncSelection(true);");
+    expect(body).toContain("this.deps.setInverseSyncSelection(false);");
+  });
+
   test("derives the render-cache relative path with the shared helper", async () => {
     const source = await Bun.file(
       new URL("../src/preview/previewSourceNavigationController.ts", import.meta.url),

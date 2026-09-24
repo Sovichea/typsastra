@@ -60,7 +60,7 @@ describe("document outline", () => {
     expect(controllerSource).toContain("onDocumentOutline(items: PreviewOutlineItem[]): void");
   });
 
-  test("synchronizes editor selection heading changes to the PDF in every memory mode", async () => {
+  test("gates cursor-driven outline preview sync on the Cursor sync setting", async () => {
     const outlineSource = await Bun.file(
       new URL("../src/outline/documentOutline.ts", import.meta.url),
     ).text();
@@ -70,14 +70,20 @@ describe("document outline", () => {
     const navigationSource = await Bun.file(
       new URL("../src/navigation/outlineNavigationController.ts", import.meta.url),
     ).text();
+    const appSource = await Bun.file(
+      new URL("../src/appController.ts", import.meta.url),
+    ).text();
 
     expect(outlineSource).toContain("if (active && syncPreview) this.requestPreviewSync(active, activeKey!)");
     expect(outlineSource).toContain("if (syncPreview) this.requestPreviewSync(active, activeKey!)");
     expect(outlineSource).toContain("this.pendingPreviewSyncHeadingKey = hasDestination ? null : headingKey");
     expect(outlineSource).toContain("this.onActiveHeadingChanged?.(heading)");
+    // Clicking in the editor must not scroll the PDF unless the user enabled
+    // "Cursor sync" (currently disabled), and never for an inverse-sync click.
     expect(editorSource).toMatch(
-      /setCursorPosition\(\s*update\.state\.selection\.main\.head,\s*deps\.activeFilePath\(\),\s*true,/s,
+      /setCursorPosition\(\s*update\.state\.selection\.main\.head,\s*deps\.activeFilePath\(\),\s*deps\.cursorSyncEnabled\(\) && !deps\.isInverseSyncSelection\(\),/s,
     );
+    expect(appSource).toContain("cursorSyncEnabled: () => this.settingsController.value.preview.cursorSync");
     expect(navigationSource).toContain("revealInPreview(heading: DocumentHeading): void");
     expect(navigationSource).toContain("scrollToOutlineBookmark(heading.previewBookmarkIndex)");
     expect(navigationSource).toContain("this.deps.previewFrame().scrollToPage(previewPosition.page_no)");

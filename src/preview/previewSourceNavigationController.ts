@@ -53,6 +53,8 @@ export interface PreviewSourceNavigationDependencies {
   getSourceMapRootPath(): string | null;
   getActiveMode(): "CODE" | "WYSIWYM";
   switchViewLayoutMode(): void;
+  /** Marks the programmatic selection change made by an inverse sync. */
+  setInverseSyncSelection(active: boolean): void;
   loadFile(path: string, options: { preservePreviewSession?: PreviewSessionState }): Promise<void>;
   capturePreviewSession(): PreviewSessionState;
   getActiveTab(): EditorTab | null;
@@ -306,10 +308,17 @@ export class PreviewSourceNavigationController {
     const editor = this.deps.getEditor();
     const target = Math.max(0, Math.min(cursor, editor.state.doc.length));
     await nextAnimationFrame();
-    editor.dispatch({
-      selection: { anchor: target },
-      effects: EditorView.scrollIntoView(target, { y: "center" }),
-    });
+    // Flag the dispatch so the editor's outline sync does not scroll the PDF
+    // back to the active heading right after the user clicked the preview.
+    this.deps.setInverseSyncSelection(true);
+    try {
+      editor.dispatch({
+        selection: { anchor: target },
+        effects: EditorView.scrollIntoView(target, { y: "center" }),
+      });
+    } finally {
+      this.deps.setInverseSyncSelection(false);
+    }
     editor.focus();
     window.setTimeout(() => {
       if (this.deps.getEditor() !== editor) return;

@@ -1033,6 +1033,8 @@ export class TypsastraWorkspaceController {
     activeFilePath: () => this.activeFilePath,
     pathKey: filePathKey,
   });
+  /** True while an inverse-sync click applies its programmatic editor selection. */
+  private inverseSyncSelectionInProgress = false;
   private readonly previewSyncController: PreviewSyncController = new PreviewSyncController({
     getEditor: () => this.editorInstance,
     getClient: () => this.lspClient,
@@ -1167,7 +1169,7 @@ export class TypsastraWorkspaceController {
     () => this.restoreDockedPreviewScrollPosition()
   );
   private readonly workspaceController = new WorkspaceController({
-    dockPreview: () => this.layoutController.dockPreview(),
+    ensureDockedPreviewVisible: () => this.layoutController.ensureDockedPreviewVisible(),
     applySidebarVisibility: () => this.sidebarController.applyVisibility(),
     pathKey: filePathKey,
     handleWorkspaceChange: change => this.handleWorkspaceChange(change),
@@ -1805,6 +1807,7 @@ export class TypsastraWorkspaceController {
     getSourceMapRootPath: () => this.pdfPreviewSourceMapRootPath,
     getActiveMode: () => this.activeMode,
     switchViewLayoutMode: () => this.switchViewLayoutMode(),
+    setInverseSyncSelection: active => { this.inverseSyncSelectionInProgress = active; },
     loadFile: (path, options) => this.loadFile(path, options),
     capturePreviewSession: () => this.capturePreviewSession(),
     getActiveTab: () => this.getActiveTab(),
@@ -1883,6 +1886,8 @@ export class TypsastraWorkspaceController {
     scheduleEditorContentMutation: doc => this.scheduleEditorContentMutation(doc),
     syncSelectedSpellingLocation: () => this.syncSelectedSpellingLocation(),
     updateDocumentLanguageStatus: () => this.documentLanguageStatusController.update(),
+    isInverseSyncSelection: () => this.inverseSyncSelectionInProgress,
+    cursorSyncEnabled: () => this.settingsController.value.preview.cursorSync,
     forwardSyncDebounceMs: () => this.settingsRuntimeController.forwardSyncDebounceMs,
     isDeveloperPerformanceLogEnabled: () => this.isDeveloperLogEnabled("performance"),
     insertExplorerImage: (path, position, view) => this.fileDropController.insertExplorerImage(path, position, view),
@@ -3668,10 +3673,19 @@ export class TypsastraWorkspaceController {
       handlePreviewSourceLocation: (line, column) => {
         const cursor = this.editorPositionFromSourceLocation(line, column);
         if (this.activeMode === "WYSIWYM") this.switchViewLayoutMode();
+        // Inverse sync must not forward-sync back into the preview: the clicked
+        // position is already on screen, and re-scrolling the preview to the
+        // cursor's mapped location (or its heading) makes the live preview page
+        // jump. Cancel any pending forward sync and flag the programmatic
+        // selection so the outline's cursor→PDF sync is skipped too.
         this.previewSyncController.suppressOnce();
-        this.editorInstance.dispatch({ selection: { anchor: cursor }, scrollIntoView: true });
+        this.inverseSyncSelectionInProgress = true;
+        try {
+          this.editorInstance.dispatch({ selection: { anchor: cursor }, scrollIntoView: true });
+        } finally {
+          this.inverseSyncSelectionInProgress = false;
+        }
         this.editorInstance.focus();
-        void this.previewSyncController.renderAtCursor(cursor);
       },
     });
   }

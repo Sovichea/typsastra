@@ -36,6 +36,10 @@ export interface EditorInitializationDependencies {
   scheduleEditorContentMutation(doc: Text): void;
   syncSelectedSpellingLocation(): void;
   updateDocumentLanguageStatus(): void;
+  /** True while an inverse-sync click applies its programmatic selection. */
+  isInverseSyncSelection(): boolean;
+  /** The preview "Cursor sync" setting; off until the v0.9.0 reliability work. */
+  cursorSyncEnabled(): boolean;
   forwardSyncDebounceMs(): number;
   isDeveloperPerformanceLogEnabled(): boolean;
   insertExplorerImage(path: string, position: number, view: EditorView): void;
@@ -91,10 +95,13 @@ export class EditorInitializationController {
         if (update.selectionSet) {
           deps.spellcheck.selectionChanged(update.docChanged);
           deps.syncSelectedSpellingLocation();
+          // Cursor movement only scrolls the PDF when the user opted into
+          // "Cursor sync" (currently disabled until v0.9.0). Inverse sync never
+          // scrolls it: that would jump the preview the user just clicked in.
           deps.documentOutline.setCursorPosition(
             update.state.selection.main.head,
             deps.activeFilePath(),
-            true,
+            deps.cursorSyncEnabled() && !deps.isInverseSyncSelection(),
           );
         } else if (update.docChanged) {
           deps.logConsole.setActiveSpellcheckLocation(null);

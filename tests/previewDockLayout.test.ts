@@ -19,6 +19,23 @@ describe("preview dock layout", () => {
     expect(lifecycle).toContain("app.layoutController.setDockedInputWidthPct(state.layout.inputContainerWidthPct)");
   });
 
+  test("does not auto-dock an intentionally undocked preview when the editor is shown", async () => {
+    const layout = await Bun.file(new URL("../src/layout/layoutController.ts", import.meta.url)).text();
+    const workspace = await Bun.file(
+      new URL("../src/workspace/workspaceController.ts", import.meta.url),
+    ).text();
+    const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+
+    // Showing the editor only ensures the docked layout; it must not close the
+    // undocked preview window (inverse sync activates a tab and would dock it).
+    expect(layout).toContain("public ensureDockedPreviewVisible(): void {");
+    expect(layout).toContain("if (this.previewUndocked) return;");
+    expect(layout).toContain("private applyDockedPreviewLayout(): void {");
+    expect(workspace).toContain("this.port.ensureDockedPreviewVisible();");
+    expect(workspace).not.toContain("this.port.dockPreview();");
+    expect(app).toContain("ensureDockedPreviewVisible: () => this.layoutController.ensureDockedPreviewVisible()");
+  });
+
   test("stops shrinking once the essential preview toolbar controls are packed", () => {
     expect(clampEditorPreviewSplitPct(80, 1000, 420)).toBe(58);
     expect(clampEditorPreviewSplitPct(40, 1000, 420)).toBe(40);
