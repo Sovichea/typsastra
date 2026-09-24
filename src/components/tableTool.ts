@@ -3,6 +3,7 @@ import { readTextFile } from "@tauri-apps/plugin-fs";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { TABLE_SAMPLES, type TableSample } from "./tableSamples";
 import { parseDelimitedText, tableFromRows, transposeRows } from "./tableImport";
+import { exportTableTypst, importTableTypst } from "./tableExchange";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import { createAppIcon } from "../ui/icons";
 import {
@@ -51,6 +52,10 @@ export type TableToolDependencies = {
   getLink?(id: string): { path: string; line: number; column: number; label: string } | null;
   /** Opens the linked directive in the code editor. */
   openLink?(id: string): void;
+  /** Saves a portable `.typ` export of a table. */
+  exportTable?(suggestedName: string, content: string): void;
+  /** Reads a `.typ` file the user chose for import, or null. */
+  importTable?(): Promise<string | null>;
   log?(kind: "info" | "warning", message: string): void;
 };
 
@@ -1252,6 +1257,9 @@ export class TableToolController {
             label: "Read cells from document",
             onSelect: () => this.readCellsFromDocument(table),
           },
+          { kind: "separator" },
+          { kind: "item", label: "Export table…", onSelect: () => this.exportTable(table) },
+          { kind: "item", label: "Import table…", onSelect: () => void this.importTable() },
           { kind: "heading", label: `Gutter (${table.gutter}pt)` },
           {
             kind: "choices",
@@ -2021,6 +2029,48 @@ export class TableToolController {
    * the builder (so navigating back shows code edits, without clobbering an
    * in-sync model on every visit).
    */
+  private exportTable(table: StoredTable): void {
+    this.deps.exportTable?.(`${table.id}.typ`, exportTableTypst(table));
+  }
+
+  private async importTable(): Promise<void> {
+    const text = await this.deps.importTable?.();
+    if (!text) return;
+    const result = importTableTypst(text);
+    if (!result.ok) {
+      this.deps.showPreviewMessage?.(result.error);
+      return;
+    }
+    this.createImportedTable(result.table, result.source);
+  }
+
+  private createImportedTable(model: StoredTable, source: "tool" | "handwritten"): void {
+    const name = this.uniqueTableName(model.name || "Imported table");
+    const id = this.nextTableId(name);
+    const table: StoredTable = {
+      ...model,
+      id,
+      name,
+      columnSizes: [...model.columnSizes],
+      rowSizes: [...model.rowSizes],
+      rules: model.rules.map(rule => ({ ...rule })),
+    };
+    this.tables.push(table);
+    this.selectedId = id;
+    this.selectionAnchor = { row: 0, column: 0 };
+    this.selectionFocus = { row: 0, column: 0 };
+    this.resetHistory(table);
+    this.emitChange();
+    this.renderSidebar();
+    this.renderInspector();
+    this.schedulePreview();
+    if (source === "handwritten") {
+      this.deps.showPreviewMessage?.(
+        "Imported a table from code. Verify the generated code before relying on it.",
+      );
+    }
+  }
+
   public readLinkedCells(id: string): void {
     const table = this.tables.find(candidate => candidate.id === id);
     if (!table) return;

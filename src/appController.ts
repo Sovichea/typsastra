@@ -1,4 +1,5 @@
-import { message } from "@tauri-apps/plugin-dialog";
+import { message, open, save } from "@tauri-apps/plugin-dialog";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -824,6 +825,42 @@ export class TypsastraWorkspaceController {
       : normalizedPath;
   }
 
+  private async saveTableExport(suggestedName: string, content: string): Promise<void> {
+    try {
+      const path = await save({
+        defaultPath: suggestedName,
+        filters: [{ name: "Typst", extensions: ["typ"] }],
+      });
+      if (!path) return;
+      await writeTextFile(path, content);
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "table tool",
+        message: `Could not export the table: ${String(error)}`,
+      });
+    }
+  }
+
+  private async pickTableImport(): Promise<string | null> {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Typst", extensions: ["typ"] }],
+      });
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return null;
+      return await readTextFile(path);
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "table tool",
+        message: `Could not read the table file: ${String(error)}`,
+      });
+      return null;
+    }
+  }
+
   /** Opens the linked directive in the code editor at its line. */
   private async openTableLink(id: string): Promise<void> {
     const link = this.tableLinkFor(id);
@@ -908,6 +945,8 @@ export class TypsastraWorkspaceController {
       getBlockSource: id => this.tableDirectiveSource(id),
       getLink: id => this.tableLinkFor(id),
       openLink: id => void this.openTableLink(id),
+      exportTable: (suggestedName, content) => void this.saveTableExport(suggestedName, content),
+      importTable: () => this.pickTableImport(),
       log: (kind, message) => this.appendDeveloperLog({ kind, source: "table tool", message }),
     },
   );

@@ -586,6 +586,14 @@ describe("table typst generation", () => {
     // Builder changes write back to the linked blocks automatically.
     expect(source).toContain("private scheduleBlockSync(");
     expect(source).toContain("private flushBlockSync(");
+    // Portable table export/import.
+    expect(source).toContain("private exportTable(");
+    expect(source).toContain("private async importTable(");
+    expect(source).toContain("private createImportedTable(");
+    expect(source).toContain('label: "Export table…"');
+    expect(source).toContain('label: "Import table…"');
+    expect(source).toContain("exportTableTypst(");
+    expect(source).toContain("importTableTypst(");
     // Link status mirrors the image tool's reference list.
     expect(source).toContain("private renderLinkStatus(");
     expect(source).toContain("this.deps.getLink?.");
