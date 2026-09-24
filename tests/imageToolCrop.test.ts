@@ -47,6 +47,25 @@ describe("image tool crop", () => {
     expect(style).toContain(".image-crop-overlay-locked {");
   });
 
+  test("keeps the saved replacement image selected when a concurrent refresh wins", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/imageTools.ts", import.meta.url),
+    ).text();
+
+    // The workspace watcher can refresh the image list while the save is still
+    // completing, discarding the save's preferred-path refresh. The pending
+    // path lets whichever refresh wins still select the saved image.
+    expect(source).toContain("private pendingPreferredImagePath: string | null = null;");
+    expect(source).toContain("const preferred = preferredImagePath ?? this.pendingPreferredImagePath;");
+    expect(source).toContain("if (preferred) this.pendingPreferredImagePath = null;");
+    // The saved copy is selected whether or not static paths are replaced.
+    expect(source).toContain("this.pendingPreferredImagePath = destination;");
+    expect(source).toContain("await this.refresh(destination);");
+    expect(source).toContain("this.pendingPreferredImagePath = replacementPath;");
+    // A preferred image that is not indexed keeps the current selection.
+    expect(source).toContain("const next = preferredNext ?? lookup(this.committed?.path);");
+  });
+
   test("sends crop parameters to the native preview pipeline", async () => {
     const native = await Bun.file(new URL("../src-tauri/src/lib.rs", import.meta.url)).text();
 

@@ -118,6 +118,12 @@ export class ImageToolsController {
   private imageExpansionInitialized = false;
   private crop: ImageToolCrop | null = null;
   private cropMode = false;
+  /**
+   * The image to select on the next refresh, even when a concurrent refresh
+   * (for example the workspace watcher reacting to the saved file) wins the
+   * generation race. Cleared once consumed.
+   */
+  private pendingPreferredImagePath: string | null = null;
 
   public constructor(
     private readonly sidebar: HTMLElement,
@@ -141,6 +147,7 @@ export class ImageToolsController {
     this.originalProxy = null;
     this.query = "";
     this.loaded = false;
+    this.pendingPreferredImagePath = null;
     this.imageExpandedPaths = [];
     this.imageKnownDirectoryPaths = [];
     this.imageExpansionInitialized = false;
@@ -181,29 +188,37 @@ export class ImageToolsController {
     this.scannedTypstFiles = index.scannedTypstFiles;
     this.loaded = true;
 
-    const committedPath = preferredImagePath ?? this.committed?.path;
-    const committedKey = committedPath?.replace(/\\/gu, "/").toLocaleLowerCase();
-    const next = committedKey
-      ? this.images.find(image => image.path.replace(/\\/gu, "/").toLocaleLowerCase() === committedKey)
-      : undefined;
-
-    if (preferredImagePath && next) {
-      this.committed = next;
+    // A concurrent refresh may win the generation race; honor a preferred
+    // image recorded by the save/replace flow so the panel still switches.
+    const preferred = preferredImagePath ?? this.pendingPreferredImagePath;
+    if (preferred) this.pendingPreferredImagePath = null;
+    const lookup = (path: string | null | undefined) => {
+      const key = path?.replace(/\\/gu, "/").toLocaleLowerCase();
+      return key
+        ? this.images.find(image => image.path.replace(/\\/gu, "/").toLocaleLowerCase() === key)
+        : undefined;
+    };
+    const preferredNext = lookup(preferred);
+    if (preferred && preferredNext) {
+      this.committed = preferredNext;
       this.generatedPreview = null;
       this.originalProxy = null;
     }
+    // Fall back to the current image when the preferred one is not indexed
+    // (for example a copy saved outside the project).
+    const next = preferredNext ?? lookup(this.committed?.path);
 
     this.renderSidebar();
 
     if (next) {
-      if (preferredImagePath) {
+      if (preferredNext) {
         this.imageExplorer?.setActiveFile(next.path);
         this.renderInspector(next);
         await this.loadOriginalProxy(next);
       } else {
         await this.commit(next);
       }
-    } else if (committedPath) {
+    } else if (this.committed) {
       this.renderEmptyInspector();
     }
   }
@@ -591,6 +606,7 @@ export class ImageToolsController {
         return;
       }
       const sourcePaths = [...new Set(image.references.map(reference => reference.sourcePath))];
+      this.pendingPreferredImagePath = replacementPath;
       await this.workspaceFilesWritten(sourcePaths, "before");
       const updatedReferences = await invoke<number>("image_tool_update_references", {
         workspaceRootPath: workspaceRoot,
@@ -835,6 +851,9 @@ export class ImageToolsController {
         destination,
         ...(updateReferences ? sourcePaths : []),
       ];
+      // Record the destination before the writes: the workspace watcher can
+      // refresh the image list mid-save and would otherwise keep the old image.
+      this.pendingPreferredImagePath = destination;
       await this.workspaceFilesWritten(changedPaths, "before");
       await invoke("image_tool_save_copy", {
         workspaceRootPath: workspaceRoot,
@@ -856,7 +875,7 @@ export class ImageToolsController {
         : `Saved optimized copy to ${destination}`;
       if (output?.isConnected) output.textContent = successMessage;
       try {
-        await this.refresh(updateReferences ? destination : undefined);
+        await this.refresh(destination);
       } catch (refreshError) {
         if (output?.isConnected) {
           output.textContent = `${successMessage} Image Tools could not refresh: ${String(refreshError)}`;
