@@ -24,6 +24,7 @@ mod pdfium_preview;
 mod project_archive;
 mod render_prepare;
 mod scaled_fonts;
+mod templates;
 mod segmentation;
 mod toolchain;
 mod webview_storage;
@@ -7231,6 +7232,260 @@ async fn import_typsastra_project(
     result
 }
 
+fn app_local_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get data dir: {error}"))
+}
+
+#[tauri::command]
+async fn fetch_universe_templates(
+    app_handle: tauri::AppHandle,
+    refresh: bool,
+) -> Result<templates::TemplateCatalog, String> {
+    let data_dir = app_local_data_dir(&app_handle)?;
+    templates::fetch_index(&data_dir, refresh).await
+}
+
+#[tauri::command]
+async fn download_universe_template(
+    app_handle: tauri::AppHandle,
+    name: String,
+    version: String,
+) -> Result<templates::TemplateEntry, String> {
+    let data_dir = app_local_data_dir(&app_handle)?;
+    let summary = templates::fetch_index(&data_dir, false)
+        .await?
+        .templates
+        .into_iter()
+        .find(|summary| summary.name == name && summary.version == version)
+        .ok_or_else(|| format!("Template {name}:{version} is not in the Typst Universe index."))?;
+    let package =
+        templates::fetch_bytes(&templates::package_url(&name, &version), templates::MAX_PACKAGE_BYTES).await?;
+    let thumbnail = templates::fetch_bytes(&summary.thumbnail_url, templates::MAX_THUMBNAIL_BYTES)
+        .await
+        .ok();
+    let tinymist_version = toolchain::status(&data_dir)
+        .tinymist_version
+        .unwrap_or_else(|| summary.compiler.clone());
+    let app_version = env!("CARGO_PKG_VERSION").to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        templates::store_universe_template(
+            &data_dir,
+            &summary,
+            &package,
+            thumbnail.as_deref(),
+            &app_version,
+            &tinymist_version,
+        )
+    })
+    .await
+    .map_err(|error| format!("Template download task failed: {error}"))?
+}
+
+#[tauri::command]
+fn list_offline_templates(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<templates::TemplateEntry>, String> {
+    templates::list_templates(&app_local_data_dir(&app_handle)?, "universe")
+}
+
+#[tauri::command]
+fn list_user_templates(app_handle: tauri::AppHandle) -> Result<Vec<templates::TemplateEntry>, String> {
+    templates::list_templates(&app_local_data_dir(&app_handle)?, "user")
+}
+
+#[tauri::command]
+fn project_template_thumbnail(
+    app_handle: tauri::AppHandle,
+    source: String,
+    id: String,
+) -> Result<Option<String>, String> {
+    templates::thumbnail_data_url(&app_local_data_dir(&app_handle)?, &source, &id)
+}
+
+#[tauri::command]
+fn remove_project_template(
+    app_handle: tauri::AppHandle,
+    source: String,
+    id: String,
+) -> Result<(), String> {
+    templates::remove_template(&app_local_data_dir(&app_handle)?, &source, &id)
+}
+
+#[tauri::command]
+fn validate_project_template_destination(
+    parent_path: String,
+    project_name: String,
+) -> Result<String, String> {
+    project_archive::validate_import_destination(Path::new(&parent_path), &project_name)
+        .map(|path| path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn add_user_template(
+    app_handle: tauri::AppHandle,
+    archive_path: String,
+) -> Result<templates::TemplateEntry, String> {
+    let data_dir = app_local_data_dir(&app_handle)?;
+    let bytes = std::fs::read(&archive_path)
+        .map_err(|error| format!("Could not read the template archive: {error}"))?;
+    let inspection = project_archive::inspect_typsastra_project(Path::new(&archive_path))?;
+    let name = inspection.manifest.project.name.clone();
+    let main = inspection.manifest.project.main.clone();
+    let manifest_sha256 = inspection.manifest_sha256.clone();
+
+    let thumbnail = match tempfile::tempdir() {
+        Ok(temp) => {
+            let destination = temp.path().join("project");
+            match project_archive::import_typsastra_project_cancellable(
+                Path::new(&archive_path),
+                &destination,
+                &manifest_sha256,
+                || false,
+            ) {
+                Ok(_) => render_workspace_thumbnail_png(&app_handle, &destination, &main).await,
+                Err(_) => None,
+            }
+        }
+        Err(_) => None,
+    };
+
+    let entry = {
+        let thumb = thumbnail.as_deref().map(|png| ("png", png));
+        templates::store_user_template(&data_dir, &name, "", &bytes, thumb)?
+    };
+    Ok(entry)
+}
+
+#[tauri::command]
+async fn create_project_from_template(
+    app_handle: tauri::AppHandle,
+    source: String,
+    id: String,
+    parent_path: String,
+    project_name: String,
+    operation_id: String,
+    operations: tauri::State<'_, ProjectImportOperations>,
+) -> Result<templates::CreatedProject, String> {
+    let data_dir = app_local_data_dir(&app_handle)?;
+    let archive = templates::template_archive_path(&data_dir, &source, &id)?;
+    let inspection = project_archive::inspect_typsastra_project(&archive)?;
+    let expected_manifest_sha256 = inspection.manifest_sha256;
+    let cancelled = Arc::new(AtomicBool::new(false));
+    operations
+        .cancellations
+        .lock()
+        .map_err(|_| "Project import cancellation state is unavailable.".to_string())?
+        .insert(operation_id.clone(), cancelled.clone());
+    let destination_parent = PathBuf::from(&parent_path);
+    let destination_name = project_name.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let destination =
+            project_archive::validate_import_destination(&destination_parent, &destination_name)?;
+        project_archive::import_typsastra_project_cancellable(
+            &archive,
+            &destination,
+            &expected_manifest_sha256,
+            || cancelled.load(Ordering::Relaxed),
+        )
+    })
+    .await
+    .map_err(|error| format!("Project creation task failed: {error}"))?;
+    if let Ok(mut active) = operations.cancellations.lock() {
+        active.remove(&operation_id);
+    }
+    result.map(|imported| templates::created_from_import(imported, &project_name))
+}
+
+#[tauri::command]
+async fn create_blank_project(
+    parent_path: String,
+    project_name: String,
+) -> Result<templates::CreatedProject, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        templates::create_blank_project(Path::new(&parent_path), &project_name)
+    })
+    .await
+    .map_err(|error| format!("Project creation task failed: {error}"))?
+}
+
+#[tauri::command]
+fn cancel_project_template_operation(
+    state: tauri::State<'_, ProjectImportOperations>,
+    operation_id: String,
+) {
+    if let Ok(operations) = state.cancellations.lock() {
+        if let Some(cancelled) = operations.get(&operation_id) {
+            cancelled.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Renders the first page of a scaffolded project to a small PNG for use as a
+/// user-template thumbnail. Returns `None` when compilation is unavailable.
+async fn render_workspace_thumbnail_png(
+    app_handle: &tauri::AppHandle,
+    workspace_root: &Path,
+    main_relative: &str,
+) -> Option<Vec<u8>> {
+    use image::ImageEncoder;
+
+    let data_dir = app_handle.path().app_local_data_dir().ok()?;
+    let executable = active_tinymist(&data_dir)?;
+    let main_path = workspace_root.join(main_relative);
+    if !main_path.is_file() {
+        return None;
+    }
+    let work = tempfile::tempdir().ok()?;
+    let mut command = tokio::process::Command::new(executable);
+    command
+        .arg("compile")
+        .current_dir(work.path())
+        .arg(&main_path)
+        .arg("page-{p}.svg")
+        .arg("--root")
+        .arg(workspace_root)
+        .kill_on_drop(true);
+    let font_paths = compiler_font_directories(app_handle, &data_dir, workspace_root);
+    if !font_paths.is_empty() {
+        if let Ok(value) = std::env::join_paths(font_paths) {
+            command.env("TYPST_FONT_PATHS", value);
+        }
+    }
+    configure_background_compiler(&mut command);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let output = command.output().await.ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let svg = std::fs::read(work.path().join("page-1.svg")).ok()?;
+    let tree = resvg::usvg::Tree::from_data(&svg, &resvg::usvg::Options::default()).ok()?;
+    let size = tree.size();
+    let longest = size.width().max(size.height());
+    if longest <= 0.0 {
+        return None;
+    }
+    let scale = (640.0_f32 / longest).min(1.0);
+    let width = (size.width() * scale).round().max(1.0) as u32;
+    let height = (size.height() * scale).round().max(1.0) as u32;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    let rgba = pixmap.take();
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(&rgba, width, height, image::ExtendedColorType::Rgba8)
+        .ok()?;
+    Some(png)
+}
+
 #[tauri::command]
 async fn select_project_toolchain(
     app_handle: tauri::AppHandle,
@@ -7381,6 +7636,17 @@ pub fn run() {
             validate_typsastra_project_import_destination,
             import_typsastra_project,
             cancel_typsastra_project_import,
+            fetch_universe_templates,
+            download_universe_template,
+            list_offline_templates,
+            list_user_templates,
+            project_template_thumbnail,
+            remove_project_template,
+            validate_project_template_destination,
+            add_user_template,
+            create_project_from_template,
+            create_blank_project,
+            cancel_project_template_operation,
             select_project_toolchain,
             take_pending_project_imports,
             save_workspace_file,

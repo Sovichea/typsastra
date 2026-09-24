@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:* http://localhost:*; font-src 'self' blob: data: http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*; blob-src 'self' blob:; connect-src 'self' blob: data: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*; frame-src 'self' about: data: blob: http://127.0.0.1:* http://localhost:*; worker-src 'self' blob: http://127.0.0.1:* http://localhost:*;"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:* http://localhost:*; font-src 'self' blob: data: http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob: https://packages.typst.org http://127.0.0.1:* http://localhost:*; blob-src 'self' blob:; connect-src 'self' blob: data: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*; frame-src 'self' about: data: blob: http://127.0.0.1:* http://localhost:*; worker-src 'self' blob: http://127.0.0.1:* http://localhost:*;"
     }
   },
   "bundle": {
