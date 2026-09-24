@@ -112,6 +112,29 @@ describe("sidebar visibility persistence", () => {
     expect((elements.get("sidebar-tables-button") as HTMLButtonElement).classList.contains("active")).toBe(true);
   });
 
+  test("keeps the sidebar open for Table Tools even when the workspace preference is hidden", () => {
+    const { controller, elements } = createController();
+
+    controller.restore({ visible: false, activeTool: "tables" });
+
+    expect(controller.visible).toBe(false);
+    expect(controller.activeTool).toBe("tables");
+    expect(elements.get("explorer-sidebar")!.classList.contains("hidden")).toBe(false);
+    expect((elements.get("sidebar-toggle-button") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test("does not hide the table explorer when the sidebar toggles while Table Tools is active", () => {
+    const { controller, elements } = createController();
+
+    controller.setVisible(false);
+    controller.setTool("tables");
+    controller.toggle();
+
+    expect(controller.visible).toBe(false);
+    expect(controller.activeTool).toBe("tables");
+    expect(elements.get("explorer-sidebar")!.classList.contains("hidden")).toBe(false);
+  });
+
   test("keeps visibility unchanged when switching between Explorer and Images", () => {
     const { controller } = createController();
     controller.setVisible(false);

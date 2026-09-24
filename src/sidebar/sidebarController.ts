@@ -54,9 +54,9 @@ export class SidebarController {
 
   public toggle(): void {
     if (!this.port.hasWorkspace()) return;
-    // Image Tools owns the sidebar surface. Toggling the workspace sidebar
-    // must not hide the image explorer while that tool is active.
-    if (this.state.activeTool === "images") return;
+    // Image Tools and Table Tools own the sidebar surface. Toggling the
+    // workspace sidebar must not hide their explorer while that tool is active.
+    if (this.state.activeTool === "images" || this.state.activeTool === "tables") return;
     this.state.visible = !this.state.visible;
     this.applyVisibility();
     this.port.persist();
@@ -124,22 +124,26 @@ export class SidebarController {
     const explorerResizer = document.getElementById("explorer-resizer");
     const sidebarToggle = document.getElementById("sidebar-toggle-button") as HTMLButtonElement | null;
     const showingImages = this.state.activeTool === "images";
-    // Image Tools keeps the sidebar surface (and its image explorer) open even
-    // when the workspace sidebar preference is hidden.
-    const visible = (this.state.visible || showingImages) && !this.port.isWorkspaceLoading();
+    const showingTables = this.state.activeTool === "tables";
+    const toolKeepsSidebarOpen = showingImages || showingTables;
+    // Image Tools and Table Tools keep the sidebar surface (and their explorer)
+    // open even when the workspace sidebar preference is hidden.
+    const visible = (this.state.visible || toolKeepsSidebarOpen) && !this.port.isWorkspaceLoading();
 
     explorerSidebar?.classList.toggle("hidden", !visible);
     if (explorerSidebar) explorerSidebar.style.display = "";
     explorerResizer?.classList.toggle("hidden", !visible);
     this.port.reconcileDockedPaneWidths();
     if (sidebarToggle) {
-      sidebarToggle.disabled = showingImages;
-      const expanded = showingImages || this.state.visible;
+      sidebarToggle.disabled = toolKeepsSidebarOpen;
+      const expanded = toolKeepsSidebarOpen || this.state.visible;
       const label = showingImages
         ? "Image Tools keeps the sidebar open"
-        : this.state.visible
-          ? "Hide sidebar"
-          : "Show sidebar";
+        : showingTables
+          ? "Table Tools keeps the sidebar open"
+          : this.state.visible
+            ? "Hide sidebar"
+            : "Show sidebar";
       sidebarToggle.setAttribute("aria-expanded", String(expanded));
       sidebarToggle.setAttribute("aria-label", label);
       sidebarToggle.title = label;
