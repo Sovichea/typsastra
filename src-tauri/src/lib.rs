@@ -24,8 +24,8 @@ mod pdfium_preview;
 mod project_archive;
 mod render_prepare;
 mod scaled_fonts;
-mod templates;
 mod segmentation;
+mod templates;
 mod toolchain;
 mod webview_storage;
 use compatibility::{get_linux_renderer_compatibility, prepare_linux_renderer_relaunch};
@@ -7261,8 +7261,11 @@ async fn download_universe_template(
         .into_iter()
         .find(|summary| summary.name == name && summary.version == version)
         .ok_or_else(|| format!("Template {name}:{version} is not in the Typst Universe index."))?;
-    let package =
-        templates::fetch_bytes(&templates::package_url(&name, &version), templates::MAX_PACKAGE_BYTES).await?;
+    let package = templates::fetch_bytes(
+        &templates::package_url(&name, &version),
+        templates::MAX_PACKAGE_BYTES,
+    )
+    .await?;
     let thumbnail = templates::fetch_bytes(&summary.thumbnail_url, templates::MAX_THUMBNAIL_BYTES)
         .await
         .ok();
@@ -7292,7 +7295,9 @@ fn list_offline_templates(
 }
 
 #[tauri::command]
-fn list_user_templates(app_handle: tauri::AppHandle) -> Result<Vec<templates::TemplateEntry>, String> {
+fn list_user_templates(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<templates::TemplateEntry>, String> {
     templates::list_templates(&app_local_data_dir(&app_handle)?, "user")
 }
 

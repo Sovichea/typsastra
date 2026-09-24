@@ -136,7 +136,12 @@ pub async fn fetch_index(data_dir: &Path, refresh: bool) -> Result<TemplateCatal
     let cached_at = read_cached_at(data_dir);
     if !refresh {
         if let Some(templates) = read_cached_templates(&cache) {
-            return Ok(TemplateCatalog { templates, cached_at, from_cache: true, offline: false });
+            return Ok(TemplateCatalog {
+                templates,
+                cached_at,
+                from_cache: true,
+                offline: false,
+            });
         }
     }
     match fetch_bytes(INDEX_URL, MAX_INDEX_BYTES).await {
@@ -148,11 +153,21 @@ pub async fn fetch_index(data_dir: &Path, refresh: bool) -> Result<TemplateCatal
             let _ = fs::write(&cache, &bytes);
             let fetched_at = now_unix();
             write_cached_at(data_dir, fetched_at);
-            Ok(TemplateCatalog { templates, cached_at: Some(fetched_at), from_cache: false, offline: false })
+            Ok(TemplateCatalog {
+                templates,
+                cached_at: Some(fetched_at),
+                from_cache: false,
+                offline: false,
+            })
         }
         Err(error) => {
             if let Some(templates) = read_cached_templates(&cache) {
-                return Ok(TemplateCatalog { templates, cached_at, from_cache: true, offline: true });
+                return Ok(TemplateCatalog {
+                    templates,
+                    cached_at,
+                    from_cache: true,
+                    offline: true,
+                });
             }
             Err(error)
         }
@@ -195,7 +210,9 @@ pub fn parse_index(bytes: &[u8]) -> Result<Vec<TemplateSummary>, String> {
         .map_err(|error| format!("The Typst Universe index is malformed: {error}"))?;
     let mut best: BTreeMap<String, TemplateSummary> = BTreeMap::new();
     for value in &values {
-        let Some(template) = value.get("template") else { continue };
+        let Some(template) = value.get("template") else {
+            continue;
+        };
         if !template.is_object() {
             continue;
         }
@@ -212,7 +229,11 @@ pub fn parse_index(bytes: &[u8]) -> Result<Vec<TemplateSummary>, String> {
             keywords: string_array(value, "keywords"),
             disciplines: string_array(value, "disciplines"),
             repository: string_field(value, "repository"),
-            compiler: if compiler.is_empty() { "0.13.0".to_string() } else { compiler },
+            compiler: if compiler.is_empty() {
+                "0.13.0".to_string()
+            } else {
+                compiler
+            },
             updated_at: value.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(0),
             template_path: string_field(template, "path"),
             template_entrypoint: string_field(template, "entrypoint"),
@@ -239,19 +260,31 @@ pub fn package_url(name: &str, version: &str) -> String {
 }
 
 fn string_field(value: &serde_json::Value, key: &str) -> String {
-    value.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string()
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn string_array(value: &serde_json::Value, key: &str) -> Vec<String> {
     value
         .get(key)
         .and_then(|v| v.as_array())
-        .map(|items| items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 fn version_is_newer(candidate: &str, current: &str) -> bool {
-    match (semver::Version::parse(candidate), semver::Version::parse(current)) {
+    match (
+        semver::Version::parse(candidate),
+        semver::Version::parse(current),
+    ) {
         (Ok(candidate), Ok(current)) => candidate > current,
         _ => candidate > current,
     }
@@ -267,7 +300,8 @@ pub fn extract_tar_gz(bytes: &[u8], destination: &Path) -> Result<(), String> {
         .entries()
         .map_err(|error| format!("The template package is not a valid archive: {error}"))?;
     for entry in entries {
-        let mut entry = entry.map_err(|error| format!("Could not read the template package: {error}"))?;
+        let mut entry =
+            entry.map_err(|error| format!("Could not read the template package: {error}"))?;
         let path = entry
             .path()
             .map_err(|error| format!("The template package has an invalid path: {error}"))?
@@ -298,7 +332,8 @@ pub fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), Strin
     let entries = fs::read_dir(source)
         .map_err(|error| format!("Could not read '{}': {error}", source.display()))?;
     for entry in entries {
-        let entry = entry.map_err(|error| format!("Could not read '{}': {error}", source.display()))?;
+        let entry =
+            entry.map_err(|error| format!("Could not read '{}': {error}", source.display()))?;
         let file_type = entry
             .file_type()
             .map_err(|error| format!("Could not inspect '{}': {error}", entry.path().display()))?;
@@ -309,9 +344,8 @@ pub fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), Strin
         if file_type.is_dir() {
             copy_dir_recursive(&entry.path(), &target)?;
         } else if file_type.is_file() {
-            fs::copy(entry.path(), &target).map_err(|error| {
-                format!("Could not copy '{}': {error}", entry.path().display())
-            })?;
+            fs::copy(entry.path(), &target)
+                .map_err(|error| format!("Could not copy '{}': {error}", entry.path().display()))?;
         }
     }
     Ok(())
@@ -420,7 +454,9 @@ pub fn store_universe_template(
         .map_err(|error| format!("Could not create the template workspace: {error}"))?;
     extract_tar_gz(package_bytes, temp.path())?;
 
-    let template_source = temp.path().join(normalize_relative(&summary.template_path)?);
+    let template_source = temp
+        .path()
+        .join(normalize_relative(&summary.template_path)?);
     if !template_source.is_dir() {
         return Err("The template package does not contain its template directory.".to_string());
     }
@@ -487,12 +523,17 @@ fn write_sidecar(root: &Path, entry: &TemplateEntry) -> Result<(), String> {
     }
     let bytes = serde_json::to_vec_pretty(entry)
         .map_err(|error| format!("Could not serialize the template metadata: {error}"))?;
-    fs::write(&path, bytes).map_err(|error| format!("Could not write '{}': {error}", path.display()))
+    fs::write(&path, bytes)
+        .map_err(|error| format!("Could not write '{}': {error}", path.display()))
 }
 
 pub fn list_templates(data_dir: &Path, source: &str) -> Result<Vec<TemplateEntry>, String> {
     let root = templates_root(data_dir);
-    let directory = if source == "user" { user_root(data_dir) } else { root.clone() };
+    let directory = if source == "user" {
+        user_root(data_dir)
+    } else {
+        root.clone()
+    };
     if !directory.is_dir() {
         return Ok(Vec::new());
     }
@@ -517,7 +558,11 @@ pub fn list_templates(data_dir: &Path, source: &str) -> Result<Vec<TemplateEntry
 
 pub fn remove_template(data_dir: &Path, source: &str, id: &str) -> Result<(), String> {
     let root = templates_root(data_dir);
-    let directory = if source == "user" { user_root(data_dir) } else { root.clone() };
+    let directory = if source == "user" {
+        user_root(data_dir)
+    } else {
+        root.clone()
+    };
     let sidecar = directory.join(format!("{id}.json"));
     let bytes = fs::read(&sidecar)
         .map_err(|error| format!("The template '{id}' was not found: {error}"))?;
@@ -533,7 +578,11 @@ pub fn remove_template(data_dir: &Path, source: &str, id: &str) -> Result<(), St
 
 pub fn template_archive_path(data_dir: &Path, source: &str, id: &str) -> Result<PathBuf, String> {
     let root = templates_root(data_dir);
-    let directory = if source == "user" { user_root(data_dir) } else { root.clone() };
+    let directory = if source == "user" {
+        user_root(data_dir)
+    } else {
+        root.clone()
+    };
     let sidecar = directory.join(format!("{id}.json"));
     let bytes = fs::read(&sidecar)
         .map_err(|error| format!("The template '{id}' was not found: {error}"))?;
@@ -542,15 +591,31 @@ pub fn template_archive_path(data_dir: &Path, source: &str, id: &str) -> Result<
     Ok(root.join(entry.archive))
 }
 
-pub fn thumbnail_data_url(data_dir: &Path, source: &str, id: &str) -> Result<Option<String>, String> {
+pub fn thumbnail_data_url(
+    data_dir: &Path,
+    source: &str,
+    id: &str,
+) -> Result<Option<String>, String> {
     let root = templates_root(data_dir);
-    let directory = if source == "user" { user_root(data_dir) } else { root.clone() };
+    let directory = if source == "user" {
+        user_root(data_dir)
+    } else {
+        root.clone()
+    };
     let sidecar = directory.join(format!("{id}.json"));
-    let Ok(bytes) = fs::read(&sidecar) else { return Ok(None) };
-    let Ok(entry) = serde_json::from_slice::<TemplateEntry>(&bytes) else { return Ok(None) };
-    let Some(thumbnail) = entry.thumbnail else { return Ok(None) };
+    let Ok(bytes) = fs::read(&sidecar) else {
+        return Ok(None);
+    };
+    let Ok(entry) = serde_json::from_slice::<TemplateEntry>(&bytes) else {
+        return Ok(None);
+    };
+    let Some(thumbnail) = entry.thumbnail else {
+        return Ok(None);
+    };
     let path = root.join(&thumbnail);
-    let Ok(bytes) = fs::read(&path) else { return Ok(None) };
+    let Ok(bytes) = fs::read(&path) else {
+        return Ok(None);
+    };
     let mime = match path.extension().and_then(|value| value.to_str()) {
         Some("png") => "image/png",
         Some("jpg") | Some("jpeg") => "image/jpeg",
@@ -655,7 +720,9 @@ mod tests {
         assert_eq!(summaries[0].version, "0.2.0");
         assert_eq!(summaries[0].template_path, "template");
         assert_eq!(summaries[0].template_entrypoint, "main.typ");
-        assert!(summaries[0].thumbnail_url.ends_with("alpha-0.2.0-small.webp"));
+        assert!(summaries[0]
+            .thumbnail_url
+            .ends_with("alpha-0.2.0-small.webp"));
     }
 
     #[test]
@@ -671,8 +738,7 @@ mod tests {
         write_workspace_scaffold(directory.path(), "main.typ").unwrap();
         let config = directory.path().join(".typsastra/config.json");
         assert!(config.is_file());
-        let value: serde_json::Value =
-            serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
         assert_eq!(value["schemaVersion"], 2);
         assert_eq!(value["mainFile"], "main.typ");
     }
@@ -682,6 +748,8 @@ mod tests {
         let parent = tempfile::tempdir().unwrap();
         let created = create_blank_project(parent.path(), "My Project").unwrap();
         assert!(Path::new(&created.main_file_path).is_file());
-        assert!(Path::new(&created.workspace_path).join(".typsastra/config.json").is_file());
+        assert!(Path::new(&created.workspace_path)
+            .join(".typsastra/config.json")
+            .is_file());
     }
 }
