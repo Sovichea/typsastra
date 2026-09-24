@@ -3,7 +3,7 @@
 These compiled artifacts are generated from the language data pinned by the
 `third_party/khmer_segmenter` submodule:
 
-- `khmer_dictionary.kdict` is the unified KDIC v2 artifact used by the v0.3.0
+- `khmer_dictionary.kdict` is the unified KDIC v2 artifact used by the v0.3.2
   provider. It supplies deterministic analysis plus the curated spellcheck,
   completion, and correction metadata used by Typsastra's language tools.
   Typsastra selects the visual spelling accuracy together with the reviewed

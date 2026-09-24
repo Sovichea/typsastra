@@ -439,7 +439,7 @@ impl LanguageSegmenter for KhmerProvider {
     }
 
     fn version(&self) -> &'static str {
-        "0.3.0"
+        "0.3.2"
     }
 
     fn license(&self) -> &'static str {
@@ -1377,7 +1377,7 @@ fn khmer_provider_capabilities() -> ProviderCapabilities {
         supports_custom_dictionary: true,
         has_editing_policy: true,
         provider_type: "deep".to_string(),
-        version: "0.3.0".to_string(),
+        version: "0.3.2".to_string(),
         license: "MIT AND LicenseRef-Khmer-Dictionary-NC".to_string(),
     }
 }
@@ -2637,7 +2637,7 @@ mod tests {
 
     #[test]
     fn khmer_reference_provider_fixtures_are_locked() {
-        const PINNED_UPSTREAM: &str = "cfff5f962bb120dac909131dfb6b382d50545143";
+        const PINNED_UPSTREAM: &str = "d21973f2860663c9e1f183094e56cb79c39da8fd";
         let fixture: KhmerReferenceFixture =
             serde_json::from_str(include_str!("../../../tests/fixtures/khmer/provider.json"))
                 .expect("Khmer provider reference fixture");
@@ -3439,7 +3439,7 @@ mod tests {
             .find(|provider| provider.id == "khmer-segmenter")
             .expect("Khmer capabilities");
         assert_eq!(khmer.support_level, "deep");
-        assert_eq!(khmer.version, "0.3.0");
+        assert_eq!(khmer.version, "0.3.2");
         assert_eq!(khmer.stability, "experimental");
         assert!(khmer.supports_spellcheck);
         assert!(khmer.supports_completion);

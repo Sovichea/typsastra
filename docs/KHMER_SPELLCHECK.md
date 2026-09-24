@@ -13,7 +13,7 @@ ISO 15924 script:  Khmr
 Support:           Deep · Experimental
 Policy contract:   1
 Capability schema: 1
-Upstream commit:   cfff5f962bb120dac909131dfb6b382d50545143 (v0.3.0)
+Upstream commit:   d21973f2860663c9e1f183094e56cb79c39da8fd (v0.3.2)
 ```
 
 The gitlink at `third_party/khmer_segmenter` pins the code, curated language
@@ -28,7 +28,7 @@ accepts the reviewed legacy variants such as `អោយ`, `ឲ្យ`, and `ឱ�
 also queries the visual COENG alias of a typed prefix, so `ស្តាប` can offer the
 curated `ស្ដាប់` before the final mark is entered, and community words
 participate in completion. Word composition and the completion length cap
-shipped in v0.3.0 are baked into the KDIC pack, so long curated phrases split
+shipped since v0.3.0 are baked into the KDIC pack, so long curated phrases split
 into ordinary words and are not offered as single completions.
 `tests/fixtures/khmer/provider.json` records the
 same commit and exact expected output. Runtime artifacts retain the usage and
