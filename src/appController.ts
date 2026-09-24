@@ -912,7 +912,6 @@ export class TypsastraWorkspaceController {
   }
 
   private lastTablePreviewPages: string | null = null;
-  private tablePreviewNoticeTimer: number | null = null;
   private tablePreviewScale = 1;
   private tablePreviewFit = true;
   private tablePreviewResizeObserver: ResizeObserver | null = null;
@@ -3302,7 +3301,6 @@ export class TypsastraWorkspaceController {
       this.showTablePreviewMessage("Create or select a table to preview it.");
       return;
     }
-    this.clearTablePreviewNoticeTimer();
     this.lastTablePreviewPages = pages
       .map(svg => `<div class="table-tool-preview-page">${svg}</div>`)
       .join("");
@@ -3422,26 +3420,17 @@ export class TypsastraWorkspaceController {
   }
 
   private armTablePreviewNotice(): void {
-    this.clearTablePreviewNoticeTimer();
+    // The notice stays until the reader dismisses it: long messages need more
+    // than a fixed timeout, and the close button is always available.
     const close = this.previewPane.querySelector<HTMLButtonElement>(".table-tool-preview-notice-close");
     if (close) {
       close.appendChild(createAppIcon("x", { size: 13 }));
       close.addEventListener("click", () => this.dismissTablePreviewNotice());
     }
-    if (this.previewPane.querySelector(".table-tool-preview-notice")) {
-      this.tablePreviewNoticeTimer = window.setTimeout(() => this.dismissTablePreviewNotice(), 5_000);
-    }
   }
 
   private dismissTablePreviewNotice(): void {
-    this.clearTablePreviewNoticeTimer();
     this.previewPane.querySelector<HTMLElement>(".table-tool-preview-notice")?.remove();
-  }
-
-  private clearTablePreviewNoticeTimer(): void {
-    if (this.tablePreviewNoticeTimer === null) return;
-    window.clearTimeout(this.tablePreviewNoticeTimer);
-    this.tablePreviewNoticeTimer = null;
   }
 
   private renderInteractiveImageViewer(

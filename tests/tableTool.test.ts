@@ -884,7 +884,8 @@ describe("table preview compilation", () => {
     expect(app).toContain("table-tool-preview-notice");
     expect(app).toContain("table-tool-preview-notice-close");
     expect(app).toContain("private armTablePreviewNotice(");
-    expect(app).toContain("5_000");
+    // Notices persist until dismissed via the close button, not a timer.
+    expect(app).not.toContain("tablePreviewNoticeTimer");
     expect(app).toContain("lastTablePreviewPages");
     expect(native).toContain("async fn compile_typst_snippet_svg(");
     expect(native).toContain('"page-{p}.svg"');
