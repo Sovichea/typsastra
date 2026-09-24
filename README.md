@@ -58,12 +58,19 @@ and sort or transpose data. Link a table into a document with `//@table:<id>`
 and the builder stays synchronized with the generated code; export and import
 losslessly as `.typ`.
 
+<img src="./assets/screenshot-create-table.png" alt="Creating a new table from a built-in sample in the Table Tool" width="800"/>
+
+<img src="./assets/screenshot-table-tool.png" alt="Typsastra Table Tool with a spreadsheet-style cell grid, formatting toolbar, and a live table preview" width="800"/>
+
+
 ### Create New Project from templates
 
 Start a project from a searchable Typst Universe template, an offline copy of a
 template you downloaded before, a managed user `.typsastra` template, or a blank
 project. Templates are cached as portable multi-directory `.typsastra` archives,
 and each project is created as an ordinary multi-directory project.
+
+<img src="./assets/screenshot-create-project.png" alt="Create New Project browser with Typst Universe, downloaded, and user template tabs" width="800"/>
 
 ### Language tools and preview fixes
 
