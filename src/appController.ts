@@ -88,6 +88,8 @@ import {
   type WorkspaceLifecycleDependencies,
 } from "./workspace/workspaceLifecycleController";
 import { ProjectImportController } from "./workspace/projectImportController";
+import { ProjectTemplateController } from "./workspace/projectTemplateController";
+import type { CreatedProject } from "./projectTemplates";
 import { ExternalWorkspaceController } from "./workspace/externalWorkspaceController";
 import { FileDropController } from "./workspace/fileDropController";
 import { ExternalFileReloadController } from "./workspace/externalFileReloadController";
@@ -1243,6 +1245,10 @@ export class TypsastraWorkspaceController {
     handleToolchainChanged: status => this.handleToolchainChanged(status),
     completeImport: (imported, projectName) => this.completeProjectImport(imported, projectName),
   });
+  private readonly projectTemplateController = new ProjectTemplateController({
+    setStatus: status => this.setLspStatus(status),
+    completeCreatedProject: project => this.completeCreatedProject(project),
+  });
   private readonly externalWorkspaceController = new ExternalWorkspaceController({
     workspaceRoot: () => this.workspaceRootPath,
     pathKey: filePathKey,
@@ -2074,6 +2080,7 @@ export class TypsastraWorkspaceController {
     });
     for (const entry of this.settingsController.getTimings()) this.performanceController.recordStartupTimingEntry(entry);
     this.performanceController.timeStartupSync("initialize recent projects", () => this.recentProjectsController.initialize());
+    this.performanceController.timeStartupSync("initialize project templates", () => this.projectTemplateController.initialize());
     this.performanceController.timeStartupSync("initialize CodeMirror", () => this.initCodeMirror());
     this.performanceController.timeStartupSync("initialize document outline", () => this.documentOutlineController.initialize());
     this.performanceController.timeStartupSync("apply settings to runtime", () => this.applySettingsToRuntime(this.settingsController.value));
@@ -3471,6 +3478,14 @@ export class TypsastraWorkspaceController {
     return this.workspaceLifecycleController.completeImport(imported, projectName);
   }
 
+  private completeCreatedProject(project: CreatedProject): Promise<boolean> {
+    return this.workspaceLifecycleController.completeCreatedProject(project);
+  }
+
+  private createProjectFromTemplate(): void {
+    this.projectTemplateController.open();
+  }
+
   private closeOtherTabs(pathToKeep: string): Promise<void> {
     return this.workspaceLifecycleController.closeOtherTabs(pathToKeep);
   }
@@ -3581,6 +3596,7 @@ export class TypsastraWorkspaceController {
       openRecentProject: index => this.recentProjectsController.openAt(index),
       openWorkspace: path => this.openWorkspace(path),
       importProject: () => this.importTypsastraProject(),
+      createProjectFromTemplate: () => this.createProjectFromTemplate(),
       restartWorkspace: () => this.restartWorkspace(),
       closeProject: () => this.closeProject(),
       workspaceRootPath: () => this.workspaceRootPath,

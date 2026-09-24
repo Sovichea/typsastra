@@ -23,10 +23,27 @@ describe("welcome project actions", () => {
       html.indexOf('<div class="welcome-section">'),
       html.indexOf('<div class="welcome-section" id="welcome-recent-projects">')
     );
+    expect(gettingStarted).toContain('id="welcome-create-project"');
     expect(gettingStarted).toContain('id="welcome-open-project"');
     expect(gettingStarted).toContain('id="welcome-import-project"');
     expect(gettingStarted).toContain('id="welcome-open-examples"');
-    expect(gettingStarted.match(/<button\b/g)).toHaveLength(3);
-    expect(gettingStarted.match(/<\/button>/g)).toHaveLength(3);
+    expect(gettingStarted.match(/<button\b/g)).toHaveLength(4);
+    expect(gettingStarted.match(/<\/button>/g)).toHaveLength(4);
+  });
+
+  test("exposes the create-new-project template browser", async () => {
+    const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
+    expect(html).toContain('id="welcome-create-project"');
+    expect(html).toContain('id="project-template-overlay"');
+    expect(html).toContain('data-template-tab="all"');
+    expect(html).toContain('data-template-tab="offline"');
+    expect(html).toContain('data-template-tab="user"');
+    expect(html).toContain('id="project-template-search"');
+    expect(html).toContain('id="project-template-universe"');
+    expect(html).toContain('id="project-template-refresh"');
+    expect(html).toContain('id="project-template-add"');
+    expect(html).toContain('id="project-template-list"');
+    expect(html).toContain('id="project-template-name"');
+    expect(html).toContain('id="project-template-location"');
   });
 });

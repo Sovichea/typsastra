@@ -24,9 +24,11 @@ import {
   FileCode,
   FileCog,
   FileImage,
+  FilePlus2,
   FileText,
   Folder,
   FolderArchive,
+  LayoutTemplate,
   Highlighter,
   Image,
   Info,
@@ -97,9 +99,11 @@ const iconNodes = {
   fileCode: FileCode,
   fileCog: FileCog,
   fileImage: FileImage,
+  filePlus: FilePlus2,
   fileText: FileText,
   folder: Folder,
   folderArchive: FolderArchive,
+  layoutTemplate: LayoutTemplate,
   highlighter: Highlighter,
   image: Image,
   info: Info,
@@ -225,6 +229,7 @@ export function initializeLucideIcons(): void {
   replaceContents("#settings-close, #log-console-close", "x", 15);
   replaceContents("#editor-tabs-previous", "chevronLeft", 16);
   replaceContents("#editor-tabs-next", "chevronRight", 16);
+  replaceContents("#welcome-create-project .welcome-item-icon", "filePlus", 18);
   replaceContents("#welcome-open-project .welcome-item-icon", "folder", 18);
   replaceContents("#welcome-import-project .welcome-item-icon", "folderArchive", 18);
   replaceContents("#welcome-open-examples .welcome-item-icon", "bookOpen", 18);

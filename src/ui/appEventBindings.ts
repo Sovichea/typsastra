@@ -39,6 +39,7 @@ export interface AppEventActions {
 
   openWorkspace: (path: string) => Promise<void> | void;
   importProject: () => Promise<void> | void;
+  createProjectFromTemplate: () => Promise<void> | void;
   restartWorkspace: () => Promise<void> | void;
   closeProject: () => Promise<boolean> | void;
   workspaceRootPath: () => string | null;
@@ -400,6 +401,7 @@ export function bindAppEvents(actions: AppEventActions): void {
 
   const welcomeScreen = document.getElementById("welcome-screen");
   if (welcomeScreen) installWelcomeKeyboardNavigation(welcomeScreen);
+  document.getElementById("welcome-create-project")?.addEventListener("click", () => void actions.createProjectFromTemplate());
   document.getElementById("welcome-open-project")?.addEventListener("click", () => document.getElementById("action-open-folder")?.click());
   document.getElementById("welcome-import-project")?.addEventListener("click", () => document.getElementById("action-import-project")?.click());
   document.getElementById("welcome-open-examples")?.addEventListener("click", () => void actions.openExamplesWorkspace());

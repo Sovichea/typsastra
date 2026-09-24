@@ -370,6 +370,21 @@
                             <div class="welcome-section-title">GET STARTED</div>
                             <button
                                 class="welcome-item"
+                                id="welcome-create-project"
+                                type="button"
+                            >
+                                <span class="welcome-item-icon"></span>
+                                <span class="welcome-item-text"
+                                    >Create New Project</span
+                                >
+                                <span
+                                    class="welcome-item-hotkey"
+                                    data-shortcut="Mod+K Mod+N"
+                                    >Ctrl+K Ctrl+N</span
+                                >
+                            </button>
+                            <button
+                                class="welcome-item"
                                 id="welcome-open-project"
                                 type="button"
                             >
@@ -3262,6 +3277,54 @@ SOFTWARE.</pre>
                     <div class="settings-footer-actions">
                         <button id="project-import-cancel" type="button">Cancel</button>
                         <button id="project-import-confirm" class="settings-primary" type="button" disabled>Import Project</button>
+                    </div>
+                </footer>
+            </section>
+        </div>
+
+        <div id="project-template-overlay" class="settings-overlay hidden" role="presentation">
+            <section class="settings-dialog project-template-dialog" role="dialog" aria-modal="true" aria-labelledby="project-template-title" aria-describedby="project-template-subtitle">
+                <header class="settings-header">
+                    <div>
+                        <h2 id="project-template-title">Create New Project</h2>
+                        <p id="project-template-subtitle">Start from a Typst Universe template, a downloaded copy, a user template, or a blank project.</p>
+                    </div>
+                    <button id="project-template-close" class="settings-icon-button" type="button" aria-label="Cancel" title="Cancel">×</button>
+                </header>
+                <div class="project-template-tabs" role="tablist" aria-label="Template source">
+                    <button type="button" class="project-template-tab is-active" data-template-tab="all" role="tab" aria-selected="true">All templates</button>
+                    <button type="button" class="project-template-tab" data-template-tab="offline" role="tab" aria-selected="false">Downloaded</button>
+                    <button type="button" class="project-template-tab" data-template-tab="user" role="tab" aria-selected="false">User templates</button>
+                </div>
+                <div class="project-template-browser">
+                    <div class="project-template-toolbar">
+                        <input id="project-template-search" type="search" placeholder="Search templates" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search templates" />
+                        <button id="project-template-universe" type="button" class="project-template-universe">Browse Typst Universe</button>
+                        <button id="project-template-refresh" type="button" class="project-template-refresh" title="Refresh templates" aria-label="Refresh templates">Refresh</button>
+                        <button id="project-template-add" type="button" class="project-template-add hidden">Add .typsastra…</button>
+                    </div>
+                    <p id="project-template-status" class="project-template-status" role="status"></p>
+                    <div id="project-template-list" class="project-template-list" role="list"></div>
+                </div>
+                <div class="project-template-destination hidden">
+                    <p id="project-template-chosen" class="project-template-chosen"></p>
+                    <label class="project-import-name-label" for="project-template-name">
+                        Project name
+                        <input id="project-template-name" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="project-template-name-error" />
+                    </label>
+                    <p id="project-template-name-error" class="project-import-validation" role="alert"></p>
+                    <div class="project-import-resolved">
+                        <span>Project will be created at</span>
+                        <code id="project-template-path"></code>
+                    </div>
+                    <button id="project-template-location" type="button" class="project-template-location">Choose location…</button>
+                </div>
+                <footer class="settings-footer project-template-footer">
+                    <span id="project-template-parent" class="project-template-parent"></span>
+                    <div class="settings-footer-actions">
+                        <button id="project-template-back" type="button" class="hidden">Back</button>
+                        <button id="project-template-cancel" type="button">Cancel</button>
+                        <button id="project-template-create" class="settings-primary" type="button" disabled>Continue</button>
                     </div>
                 </footer>
             </section>

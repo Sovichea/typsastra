@@ -6,6 +6,7 @@ import { createTabEditorState } from "../editor/tabHistory";
 import type { EditorFoldRange } from "../editor/folding";
 import { parseDocumentScripts } from "../editor/documentTypography";
 import type { ImportedTypsastraProject } from "../projectArchive";
+import type { CreatedProject } from "../projectTemplates";
 import type { ToolchainStatus } from "../toolchain/toolchainController";
 import { workspaceRestoreCandidates, type WorkspaceMetadata } from "./workspaceStateStore";
 import type { EditorTab } from "../editor/editorTab";
@@ -608,6 +609,18 @@ export class WorkspaceLifecycleController {
     await app.setPinnedMainFile(imported.mainFilePath);
     await app.saveWorkspaceState();
     app.setLspStatus({ kind: "preview-ready", message: `Imported ${projectName}` });
+    return true;
+  }
+
+  async completeCreatedProject(project: CreatedProject): Promise<boolean> {
+    const app = this.app;
+    await this.open(project.workspacePath);
+    if (!app.workspaceRootPath || filePathKey(app.workspaceRootPath) !== filePathKey(project.workspacePath)) {
+      return false;
+    }
+    await app.setPinnedMainFile(project.mainFilePath);
+    await app.saveWorkspaceState();
+    app.setLspStatus({ kind: "preview-ready", message: `Created ${project.projectName}` });
     return true;
   }
 
