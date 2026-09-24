@@ -810,6 +810,15 @@ describe("table preview compilation", () => {
     expect(app).toContain("private readTableDirectiveBlock(id: string)");
     expect(app).toContain("private navigateToTableTool(tableId: string): void");
     expect(app).toContain("this.tableToolController.readLinkedCells(tableId);");
+    expect(app).toContain("private async saveTableExport(");
+    expect(app).toContain("private async pickTableImport(");
+    // Table preview participates in the zoom controls.
+    expect(app).toContain("tablePreview: this.tablePreviewZoom");
+    expect(app).toContain("private zoomTablePreview(");
+    expect(app).toContain("data-table-zoom");
+    // Fit scales to the pane width and stays fitted on resize.
+    expect(app).toContain("private computeTableFitScale(");
+    expect(app).toContain("new ResizeObserver(");
     expect(app).toContain("syncTableDirectiveContent(");
     expect(app).toContain("private tableLinkFor(");
     expect(app).toContain("private async openTableLink(id: string): Promise<void>");

@@ -3481,10 +3481,12 @@ body.table-tools-active #code-render-pane {
   cursor: pointer;
 }
 .table-tool-preview-notice-close:hover { background: var(--ui-hover); }
+.table-tool-preview-zoom { width: 100%; }
 .table-tool-preview-page { display: flex; justify-content: center; padding: 18px; }
 .table-tool-preview-page + .table-tool-preview-page { border-top: 1px solid var(--ui-border); }
 .table-tool-preview-page svg {
-  max-width: 100%;
+  /* The zoom wrapper scales the whole preview to fit the pane width. */
+  max-width: none;
   height: auto;
   background: #fff;
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);

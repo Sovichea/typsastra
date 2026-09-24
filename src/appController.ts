@@ -44,7 +44,7 @@ import { PreviewSyncController } from "./preview/previewSyncController";
 import { LowMemorySyncIndexController } from "./preview/lowMemorySyncIndexController";
 import { buildLowMemorySyncIndex } from "./preview/lowMemorySyncIndexBuilder";
 import { PreviewSourceNavigationController } from "./preview/previewSourceNavigationController";
-import { PreviewUiController } from "./preview/previewUiController";
+import { PreviewUiController, type TablePreviewZoom } from "./preview/previewUiController";
 import { PreviewContentController } from "./preview/previewContentController";
 import {
   PreviewWindowController,
@@ -913,6 +913,16 @@ export class TypsastraWorkspaceController {
 
   private lastTablePreviewPages: string | null = null;
   private tablePreviewNoticeTimer: number | null = null;
+  private tablePreviewScale = 1;
+  private tablePreviewFit = true;
+  private tablePreviewResizeObserver: ResizeObserver | null = null;
+  private readonly tablePreviewZoom: TablePreviewZoom = {
+    zoomIn: () => this.zoomTablePreview(1.2),
+    zoomOut: () => this.zoomTablePreview(1 / 1.2),
+    zoomToFit: () => this.fitTablePreview(),
+    zoomPercent: () => (this.tableZoomElement() ? this.tablePreviewScale : null),
+    isFit: () => (this.tableZoomElement() ? this.tablePreviewFit : null),
+  };
   private readonly tableToolController = new TableToolController(
     document.getElementById("tables-sidebar-list")!,
     document.getElementById("table-tool-inspector")!,
@@ -1813,6 +1823,7 @@ export class TypsastraWorkspaceController {
     markdownPreviewFrame: this.markdownPreviewFrame,
     draftPreview: this.draftPreviewController,
     imagePreview: this.imagePreviewController,
+    tablePreview: this.tablePreviewZoom,
     getActiveFilePath: () => this.activeFilePath,
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
     setMarkdownPreviewActive: active => this.setMarkdownPreviewActive(active),
@@ -3295,7 +3306,13 @@ export class TypsastraWorkspaceController {
     this.lastTablePreviewPages = pages
       .map(svg => `<div class="table-tool-preview-page">${svg}</div>`)
       .join("");
-    this.previewFrame.setMessage(`<div class="table-tool-preview">${this.lastTablePreviewPages}</div>`);
+    this.tablePreviewScale = 1;
+    this.tablePreviewFit = true;
+    this.previewFrame.setMessage(
+      `<div class="table-tool-preview">` +
+      `<div class="table-tool-preview-zoom" data-table-zoom>${this.lastTablePreviewPages}</div></div>`,
+    );
+    this.armTablePreviewZoom();
   }
 
   private showTablePreviewMessage(message: string): void {
@@ -3313,9 +3330,10 @@ export class TypsastraWorkspaceController {
         `<div class="table-tool-preview-notice" role="status">` +
         `<span class="table-tool-preview-notice-msg">${escaped}</span>` +
         `<button type="button" class="table-tool-preview-notice-close" aria-label="Dismiss notification" title="Dismiss"></button>` +
-        `</div>${this.lastTablePreviewPages}</div>`,
+        `</div><div class="table-tool-preview-zoom" data-table-zoom>${this.lastTablePreviewPages}</div></div>`,
       );
       this.armTablePreviewNotice();
+      this.armTablePreviewZoom();
       return;
     }
     this.previewFrame.setMessage(
@@ -3323,6 +3341,84 @@ export class TypsastraWorkspaceController {
       `<div class="preview-disabled-title preview-accent-title">Table Preview</div>` +
       `<div class="preview-disabled-msg">${escaped}</div></div></div>`,
     );
+  }
+
+  /**
+   * Arms the table preview: fit-to-width by default, ctrl+wheel zoom, and a
+   * resize observer so it stays fitted as the pane or table changes.
+   */
+  private armTablePreviewZoom(): void {
+    const container = this.previewPane.querySelector<HTMLElement>(".table-tool-preview");
+    const wrapper = this.tableZoomElement();
+    if (!container || !wrapper) return;
+    this.tablePreviewScale = 1;
+    this.tablePreviewFit = true;
+    wrapper.style.setProperty("zoom", "1");
+    const applyFit = () => {
+      if (!this.tablePreviewFit || !container.isConnected) return;
+      const scale = this.computeTableFitScale(container, wrapper);
+      if (scale === null) return;
+      this.setTablePreviewScale(scale, true);
+    };
+    requestAnimationFrame(applyFit);
+    this.tablePreviewResizeObserver?.disconnect();
+    if (typeof ResizeObserver !== "undefined") {
+      this.tablePreviewResizeObserver = new ResizeObserver(() => {
+        if (this.tablePreviewFit) applyFit();
+      });
+      this.tablePreviewResizeObserver.observe(container);
+    }
+    container.addEventListener("wheel", event => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      this.zoomTablePreview(event.deltaY < 0 ? 1.1 : 1 / 1.1);
+    }, { passive: false });
+  }
+
+  private computeTableFitScale(container: HTMLElement, wrapper: HTMLElement): number | null {
+    const pages = wrapper.querySelectorAll<SVGSVGElement>("svg");
+    if (pages.length === 0) return null;
+    // `getBoundingClientRect` reflects the current zoom, so normalize it away.
+    const currentZoom = this.tablePreviewScale || 1;
+    let widest = 0;
+    pages.forEach(svg => {
+      widest = Math.max(widest, svg.getBoundingClientRect().width / currentZoom);
+    });
+    if (widest <= 0) return null;
+    const page = wrapper.querySelector<HTMLElement>(".table-tool-preview-page");
+    const pageStyle = page ? window.getComputedStyle(page) : null;
+    const padding = pageStyle
+      ? parseFloat(pageStyle.paddingLeft) + parseFloat(pageStyle.paddingRight)
+      : 0;
+    const available = container.clientWidth - padding;
+    if (available <= 0) return null;
+    return Math.min(Math.max(available / widest, 0.1), 8);
+  }
+
+  private tableZoomElement(): HTMLElement | null {
+    return this.previewPane.querySelector<HTMLElement>("[data-table-zoom]");
+  }
+
+  private setTablePreviewScale(scale: number, fit: boolean): void {
+    const element = this.tableZoomElement();
+    if (!element) return;
+    this.tablePreviewScale = scale;
+    this.tablePreviewFit = fit;
+    element.style.setProperty("zoom", String(scale));
+    this.updatePreviewZoomLabel(scale);
+  }
+
+  private zoomTablePreview(factor: number): boolean {
+    if (!this.tableZoomElement()) return false;
+    const scale = Math.min(Math.max(this.tablePreviewScale * factor, 0.25), 8);
+    this.setTablePreviewScale(scale, false);
+    return true;
+  }
+
+  private fitTablePreview(): boolean {
+    if (!this.tableZoomElement()) return false;
+    this.setTablePreviewScale(1, true);
+    return true;
   }
 
   private armTablePreviewNotice(): void {
