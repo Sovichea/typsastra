@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.9.0": {
+    version: "0.9.0",
+    title: "Table authoring and project templates",
+    highlights: [
+      "The Table Tool builds Typst tables from a spreadsheet-style grid with styles, explicit rules, merged cells, CSV import, and linked `//@table:` directives that keep the builder and source in sync.",
+      "Create New Project offers searchable Typst Universe templates, an offline library of downloaded templates, managed user templates, and a blank project, all stored as portable .typsastra archives.",
+      "The bundled Khmer segmenter is updated to v0.3.2 with reviewed phrase-collision exclusions and out-of-vocabulary diagnostics.",
+      "Inverse sync no longer moves or docks the preview, Table Tools keeps its explorer visible, and Image Tools adds non-destructive cropping and selects the saved copy after saving."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.9.0"
+  },
   "0.8.1": {
     version: "0.8.1",
     title: "Unicode PDF reliability",

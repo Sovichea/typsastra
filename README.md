@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.8.0.
+Typsastra is currently beta software. The latest release is v0.9.0.
 
 Typsastra is an open-source project and does not plan to purchase Apple
 Developer ID signing or notarization. On macOS, Gatekeeper may therefore report
@@ -42,6 +42,37 @@ The name combines Typst, the typesetting system at the center of the project, wi
 It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typsastra focuses on Unicode-safe editing, script-aware interaction, responsive PDF preview, extensible language tools, and multi-file project workflows while keeping the underlying Typst source portable.
 
 Khmer is the first language with deep support, including tailored cursor and deletion behavior, spellcheck, and word completion. Khmer demonstrates the depth Typsastra aims to provide; it is not the boundary of the project. The editing-policy and language-provider architecture is designed so other languages can add their own behavior without changing or weakening Khmer support.
+
+## v0.9.0 feature showcase
+
+Typsastra v0.9.0 adds a full table authoring tool and a template-based way to
+start new projects, alongside Khmer segmenter updates and preview-sync fixes.
+
+### Table Tool
+
+Build Typst tables from a spreadsheet-style grid with rows, columns, multi-row
+headers, merged cells, horizontal and vertical alignment, fills, text color,
+insets, rotation, and page-break control. Choose from default, report, banded,
+and booktabs styles, add explicit rules and row/column tracks, import CSV/TSV,
+and sort or transpose data. Link a table into a document with `//@table:<id>`
+and the builder stays synchronized with the generated code; export and import
+losslessly as `.typ`.
+
+### Create New Project from templates
+
+Start a project from a searchable Typst Universe template, an offline copy of a
+template you downloaded before, a managed user `.typsastra` template, or a blank
+project. Templates are cached as portable multi-directory `.typsastra` archives,
+and each project is created as an ordinary multi-directory project.
+
+### Language tools and preview fixes
+
+The bundled Khmer segmenter is updated to v0.3.2 with reviewed phrase-collision
+exclusions and out-of-vocabulary diagnostics. Image Tools adds non-destructive
+cropping to the optimized copy and selects the saved copy after saving. Clicking
+the live preview to inverse-sync no longer re-scrolls the preview, the undocked
+preview window is no longer docked when a tab activates, and Table Tools keeps
+its explorer visible.
 
 ## v0.8.0 feature showcase
 
