@@ -703,9 +703,10 @@ describe("table typst generation", () => {
   });
 
   test("uses Excel-style navigation and editing states", async () => {
-    const source = await Bun.file(
+    // Normalize CRLF so multi-line source assertions hold on Windows checkouts.
+    const source = (await Bun.file(
       new URL("../src/components/tableTool.ts", import.meta.url),
-    ).text();
+    ).text()).replace(/\r\n/gu, "\n");
 
     expect(source).toContain("private editingCell: Slot | null = null");
     expect(source).toContain("input.readOnly = true");
