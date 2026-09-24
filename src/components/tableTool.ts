@@ -885,7 +885,9 @@ export class TableToolController {
       `<label class="table-tool-name">Alt text <input class="table-tool-field" data-field="table-alt" type="text" maxlength="300" placeholder="Optional description" /></label>` +
       `</section>` +
       `<section class="image-tool-section"><h3>Generated Typst</h3>` +
-      `<div class="image-tool-actions"><button type="button" data-action="copy" class="primary"><span data-field="copy-label">Copy code</span></button></div>` +
+      `<div class="image-tool-actions">` +
+      `<button type="button" data-action="copy" class="primary"><span data-field="copy-label">Copy code</span></button>` +
+      `<button type="button" data-action="link"><span data-field="link-label">Link to source</span></button></div>` +
       `<pre class="table-tool-code" data-field="code"></pre></section>`;
 
     // Reuse the editor's caret text field so Khmer text renders in the same font
@@ -968,6 +970,22 @@ export class TableToolController {
           window.setTimeout(() => { copyLabel.textContent = "Copy code"; }, 1200);
         })
         .catch(error => this.deps.log?.("warning", `Could not copy table code: ${String(error)}`));
+    });
+
+    const link = this.inspector.querySelector<HTMLButtonElement>('[data-action="link"]')!;
+    link.prepend(createAppIcon("link", { size: 13 }));
+    const linkLabel = this.inspector.querySelector<HTMLElement>('[data-field="link-label"]')!;
+    link.addEventListener("click", () => {
+      void writeText(tableDirectiveBlock(table))
+        .then(() => {
+          linkLabel.textContent = "Copied";
+          window.setTimeout(() => { linkLabel.textContent = "Link to source"; }, 1200);
+          this.deps.showPreviewMessage?.(
+            `Linked block copied. Paste it anywhere in your source and it stays synchronized. `
+            + `To link manually, type //@table:${table.id} where you want it.`,
+          );
+        })
+        .catch(error => this.deps.log?.("warning", `Could not copy the linked table block: ${String(error)}`));
     });
 
     this.renderGrid(table);

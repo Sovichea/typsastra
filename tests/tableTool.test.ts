@@ -781,6 +781,20 @@ describe("table typst generation", () => {
     expect(source).toContain("`Delete ${count} columns? This cannot be undone.`");
   });
 
+  test("offers a Link to source action beside Copy code", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain('data-action="copy"');
+    expect(source).toContain('data-action="link"');
+    expect(source).toContain('data-field="link-label">Link to source<');
+    // The action copies the pre-wrapped managed block, not the bare code.
+    expect(source).toContain("void writeText(tableDirectiveBlock(table))");
+    expect(source).toContain("Paste it anywhere in your source and it stays synchronized.");
+    expect(source).toContain("//@table:${table.id}");
+  });
+
   test("builds and finds the managed directive block", () => {
     const block = tableDirectiveBlock(table);
     expect(block.startsWith("//@table:table_1\n//@generated-table-start\n")).toBe(true);
