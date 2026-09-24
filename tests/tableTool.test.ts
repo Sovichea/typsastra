@@ -7,7 +7,7 @@ import {
   syncTableDirectiveContent,
   tableDirectiveBlock,
 } from "../src/components/tableTypst";
-import { compareCellText, tableCellOrigin, tableIdFromName } from "../src/components/tableTool";
+import { columnLetter, compareCellText, tableCellOrigin, tableIdFromName } from "../src/components/tableTool";
 import {
   normalizeWorkspaceMetadata,
   type StoredTable,
@@ -635,8 +635,8 @@ describe("table typst generation", () => {
     // Destructive removals always confirm first.
     expect(source).toContain("async function confirmDelete(");
     expect(source).toContain("private async deleteTable(");
-    expect(source).toContain("private async deleteRow(");
-    expect(source).toContain("private async deleteColumn(");
+    expect(source).toContain("private deleteRow(");
+    expect(source).toContain("private deleteColumn(");
     expect(source).toContain("private sortByColumn(");
     expect(source).toContain("private transpose(");
     expect(source).toContain('label: "Sort ascending"');
@@ -684,8 +684,8 @@ describe("table typst generation", () => {
     expect(source).toContain("private openCellContextMenu(");
     expect(source).toContain("private insertRow(");
     expect(source).toContain("private insertColumn(");
-    expect(source).toContain("private async deleteRow(");
-    expect(source).toContain("private async deleteColumn(");
+    expect(source).toContain("private deleteRow(");
+    expect(source).toContain("private deleteColumn(");
     expect(source).toContain("private copySelection(");
     expect(source).toContain("private pasteSelection(");
     expect(source).toContain('readText, writeText');
@@ -739,6 +739,46 @@ describe("table typst generation", () => {
     );
     // Focusing the range focus must not collapse the selection.
     expect(source).toContain("if (this.selectionFocus?.row === rowIndex");
+  });
+
+  test("renders row/column headers and a select-all control", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain('header.className = "table-tool-col-header"');
+    expect(source).toContain('header.className = "table-tool-row-header"');
+    expect(source).toContain('selectAll.className = "table-tool-select-all"');
+    expect(source).toContain("private selectRow(");
+    expect(source).toContain("private selectColumn(");
+    expect(source).toContain("private selectAll(");
+    // Cells shift by one track/row to leave room for the headers.
+    expect(source).toContain("wrap.style.gridRow = `${rowIndex + 2} / span ${cell.rowspan}`");
+    expect(source).toContain("wrap.style.gridColumn = `${columnIndex + 2} / span ${cell.colspan}`");
+  });
+
+  test("labels columns the spreadsheet way", () => {
+    expect(columnLetter(0)).toBe("A");
+    expect(columnLetter(25)).toBe("Z");
+    expect(columnLetter(26)).toBe("AA");
+    expect(columnLetter(27)).toBe("AB");
+    expect(columnLetter(701)).toBe("ZZ");
+    expect(columnLetter(702)).toBe("AAA");
+  });
+
+  test("deletes a whole span of rows or columns", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("private async deleteRows(table: StoredTable, from: number, to: number)");
+    expect(source).toContain("private async deleteColumns(table: StoredTable, from: number, to: number)");
+    expect(source).toContain("private deleteSelectedRows(");
+    expect(source).toContain("private deleteSelectedColumns(");
+    expect(source).toContain("table.rows.splice(from, count)");
+    expect(source).toContain("for (const row of table.rows) row.splice(from, count)");
+    expect(source).toContain("`Delete ${count} rows? This cannot be undone.`");
+    expect(source).toContain("`Delete ${count} columns? This cannot be undone.`");
   });
 
   test("builds and finds the managed directive block", () => {

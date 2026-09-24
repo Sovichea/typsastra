@@ -3300,7 +3300,8 @@ body.table-tools-active #code-render-pane {
 .table-tool-grid-host { overflow-x: auto; padding: 8px 4px; }
 .table-tool-grid {
   display: grid;
-  grid-template-columns: repeat(var(--table-columns, 2), minmax(80px, 1fr));
+  /* A leading track holds the row-number column; row 1 holds column letters. */
+  grid-template-columns: 26px repeat(var(--table-columns, 2), minmax(80px, 1fr));
   grid-auto-rows: minmax(26px, auto);
   gap: 0;
   min-width: max-content;
@@ -3309,6 +3310,38 @@ body.table-tools-active #code-render-pane {
 .table-tool-grid.borders-mode {
   gap: 12px;
   padding: 6px;
+}
+.table-tool-corner,
+.table-tool-col-header,
+.table-tool-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  color: var(--ui-header-text, var(--ui-text));
+  background: color-mix(in srgb, var(--ui-bg) 92%, var(--ui-hover));
+  font: 10px/1 var(--font-family-sans);
+  cursor: pointer;
+  user-select: none;
+}
+.table-tool-corner { border-radius: 3px 0 0 0; }
+.table-tool-col-header { border-radius: 0 3px 0 0; min-width: 80px; }
+.table-tool-row-header { border-radius: 3px 0 0 3px; }
+.table-tool-col-header:hover,
+.table-tool-row-header:hover { background: var(--ui-hover); }
+.table-tool-col-header.selected,
+.table-tool-row-header.selected {
+  border-color: var(--ui-accent-color);
+  background: color-mix(in srgb, var(--ui-accent-color) 28%, var(--ui-bg));
+  color: var(--ui-text);
+}
+.table-tool-select-all {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--ui-accent-color);
 }
 .table-tool-cell-wrap { position: relative; display: grid; }
 .table-tool-cell-shell {

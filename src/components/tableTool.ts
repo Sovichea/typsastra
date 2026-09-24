@@ -162,6 +162,18 @@ function describeRule(rule: StoredTableRule): string {
   return `Remove ${axis} rule at ${rule.position} (${span})`;
 }
 
+/** Spreadsheet column label: 0 -> A, 25 -> Z, 26 -> AA. */
+export function columnLetter(index: number): string {
+  let value = index + 1;
+  let label = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    value = Math.floor((value - 1) / 26);
+  }
+  return label;
+}
+
 /** Slugifies a table name into an id: "Revenue Report" -> "revenue_report". */
 export function tableIdFromName(name: string): string {
   const slug = name
@@ -803,6 +815,35 @@ export class TableToolController {
     host.appendChild(button);
   }
 
+  private selectRow(table: StoredTable, row: number, extend: boolean): void {
+    const anchor = extend && this.selectionAnchor ? this.selectionAnchor : { row, column: 0 };
+    this.selectionAnchor = anchor;
+    this.selectionFocus = { row, column: Math.max(0, table.columns - 1) };
+    this.syncSelectionHighlight();
+    this.syncSelectionSummary();
+    this.syncCellSelects(table);
+  }
+
+  private selectColumn(table: StoredTable, column: number, extend: boolean): void {
+    const anchor = extend && this.selectionAnchor ? this.selectionAnchor : { row: 0, column };
+    this.selectionAnchor = anchor;
+    this.selectionFocus = { row: Math.max(0, table.rows.length - 1), column };
+    this.syncSelectionHighlight();
+    this.syncSelectionSummary();
+    this.syncCellSelects(table);
+  }
+
+  private selectAll(table: StoredTable): void {
+    this.selectionAnchor = { row: 0, column: 0 };
+    this.selectionFocus = {
+      row: Math.max(0, table.rows.length - 1),
+      column: Math.max(0, table.columns - 1),
+    };
+    this.syncSelectionHighlight();
+    this.syncSelectionSummary();
+    this.syncCellSelects(table);
+  }
+
   private selectionRange(): SelectionRange | null {
     if (!this.selectionAnchor || !this.selectionFocus) return null;
     return {
@@ -959,9 +1000,9 @@ export class TableToolController {
           },
           {
             kind: "item",
-            label: "Remove row",
+            label: "Delete row(s)",
             icon: "minus",
-            onSelect: () => void this.deleteRow(table, table.rows.length - 1),
+            onSelect: () => void this.deleteSelectedRows(table),
           },
           { kind: "separator" },
           { kind: "heading", label: "Row height" },
@@ -1004,9 +1045,9 @@ export class TableToolController {
           },
           {
             kind: "item",
-            label: "Remove column",
+            label: "Delete column(s)",
             icon: "minus",
-            onSelect: () => void this.deleteColumn(table, table.columns - 1),
+            onSelect: () => void this.deleteSelectedColumns(table),
           },
           { kind: "separator" },
           { kind: "heading", label: "Column width" },
@@ -1375,13 +1416,59 @@ export class TableToolController {
     grid.classList.toggle("borders-mode", this.borderMode);
     grid.style.setProperty("--table-columns", String(table.columns));
     const range = this.selectionRange();
+    const corner = document.createElement("div");
+    corner.className = "table-tool-corner";
+    corner.style.gridRow = "1";
+    corner.style.gridColumn = "1";
+    const selectAll = document.createElement("input");
+    selectAll.type = "checkbox";
+    selectAll.className = "table-tool-select-all";
+    selectAll.title = "Select the whole table";
+    selectAll.setAttribute("aria-label", "Select the whole table");
+    selectAll.addEventListener("change", () => {
+      if (selectAll.checked) {
+        this.selectAll(table);
+      } else {
+        this.resetSelection();
+        this.syncSelectionHighlight();
+        this.syncSelectionSummary();
+        this.syncCellSelects(table);
+      }
+    });
+    corner.appendChild(selectAll);
+    grid.appendChild(corner);
+    for (let column = 0; column < table.columns; column += 1) {
+      const header = document.createElement("button");
+      header.type = "button";
+      header.className = "table-tool-col-header";
+      header.dataset.column = String(column);
+      header.textContent = columnLetter(column);
+      header.title = `Select column ${columnLetter(column)}`;
+      header.style.gridRow = "1";
+      header.style.gridColumn = `${column + 2}`;
+      header.addEventListener("click", event => this.selectColumn(table, column, event.shiftKey));
+      grid.appendChild(header);
+    }
+    for (let row = 0; row < table.rows.length; row += 1) {
+      const header = document.createElement("button");
+      header.type = "button";
+      header.className = "table-tool-row-header";
+      header.dataset.row = String(row);
+      header.textContent = String(row + 1);
+      header.title = `Select row ${row + 1}`;
+      header.style.gridRow = `${row + 2}`;
+      header.style.gridColumn = "1";
+      header.addEventListener("click", event => this.selectRow(table, row, event.shiftKey));
+      grid.appendChild(header);
+    }
     table.rows.forEach((row, rowIndex) => {
       row.forEach((cell, columnIndex) => {
         if (cell.covered) return;
         const wrap = document.createElement("div");
         wrap.className = "table-tool-cell-wrap";
-        wrap.style.gridRow = `${rowIndex + 1} / span ${cell.rowspan}`;
-        wrap.style.gridColumn = `${columnIndex + 1} / span ${cell.colspan}`;
+        // Row 1 / column 1 hold the row/column headers.
+        wrap.style.gridRow = `${rowIndex + 2} / span ${cell.rowspan}`;
+        wrap.style.gridColumn = `${columnIndex + 2} / span ${cell.colspan}`;
         if (table.headerRow && rowIndex < Math.max(1, table.headerRowCount)) {
           wrap.classList.add("is-header-row");
         }
@@ -1688,6 +1775,23 @@ export class TableToolController {
         focus !== null && row === focus.row && column === focus.column,
       );
     }
+    const wholeTable = Boolean(range
+      && range.minRow === 0 && range.maxRow === table.rows.length - 1
+      && range.minColumn === 0 && range.maxColumn === table.columns - 1);
+    const selectAll = this.inspector.querySelector<HTMLInputElement>(".table-tool-select-all");
+    if (selectAll) selectAll.checked = wholeTable;
+    this.inspector.querySelectorAll<HTMLElement>(".table-tool-col-header").forEach(header => {
+      const column = Number(header.dataset.column);
+      header.classList.toggle("selected", Boolean(range
+        && range.minColumn <= column && column <= range.maxColumn
+        && range.minRow === 0 && range.maxRow === table.rows.length - 1));
+    });
+    this.inspector.querySelectorAll<HTMLElement>(".table-tool-row-header").forEach(header => {
+      const row = Number(header.dataset.row);
+      header.classList.toggle("selected", Boolean(range
+        && range.minRow <= row && row <= range.maxRow
+        && range.minColumn === 0 && range.maxColumn === table.columns - 1));
+    });
   }
 
   private syncSelectionSummary(): void {
@@ -2250,37 +2354,77 @@ export class TableToolController {
     this.emitChange();
   }
 
-  private async deleteRow(table: StoredTable, index: number): Promise<void> {
-    if (table.rows.length <= 1) return;
+  private deleteRow(table: StoredTable, index: number): Promise<void> {
+    return this.deleteRows(table, index, index);
+  }
+
+  private deleteColumn(table: StoredTable, index: number): Promise<void> {
+    return this.deleteColumns(table, index, index);
+  }
+
+  /** Deletes the whole selected row span (header row selection aware). */
+  private deleteSelectedRows(table: StoredTable): Promise<void> {
+    const range = this.selectionRange();
+    if (!range) {
+      this.deps.showPreviewMessage?.("Select one or more rows first.");
+      return Promise.resolve();
+    }
+    return this.deleteRows(table, range.minRow, range.maxRow);
+  }
+
+  /** Deletes the whole selected column span (header column selection aware). */
+  private deleteSelectedColumns(table: StoredTable): Promise<void> {
+    const range = this.selectionRange();
+    if (!range) {
+      this.deps.showPreviewMessage?.("Select one or more columns first.");
+      return Promise.resolve();
+    }
+    return this.deleteColumns(table, range.minColumn, range.maxColumn);
+  }
+
+  private async deleteRows(table: StoredTable, from: number, to: number): Promise<void> {
+    const count = to - from + 1;
+    if (table.rows.length - count < 1) {
+      this.deps.showPreviewMessage?.("A table needs at least one row.");
+      return;
+    }
     if (tableHasSpans(table)) {
       this.deps.showPreviewMessage?.("Delete rows after splitting merged cells.");
       return;
     }
-    const accepted = await confirmDelete(`Delete row ${index + 1}? This cannot be undone.`);
+    const accepted = await confirmDelete(count === 1
+      ? `Delete row ${from + 1}? This cannot be undone.`
+      : `Delete ${count} rows? This cannot be undone.`);
     if (!accepted) return;
-    table.rows.splice(index, 1);
-    table.rowSizes.splice(index, 1);
-    this.shiftRulesForDelete("row", index);
-    const row = Math.min(index, table.rows.length - 1);
+    table.rows.splice(from, count);
+    table.rowSizes.splice(from, count);
+    for (let index = to; index >= from; index -= 1) this.shiftRulesForDelete("row", index);
+    const row = Math.min(from, table.rows.length - 1);
     this.selectionAnchor = { row, column: Math.min(this.selectionAnchor?.column ?? 0, table.columns - 1) };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);
     this.emitChange();
   }
 
-  private async deleteColumn(table: StoredTable, index: number): Promise<void> {
-    if (table.columns <= 1) return;
+  private async deleteColumns(table: StoredTable, from: number, to: number): Promise<void> {
+    const count = to - from + 1;
+    if (table.columns - count < 1) {
+      this.deps.showPreviewMessage?.("A table needs at least one column.");
+      return;
+    }
     if (tableHasSpans(table)) {
       this.deps.showPreviewMessage?.("Delete columns after splitting merged cells.");
       return;
     }
-    const accepted = await confirmDelete(`Delete column ${index + 1}? This cannot be undone.`);
+    const accepted = await confirmDelete(count === 1
+      ? `Delete column ${columnLetter(from)}? This cannot be undone.`
+      : `Delete ${count} columns? This cannot be undone.`);
     if (!accepted) return;
-    table.columns -= 1;
-    for (const row of table.rows) row.splice(index, 1);
-    table.columnSizes.splice(index, 1);
-    this.shiftRulesForDelete("column", index);
-    this.selectionAnchor = { row: Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1), column: Math.min(index, table.columns - 1) };
+    table.columns -= count;
+    for (const row of table.rows) row.splice(from, count);
+    table.columnSizes.splice(from, count);
+    for (let index = to; index >= from; index -= 1) this.shiftRulesForDelete("column", index);
+    this.selectionAnchor = { row: Math.min(this.selectionAnchor?.row ?? 0, table.rows.length - 1), column: Math.min(from, table.columns - 1) };
     this.selectionFocus = { ...this.selectionAnchor };
     this.refreshGrid(table);
     this.emitChange();
