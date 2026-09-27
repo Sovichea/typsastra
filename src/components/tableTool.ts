@@ -4,6 +4,7 @@ import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { TABLE_SAMPLES, type TableSample } from "./tableSamples";
 import { parseDelimitedText, tableFromRows, transposeRows } from "./tableImport";
 import { exportTableTypst, importTableTypst } from "./tableExchange";
+import { extractTableSource } from "./tableParse";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import { createAppIcon } from "../ui/icons";
 import {
@@ -123,6 +124,59 @@ function emptyRow(columns: number): StoredTableCell[] {
   return Array.from({ length: columns }, emptyCell);
 }
 
+/** A default, unstyled table model used when recreating a deleted table. */
+function blankTable(
+  id: string,
+  name: string,
+  columns: number,
+  rows: StoredTableCell[][],
+  header: boolean,
+  footer: boolean,
+): StoredTable {
+  return {
+    id,
+    name,
+    columns,
+    headerRow: header,
+    headerRowCount: header ? 1 : 0,
+    headerColumn: false,
+    headerRepeat: true,
+    stroke: "solid",
+    strokeWidth: 0.5,
+    strokeColor: "#000000",
+    style: "default",
+    caption: "",
+    captionPosition: "bottom",
+    captionAlign: "left",
+    columnSizes: Array.from({ length: columns }, () => ""),
+    rowSizes: Array.from({ length: rows.length }, () => ""),
+    gutter: 0,
+    label: "",
+    alt: "",
+    footerRow: footer,
+    footerRepeat: true,
+    breakable: false,
+    dataFile: "",
+    rules: [],
+    rows,
+  };
+}
+
+/** Lays recovered cell source into rows, preserving each cell's raw Typst. */
+function rowsFromSourceCells(cells: readonly string[], columns: number): StoredTableCell[][] {
+  const rows: StoredTableCell[][] = [];
+  for (let index = 0; index < cells.length; index += columns) {
+    const row = emptyRow(columns);
+    for (let column = 0; column < columns; column += 1) {
+      const text = cells[index + column] ?? "";
+      row[column].text = text;
+      row[column].raw = text !== "";
+    }
+    rows.push(row);
+  }
+  return rows.length > 0 ? rows : [emptyRow(columns)];
+}
+
 // Track sizes accept a length unit (pt/mm/cm/in/em/%) or a fraction; a bare
 // number is only meaningful as the scalar `columns: N` count.
 const TRACK_SIZE_PATTERN = /^(?:auto|[0-9]+(?:\.[0-9]+)?(?:pt|mm|cm|in|em|%|fr))$/u;
@@ -183,6 +237,13 @@ export function tableIdFromName(name: string): string {
     .slice(0, 64);
   if (!slug) return "table";
   return /^[a-z]/u.test(slug) ? slug : `t_${slug}`;
+}
+
+/** Humanizes a table id for the name field: "revenue_report" -> "Revenue report". */
+export function tableNameFromId(id: string): string {
+  const words = id.replace(/[_-]+/gu, " ").trim();
+  if (!words) return id;
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 /** Labels reference figures: keep only characters valid inside `<...>`. */
@@ -285,6 +346,7 @@ export class TableToolController {
     this.resetHistory(this.selected());
     this.renderSidebar();
     this.renderInspector();
+    this.deps.tablesChanged?.(this.tables);
   }
 
   public show(): void {
@@ -330,6 +392,49 @@ export class TableToolController {
 
   public createTable(): void {
     this.createFromSample(TABLE_SAMPLES[0]);
+  }
+
+  /**
+   * Recreates the table for an orphaned `//@table:<id>` directive. The id is
+   * preserved so the existing linked block reconnects, and the columns and cells
+   * are rebuilt from the generated source still in the document (falling back to
+   * an empty table). Returns false when a table with that id already exists, so
+   * a duplicate is never created.
+   */
+  public recreateTable(tableId: string, sourceCode: string | null): boolean {
+    const existing = this.tables.find(table => table.id === tableId);
+    if (existing) {
+      this.selectedId = existing.id;
+      this.resetSelection();
+      this.resetHistory(existing);
+      this.renderSidebar();
+      this.renderInspector();
+      this.schedulePreview();
+      return false;
+    }
+    const parsed = sourceCode ? extractTableSource(sourceCode) : null;
+    const columns = parsed?.columns ?? 2;
+    const rows = parsed && parsed.cells.length > 0
+      ? rowsFromSourceCells(parsed.cells, columns)
+      : Array.from({ length: 2 }, () => emptyRow(columns));
+    const table = blankTable(
+      tableId,
+      this.uniqueTableName(tableNameFromId(tableId)),
+      columns,
+      rows,
+      parsed?.header ?? false,
+      parsed?.footer ?? false,
+    );
+    this.tables.push(table);
+    this.selectedId = tableId;
+    this.selectionAnchor = { row: 0, column: 0 };
+    this.selectionFocus = { row: 0, column: 0 };
+    this.resetHistory(table);
+    this.emitChange();
+    this.renderSidebar();
+    this.renderInspector();
+    this.schedulePreview();
+    return true;
   }
 
   private uniqueTableName(base: string): string {

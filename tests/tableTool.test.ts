@@ -7,7 +7,7 @@ import {
   syncTableDirectiveContent,
   tableDirectiveBlock,
 } from "../src/components/tableTypst";
-import { columnLetter, compareCellText, tableCellOrigin, tableIdFromName } from "../src/components/tableTool";
+import { columnLetter, compareCellText, tableCellOrigin, tableIdFromName, tableNameFromId } from "../src/components/tableTool";
 import {
   normalizeWorkspaceMetadata,
   type StoredTable,
@@ -1026,5 +1026,68 @@ describe("stored table normalization", () => {
     expect(normalized.rows[0][1].covered).toBe(true);
     expect(normalized.rows[0][1].text).toBe("");
     expect(normalized.rows[1][0].text).toBe("c");
+  });
+});
+
+describe("orphaned table directives", () => {
+  test("relabels a table id into a human name", () => {
+    expect(tableNameFromId("revenue_report")).toBe("Revenue report");
+    expect(tableNameFromId("q1-sales")).toBe("Q1 sales");
+    expect(tableNameFromId("table")).toBe("Table");
+  });
+
+  test("flags a directive whose table no longer exists", async () => {
+    const source = await Bun.file(
+      new URL("../src/editor/tableDirectives.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("export function updateTableDirectiveIds(");
+    expect(source).toContain("let knownTableIds: ReadonlySet<string> = new Set();");
+    expect(source).toContain("let tableIdsKnown = false;");
+    expect(source).toContain("const missing = tableIdsKnown && !knownTableIds.has(match[1]);");
+    // Orphaned directives show a warning and offer recreate/delete.
+    expect(source).toContain('createAppIcon("triangleAlert", { size: 17 })');
+    expect(source).toContain('marker.classList.add("missing");');
+    expect(source).toContain('new CustomEvent("typsastra-table-directive-action"');
+    // Linked directives keep the info icon that opens the Table tool.
+    expect(source).toContain('new CustomEvent("typsastra-open-table-tool"');
+    // Markers re-evaluate when the ids change, even for reused tab states.
+    expect(source).toContain("if (doc === cachedDoc && idsVersion === cachedVersion) return cachedMarkers;");
+  });
+
+  test("recreate rebuilds the table from the document source", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    // The id is preserved and the table is rebuilt from the source left behind.
+    expect(source).toContain("public recreateTable(tableId: string, sourceCode: string | null): boolean {");
+    expect(source).toContain("const parsed = sourceCode ? extractTableSource(sourceCode) : null;");
+    expect(source).toContain("blankTable(");
+    // A duplicate id is reused rather than creating a second table.
+    expect(source).toContain("const existing = this.tables.find(table => table.id === tableId);");
+    // setWorkspace publishes ids so the editor can flag orphans on project open.
+    expect(source).toContain("this.deps.tablesChanged?.(this.tables);");
+  });
+
+  test("wires the orphan menu into the editor and app controllers", async () => {
+    const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const bindings = await Bun.file(new URL("../src/ui/appEventBindings.ts", import.meta.url)).text();
+
+    expect(app).toContain("import { updateTableDirectiveIds } from \"./editor/tableDirectives\";");
+    expect(app).toContain("tablesChanged: tables => this.handleTablesChanged(tables),");
+    expect(app).toContain("private handleTablesChanged(");
+    expect(app).toContain("updateTableDirectiveIds(this.editorInstance, tables.map(table => table.id));");
+    expect(app).toContain("private handleTableDirectiveAction(");
+    expect(app).toContain('label: "Recreate table in Table tool"');
+    expect(app).toContain('label: "Unlink table"');
+    expect(app).toContain("private recreateTableDirective(");
+    expect(app).toContain("private unlinkTableDirective(");
+    expect(app).toContain("findTableDirectiveBlocks(text).find(entry => entry.tableId === tableId)");
+    // Unlink keeps the generated table and drops only the directive + markers.
+    expect(app).toContain("const table = text.slice(block.contentFrom, block.contentTo);");
+    expect(app).toContain("changes: { from: block.from, to: block.to, insert: table },");
+    expect(app).toContain("handleTableDirectiveAction: (tableId, x, y) => this.handleTableDirectiveAction(tableId, x, y),");
+    expect(bindings).toContain('window.addEventListener("typsastra-table-directive-action"');
   });
 });

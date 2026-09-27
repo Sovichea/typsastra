@@ -130,6 +130,7 @@ import {
   syncTableDirectiveContent,
 } from "./components/tableTypst";
 import { extractTableCells } from "./components/tableParse";
+import { updateTableDirectiveIds } from "./editor/tableDirectives";
 import type { StoredTable } from "./workspace/workspaceStateStore";
 import type { EditorTab, PreviewSessionState } from "./editor/editorTab";
 import { DocumentPersistenceController, type SaveIntent } from "./editor/documentPersistenceController";
@@ -936,6 +937,7 @@ export class TypsastraWorkspaceController {
         }));
         void this.saveWorkspaceState();
       },
+      tablesChanged: tables => this.handleTablesChanged(tables),
       compilePreview: async table => {
         const workspaceRootPath = this.workspaceRootPath;
         const cacheRootPath = this.getCacheRootPath();
@@ -2193,6 +2195,51 @@ export class TypsastraWorkspaceController {
     this.tableToolController.selectTable(tableId);
     // Pick up any cell edits made in the linked block.
     this.tableToolController.readLinkedCells(tableId);
+  }
+
+  /** Keeps orphaned `//@table:` directives flagged when tables are added or removed. */
+  private handleTablesChanged(tables: readonly StoredTable[]): void {
+    updateTableDirectiveIds(this.editorInstance, tables.map(table => table.id));
+  }
+
+  /** Menu for an orphaned directive: recreate the table or unlink it. */
+  private handleTableDirectiveAction(tableId: string, x: number, y: number): void {
+    this.contextMenuController.showCustomMenu([
+      {
+        label: "Recreate table in Table tool",
+        onSelect: () => this.recreateTableDirective(tableId),
+      },
+      {
+        label: "Unlink table",
+        onSelect: () => this.unlinkTableDirective(tableId),
+      },
+    ], x, y);
+  }
+
+  /** Rebuilds the table from the generated source the deleted table left behind. */
+  private recreateTableDirective(tableId: string): void {
+    const text = this.editorInstance.state.doc.toString();
+    const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === tableId);
+    const source = block ? text.slice(block.contentFrom, block.contentTo) : null;
+    const created = this.tableToolController.recreateTable(tableId, source);
+    this.sidebarController.setTool("tables");
+    this.tableToolController.show();
+    // Duplicate id: reveal the existing table and pick up any block edits.
+    if (!created) this.tableToolController.readLinkedCells(tableId);
+  }
+
+  /** Unlinks the table: removes only the directive and markers, keeping the table. */
+  private unlinkTableDirective(tableId: string): void {
+    const view = this.editorInstance;
+    const text = view.state.doc.toString();
+    const block = findTableDirectiveBlocks(text).find(entry => entry.tableId === tableId);
+    if (!block) return;
+    const table = text.slice(block.contentFrom, block.contentTo);
+    view.dispatch({
+      changes: { from: block.from, to: block.to, insert: table },
+      selection: { anchor: block.from },
+    });
+    view.focus();
   }
 
   private async handleImageToolFilesWritten(
@@ -3584,6 +3631,7 @@ export class TypsastraWorkspaceController {
       drainPendingProjectImports: () => this.drainPendingProjectImports(),
       navigateToImageTool: imagePath => this.navigateToImageTool(imagePath),
       navigateToTableTool: tableId => this.navigateToTableTool(tableId),
+      handleTableDirectiveAction: (tableId, x, y) => this.handleTableDirectiveAction(tableId, x, y),
       beforeUnload: () => {
         this.systemResumeMonitor.stop();
         if (this.sourceMapSessionController.registeredTaskId && this.lspClient) {

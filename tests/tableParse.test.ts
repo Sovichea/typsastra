@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractTableCells } from "../src/components/tableParse";
+import { extractTableCells, extractTableSource } from "../src/components/tableParse";
 import { generateTableTypst } from "../src/components/tableTypst";
 import type { StoredTable, StoredTableCell } from "../src/workspace/workspaceStateStore";
 
@@ -105,5 +105,23 @@ describe("table block parsing", () => {
     const cells = extractTableCells(generateTableTypst(model));
     // Cells are returned as authored source (escaped text stays escaped).
     expect(cells).toEqual(["Name", "Value", "Alpha", "a\\*b", "Beta", "$x^2$"]);
+  });
+
+  test("recovers columns, cells, and header/footer for recreation", () => {
+    const model = table([
+      [cell("Name"), cell("Value")],
+      [cell("Alpha"), cell("1")],
+      [cell("Beta"), cell("2")],
+    ], 2);
+    const source = extractTableSource(generateTableTypst(model));
+    expect(source?.columns).toBe(2);
+    expect(source?.header).toBe(true);
+    expect(source?.footer).toBe(false);
+    expect(source?.cells).toEqual(["Name", "Value", "Alpha", "1", "Beta", "2"]);
+  });
+
+  test("rejects sources without a column count", () => {
+    expect(extractTableSource("#table([a], [b])")).toBeNull();
+    expect(extractTableSource('table(columns: 2, ..csv("d.csv"))')).toBeNull();
   });
 });

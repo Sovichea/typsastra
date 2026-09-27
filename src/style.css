@@ -5827,6 +5827,8 @@ button.welcome-item:disabled {
   cursor: pointer;
 }
 .cm-table-directive-marker:hover { color: #3794ff; }
+.cm-table-directive-marker.missing { color: var(--ui-warning-icon-color); }
+.cm-table-directive-marker.missing:hover { color: var(--ui-warning-icon-color); filter: brightness(1.15); }
 .cm-table-directive-marker-spacer {
   display: block;
   width: 18px;

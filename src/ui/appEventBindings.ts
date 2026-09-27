@@ -28,6 +28,7 @@ export interface AppEventActions {
   drainPendingProjectImports: () => Promise<void> | void;
   navigateToImageTool: (imagePath: string) => Promise<void> | void;
   navigateToTableTool: (tableId: string) => Promise<void> | void;
+  handleTableDirectiveAction: (tableId: string, x: number, y: number) => void;
   beforeUnload: () => void;
 
   dismissSpellcheckTyping: () => void;
@@ -300,6 +301,13 @@ export function bindAppEvents(actions: AppEventActions): void {
   window.addEventListener("typsastra-open-table-tool", event => {
     const tableId = (event as CustomEvent<{ tableId?: string }>).detail?.tableId;
     if (tableId) void actions.navigateToTableTool(tableId);
+  });
+
+  window.addEventListener("typsastra-table-directive-action", event => {
+    const detail = (event as CustomEvent<{ tableId?: string; x?: number; y?: number }>).detail;
+    if (detail?.tableId) {
+      actions.handleTableDirectiveAction(detail.tableId, detail.x ?? 0, detail.y ?? 0);
+    }
   });
 
   import("@tauri-apps/api/event").then(({ listen: listenEvent, emit: emitEvent }) => {

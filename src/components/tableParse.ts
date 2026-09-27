@@ -192,3 +192,37 @@ export function extractTableCells(code: string): string[] | null {
   if (!collectCells(code, open + 1, close, cells)) return null;
   return cells;
 }
+
+export type ParsedTableSource = {
+  columns: number;
+  cells: string[];
+  header: boolean;
+  footer: boolean;
+};
+
+/**
+ * Recovers a generated table's column count, cells, and header/footer flags so
+ * a deleted table can be rebuilt from the source still present in the document.
+ * Returns null when the source is not a recognisable table, omits `columns:`,
+ * or is data-driven.
+ */
+export function extractTableSource(code: string): ParsedTableSource | null {
+  const match = /(^|[^\w.])table\s*\(/u.exec(code);
+  if (!match) return null;
+  const open = match.index + match[0].length - 1;
+  const close = matchParen(code, open);
+  if (close === -1) return null;
+  const inner = code.slice(open + 1, close);
+  const cells: string[] = [];
+  if (!collectCells(code, open + 1, close, cells)) return null;
+  const columns = /\bcolumns:\s*(\d+)/u.exec(inner);
+  if (!columns) return null;
+  const count = Number(columns[1]);
+  if (!Number.isInteger(count) || count < 1 || count > 64) return null;
+  return {
+    columns: count,
+    cells,
+    header: /\btable\.header\s*\(/u.test(inner),
+    footer: /\btable\.footer\s*\(/u.test(inner),
+  };
+}
