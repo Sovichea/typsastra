@@ -55,7 +55,7 @@
     "tinymist": "^0.12.16"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0",
+    "@tauri-apps/cli": "~2.11.5",
     "bun-types": "^1.1.0",
     "typescript": "^5.4.0",
     "vite": "^5.2.0"

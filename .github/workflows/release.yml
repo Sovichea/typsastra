@@ -113,6 +113,44 @@ jobs:
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
 
+      - name: Verify AppImage Structure
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'ubuntu-22.04-arm'
+        run: |
+          sudo apt-get install -y squashfs-tools
+          appimage="$(find src-tauri/target -name '*.AppImage' -print -quit)"
+          if [ -z "$appimage" ]; then
+            echo "No AppImage found under src-tauri/target"
+            exit 1
+          fi
+          echo "Verifying AppImage: $appimage"
+          listing="$(unsquashfs -ll "$appimage" | sed -e 's/^[[:space:]]*//')"
+          # The AppImage catalog mounts the image and requires these root entries.
+          for entry in AppRun .DirIcon Typsastra.png Typsastra.desktop; do
+            if ! printf '%s\n' "$listing" | grep -qE "(^|/)${entry}([[:space:]]|$)"; then
+              echo "::error::$entry is missing from the AppImage root"
+              printf '%s\n' "$listing" | head -30
+              exit 1
+            fi
+          done
+          # These must be relative symlinks. An absolute target points into the
+          # build directory and breaks once the image is mounted at
+          # /tmp/.mount_*, which is what appimage.github.io rejects.
+          for link in .DirIcon Typsastra.desktop; do
+            target="$(printf '%s\n' "$listing" | grep -E "(^|/)${link} -> " | head -n1 \
+              | sed -E "s|^.*${link} -> ||" || true)"
+            if [ -z "$target" ]; then
+              echo "::error::$link is not a symlink in the AppImage root"
+              exit 1
+            fi
+            case "$target" in
+              /*)
+                echo "::error::$link points at absolute path $target"
+                exit 1
+                ;;
+            esac
+            echo "OK $link -> $target"
+          done
+
       - name: Verify macOS DMG
         if: matrix.platform == 'macos-latest'
         run: |
