@@ -3149,6 +3149,88 @@ async fn project_image_index(
     .map_err(|error| format!("Could not index project images: {error}"))?
 }
 
+#[derive(serde::Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ProjectTableDirective {
+    path: String,
+    line: usize,
+    column: usize,
+}
+
+#[derive(serde::Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ProjectTableDirectiveIndex {
+    /// Table id to the first `//@table:<id>` anchor found in the workspace.
+    directives: std::collections::HashMap<String, ProjectTableDirective>,
+    scanned_typst_files: usize,
+}
+
+/// Indexes every `//@table:<id>` anchor in the workspace.
+///
+/// The Tables sidebar filters on whether a table is referenced from the current
+/// document, another document, or nothing at all. Resolving that from the open
+/// tabs alone would report a table as unused whenever the file that uses it
+/// happens to be closed, so the anchors are scanned across the whole project the
+/// same way the image tool scans for image references.
+fn project_table_directive_index_blocking(
+    workspace_root_path: String,
+) -> Result<ProjectTableDirectiveIndex, String> {
+    let root = normalized_existing_path(std::path::Path::new(&workspace_root_path));
+    if !root.is_dir() {
+        return Err("Project folder does not exist".into());
+    }
+    let mut typst_files = Vec::new();
+    let mut image_files = Vec::new();
+    collect_project_files(&root, &mut typst_files, &mut image_files);
+    typst_files.sort();
+
+    let mut directives: std::collections::HashMap<String, ProjectTableDirective> =
+        std::collections::HashMap::new();
+    for source_path in &typst_files {
+        let Ok(contents) = std::fs::read_to_string(source_path) else {
+            continue;
+        };
+        for (index, line) in contents.lines().enumerate() {
+            let trimmed = line.trim();
+            let Some(rest) = trimmed.strip_prefix("//@table:") else {
+                continue;
+            };
+            let id = rest.trim();
+            // Matches TABLE_DIRECTIVE_BLOCK in tableTypst.ts.
+            if id.is_empty()
+                || !id
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '_')
+            {
+                continue;
+            }
+            directives
+                .entry(id.to_string())
+                .or_insert_with(|| ProjectTableDirective {
+                    path: source_path.to_string_lossy().to_string(),
+                    line: index + 1,
+                    column: line.find("//@table:").map_or(1, |offset| offset + 1),
+                });
+        }
+    }
+
+    Ok(ProjectTableDirectiveIndex {
+        directives,
+        scanned_typst_files: typst_files.len(),
+    })
+}
+
+#[tauri::command]
+async fn project_table_directive_index(
+    workspace_root_path: String,
+) -> Result<ProjectTableDirectiveIndex, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_table_directive_index_blocking(workspace_root_path)
+    })
+    .await
+    .map_err(|error| format!("Could not index project tables: {error}"))?
+}
+
 #[derive(Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ImageToolCrop {
@@ -7669,6 +7751,7 @@ pub fn run() {
             typst_preview_source_stats,
             typst_preview_image_profile,
             project_image_index,
+            project_table_directive_index,
             image_tool_generate_preview,
             image_tool_save_copy,
             image_tool_update_references,

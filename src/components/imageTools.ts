@@ -305,18 +305,18 @@ export class ImageToolsController {
       this.imageExpandedPaths = this.imageExplorer.expandedDirectoryPaths();
     }
 
-    let controls = this.sidebar.querySelector<HTMLElement>(".image-tool-sidebar-controls");
+    let controls = this.sidebar.querySelector<HTMLElement>(".sidebar-tool-controls");
     let list = this.imageExplorerList;
-    let footer = this.sidebar.querySelector<HTMLElement>(".image-tool-sidebar-footer");
+    let footer = this.sidebar.querySelector<HTMLElement>(".sidebar-tool-footer");
     let explorer = this.imageExplorer;
     const needsMount = !controls || !list || !footer || !explorer || !list.isConnected;
 
     if (needsMount) {
       controls = document.createElement("div");
-      controls.className = "image-tool-sidebar-controls";
+      controls.className = "sidebar-tool-controls";
       controls.innerHTML = `
-        <input class="image-tool-search" type="search" placeholder="Search images" aria-label="Search project images" autocomplete="off" />
-        <select class="image-tool-filter" aria-label="Filter project images">
+        <input class="sidebar-tool-search" type="search" placeholder="Search images" aria-label="Search project images" autocomplete="off" />
+        <select class="sidebar-tool-filter" aria-label="Filter project images">
           <option value="all">All images</option>
           <option value="current">Current document</option>
           <option value="referenced">Referenced elsewhere</option>
@@ -325,10 +325,10 @@ export class ImageToolsController {
         </select>`;
 
       list = document.createElement("div");
-      list.className = "image-tool-list explorer-tree";
+      list.className = "sidebar-tool-list explorer-tree";
 
       footer = document.createElement("div");
-      footer.className = "image-tool-sidebar-footer";
+      footer.className = "sidebar-tool-footer";
 
       explorer = new WorkspaceExplorer(
         list,
@@ -364,13 +364,13 @@ export class ImageToolsController {
       throw new Error("Image Tools sidebar failed to initialize.");
     }
 
-    const search = controls.querySelector<HTMLInputElement>(".image-tool-search")!;
-    if (!search.closest(".image-tool-search-shell")) {
-      const marker = document.createComment("image-tool-search");
+    const search = controls.querySelector<HTMLInputElement>(".sidebar-tool-search")!;
+    if (!search.closest(".sidebar-tool-search-shell")) {
+      const marker = document.createComment("sidebar-tool-search");
       search.replaceWith(marker);
-      marker.replaceWith(wrapEditorCaretInput(search, { shellClass: "image-tool-search-shell" }));
+      marker.replaceWith(wrapEditorCaretInput(search, { shellClass: "sidebar-tool-search-shell" }));
     }
-    const filter = controls.querySelector<HTMLSelectElement>(".image-tool-filter")!;
+    const filter = controls.querySelector<HTMLSelectElement>(".sidebar-tool-filter")!;
     search.value = this.query;
     filter.value = this.filter;
 

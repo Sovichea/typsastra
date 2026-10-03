@@ -28,6 +28,8 @@ import type {
 import { autoTextColorForFill, generateTableTypst, tableDirectiveBlock } from "./tableTypst";
 
 export type TableToolDependencies = {
+  /** Path of the document currently shown in the editor, for the list filter. */
+  getActivePath?(): string | null;
   /** Writes the current tables back to the portable project config. */
   persist(tables: readonly StoredTable[]): void;
   /** Called after any change so managed directive blocks can be refreshed. */
@@ -48,6 +50,14 @@ export type TableToolDependencies = {
   readBlock?(id: string): ReadonlyArray<string> | null;
   /** Raw source between a block's markers, for change detection. */
   getBlockSource?(id: string): string | null;
+/**
+ * Why the workspace anchor scan failed, if it did.
+ *
+ * A failed scan looks identical to an unlinked table, so the reason is surfaced
+ * rather than reporting a link that does not exist.
+ */
+linkScanError?(): string | null;
+
   /** Where the table's `//@table:` directive lives, for the link status. */
   getLink?(id: string): { path: string; line: number; column: number; label: string } | null;
   /** Opens the linked directive in the code editor. */
@@ -283,9 +293,25 @@ function effectiveSide(
 }
 
 /** Owns the project table list, the grid editor, and generated Typst code. */
+/**
+ * Which tables the sidebar list shows. The keys and labels match the images
+ * panel filter so both sidebar tools read identically.
+ */
+type TableToolFilter = "all" | "current" | "referenced" | "unused";
+
+const TABLE_FILTER_LABELS: ReadonlyArray<{ value: TableToolFilter; label: string }> = [
+  { value: "all", label: "All tables" },
+  { value: "current", label: "Current document" },
+  { value: "referenced", label: "Referenced elsewhere" },
+  { value: "unused", label: "Unused" },
+];
+
 export class TableToolController {
   private tables: StoredTable[] = [];
   private selectedId: string | null = null;
+  /** Sidebar search and filter state, owned here and mirrored into the DOM. */
+  private tableQuery = "";
+  private tableFilter: TableToolFilter = "all";
   private selectionAnchor: Slot | null = null;
   private selectionFocus: Slot | null = null;
   private borderMode = false;
@@ -335,6 +361,11 @@ export class TableToolController {
         this.redo();
       }
     }, true);
+  }
+
+  /** Repaints the list, e.g. after the workspace directive index is rebuilt. */
+  public refreshSidebar(): void {
+    this.renderSidebar();
   }
 
   public setWorkspace(tables: readonly StoredTable[]): void {
@@ -858,20 +889,176 @@ export class TableToolController {
     }
   }
 
+/**
+   * Mounts the search and filter controls once, then keeps them in sync with
+   * controller state on every render, exactly as the images panel does.
+   */
+  private ensureSidebarChrome(): {
+    controls: HTMLElement;
+    rowList: HTMLElement;
+    footer: HTMLElement;
+  } {
+    let controls = this.list.querySelector<HTMLElement>(".sidebar-tool-controls");
+    let rowList = this.list.querySelector<HTMLElement>(".sidebar-tool-list");
+    let footer = this.list.querySelector<HTMLElement>(".sidebar-tool-footer");
+    const needsMount = !controls || !rowList || !footer || !rowList.isConnected;
+
+    if (needsMount) {
+      controls = document.createElement("div");
+      controls.className = "sidebar-tool-controls";
+      controls.innerHTML = `
+        <input class="sidebar-tool-search" type="search" placeholder="Search tables" aria-label="Search project tables" autocomplete="off" />
+        <select class="sidebar-tool-filter" aria-label="Filter project tables">
+          ${TABLE_FILTER_LABELS.map(({ value, label }) => `<option value="${value}">${label}</option>`).join("")}
+        </select>`;
+
+      rowList = document.createElement("div");
+      rowList.className = "sidebar-tool-list";
+      rowList.tabIndex = 0;
+      rowList.setAttribute("role", "tree");
+      rowList.setAttribute("aria-label", "Project tables");
+
+      footer = document.createElement("div");
+      footer.className = "sidebar-tool-footer";
+
+this.list.replaceChildren(controls, rowList, footer);
+
+      const mountedList = rowList;
+      const search = controls.querySelector<HTMLInputElement>(".sidebar-tool-search")!;
+      if (!search.closest(".sidebar-tool-search-shell")) {
+        const marker = document.createComment("sidebar-tool-search");
+        search.replaceWith(marker);
+        marker.replaceWith(wrapEditorCaretInput(search, { shellClass: "sidebar-tool-search-shell" }));
+      }
+
+      const searchField = controls.querySelector<HTMLInputElement>(".sidebar-tool-search")!;
+      const filterField = controls.querySelector<HTMLSelectElement>(".sidebar-tool-filter")!;
+      searchField.addEventListener("input", () => {
+        this.tableQuery = searchField.value;
+        this.renderSidebar();
+      });
+      filterField.addEventListener("change", () => {
+        this.tableFilter = filterField.value as TableToolFilter;
+        this.renderSidebar();
+      });
+
+      mountedList.addEventListener("pointerdown", event => {
+        if (!(event.target as HTMLElement).closest("input, textarea, select")) {
+          mountedList.focus({ preventScroll: true });
+        }
+      });
+      mountedList.addEventListener("focus", () => this.ensureListKeyboardSelection());
+      mountedList.addEventListener("keydown", event => void this.handleListKeydown(event));
+    }
+
+if (!controls || !rowList || !footer) {
+      throw new Error("Tables sidebar failed to initialize.");
+    }
+
+    const searchField = controls.querySelector<HTMLInputElement>(".sidebar-tool-search");
+    if (searchField && searchField.value !== this.tableQuery) searchField.value = this.tableQuery;
+    const filterField = controls.querySelector<HTMLSelectElement>(".sidebar-tool-filter");
+    if (filterField) filterField.value = this.tableFilter;
+
+    return { controls, rowList, footer };
+  }
+
+/** Tables matching the search box and the filter dropdown. */
+  private filteredTables(): StoredTable[] {
+    const needle = this.tableQuery.trim().toLocaleLowerCase();
+    return this.tables.filter(table => {
+      const link = this.deps.getLink?.(table.id) ?? null;
+      const referenced = link !== null;
+      const referencedByCurrentDocument = referenced && link.path === this.activeDocumentPath();
+      const filterMatches = this.tableFilter === "all"
+        || (this.tableFilter === "current" && referencedByCurrentDocument)
+        || (this.tableFilter === "referenced" && referenced && !referencedByCurrentDocument)
+        || (this.tableFilter === "unused" && !referenced);
+      return filterMatches && (!needle || table.name.toLocaleLowerCase().includes(needle));
+    });
+  }
+
+  private activeDocumentPath(): string | null {
+    return this.deps.getActivePath?.() ?? null;
+  }
+
+  private listRows(): HTMLElement[] {
+    const rowList = this.list.querySelector<HTMLElement>(".sidebar-tool-list");
+    if (!rowList) return [];
+    return [...rowList.querySelectorAll<HTMLElement>(".tree-item[data-table-id]")];
+  }
+
+  /**
+   * Gives the list a keyboard selection when it has none, preferring the active
+   * table. Mirrors the explorer's `ensureKeyboardSelection`.
+   */
+  private ensureListKeyboardSelection(): void {
+    if (this.listRows().some(row => row.classList.contains("selected"))) return;
+    const rows = this.listRows();
+    const row = rows.find(item => item.classList.contains("active-file")) ?? rows[0];
+    if (row) this.selectListRow(row);
+  }
+
+  /**
+   * Moves the keyboard selection without touching the inspected table, which is
+   * why the explorer's arrows survive a re-render: rows here are not rebuilt.
+   * Mirrors the explorer's `selectItem`.
+   */
+  private selectListRow(row: HTMLElement): void {
+    for (const current of this.listRows()) {
+      current.classList.remove("selected");
+      current.setAttribute("aria-selected", "false");
+    }
+    row.classList.add("selected");
+    row.setAttribute("aria-selected", "true");
+    row.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  private async handleListKeydown(event: KeyboardEvent): Promise<void> {
+    if ((event.target as HTMLElement).closest("input, textarea")) return;
+    if (!["ArrowUp", "ArrowDown", "Home", "End", "Enter"].includes(event.key)) return;
+    this.ensureListKeyboardSelection();
+    const rows = this.listRows();
+    const selected = this.list.querySelector<HTMLElement>(".tree-item.selected[data-table-id]");
+    if (!selected || !rows.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const index = Math.max(0, rows.indexOf(selected));
+    if (event.key === "ArrowUp") this.selectListRow(rows[Math.max(0, index - 1)]);
+    else if (event.key === "ArrowDown") this.selectListRow(rows[Math.min(rows.length - 1, index + 1)]);
+    else if (event.key === "Home") this.selectListRow(rows[0]);
+    else if (event.key === "End") this.selectListRow(rows[rows.length - 1]);
+    else if (event.key === "Enter") {
+      const id = selected.dataset.tableId;
+      if (id) this.selectTable(id);
+    }
+  }
+
   private renderSidebar(): void {
-    this.list.replaceChildren();
-    if (this.tables.length === 0) {
+    const { rowList, footer } = this.ensureSidebarChrome();
+    const visible = this.filteredTables();
+    rowList.replaceChildren();
+
+    if (visible.length === 0) {
       const empty = document.createElement("div");
       empty.className = "image-tool-empty";
-      empty.textContent = "No tables yet. Create one to generate Typst code.";
-      this.list.appendChild(empty);
-      return;
+      empty.textContent = this.tables.length === 0
+        ? "No tables yet. Create one to generate Typst code."
+        : "No tables match this view.";
+      rowList.appendChild(empty);
     }
-    for (const table of this.tables) {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "tree-item table-tool-list-item";
-      if (table.id === this.selectedId) item.classList.add("selected");
+
+    for (const table of visible) {
+      // Rows are plain elements, not buttons, exactly as in the explorer: focus
+      // stays on the list so a re-render cannot swallow the next arrow press.
+      const item = document.createElement("div");
+      item.dataset.tableId = table.id;
+      item.className = "tree-item explorer-item-target table-tool-list-item";
+      item.setAttribute("role", "treeitem");
+      const isActive = table.id === this.selectedId;
+      item.classList.toggle("active-file", isActive);
+      if (isActive) item.setAttribute("aria-current", "true");
       const icon = document.createElement("span");
       icon.className = "tree-icon";
       icon.appendChild(createAppIcon("table", { size: 16 }));
@@ -894,10 +1081,12 @@ export class TableToolController {
           { label: "Delete table", onSelect: () => this.deleteTable(table) },
         ], event.clientX, event.clientY);
       });
-      this.list.appendChild(item);
+      rowList.appendChild(item);
     }
-  }
 
+    footer.textContent = `${visible.length.toLocaleString()} table${visible.length === 1 ? "" : "s"}`;
+    this.ensureListKeyboardSelection();
+  }
   /** Shows where the table is linked in code, mirroring the image tool. */
   private renderLinkStatus(table: StoredTable): void {
     const host = this.inspector.querySelector<HTMLElement>('[data-field="table-link"]');
@@ -907,7 +1096,9 @@ export class TableToolController {
     if (!link) {
       const empty = document.createElement("div");
       empty.className = "image-tool-empty-reference";
-      empty.textContent = "Not linked in the open documents.";
+      // A failed scan looks identical to an unlinked table, so say which it is
+      // rather than reporting a link that does not exist.
+      empty.textContent = this.deps.linkScanError?.() ?? "Not linked in the project.";
       host.appendChild(empty);
       return;
     }

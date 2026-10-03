@@ -18,6 +18,8 @@ export interface ExternalWorkspaceControllerPort {
   lspReady(): boolean;
   loadExplorer(rootPath: string): Promise<void>;
   refreshImageTools(): void;
+  /** Rescans the workspace for //@table:<id> anchors after an external write. */
+  refreshTableDirectives(): void;
   imageToolsActive(): boolean;
   clearDiagnostics(): void;
   retireSourceMap(reason: string): Promise<void>;
@@ -110,6 +112,7 @@ export class ExternalWorkspaceController {
       }
       await this.port.loadExplorer(workspaceRoot);
       if (this.port.imageToolsActive()) this.port.refreshImageTools();
+      this.port.refreshTableDirectives();
       if (this.port.workspaceRoot() !== workspaceRoot) return;
       await this.port.refreshPreview(true);
       await this.port.waitForPreviewRefresh();

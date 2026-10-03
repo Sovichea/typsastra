@@ -19,6 +19,11 @@ import { EditorController } from "./editor/editorController";
 import { EditorInitializationController } from "./editor/editorInitializationController";
 import { SurroundWithDiscoveryController } from "./editor/surroundWithDiscoveryController";
 import { isForwardSyncContentPosition } from "./editor/forwardSyncEligibility";
+/** Payload of the workspace-wide `//@table:<id>` scan. */
+type ProjectTableDirectiveIndex = {
+  directives: Record<string, { path: string; line: number; column: number }>;
+  scannedTypstFiles: number;
+};
 import type { EditorFoldRange } from "./editor/folding";
 import { WorkspaceExplorer } from "./components/explorer";
 import { SidebarController } from "./sidebar/sidebarController";
@@ -795,28 +800,65 @@ export class TypsastraWorkspaceController {
     });
   }
 
-  /** Location of a table's `//@table:` directive among the open documents. */
+/** Workspace-wide index of `//@table:<id>` anchors, mirroring the image index. */
+  private tableDirectiveIndex: ProjectTableDirectiveIndex | null = null;
+  private tableDirectiveIndexRoot: string | null = null;
+  private tableDirectiveIndexGeneration = 0;
+  private tableDirectiveIndexError: string | null = null;
+
+  /**
+   * Rescans the workspace for table anchors, then repaints the Tables list.
+   *
+   * The sidebar filters on whether a table is used by the current document,
+   * another document, or nothing, so a closed file must still count as a use.
+   * Cheap no-op when the cached index already covers the current root.
+   */
+  public async refreshTableDirectiveIndex(force = false): Promise<void> {
+    const root = this.workspaceRootPath;
+    if (!root) {
+      this.tableDirectiveIndex = null;
+      this.tableDirectiveIndexRoot = null;
+      this.tableDirectiveIndexError = null;
+      return;
+    }
+    if (!force && this.tableDirectiveIndex && this.tableDirectiveIndexRoot === root) return;
+    const generation = ++this.tableDirectiveIndexGeneration;
+    try {
+      const index = await invoke<ProjectTableDirectiveIndex>("project_table_directive_index", {
+        workspaceRootPath: root,
+      });
+      // A newer scan already won; drop this result rather than resurrect stale data.
+      if (generation !== this.tableDirectiveIndexGeneration) return;
+      this.tableDirectiveIndex = index;
+      this.tableDirectiveIndexRoot = root;
+      this.tableDirectiveIndexError = null;
+    } catch (error) {
+      if (generation !== this.tableDirectiveIndexGeneration) return;
+      this.tableDirectiveIndex = null;
+      this.tableDirectiveIndexError = `Could not scan the project for table links: ${String(error)}`;
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "developer",
+        message: `Could not index project tables: ${String(error)}`,
+      });
+      return;
+    }
+    this.tableToolController.refreshSidebar();
+  }
+
+  /** Location of a table's `//@table:` directive, searched across the workspace. */
   private tableLinkFor(
     id: string,
   ): { path: string; line: number; column: number; label: string } | null {
-    const directive = `//@table:${id}`;
-    for (const tab of this.openTabs) {
-      if (!isTypstDocumentPath(tab.path)) continue;
-      const text = tab.path === this.activeFilePath
-        ? this.editorInstance.state.doc.toString()
-        : tab.content;
-      const lines = text.split("\n");
-      const index = lines.findIndex(line => line.trim() === directive);
-      if (index === -1) continue;
-      return {
-        path: tab.path,
-        line: index + 1,
-        column: lines[index].indexOf("//@table:") + 1,
-        label: this.relativeWorkspacePath(tab.path),
-      };
-    }
-    return null;
-  }
+    const anchor = this.tableDirectiveIndex?.directives[id];
+    if (!anchor) return null;
+    return {
+      path: anchor.path,
+      line: anchor.line,
+      column: anchor.column,
+      label: this.relativeWorkspacePath(anchor.path),
+    };
+}
 
   private relativeWorkspacePath(path: string): string {
     const root = this.workspaceRootPath;
@@ -957,6 +999,8 @@ export class TypsastraWorkspaceController {
       readBlock: id => this.readTableDirectiveBlock(id),
       getBlockSource: id => this.tableDirectiveSource(id),
       getLink: id => this.tableLinkFor(id),
+      getActivePath: () => this.activeFilePath,
+      linkScanError: () => this.tableDirectiveIndexError,
       openLink: id => void this.openTableLink(id),
       exportTable: (suggestedName, content) => void this.saveTableExport(suggestedName, content),
       importTable: () => this.pickTableImport(),
@@ -980,7 +1024,12 @@ export class TypsastraWorkspaceController {
       this.imageToolsController.show();
     },
     hideImageTools: () => this.imageToolsController.hide(),
-    showTableTools: () => this.tableToolController.show(),
+    showTableTools: () => {
+      // The filters depend on the workspace anchor index, so make sure it is warm
+      // before the list paints.
+      void this.refreshTableDirectiveIndex();
+      this.tableToolController.show();
+    },
     hideTableTools: () => this.tableToolController.hide(),
     showRestoringPreview: () => this.previewFrame.setMessage(
       `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
@@ -1267,6 +1316,7 @@ export class TypsastraWorkspaceController {
     lspReady: () => this.lspReady,
     loadExplorer: rootPath => this.explorer.loadWorkspace(rootPath),
     refreshImageTools: () => { void this.imageToolsController.refresh(); },
+    refreshTableDirectives: () => { void this.refreshTableDirectiveIndex(true); },
     imageToolsActive: () => this.sidebarController.activeTool === "images",
     clearDiagnostics: () => this.clearDiagnostics(),
     retireSourceMap: reason => this.retirePdfSourceMapSession(reason),
@@ -1389,7 +1439,7 @@ export class TypsastraWorkspaceController {
     getActiveFile: () => this.activeFilePath,
     getEditor: () => this.editorInstance,
     getExplorer: () => this.explorer,
-    getExplorerForElement: element => element.closest(".image-tool-list")
+    getExplorerForElement: element => element.closest(".sidebar-tool-list")
       ? this.imageToolsController.getExplorer()
       : this.explorer,
     refreshSecondaryExplorer: () => this.sidebarController.activeTool === "images"
@@ -1932,7 +1982,11 @@ export class TypsastraWorkspaceController {
     initializePreviewPageControls: () => this.initializePreviewPageControls(),
     sourceMapRootPath: () => this.pdfPreviewSourceMapRootPath,
     previewRootPath: () => this.previewRootPath,
-    setWorkspaceRootPath: path => { this.workspaceRootPath = path; },
+    setWorkspaceRootPath: path => {
+      this.workspaceRootPath = path;
+      // Different root, so the cached table anchor index no longer applies.
+      void this.refreshTableDirectiveIndex();
+    },
     loadPdfPath: (path, identity, sessionKey, surface) => { void this.loadPdfPath(path, identity, sessionKey, surface); },
   });
   private readonly editorTabActivationController = new EditorTabActivationController({
@@ -2800,8 +2854,11 @@ export class TypsastraWorkspaceController {
     return this.editorTabLifecycleController.load(path, options);
   }
 
-  private saveActiveFile(intent: SaveIntent = "manual"): Promise<void> {
-    return this.documentPersistenceController.saveActiveFile(intent);
+  private async saveActiveFile(intent: SaveIntent = "manual"): Promise<void> {
+    await this.documentPersistenceController.saveActiveFile(intent);
+    // A save can add, move, or remove a `//@table:` anchor, which changes which
+    // tables the sidebar reports as current, referenced, or unused.
+    void this.refreshTableDirectiveIndex(true);
   }
 
   private configureAutoSave(enabled: boolean, intervalSeconds: number): void {

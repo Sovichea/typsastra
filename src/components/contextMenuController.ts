@@ -593,7 +593,7 @@ export class ContextMenuController {
     const explorerItem = target.closest<HTMLElement>(".explorer-item-target");
     if (explorerItem) {
       this.contextMenuOpenedFromExplorer = true;
-      const openedFromImageExplorer = Boolean(explorerItem.closest(".image-tool-list"));
+      const openedFromImageExplorer = Boolean(explorerItem.closest(".sidebar-tool-list"));
       this.contextExplorer = this.dependencies.getExplorerForElement?.(explorerItem)
         ?? this.dependencies.getExplorer();
       this.targetPath = explorerItem.dataset.path || "";

@@ -5563,15 +5563,15 @@ button.welcome-item:disabled {
   overflow: hidden;
 }
 
-.image-tool-sidebar-controls {
+.sidebar-tool-controls {
   display: grid;
   gap: 6px;
   padding: 8px;
   border-bottom: 1px solid var(--ui-border);
 }
 
-.image-tool-search,
-.image-tool-filter,
+.sidebar-tool-search,
+.sidebar-tool-filter,
 .image-tool-form input,
 .image-tool-form select {
   width: 100%;
@@ -5587,31 +5587,31 @@ button.welcome-item:disabled {
   appearance: none;
 }
 
-.image-tool-search { padding: 0 7px; }
-.image-tool-search-shell {
+.sidebar-tool-search { padding: 0 7px; }
+.sidebar-tool-search-shell {
   --editor-input-horizontal-inset: 10px;
   width: 100%;
   min-width: 0;
   font: 12px var(--font-family-sans);
 }
-.image-tool-search-shell .image-tool-search {
+.sidebar-tool-search-shell .sidebar-tool-search {
   padding-inline: var(--editor-input-horizontal-inset);
   caret-color: transparent;
 }
-.image-tool-search-shell .typsastra-caret-measure {
+.sidebar-tool-search-shell .typsastra-caret-measure {
   font: inherit;
   line-height: 26px;
 }
-.image-tool-search-shell .typsastra-input-caret {
+.sidebar-tool-search-shell .typsastra-input-caret {
   height: calc(26px - 8px);
 }
-.image-tool-filter { padding: 0 24px 0 7px; }
-.image-tool-search:focus,
-.image-tool-filter:focus,
+.sidebar-tool-filter { padding: 0 24px 0 7px; }
+.sidebar-tool-search:focus,
+.sidebar-tool-filter:focus,
 .image-tool-form input:focus,
 .image-tool-form select:focus { border-color: var(--ui-accent-color); }
 
-.image-tool-list {
+.sidebar-tool-list {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
@@ -5623,17 +5623,17 @@ button.welcome-item:disabled {
   outline: none;
 }
 
-.image-tool-list:focus { outline: none; }
+.sidebar-tool-list:focus { outline: none; }
 
-.image-tool-list:focus-within .tree-item.selected::after { display: block; }
+.sidebar-tool-list:focus-within .tree-item.selected::after { display: block; }
 
-.image-tool-list .tree-item.pathological-image .tree-text,
-.image-tool-list .tree-item.pathological-image .tree-icon,
-.image-tool-list .tree-item.pathological-image .tree-icon svg {
+.sidebar-tool-list .tree-item.pathological-image .tree-text,
+.sidebar-tool-list .tree-item.pathological-image .tree-icon,
+.sidebar-tool-list .tree-item.pathological-image .tree-icon svg {
   color: var(--ui-warning-icon-color) !important;
 }
 
-.image-tool-sidebar-footer {
+.sidebar-tool-footer {
   min-height: 28px;
   padding: 6px 8px;
   box-sizing: border-box;

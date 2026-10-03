@@ -15,6 +15,7 @@ describe("external workspace diagnostics", () => {
       lspReady: () => false,
       loadExplorer: async () => { events.push("explorer"); },
       refreshImageTools: () => {},
+      refreshTableDirectives: () => { events.push("table-directives"); },
       imageToolsActive: () => false,
       clearDiagnostics: () => { events.push("diagnostics"); },
       retireSourceMap: async () => { events.push("source-map"); },
@@ -31,6 +32,6 @@ describe("external workspace diagnostics", () => {
       paths: ["C:\\Project\\main.typ"],
     });
 
-    expect(events).toEqual(["diagnostics", "source-map", "explorer", "preview", "settled"]);
+    expect(events).toEqual(["diagnostics", "source-map", "explorer", "table-directives", "preview", "settled"]);
   });
 });
