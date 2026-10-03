@@ -19,8 +19,10 @@ import {
   isStaticTypstCompletionContextAt,
   isTypstMemberAccessAt,
   isTypstFunctionArgumentContextAt,
+  isInsideQuotedValue,
   isTypstRuleTargetAt,
   languageCompletionRange,
+  quotedValueCompletionEdit,
   liveTypstCompletionEditOffsets,
   liveTypstMemberCompletionEditOffsets,
   lspCompletionEditOffsets,
@@ -491,6 +493,119 @@ describe("LSP autocomplete edits", () => {
     const unfinished = Text.of(['#set text(font: "Khmer OS']);
     expect(quotedCompletionEditOffsets(unfinished, unfinished.length, '"Khmer OS Siemreap"'))
       .toEqual({ from: 16, to: unfinished.length });
+  });
+
+  test("closes a quoted value completion whatever shape the server returns", () => {
+    // Mirrors the apply path: resolve the edit range, then normalize the value.
+    const accept = (line: string, cursor: number, insertion: string): string => {
+      const doc = Text.of([line]);
+      const range = contextualCompletionEditOffsets(
+        doc,
+        cursor,
+        insertion,
+        undefined,
+        (_text, character) => character,
+        cursor,
+        cursor,
+        false
+      );
+      const edit = quotedValueCompletionEdit(doc, range.from, range.to, insertion);
+      return doc.sliceString(0, edit.from) + edit.insert + doc.sliceString(edit.to);
+    };
+    const expected = '#set text(font: "Times New Roman")';
+    // Tinymist returns the quotes, only the closing quote, neither, or appends
+    // the call's closing bracket. Each must land on the same valid result.
+    for (const insertion of [
+      '"Times New Roman"',
+      'Times New Roman"',
+      'Times New Roman")',
+      'Times New Roman',
+    ]) {
+      // A caret before the `)` that already closes the call.
+      const paren = '#set text(font: "Time)';
+      expect(accept(paren, paren.indexOf("Time)") + "Time".length, insertion)).toBe(expected);
+      // An empty value, with the caret right after the opening quote.
+      const empty = '#set text(font: ")';
+      expect(accept(empty, empty.indexOf('"') + 1, insertion)).toBe(expected);
+      // An already closed value, with the caret inside it.
+      const closed = '#set text(font: "Time")';
+      expect(accept(closed, closed.indexOf("Time") + "Time".length, insertion)).toBe(expected);
+      // An unterminated call only gains a `)` when the server sends one, since
+      // further arguments may still belong inside the call.
+      const open = '#set text(font: "Times New';
+      expect(accept(open, open.length, insertion)).toBe(
+        insertion.endsWith(")")
+          ? expected
+          : '#set text(font: "Times New Roman"',
+      );
+    }
+  });
+
+  test("adds the closing bracket only when the call has none", () => {
+    const unterminated = Text.of(['#set text(font: "Time']);
+    const edit = quotedValueCompletionEdit(unterminated, 17, 21, 'Times New Roman")');
+    expect(edit.insert).toBe('"Times New Roman")');
+
+    // The document already holds the bracket, so it is not repeated.
+    const closed = Text.of(['#set text(font: "Time)']);
+    expect(quotedValueCompletionEdit(closed, 17, 21, 'Times New Roman")').insert)
+      .toBe('"Times New Roman"');
+
+    // A different bracket after the range is unrelated and stays.
+    const other = Text.of(['#set text(font: "Time]']);
+    expect(quotedValueCompletionEdit(other, 17, 21, 'Times New Roman")').insert)
+      .toBe('"Times New Roman")');
+  });
+
+  test("recognizes any caret inside a string, not only argument values", () => {
+    expect(isInsideQuotedValue(Text.of(['#import "qprev"']), 10)).toBe(true);
+    expect(isInsideQuotedValue(Text.of(['#import "qprev']), 14)).toBe(true);
+    expect(isInsideQuotedValue(Text.of(['#import "qprev"']), 15)).toBe(false);
+    expect(isInsideQuotedValue(Text.of(['#import "qprev" #let a = 1']), 25)).toBe(false);
+    // An escaped quote is content, so it does not open a string.
+    expect(isInsideQuotedValue(Text.of(['#let a = \\"hi']), 13)).toBe(false);
+  });
+
+  test("completes a package path inside quotes", () => {
+    const accept = (line: string, cursor: number, insertion: string): string => {
+      const doc = Text.of([line]);
+      const range = contextualCompletionEditOffsets(
+        doc,
+        cursor,
+        insertion,
+        undefined,
+        (_text, character) => character,
+        cursor,
+        cursor,
+        false
+      );
+      const edit = quotedValueCompletionEdit(doc, range.from, range.to, insertion);
+      return doc.sliceString(0, edit.from) + edit.insert + doc.sliceString(edit.to);
+    };
+    const expected = '#import "@preview/js:0.1.4"';
+    for (const insertion of [
+      '"@preview/js:0.1.4"',
+      '@preview/js:0.1.4"',
+      '@preview/js:0.1.4',
+      '"@preview/js:0.1.4',
+    ]) {
+      // The caret inside an existing path, an unterminated one, and an empty
+      // value all land on the same import.
+      expect(accept('#import "qprev"', 10, insertion)).toBe(expected);
+      expect(accept('#import "qprev', 14, insertion)).toBe(expected);
+      expect(accept('#import "', 9, insertion)).toBe(expected);
+    }
+    expect(accept('#include "q', 11, '"file.typ"')).toBe('#include "file.typ"');
+  });
+
+  test("keeps an escaped quote as content instead of the value terminator", () => {
+    const doc = Text.of(['#let a = "x']);
+    // The insert ends with an escaped quote, so the value still needs closing.
+    expect(quotedValueCompletionEdit(doc, 11, 11, 'he said \\"hi\\"').insert)
+      .toBe('"he said \\"hi\\""');
+    // A real closing quote is reused rather than doubled.
+    expect(quotedValueCompletionEdit(doc, 11, 11, '"he said \\"hi\\""').insert)
+      .toBe('"he said \\"hi\\""');
   });
 
   test("preserves the opening quote when Tinymist only supplies a closing quote", () => {

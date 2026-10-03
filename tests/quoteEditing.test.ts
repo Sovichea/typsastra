@@ -67,9 +67,39 @@ describe("contextual double-quote editing", () => {
     expect(state.selection.main.head).toBe(0);
   });
 
-  test("moves over an existing closer and preserves escaped quotes", () => {
-    expect(doubleQuoteAction("", '"')).toBe("skip");
+  test("steps over a closer only when the caret is inside a string", () => {
+    // Inside a string the following quote closes it, so the caret moves over it
+    // and the pair is left untouched.
+    expect(doubleQuoteAction('"abc', '"')).toBe("skip");
     expect(applyQuote('""', 1).doc.toString()).toBe('""');
+    expect(applyQuote('"abc"', 4).doc.toString()).toBe('"abc"');
     expect(applyQuote("\\", 1).doc.toString()).toBe('\\"');
+  });
+
+  test("inserts the quote before an opener instead of swallowing it", () => {
+    // The caret is not inside a string yet, so the following quote is an
+    // opener and the typed quote must still be inserted.
+    expect(doubleQuoteAction("", '"')).toBe("pair");
+    const state = applyQuote('test"', 4);
+    expect(state.doc.toString()).toBe('test""');
+    expect(state.selection.main.head).toBe(5);
+
+    // The same holds when an escaped quote precedes the caret.
+    expect(doubleQuoteAction('\\"', '"')).not.toBe("skip");
+  });
+
+  test("never leaves three quotes next to an existing one", () => {
+    // A quote already before the caret closes the string instead of opening a
+    // nested pair.
+    expect(doubleQuoteAction('"', "")).toBe("single");
+    expect(doubleQuoteAction('font: "', "")).toBe("single");
+    const closed = applyQuote('"', 1);
+    expect(closed.doc.toString()).toBe('""');
+    expect(closed.selection.main.head).toBe(2);
+
+    // A quote already after the caret is stepped over, leaving the pair.
+    const skipped = applyQuote('""', 1);
+    expect(skipped.doc.toString()).toBe('""');
+    expect(skipped.selection.main.head).toBe(2);
   });
 });

@@ -798,6 +798,65 @@ export function fontCompletionEditOffsets(
   return /\bfont\s*:\s*$/.test(beforeQuote) ? edit : null;
 }
 
+/**
+ * True when the caret sits inside a Typst string literal on its line, whatever
+ * the string is for: a `font:` value, a named argument, or a package path in
+ * `#import "…"`. These completions all replace text inside quotes and so need
+ * the same normalization.
+ */
+export function isInsideQuotedValue(doc: Text, cursorPosition: number): boolean {
+  const line = doc.lineAt(cursorPosition);
+  const cursor = cursorPosition - line.from;
+  let quoted = false;
+  for (let index = 0; index < cursor; index += 1) {
+    if (line.text[index] === '"' && !isEscaped(line.text, index)) quoted = !quoted;
+  }
+  return quoted;
+}
+
+/**
+ * Normalizes a completion that fills a quoted Typst value, so the result is a
+ * properly closed string no matter how the server shapes its insert.
+ *
+ * Tinymist is inconsistent here: for `#set text(font: "Time|)` it may return
+ * `"Times New Roman"` with quotes, or just `Times New Roman"` / `Times New
+ * Roman)` assuming the opening quote already in the document. Taken literally
+ * the latter leaves `#set text(font: "Times New Roman)` without its closing
+ * quote, and a bracket it appends can double up against the `)` that already
+ * follows the value.
+ */
+export function quotedValueCompletionEdit(
+  doc: Text,
+  from: number,
+  to: number,
+  insertion: string
+): { from: number; to: number; insert: string } {
+  // Keep any closing brackets aside so the string can be closed first.
+  const brackets = /[)\]}]*$/u.exec(insertion)![0];
+  let start = from;
+  let end = to;
+  let value = insertion.slice(0, insertion.length - brackets.length);
+  // A quote that closes the value may already be the insert's last character,
+  // but an escaped quote inside the value is content, not a terminator.
+  const closesValue = value.endsWith('"') && !value.endsWith('\\"');
+
+  if (!value.startsWith('"')) {
+    // The document holds the opening quote, so the replacement owns it too.
+    if (doc.sliceString(Math.max(0, start - 1), start) === '"') start -= 1;
+    value = closesValue ? `"${value}` : `"${value}"`;
+  } else if (!value.endsWith('"')) {
+    value = `${value}"`;
+  }
+  // The value now closes its own string, so a quote left in the document is
+  // part of the replaced text.
+  if (doc.sliceString(end, end + 1) === '"') end += 1;
+  // Re-attach the brackets only when the document does not already hold them.
+  if (brackets && doc.sliceString(end, end + brackets.length) !== brackets) {
+    value += brackets;
+  }
+  return { from: start, to: end, insert: value };
+}
+
 export function completionEditOffsets(
   doc: Text,
   cursorPosition: number,
@@ -1297,6 +1356,12 @@ export function createTypstAutocomplete(
           const isHashPrefix = word?.text.startsWith('#');
           const preferLocalTokenRange = fontValueFrom === null
             && (Boolean(word?.text) || isFunctionArgumentStart);
+          // A completion filling a quoted value is normalized on apply so the
+          // string always closes, whatever the server's insert looks like. This
+          // covers package paths in `#import "…"` as well as argument values.
+          const isQuotedValue = fontValueFrom !== null
+            || quotedArgumentValueStart !== null
+            || isInsideQuotedValue(context.state.doc, context.pos);
           const variantsByFamily = new Map<string, Set<TypstCompletionSyntaxVariant>>();
           for (const item of items) {
             const syntax = effectiveTypstCompletionSyntax(item, rawVariantsByFamily);
@@ -1361,7 +1426,7 @@ export function createTypstAutocomplete(
               item.kind,
               item.detail ?? item.labelDetails?.description
             );
-            if (insertTextFormat === 2 || callableSnippet.opensArguments) {
+            if ((insertTextFormat === 2 || callableSnippet.opensArguments) && !isQuotedValue) {
               const completion = snippetCompletion(callableSnippet.template, {
                 label,
                 detail,
@@ -1401,7 +1466,21 @@ export function createTypstAutocomplete(
                     Boolean(liveTokenEdit) || preferLocalTokenRange
                   );
                   const documentLengthBeforeApply = view.state.doc.length;
-                  snippetApply(view, selected, edit.from, edit.to);
+                  if (isQuotedValue) {
+                    const quoted = quotedValueCompletionEdit(
+                      view.state.doc,
+                      edit.from,
+                      edit.to,
+                      apply
+                    );
+                    view.dispatch({
+                      changes: { from: quoted.from, to: quoted.to, insert: quoted.insert },
+                      selection: { anchor: quoted.from + quoted.insert.length },
+                      userEvent: "input.complete"
+                    });
+                  } else {
+                    snippetApply(view, selected, edit.from, edit.to);
+                  }
                   if (isFunctionArgumentValue && !callableSnippet.opensArguments) {
                     const insertedLength = view.state.doc.length
                       - (documentLengthBeforeApply - (edit.to - edit.from));
@@ -1469,9 +1548,12 @@ export function createTypstAutocomplete(
                   liveTokenEdit?.to ?? to,
                   Boolean(liveTokenEdit) || preferLocalTokenRange
                 );
+                const edit = isQuotedValue
+                  ? quotedValueCompletionEdit(view.state.doc, replacement.from, replacement.to, apply)
+                  : { from: replacement.from, to: replacement.to, insert: apply };
                 view.dispatch({
-                  changes: { from: replacement.from, to: replacement.to, insert: apply },
-                  selection: { anchor: replacement.from + apply.length },
+                  changes: { from: edit.from, to: edit.to, insert: edit.insert },
+                  selection: { anchor: edit.from + edit.insert.length },
                   userEvent: "input.complete"
                 });
                 if (allowsAdaptivePreference) {
