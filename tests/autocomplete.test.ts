@@ -800,6 +800,32 @@ describe("LSP autocomplete edits", () => {
     expect(isTypstFunctionArgumentContextAt(tuple, tuple.line(2).to, true)).toBe(false);
   });
 
+  test("treats a bare identifier argument as code for implicit completion", async () => {
+    const source = await Bun.file(
+      new URL("../src/editor/autocomplete.ts", import.meta.url),
+    ).text();
+
+    // `#render(… time|)` must complete a local such as `timeline`, so the gate
+    // accepts an identifier slot.
+    const render = Text.of([
+      "#render-project-timeline-chart(",
+      "  time",
+      "  timeline-task-width: 190pt,",
+      ")",
+    ]);
+    expect(isTypstFunctionArgumentContextAt(render, render.line(2).to, true)).toBe(true);
+
+    const afterComma = Text.of(["#render(", "  time,", "  mile"]);
+    expect(isTypstFunctionArgumentContextAt(afterComma, afterComma.line(3).to, true)).toBe(true);
+
+    // Prose inside a content block stays out of implicit completion.
+    const prose = Text.of(["#figure(", "  [Quarterly results and more words here]"]);
+    expect(isTypstFunctionArgumentContextAt(prose, prose.length, true)).toBe(false);
+
+    expect(source).toContain("const isArgumentIdentifier = isTypstFunctionArgumentContextAt(");
+    expect(source).toContain("&& !isArgumentIdentifier");
+  });
+
   test("recognizes a function comma boundary but waits for spacing to reopen completion", async () => {
     const sameLine = Text.of(["#figure(caption: [Example],"]);
     expect(isTypstFunctionArgumentContextAt(sameLine, sameLine.length)).toBe(true);

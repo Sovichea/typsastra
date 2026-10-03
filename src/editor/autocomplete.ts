@@ -1270,15 +1270,26 @@ export function createTypstAutocomplete(
           const closeBraces = (docBefore.match(/\}/g) || []).length;
           const inCodeBlock = openBraces > closeBraces;
           
+          // A bare identifier in an argument slot is code, not prose: a local
+          // such as `timeline` passed as `#render(… time|)` must complete even
+          // though the line has no hash, member, or rule target. Allowing the
+          // identifier keeps prose inside a content block out, because a prose
+          // slot is not a single identifier.
+          const isArgumentIdentifier = isTypstFunctionArgumentContextAt(
+            context.state.doc,
+            context.pos,
+            true
+          );
           if (!isHashWord
             && !isSetShow
             && !isMemberAccess
             && !inCodeBlock
             && !isEmptyFunctionCall
+            && !isArgumentIdentifier
             && !isFunctionArgumentTrigger) {
             if (traceRelevant) {
               onTypstCompletionTrace?.(
-                `Implicit completion rejected by syntax gate: hashWord=${isHashWord}; rule=${isSetShow}; member=${isMemberAccess}; codeBlock=${inCodeBlock}; emptyCall=${isEmptyFunctionCall}.`
+                `Implicit completion rejected by syntax gate: hashWord=${isHashWord}; rule=${isSetShow}; member=${isMemberAccess}; codeBlock=${inCodeBlock}; emptyCall=${isEmptyFunctionCall}; argument=${isArgumentIdentifier}.`
               );
             }
             return null;
