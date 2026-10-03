@@ -33,6 +33,11 @@ packaging. It also adds Linux ARM64 bundles for Raspberry Pi.
 
 ## Editor fixes
 
+- Fixed project-root-relative Typst imports and includes such as
+  `#import "/shared/series_render.typ"` being mistaken for operating-system
+  absolute paths on Windows. Dependencies now resolve from the open project root
+  as Typst expects, including paths stored in string bindings; imports that
+  escape the project remain blocked.
 - Fixed completion inside a call rejecting a bare identifier argument, so a local
   such as `timeline` was offered in `#render-project-timeline-chart( time|)`.
 - Fixed completion of a bare member typed inside a call. `table.hea` inside

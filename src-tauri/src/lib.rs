@@ -2529,7 +2529,25 @@ fn normalized_existing_path(path: &std::path::Path) -> std::path::PathBuf {
     dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn local_typst_dependencies(contents: &str, parent: &std::path::Path) -> Vec<std::path::PathBuf> {
+fn resolve_typst_dependency(
+    raw: &str,
+    parent: &std::path::Path,
+    project_root: &std::path::Path,
+) -> std::path::PathBuf {
+    // Typst's leading slash means the project root, not the host OS root.
+    let candidate = if raw.starts_with('/') {
+        project_root.join(raw.trim_start_matches('/'))
+    } else {
+        parent.join(raw)
+    };
+    normalized_existing_path(&candidate)
+}
+
+fn local_typst_dependencies(
+    contents: &str,
+    parent: &std::path::Path,
+    project_root: &std::path::Path,
+) -> Vec<std::path::PathBuf> {
     let bytes = contents.as_bytes();
     let mut dependencies = Vec::new();
     let mut index = 0;
@@ -2617,7 +2635,7 @@ fn local_typst_dependencies(contents: &str, parent: &std::path::Path) -> Vec<std
             if byte == b'"' && !escaped {
                 let raw = &contents[start..index];
                 if !raw.starts_with('@') && !raw.contains("://") {
-                    let candidate = normalized_existing_path(&parent.join(raw));
+                    let candidate = resolve_typst_dependency(raw, parent, project_root);
                     if candidate.extension().and_then(|value| value.to_str()) == Some("typ") {
                         dependencies.push(candidate);
                     }
@@ -2645,6 +2663,7 @@ fn local_typst_dependencies(contents: &str, parent: &std::path::Path) -> Vec<std
     fn collect_bound_dependencies(
         node: &typst_syntax::SyntaxNode,
         parent: &std::path::Path,
+        project_root: &std::path::Path,
         bindings: &mut HashMap<String, String>,
         dependencies: &mut Vec<std::path::PathBuf>,
     ) {
@@ -2664,7 +2683,7 @@ fn local_typst_dependencies(contents: &str, parent: &std::path::Path) -> Vec<std
         if let Some(Expr::Ident(identifier)) = source {
             if let Some(raw) = bindings.get(identifier.as_str()) {
                 if !raw.starts_with('@') && !raw.contains("://") {
-                    let candidate = normalized_existing_path(&parent.join(raw));
+                    let candidate = resolve_typst_dependency(raw, parent, project_root);
                     if candidate.extension().and_then(|value| value.to_str()) == Some("typ")
                         && !dependencies.contains(&candidate)
                     {
@@ -2675,12 +2694,18 @@ fn local_typst_dependencies(contents: &str, parent: &std::path::Path) -> Vec<std
         }
 
         for child in node.children() {
-            collect_bound_dependencies(child, parent, bindings, dependencies);
+            collect_bound_dependencies(child, parent, project_root, bindings, dependencies);
         }
     }
 
     let syntax = typst_syntax::parse(contents);
-    collect_bound_dependencies(&syntax, parent, &mut HashMap::new(), &mut dependencies);
+    collect_bound_dependencies(
+        &syntax,
+        parent,
+        project_root,
+        &mut HashMap::new(),
+        &mut dependencies,
+    );
     dependencies
 }
 
@@ -3036,6 +3061,7 @@ fn collect_project_files(
 
 fn current_document_sources(
     main_path: Option<&std::path::Path>,
+    project_root: &std::path::Path,
 ) -> std::collections::HashSet<std::path::PathBuf> {
     use std::collections::{HashSet, VecDeque};
     let mut visited = HashSet::new();
@@ -3051,7 +3077,7 @@ fn current_document_sources(
             continue;
         };
         let parent = path.parent().unwrap_or(std::path::Path::new(""));
-        pending.extend(local_typst_dependencies(&contents, parent));
+        pending.extend(local_typst_dependencies(&contents, parent, project_root));
     }
     visited
 }
@@ -3067,7 +3093,8 @@ fn project_image_index_blocking(
     if !root.is_dir() {
         return Err("Project folder does not exist".into());
     }
-    let current_sources = current_document_sources(main_path.as_deref().map(std::path::Path::new));
+    let current_sources =
+        current_document_sources(main_path.as_deref().map(std::path::Path::new), &root);
     let mut typst_files = Vec::new();
     let mut image_files = Vec::new();
     collect_project_files(&root, &mut typst_files, &mut image_files);
@@ -3805,7 +3832,11 @@ fn collect_preview_image_profile_with_override(
             contents
         };
         let parent = path.parent().unwrap_or(std::path::Path::new(""));
-        pending.extend(local_typst_dependencies(&contents, parent));
+        pending.extend(local_typst_dependencies(
+            &contents,
+            parent,
+            root_path.parent().unwrap_or(parent),
+        ));
         for image_reference in local_typst_images(&contents, parent) {
             let source_prefix = &contents[..image_reference.from_byte];
             let line_start = source_prefix.rfind('\n').map_or(0, |index| index + 1);
@@ -3906,7 +3937,11 @@ fn collect_typst_preview_source_stats(root_path: &std::path::Path) -> TypstPrevi
             continue;
         };
         let parent = path.parent().unwrap_or(std::path::Path::new(""));
-        pending.extend(local_typst_dependencies(contents, parent));
+        pending.extend(local_typst_dependencies(
+            contents,
+            parent,
+            root_path.parent().unwrap_or(parent),
+        ));
     }
     stats
 }
@@ -4004,6 +4039,9 @@ fn resolve_preview_target(
                     for dependency in local_typst_dependencies(
                         &contents,
                         source.parent().unwrap_or(std::path::Path::new("")),
+                        workspace_root
+                            .as_deref()
+                            .unwrap_or(path.parent().unwrap_or(&path)),
                     ) {
                         reverse.entry(dependency).or_default().push(source.clone());
                     }
@@ -4015,6 +4053,9 @@ fn resolve_preview_target(
         for dependency in local_typst_dependencies(
             contents,
             source.parent().unwrap_or(std::path::Path::new("")),
+            workspace_root
+                .as_deref()
+                .unwrap_or(path.parent().unwrap_or(&path)),
         ) {
             reverse.entry(dependency).or_default().push(source.clone());
         }
@@ -5518,6 +5559,39 @@ mod preview_main_tests {
         );
         assert!(resolved.imported);
         assert!(!resolved.standalone);
+    }
+
+    #[test]
+    fn root_relative_import_from_nested_main_selects_workspace_main() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let main_path = workspace.path().join("books/main.typ");
+        let shared_path = workspace.path().join("shared/series_render.typ");
+        std::fs::create_dir_all(main_path.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(shared_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &main_path,
+            "#import \"/shared/series_render.typ\": render_book",
+        )
+        .unwrap();
+        std::fs::write(&shared_path, "#let render_book = [Hello]").unwrap();
+
+        let resolved = resolve_preview_target(
+            shared_path.to_string_lossy().into_owned(),
+            Some(workspace.path().to_string_lossy().into_owned()),
+            None,
+            None,
+        )
+        .expect("resolve preview");
+
+        assert_eq!(
+            resolved.main_path.as_deref(),
+            Some(
+                super::normalized_existing_path(&main_path)
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
+        assert!(resolved.imported);
     }
 
     #[test]

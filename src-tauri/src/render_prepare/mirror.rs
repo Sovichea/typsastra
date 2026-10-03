@@ -436,7 +436,7 @@ fn validate_source_dependency_boundary(
 ) -> Result<Vec<PathBuf>, String> {
     let project_root = normalized_dependency_path(project_root);
     let parent = source_path.parent().unwrap_or(project_root.as_path());
-    let dependencies = crate::local_typst_dependencies(source, parent);
+    let dependencies = crate::local_typst_dependencies(source, parent, &project_root);
     let mut normalized_dependencies = Vec::with_capacity(dependencies.len());
     for dependency in dependencies {
         let dependency = normalized_dependency_path(&dependency);
@@ -504,7 +504,7 @@ fn collect_reachable_typst_files(project_root: &Path, entry_file: &Path) -> Hash
             continue;
         };
         let parent = source_path.parent().unwrap_or(&project_root);
-        for dependency in crate::local_typst_dependencies(&source, parent) {
+        for dependency in crate::local_typst_dependencies(&source, parent, &project_root) {
             let dependency = canonical_or_original(&dependency);
             if dependency.starts_with(&project_root)
                 && dependency
@@ -1443,6 +1443,88 @@ mod tests {
             inspect_render_cache_storage(&cache_root).recorded_at_ms,
             prepared.storage.recorded_at_ms
         );
+    }
+
+    #[test]
+    fn resolves_root_relative_imports_from_nested_files_inside_the_workspace() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let main = root.join("books/main.typ");
+        let chapter = root.join("books/chapters/one.typ");
+        let shared = root.join("shared/series_render.typ");
+        fs::create_dir_all(chapter.parent().unwrap()).unwrap();
+        fs::create_dir_all(shared.parent().unwrap()).unwrap();
+        fs::write(&main, "#include \"chapters/one.typ\"").unwrap();
+        fs::write(
+            &chapter,
+            "#import \"/shared/series_render.typ\": render_book",
+        )
+        .unwrap();
+        fs::write(&shared, "#let render_book = [Shared]").unwrap();
+        let cache_root = root.join(".typsastra/cache");
+        let options = RenderPrepareOptions {
+            project_root: root.to_path_buf(),
+            entry_file: main,
+            cache_root: cache_root.clone(),
+            generate_source_map: true,
+            preview_content_mode: PreviewContentMode::Normal,
+            allow_large_copy_fallback: false,
+        };
+
+        let prepared = mirror_project_cancellable(&options, || false).unwrap();
+        assert!(prepared.draft_reachable_files.contains(&shared));
+        assert!(cache_root.join("render/shared/series_render.typ").is_file());
+    }
+
+    #[test]
+    fn resolves_root_relative_string_bound_includes() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let main = root.join("books/main.typ");
+        let shared = root.join("shared/one.typ");
+        fs::create_dir_all(main.parent().unwrap()).unwrap();
+        fs::create_dir_all(shared.parent().unwrap()).unwrap();
+        fs::write(
+            &main,
+            "#let chapter = \"/shared/one.typ\"\n#include chapter",
+        )
+        .unwrap();
+        fs::write(&shared, "= Shared").unwrap();
+
+        let options = RenderPrepareOptions {
+            project_root: root.to_path_buf(),
+            entry_file: main,
+            cache_root: root.join(".typsastra/cache"),
+            generate_source_map: true,
+            preview_content_mode: PreviewContentMode::Normal,
+            allow_large_copy_fallback: false,
+        };
+        let prepared = mirror_project_cancellable(&options, || false).unwrap();
+        assert!(prepared.draft_reachable_files.contains(&shared));
+    }
+
+    #[test]
+    fn rejects_root_relative_dependencies_that_escape_the_workspace() {
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join("project");
+        let main = root.join("books/main.typ");
+        let outside = parent.path().join("outside.typ");
+        fs::create_dir_all(main.parent().unwrap()).unwrap();
+        fs::write(&main, "#include \"/../outside.typ\"").unwrap();
+        fs::write(&outside, "= Outside").unwrap();
+        let cache_root = root.join(".typsastra/cache");
+        let options = RenderPrepareOptions {
+            project_root: root,
+            entry_file: main,
+            cache_root: cache_root.clone(),
+            generate_source_map: true,
+            preview_content_mode: PreviewContentMode::Normal,
+            allow_large_copy_fallback: false,
+        };
+
+        let error = mirror_project_cancellable(&options, || false).unwrap_err();
+        assert!(error.contains("outside the current workspace"));
+        assert!(!cache_root.exists());
     }
 
     #[test]
