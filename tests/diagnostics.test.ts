@@ -213,6 +213,25 @@ describe("counted console logs", () => {
       .toEqual([compilerFailure, relatedCallSite]);
   });
 
+  test("clears counted Dev entries so the Clear button empties the Dev tab", () => {
+    // Developer entries are always counted so they render, but they must not
+    // survive a manual clear or the button appears to do nothing.
+    const devEntry = {
+      kind: "info" as const,
+      channel: "dev" as const,
+      counted: true,
+      message: "render started",
+    };
+    const countedLsp = {
+      kind: "error" as const,
+      channel: "lsp" as const,
+      counted: true,
+      message: "compile failed",
+    };
+
+    expect(persistentLogsAfterManualClear([devEntry, countedLsp])).toEqual([countedLsp]);
+  });
+
   test("marks developer entries counted so the Dev tab can render them", async () => {
     const source = await Bun.file(
       new URL("../src/diagnostics/developerLogController.ts", import.meta.url),

@@ -62,10 +62,27 @@ export function countedLogTotals(
   };
 }
 
-export function persistentLogsAfterManualClear<T extends Pick<LogConsoleEntryInput, "counted" | "persistent">>(
+/**
+ * Entries that survive a manual Clear.
+ *
+ * `counted` is deliberately not enough on its own: it means "include this in the
+ * problem/severity badges", and every Dev-channel entry sets it so the Dev tab
+ * can render them. Filtering on it kept developer logs on screen after Clear,
+ * which made the button look broken.
+ *
+ * Counted entries are still preserved on the non-dev channels, because compiler
+ * and preview failures are owned by a subsystem that re-reports them when it
+ * resolves; developer logs are transient diagnostics with no such owner.
+ */
+export function persistentLogsAfterManualClear<
+  T extends Pick<LogConsoleEntryInput, "channel" | "counted" | "persistent">,
+>(
   logs: readonly T[]
 ): T[] {
-  return logs.filter(entry => entry.counted === true || entry.persistent === true);
+  return logs.filter(
+    entry => entry.persistent === true
+      || (entry.counted === true && entry.channel !== "dev"),
+  );
 }
 
 function canonicalDiagnosticMessage(message: string): string {
