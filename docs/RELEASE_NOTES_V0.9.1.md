@@ -80,14 +80,6 @@ and v0.8.x projects remain compatible.
 Automatic preview scrolling on cursor movement (Cursor sync) remains disabled
 pending the v0.9.x reliability work.
 
-Editor font settings, including the default Unicode fallback and the per-script
-editor fallbacks, continue to apply only to the editor. They are not passed to
-Tinymist, so they do not affect compiled output. Choosing a font for the compiled
-document is done with the typography toolbar, which writes an ordinary ordered
-`#set text(font: …)` stack into the document; the compiler's only font input is a
-list of directories, which cannot express a preference.
-
-The table filters depend on a project-wide scan of every Typst file. Changing a
-font directory or a document's table directives restarts the active Tinymist
-session so all compiler paths see the same state; adding or removing a font file
-inside an already-configured directory requires reopening the project.
+The table filters depend on a project-wide scan of every Typst file, so the
+active Tinymist session is restarted when a document's table directives change,
+keeping every compiler path on the same state.
