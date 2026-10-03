@@ -14,6 +14,7 @@ import {
   innermostTypstFunctionName,
   innermostTypstArgumentFieldName,
   isDirectMemberCompletion,
+  isBareTypstMemberAccessAt,
   isInsideTypstFunctionArgumentsAt,
   isNamedArgumentCompletion,
   isStaticTypstCompletionContextAt,
@@ -754,6 +755,25 @@ describe("LSP autocomplete edits", () => {
       .toEqual({ template: "#page(width: 10cm)", opensArguments: false });
     expect(completedEmptyCallCaret("#page()", "#page")).toBe(6);
     expect(completedEmptyCallCaret("before #align() after", "#align")).toBe(14);
+    // A member completion inserts the bare name, so accepting `table.hea`
+    // cannot leave the caret inside `table.header()` offering that call's
+    // arguments instead of the receiver's other members.
+    expect(completedEmptyCallCaret("  table.header()", "header", 8)).toBe(15);
+    expect(completedEmptyCallCaret("  table.header()", "table.header", 8)).toBe(null);
+  });
+
+  test("keeps member completions out of the callable snippet path", async () => {
+    const source = await Bun.file(
+      new URL("../src/editor/autocomplete.ts", import.meta.url),
+    ).text();
+
+    // Members neither gain parentheses nor bypass the snippet machinery, which
+    // is what expands a `${1:}` field the server sends.
+    expect(source).toContain("const callableSnippet = isMemberAccess");
+    expect(source).toContain("? { template: apply, opensArguments: /\\$\\{/u.test(apply) }");
+    expect(source).not.toContain("&& !isMemberAccess) {");
+    // Accepting a member still offers the call's arguments.
+    expect(source).toContain("startCompletion(view);");
   });
 
   test("recognizes an empty manually typed function argument context", () => {
@@ -923,6 +943,44 @@ describe("LSP autocomplete edits", () => {
     expect(typstMemberCompletionValidFor.test(".le")).toBe(false);
   });
 
+  test("recognizes a bare receiver inside code without a hash", () => {
+    const at = (source: string, cursor: number): boolean =>
+      isBareTypstMemberAccessAt(Text.of(source.split("\n")), cursor);
+
+    // A call argument, where the receiver needs no `#`.
+    const table = [
+      "#table(",
+      "  columns: (1fr, 0.82in),",
+      "  align: (left, center),",
+      "  table.hea",
+      "  [Favorable],",
+      ")",
+    ].join("\n");
+    expect(at(table, table.indexOf("table.hea") + "table.hea".length)).toBe(true);
+
+    // A code block and a nested call argument.
+    expect(at("#{\n  items.hea\n}", 13)).toBe(true);
+    const nested = '#figure(\n  image("a.png"),\n  grid.hea\n)';
+    expect(at(nested, nested.indexOf("grid.hea") + "grid.hea".length)).toBe(true);
+
+    // A dotted receiver chain.
+    const chained = "#table(\n  a.b.hea\n)";
+    expect(at(chained, chained.indexOf("a.b.hea") + "a.b.hea".length)).toBe(true);
+
+    // Markup prose keeps its exclusion.
+    const prose = "See example.com for details";
+    expect(at(prose, prose.indexOf("example.com") + "example.".length)).toBe(false);
+
+    // A named argument, and a value inside a string, are not member access.
+    const named = "#table(\n  stroke: ";
+    expect(at(named, named.length)).toBe(false);
+    const quoted = '#import "a.b';
+    expect(at(quoted, quoted.length)).toBe(false);
+
+    // The hash forms keep working through the existing check.
+    expect(isTypstMemberAccessAt("#value.fi", 9)).toBe(true);
+  });
+
   test("keeps direct members and removes Tinymist expression transformations", () => {
     expect(isDirectMemberCompletion({ label: "fields", kind: 3 })).toBe(true);
     expect(isDirectMemberCompletion({ label: "depth", kind: 6 })).toBe(true);
@@ -952,6 +1010,28 @@ describe("LSP autocomplete edits", () => {
     const bareDot = Text.of(['#"hello".']);
     expect(liveTypstMemberCompletionEditOffsets(bareDot, bareDot.length))
       .toEqual({ from: 9, to: 9 });
+  });
+
+  test("replaces a bare member suffix typed after the request was opened", () => {
+    // The request is opened on `table.`, then `hea` is typed before the option
+    // is accepted. The live range must cover what was typed, otherwise the
+    // member is inserted at the stale position and `hea` is stranded after it.
+    const source = [
+      "#table(",
+      "  columns: (1fr, 0.82in),",
+      "  table.hea",
+      ")",
+    ].join("\n");
+    const doc = Text.of(source.split("\n"));
+    const cursor = source.indexOf("table.hea") + "table.hea".length;
+    const replacement = liveTypstMemberCompletionEditOffsets(doc, cursor);
+
+    expect(replacement).toEqual({ from: cursor - 3, to: cursor });
+    expect(
+      doc.sliceString(0, replacement!.from)
+      + "header()"
+      + doc.sliceString(replacement!.to)
+    ).toBe(source.replace("table.hea", "table.header()"));
   });
 
   test("replaces a member suffix on the right-hand side of a let assignment", () => {

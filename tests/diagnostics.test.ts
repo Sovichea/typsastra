@@ -212,4 +212,19 @@ describe("counted console logs", () => {
     expect(persistentLogsAfterManualClear([compilerFailure, relatedCallSite, developerLog]))
       .toEqual([compilerFailure, relatedCallSite]);
   });
+
+  test("marks developer entries counted so the Dev tab can render them", async () => {
+    const source = await Bun.file(
+      new URL("../src/diagnostics/developerLogController.ts", import.meta.url),
+    ).text();
+
+    // Without `counted` the console filters a developer entry out of every
+    // rendered list, so enabling the category would still show nothing.
+    const append = source.slice(
+      source.indexOf("appendDeveloper("),
+      source.indexOf("appendSpellcheckDebug("),
+    );
+    expect(append).toContain('channel: "dev"');
+    expect(append).toContain("counted: true");
+  });
 });

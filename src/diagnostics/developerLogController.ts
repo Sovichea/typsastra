@@ -34,6 +34,9 @@ export class DeveloperLogController {
       source,
       message: entry.message,
       channel: "dev",
+      // Developer entries are opt-in per category, so they must be marked
+      // counted or the console filters them out of every rendered list.
+      counted: true,
     });
   }
 

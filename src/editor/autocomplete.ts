@@ -577,13 +577,43 @@ export function isTypstMemberAccessAt(
   return false;
 }
 
+/**
+ * True when a bare `receiver.` can own fields at the caret. Inside a function
+ * call or a code block the receiver needs no `#`, as in `#table(… table.hea)`.
+ * Markup outside code keeps requiring one, so prose such as `example.com` is
+ * still excluded.
+ */
+export function isBareTypstMemberAccessAt(doc: Text, cursorPosition: number): boolean {
+  const line = doc.lineAt(cursorPosition);
+  const before = line.text.slice(0, cursorPosition - line.from);
+  if (!/\.[\p{L}\p{M}\p{N}_-]*$/u.test(before)) return false;
+  // The receiver must be an identifier or a chain of them, not prose.
+  const receiver = before.replace(/\.[\p{L}\p{M}\p{N}_-]*$/u, "");
+  if (!/(?:^|[\s(,{[])[\p{L}_][\p{L}\p{M}\p{N}_-]*(?:\.[\p{L}_][\p{L}\p{M}\p{N}_-]*)*$/u.test(receiver)) {
+    return false;
+  }
+  if (isInsideTypstFunctionArgumentsAt(doc, cursorPosition)) return true;
+  const sofar = doc.sliceString(0, cursorPosition);
+  const openers = (sofar.match(/[{(]/gu) ?? []).length;
+  const closers = (sofar.match(/[})]/gu) ?? []).length;
+  return openers > closers;
+}
+
 export function liveTypstMemberCompletionEditOffsets(
   doc: Text,
   cursorPosition: number
 ): { from: number; to: number } | null {
   const line = doc.lineAt(cursorPosition);
   const cursor = cursorPosition - line.from;
-  if (!isTypstMemberAccessAt(line.text, cursor)) return null;
+  // A bare receiver inside code carries no `#`, so accept that shape as well.
+  // Otherwise this returns null for it and the caller falls back to the range
+  // captured when the request was made, which predates the text typed since:
+  // accepting `table.hea` after the request saw `table.` would then insert the
+  // member and leave `hea` stranded after it.
+  if (!isTypstMemberAccessAt(line.text, cursor)
+    && !isBareTypstMemberAccessAt(doc, cursorPosition)) {
+    return null;
+  }
   const suffix = /[\p{L}\p{M}\p{N}_-]*$/u.exec(line.text.slice(0, cursor));
   if (!suffix || suffix.index === undefined) return null;
   return { from: line.from + suffix.index, to: cursorPosition };
@@ -1184,10 +1214,16 @@ export function createTypstAutocomplete(
         const isMemberAccess = isTypstMemberAccessAt(
           activeCompletionLine.text,
           completionColumn
-        );
+        ) || isBareTypstMemberAccessAt(context.state.doc, context.pos);
         const fontValueFrom = fontCompletionValueStart(context.state.doc, context.pos);
+        // Trace the contexts that are hard to diagnose from the outside: an
+        // explicit request, a line with a hash, and the completion shapes that
+        // rewrite a quoted value or a member expression.
         const traceRelevant = context.explicit
-          || context.state.doc.lineAt(context.pos).text.includes("#");
+          || activeCompletionLine.text.includes("#")
+          || isMemberAccess
+          || fontValueFrom !== null
+          || isInsideQuotedValue(context.state.doc, context.pos);
         if (traceRelevant) {
           const line = context.state.doc.lineAt(context.pos);
           onTypstCompletionTrace?.(
@@ -1421,12 +1457,20 @@ export function createTypstAutocomplete(
               isHashPrefix,
               Boolean(textEdit) && !isHashPrefix
             );
-            const callableSnippet = normalizeCallableCompletionSnippet(
-              apply,
-              item.kind,
-              item.detail ?? item.labelDetails?.description
-            );
-            if ((insertTextFormat === 2 || callableSnippet.opensArguments) && !isQuotedValue) {
+            // A member completion must not gain parentheses on its own: synthesizing
+              // `header(${})` for `table.hea` dropped the caret inside
+              // `table.header(|)`, where the next request only offers that
+              // call's arguments instead of the receiver's other members. A
+              // `${…}` field from the server is still honored, because it needs
+              // the snippet machinery below to be expanded rather than typed.
+              const callableSnippet = isMemberAccess
+                ? { template: apply, opensArguments: /\$\{/u.test(apply) }
+                : normalizeCallableCompletionSnippet(
+                  apply,
+                  item.kind,
+                  item.detail ?? item.labelDetails?.description
+                );
+              if ((insertTextFormat === 2 || callableSnippet.opensArguments) && !isQuotedValue) {
               const completion = snippetCompletion(callableSnippet.template, {
                 label,
                 detail,
@@ -1480,6 +1524,12 @@ export function createTypstAutocomplete(
                     });
                   } else {
                     snippetApply(view, selected, edit.from, edit.to);
+                    if (traceRelevant) {
+                      const line = view.state.doc.lineAt(edit.from);
+                      onTypstCompletionTrace?.(
+                        `Applied snippet completion: label=${label}; member=${isMemberAccess}; from=${edit.from}; to=${edit.to}; text=${JSON.stringify(line.text)}; anchor=${view.state.selection.main.anchor}.`
+                      );
+                    }
                   }
                   if (isFunctionArgumentValue && !callableSnippet.opensArguments) {
                     const insertedLength = view.state.doc.length
@@ -1504,6 +1554,8 @@ export function createTypstAutocomplete(
                       if (view.state.selection.main.anchor !== anchor) {
                         view.dispatch({ selection: { anchor } });
                       }
+                      // Offer the call's arguments now that the caret is inside
+                      // it, as with any other accepted call.
                       window.setTimeout(() => {
                         view.dispatch({ selection: view.state.selection });
                         startCompletion(view);
@@ -1556,6 +1608,11 @@ export function createTypstAutocomplete(
                   selection: { anchor: edit.from + edit.insert.length },
                   userEvent: "input.complete"
                 });
+                if (traceRelevant) {
+                  onTypstCompletionTrace?.(
+                    `Applied completion: label=${label}; member=${isMemberAccess}; quoted=${isQuotedValue}; from=${edit.from}; to=${edit.to}; insert=${JSON.stringify(edit.insert)}.`
+                  );
+                }
                 if (allowsAdaptivePreference) {
                   recordTypstCompletionPreference(preferenceLabel);
                 }
