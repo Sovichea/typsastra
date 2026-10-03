@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing tag to rebuild using the latest release workflow'
+        required: false
+        type: string
 
 jobs:
   release:
@@ -41,6 +46,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
+          # Manual runs can use the fixed workflow from main while building the
+          # unchanged tagged sources. Do not move an already published tag.
+          ref: ${{ inputs.release_tag || github.ref }}
           submodules: recursive
 
       - name: Install Linux Dependencies
@@ -123,31 +131,40 @@ jobs:
             exit 1
           fi
           echo "Verifying AppImage: $appimage"
-          listing="$(unsquashfs -ll "$appimage" | sed -e 's/^[[:space:]]*//')"
+          # A type-2 AppImage starts with an ELF runtime. SquashFS begins at the
+          # byte offset reported by that runtime, not at byte zero.
+          offset="$("$appimage" --appimage-offset)"
+          if [[ ! "$offset" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid SquashFS offset for $appimage: $offset"
+            exit 1
+          fi
+          listing="$(unsquashfs -offset "$offset" -ll "$appimage")"
+          archive_entry() {
+            local name=${1//./\\.}
+            grep -E -m1 "[[:space:]]squashfs-root/${name}([[:space:]]|$)" <<< "$listing" || true
+          }
           # The AppImage catalog mounts the image and requires these root entries.
           for entry in AppRun .DirIcon Typsastra.png Typsastra.desktop; do
-            if ! printf '%s\n' "$listing" | grep -qE "(^|/)${entry}([[:space:]]|$)"; then
+            if [[ -z "$(archive_entry "$entry")" ]]; then
               echo "::error::$entry is missing from the AppImage root"
-              printf '%s\n' "$listing" | head -30
               exit 1
             fi
           done
-          # These must be relative symlinks. An absolute target points into the
-          # build directory and breaks once the image is mounted at
-          # /tmp/.mount_*, which is what appimage.github.io rejects.
           for link in .DirIcon Typsastra.desktop; do
-            target="$(printf '%s\n' "$listing" | grep -E "(^|/)${link} -> " | head -n1 \
-              | sed -E "s|^.*${link} -> ||" || true)"
-            if [ -z "$target" ]; then
+            line="$(archive_entry "$link")"
+            if [[ "$line" != l* || "$line" != *" -> "* ]]; then
               echo "::error::$link is not a symlink in the AppImage root"
               exit 1
             fi
-            case "$target" in
-              /*)
-                echo "::error::$link points at absolute path $target"
-                exit 1
-                ;;
-            esac
+            target=${line##* -> }
+            if [[ "$target" == /* ]]; then
+              echo "::error::$link points at absolute path $target"
+              exit 1
+            fi
+            if [[ -z "$(archive_entry "$target")" ]]; then
+              echo "::error::$link points at missing target $target"
+              exit 1
+            fi
             echo "OK $link -> $target"
           done
 
