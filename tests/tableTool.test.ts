@@ -544,15 +544,21 @@ describe("table typst generation", () => {
 
     expect(source).toContain("ArrowRight: { row, column: column + cell.colspan }");
     expect(source).toContain("event.shiftKey && this.selectionAnchor");
-    // The builder mounts the shared toolbar with only its own entries.
-    expect(source).toContain("private toolbarEntries(table: StoredTable): ToolbarEntry[]");
-    expect(source).toContain('entries: this.toolbarEntries(table)');
+    // Cell formatting and table properties live in separate toolbars so the
+    // panel always shows which scope a control edits.
+    expect(source).toContain("private selectionToolbarEntries(table: StoredTable): ToolbarEntry[]");
+    expect(source).toContain("private tableToolbarEntries(table: StoredTable): ToolbarEntry[]");
+    expect(source).toContain("entries: this.selectionToolbarEntries(table)");
+    expect(source).toContain("entries: this.tableToolbarEntries(table)");
     expect(source).toContain('id: "rows"');
     expect(source).toContain('id: "columns"');
     expect(source).toContain('id: "cells"');
     expect(source).toContain('id: "borders"');
+    expect(source).toContain('id: "header"');
+    expect(source).toContain('id: "frame"');
     expect(source).toContain('id: "table"');
     expect(source).toContain('id: "style"');
+    expect(source).toContain('id: "fill"');
     expect(source).toContain("private applyTableStyle(");
     expect(source).toContain('id: "bold"');
     expect(source).toContain('id: "italic"');
@@ -617,9 +623,11 @@ describe("table typst generation", () => {
     expect(source).toContain('class="table-import-map"');
     expect(source).toContain('class="table-import-flatten"');
     expect(source).toContain('data-field="table-caption"');
-    expect(source).toContain('id: "caption-position"');
-    expect(source).toContain('id: "caption-center"');
-    expect(source).toContain("private applyCaptionAlign(");
+    // Caption position lives beside the caption text rather than in the
+    // toolbar, and caption alignment is a style/import concern with no control.
+    expect(source).toContain('data-field="table-caption-position"');
+    expect(source).not.toContain('data-field="table-caption-align"');
+    expect(source).toContain("private applyCaptionPosition(");
     // Tier 1 controls.
     expect(source).toContain("private applyRaw(");
     expect(source).toContain("private applyFill(");
@@ -700,6 +708,79 @@ describe("table typst generation", () => {
     expect(source).toContain("private undo(): void");
     expect(source).toContain("private redo(): void");
     expect(source).toContain("private commitHistory(): void");
+  });
+
+  test("separates cell-scope controls from table-scope controls", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    const selection = source.slice(
+      source.indexOf("private selectionToolbarEntries("),
+      source.indexOf("private tableToolbarEntries("),
+    );
+    const table = source.slice(source.indexOf("private tableToolbarEntries("));
+
+    // Cell formatting only ever edits the selection.
+    for (const id of ['id: "align"', 'id: "bold"', 'id: "italic"', 'id: "fill"', 'id: "borders"', 'id: "cells"']) {
+      expect(selection).toContain(id);
+      expect(table).not.toContain(id);
+    }
+    // Table properties never pretend to be per-cell.
+    for (const id of ['id: "rows"', 'id: "columns"', 'id: "header"', 'id: "frame"', 'id: "table"', 'id: "style"']) {
+      expect(table).toContain(id);
+      expect(selection).not.toContain(id);
+    }
+    // Header and footer toggles form one subsystem, and the frame groups the
+    // stroke, gutter, and page-breaking controls.
+    expect(table).toContain('label: "Header row"');
+    expect(table).toContain('label: "Footer row"');
+    expect(table).toContain('id: "frame"');
+    expect(table).toContain('label: "Break across pages"');
+    // The panel states which scope each toolbar edits and dims the cell toolbar
+    // while nothing is selected.
+    expect(source).toContain('data-field="selection-scope"');
+    expect(source).toContain(">Applies to the whole table</span>");
+    expect(source).toContain('classList.toggle("is-inactive", !range)');
+    // A mixed selection must not read as a single "Default" value.
+    expect(source).toContain("private selectionSharedValue<T>(");
+    expect(source).toContain('return this.selectionAlign(table) === null ? "Mixed" : "Default"');
+  });
+
+  test("keeps inspector typography consistent and notice text on one line", async () => {
+    const style = await Bun.file(new URL("../src/style.css", import.meta.url)).text();
+
+    // The notice is a grid for whole lines only; inline markup must not become
+    // its own row, so the size is set here rather than inherited from the pane.
+    const notice = style.slice(
+      style.indexOf(".image-tool-notice {"),
+      style.indexOf(".image-tool-metadata-grid {"),
+    );
+    expect(notice).toContain("font-size: 11px;");
+    expect(notice).toContain(".image-tool-notice code {");
+    // Caption controls match the other pane inputs rather than the smaller
+    // secondary text.
+    const select = style.slice(
+      style.indexOf(".table-tool-select {"),
+      style.indexOf(".table-tool-gutter-add {"),
+    );
+    expect(select).toContain("font: 12px var(--font-family-sans);");
+  });
+
+  test("offers spreadsheet-style insert buttons in the grid gutters", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/tableTool.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("private gridAddButton(table: StoredTable, kind:");
+    expect(source).toContain('button.className = "table-tool-gutter-add"');
+    expect(source).toContain("button.dataset.add = kind");
+    expect(source).toContain("private addRow(table: StoredTable): void");
+    expect(source).toContain("private addColumn(table: StoredTable): void");
+    // The menus reuse the same helpers, so the limits are reported once.
+    expect(source).toContain("onSelect: () => this.addRow(table)");
+    expect(source).toContain("onSelect: () => this.addColumn(table)");
+    expect(source).toContain("A table can hold at most");
   });
 
   test("uses Excel-style navigation and editing states", async () => {

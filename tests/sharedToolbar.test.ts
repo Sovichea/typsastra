@@ -30,8 +30,9 @@ describe("shared toolbar", () => {
 
     expect(source).toContain('from "../ui/toolbar"');
     expect(source).toContain("this.toolbar = createToolbar({");
-    expect(source).toContain("this.toolbar?.setSelectValue(");
-    expect(source).toContain("this.toolbar?.setActive(");
+    // The table mounts two toolbars: table properties and cell formatting.
+    expect(source).toContain("this.selectionToolbar = createToolbar({");
+    expect(source).toContain("this.selectionToolbar?.setActive(");
     expect(source).toContain("this.toolbar?.openMenuAt(");
     // The hand-rolled menu machinery now lives in the shared module.
     expect(source).not.toContain("private appendMenuItem(");

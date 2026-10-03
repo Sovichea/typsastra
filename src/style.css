@@ -990,10 +990,12 @@ html.native-app-menu #app-menus {
   box-sizing: border-box;
   border: 1px solid var(--ui-border);
   border-radius: 4px;
-  color: var(--ui-text);
+color: var(--ui-text);
   background: var(--ui-bg);
-  font: 11px var(--ui-font), sans-serif;
+  font-family: var(--font-family-sans);
+  cursor: pointer;
 }
+.table-tool-select:focus-visible { outline: 1px solid var(--ui-accent-color); outline-offset: -1px; }
 
 .document-typography-dialog select,
 .document-language-dialog select {
@@ -3223,6 +3225,39 @@ body.table-tools-active #code-render-pane {
 }
 .table-tool-menubar { margin: 6px 0; }
 .table-tool-caption { margin-top: 6px; }
+/* Scope blocks make it explicit whether controls edit cells or the table. */
+.table-tool-scope {
+  display: grid;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--ui-border);
+}
+.table-tool-scope .table-tool-menubar { margin: 0; }
+.table-tool-scope-label {
+  color: var(--ui-header-text, var(--ui-text));
+  font-size: 11px;
+}
+.table-tool-menubar.is-inactive {
+  opacity: 0.45;
+}
+/* Caption row: position, then the caption text itself. */
+.table-tool-caption-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+.table-tool-caption-row .table-tool-field-shell { flex: 1; min-width: 0; }
+.table-tool-select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font: 12px var(--font-family-sans);
+}
 /* New-table picker: sample cards with compiled thumbnails. */
 .table-samples-overlay {
   position: fixed;
@@ -3467,7 +3502,7 @@ body.table-tools-active #code-render-pane {
   font: 11px var(--font-family-sans);
 }
 .app-menu-field input:focus { border-color: var(--ui-accent-color); outline: none; }
-.table-tool-grid-host { overflow-x: auto; padding: 8px 4px; }
+.table-tool-grid-host { overflow-x: auto; margin-top: 10px; padding: 8px 4px; }
 .table-tool-grid {
   display: grid;
   /* A leading track holds the row-number column; row 1 holds column letters. */
@@ -3512,6 +3547,29 @@ body.table-tools-active #code-render-pane {
   margin: 0;
   cursor: pointer;
   accent-color: var(--ui-accent-color);
+}
+/* Insert affordance at the end of the row/column gutters. */
+.table-tool-gutter-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 22px;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed var(--ui-border);
+  border-radius: 3px;
+  color: var(--ui-header-text, var(--ui-text));
+  background: transparent;
+  font: 12px/1 var(--font-family-sans);
+  cursor: pointer;
+  user-select: none;
+}
+.table-tool-gutter-add:hover {
+  border-style: solid;
+  border-color: var(--ui-accent-color);
+  color: var(--ui-text);
+  background: var(--ui-hover);
 }
 .table-tool-cell-wrap { position: relative; display: grid; }
 .table-tool-cell-shell {
@@ -3764,8 +3822,19 @@ body.table-tools-active #code-render-pane {
   border-radius: 0;
   color: var(--ui-header-text);
   background: color-mix(in srgb, var(--ui-bg) 88%, var(--ui-hover));
+  /* Secondary text shares one size across the inspector panes; the grid here
+     is only for stacking whole lines, so inline markup must stay inline. */
+  font-size: 11px;
+  line-height: 1.6;
 }
 .image-tool-notice strong { color: var(--ui-text); font-weight: 500; }
+.image-tool-notice code {
+  padding: 0 2px;
+  color: var(--ui-text);
+  background: color-mix(in srgb, var(--ui-text) 10%, transparent);
+  font-family: var(--editor-code-font);
+  font-size: 11px;
+}
 .image-tool-notice.warning { border-color: color-mix(in srgb, var(--ui-warning-icon-color) 55%, var(--ui-border)); }
 .image-tool-notice.warning strong { color: var(--ui-warning-icon-color); }
 

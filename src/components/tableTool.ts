@@ -19,7 +19,6 @@ import type {
   StoredTableCell,
   StoredTableCellBorders,
   StoredTableAlignment,
-  StoredTableCaptionAlign,
   StoredTableCaptionPosition,
   StoredTableEmphasis,
   StoredTableRule,
@@ -299,6 +298,7 @@ export class TableToolController {
   private editingCell: Slot | null = null;
   private editStartValue = "";
   private toolbar: SharedToolbar | null = null;
+  private selectionToolbar: SharedToolbar | null = null;
   private readonly cellInputs = new Map<string, HTMLInputElement>();
   private historyPast: StoredTable[] = [];
   private historyFuture: StoredTable[] = [];
@@ -966,6 +966,8 @@ export class TableToolController {
     }
     this.toolbar?.dispose();
     this.toolbar = null;
+    this.selectionToolbar?.dispose();
+    this.selectionToolbar = null;
     const table = this.selected();
     if (!table) {
       this.inspector.innerHTML =
@@ -980,14 +982,22 @@ export class TableToolController {
       `<span class="image-tool-status current-document">Table</span></div>` +
       `<section class="image-tool-section"><h3>Linked from</h3>` +
       `<div class="image-tool-references" data-field="table-link"></div></section>` +
-      `<section class="image-tool-section"><h3>Structure</h3>` +
+      `<section class="image-tool-section"><h3>Cells</h3>` +
       `<label class="table-tool-name">Name <input class="table-tool-field" data-field="table-name" type="text" maxlength="80" /></label>` +
-      `<div class="table-tool-menubar-host"></div>` +
-      `<div class="table-tool-selection" data-field="selection-summary" aria-live="polite"></div>` +
+      `<div class="table-tool-scope"><span class="table-tool-scope-label" data-field="selection-scope" aria-live="polite"></span>` +
+      `<div class="table-tool-menubar-host" data-host="selection"></div></div>` +
+      `<div class="table-tool-scope table-scope"><span class="table-tool-scope-label">Applies to the whole table</span>` +
+      `<div class="table-tool-menubar-host" data-host="table"></div></div>` +
       `<div class="table-tool-grid-host"></div>` +
-      `<label class="table-tool-name table-tool-caption">Caption <input class="table-tool-field" data-field="table-caption" type="text" maxlength="200" placeholder="Optional caption" /></label>` +
+      `</section>` +
+      `<section class="image-tool-section"><h3>Caption and semantics</h3>` +
+      `<div class="table-tool-caption-row">` +
+      `<select class="table-tool-select" data-field="table-caption-position" aria-label="Caption position">` +
+      `<option value="bottom">Below table</option><option value="top">Above table</option></select>` +
+      `<input class="table-tool-field" data-field="table-caption" type="text" maxlength="200" placeholder="Optional caption" aria-label="Caption" /></div>` +
       `<label class="table-tool-name">Label <input class="table-tool-field" data-field="table-label" type="text" maxlength="64" placeholder="e.g. tab:results" /></label>` +
       `<label class="table-tool-name">Alt text <input class="table-tool-field" data-field="table-alt" type="text" maxlength="300" placeholder="Optional description" /></label>` +
+      `<div class="image-tool-notice"><span>A label lets you reference this table with <code>@tab:results</code>. Alt text is read by screen readers in exported PDFs.</span></div>` +
       `</section>` +
       `<section class="image-tool-section"><h3>Generated Typst</h3>` +
       `<div class="image-tool-actions">` +
@@ -1058,12 +1068,27 @@ export class TableToolController {
       this.emitChange();
     });
 
+    this.selectionToolbar = createToolbar({
+      className: "table-tool-menubar",
+      ariaLabel: "Selected cell formatting",
+      entries: this.selectionToolbarEntries(table),
+    });
+    this.inspector.querySelector('[data-host="selection"]')
+      ?.replaceWith(this.selectionToolbar.element);
+
     this.toolbar = createToolbar({
       className: "table-tool-menubar",
-      ariaLabel: "Table actions",
-      entries: this.toolbarEntries(table),
+      ariaLabel: "Table properties",
+      entries: this.tableToolbarEntries(table),
     });
-    this.inspector.querySelector(".table-tool-menubar-host")?.replaceWith(this.toolbar.element);
+    this.inspector.querySelector('[data-host="table"]')?.replaceWith(this.toolbar.element);
+
+    const captionPosition = this.inspector
+      .querySelector<HTMLSelectElement>('[data-field="table-caption-position"]')!;
+    captionPosition.value = table.captionPosition;
+    captionPosition.addEventListener("change", () => {
+      this.applyCaptionPosition(table, captionPosition.value as StoredTableCaptionPosition);
+    });
 
     const copy = this.inspector.querySelector<HTMLButtonElement>('[data-action="copy"]')!;
     copy.prepend(createAppIcon("copy", { size: 13 }));
@@ -1098,121 +1123,67 @@ export class TableToolController {
     this.updateCode(table);
   }
 
-  /** The table editor shares the app toolbar, exposing only table controls. */
-  private toolbarEntries(table: StoredTable): ToolbarEntry[] {
+  /**
+   * Controls that act on the selected cells. They live in their own toolbar so
+   * the panel always shows which scope a control belongs to; the whole toolbar
+   * is dimmed while nothing is selected.
+   */
+  private selectionToolbarEntries(table: StoredTable): ToolbarEntry[] {
     return [
       {
         kind: "menu",
-        id: "rows",
-        label: "Rows",
+        id: "align",
+        label: "Align",
         entries: () => [
-          { kind: "item", label: "Move row up", icon: "arrowUp", onSelect: () => this.moveRow(table, -1) },
-          { kind: "item", label: "Move row down", icon: "arrowDown", onSelect: () => this.moveRow(table, 1) },
-          { kind: "separator" },
-          {
-            kind: "item",
-            label: "Add row",
-            icon: "plus",
-            onSelect: () => {
-              if (table.rows.length >= MAX_ROWS) return;
-              table.rows.push(emptyRow(table.columns));
-              table.rowSizes.push("");
-              this.refreshGrid(table);
-              this.emitChange();
-            },
-          },
-          {
-            kind: "item",
-            label: "Delete row(s)",
-            icon: "minus",
-            onSelect: () => void this.deleteSelectedRows(table),
-          },
-          { kind: "separator" },
-          { kind: "heading", label: "Row height" },
+          { kind: "heading", label: "Horizontal" },
           {
             kind: "choices",
-            values: ["", "40pt", "60pt"],
-            current: () => this.selectionRowSize(table),
-            format: value => (value === "" ? "Auto" : String(value)),
-            onSelect: value => this.applyRowSize(table, String(value)),
+            values: ["", "left", "center", "right"],
+            current: () => this.selectionAlign(table) ?? "",
+            format: value => this.alignmentChoiceLabel(table, String(value)),
+            onSelect: value => this.applyAlignment(table, (value || null) as StoredTableAlignment | null),
           },
+          { kind: "separator" },
+          { kind: "heading", label: "Vertical" },
           {
-            kind: "field",
-            value: this.selectionRowSize(table),
-            placeholder: "e.g. 40pt or 1fr",
-            ariaLabel: "Custom row height",
-            onCommit: value => this.applyRowSize(table, value),
+            kind: "choices",
+            values: ["", "top", "center", "bottom"],
+            current: () => this.selectionVerticalAlign(table) ?? "",
+            format: value => this.verticalAlignmentChoiceLabel(table, String(value)),
+            onSelect: value => this.applyVerticalAlignment(
+              table,
+              (value || null) as StoredTableVerticalAlignment | null,
+            ),
           },
         ],
       },
       {
-        kind: "menu",
-        id: "columns",
-        label: "Columns",
-        entries: () => [
-          { kind: "item", label: "Move column left", icon: "chevronLeft", onSelect: () => this.moveColumn(table, -1) },
-          { kind: "item", label: "Move column right", icon: "chevronRight", onSelect: () => this.moveColumn(table, 1) },
-          { kind: "separator" },
-          {
-            kind: "item",
-            label: "Add column",
-            icon: "plus",
-            onSelect: () => {
-              if (table.columns >= MAX_COLUMNS) return;
-              table.columns += 1;
-              for (const row of table.rows) row.push(emptyCell());
-              table.columnSizes.push("");
-              this.refreshGrid(table);
-              this.emitChange();
-            },
-          },
-          {
-            kind: "item",
-            label: "Delete column(s)",
-            icon: "minus",
-            onSelect: () => void this.deleteSelectedColumns(table),
-          },
-          { kind: "separator" },
-          { kind: "heading", label: "Column width" },
-          {
-            kind: "choices",
-            values: ["", "1fr", "2fr", "3fr"],
-            current: () => this.selectionColumnSize(table),
-            format: value => (value === "" ? "Auto" : String(value)),
-            onSelect: value => this.applyColumnSize(table, String(value)),
-          },
-          {
-            kind: "field",
-            value: this.selectionColumnSize(table),
-            placeholder: "e.g. 80pt or 2fr",
-            ariaLabel: "Custom column width",
-            onCommit: value => this.applyColumnSize(table, value),
-          },
-          { kind: "separator" },
-          { kind: "item", label: "Sort ascending", icon: "arrowUp", onSelect: () => this.sortByColumn(table, 1) },
-          { kind: "item", label: "Sort descending", icon: "arrowDown", onSelect: () => this.sortByColumn(table, -1) },
-        ],
+        kind: "toggle",
+        id: "bold",
+        title: "Bold",
+        icon: "bold",
+        onSelect: () => this.toggleEmphasis(table, "bold"),
+      },
+      {
+        kind: "toggle",
+        id: "italic",
+        title: "Italic",
+        icon: "italic",
+        onSelect: () => this.toggleEmphasis(table, "italic"),
       },
       {
         kind: "menu",
-        id: "cells",
-        label: "Cells",
+        id: "fill",
+        label: "Fill",
         entries: () => [
-          { kind: "item", label: "Merge cells", onSelect: () => this.mergeSelection(table) },
-          { kind: "item", label: "Split cells", onSelect: () => this.splitSelection(table) },
-          { kind: "separator" },
-          {
-            kind: "toggle",
-            label: "Typst content",
-            checked: this.selectionIsRaw(table),
-            onSelect: () => this.applyRaw(table, !this.selectionIsRaw(table)),
-          },
           { kind: "heading", label: "Fill" },
           { kind: "color", value: this.fillColor, onInput: value => { this.fillColor = value; this.applyFill(table, value); } },
           { kind: "item", label: "No fill", icon: "x", onSelect: () => this.applyFill(table, null) },
+          { kind: "separator" },
           { kind: "heading", label: "Text color" },
           { kind: "color", value: this.textColor, onInput: value => { this.textColor = value; this.applyTextColor(table, value); } },
           { kind: "item", label: "Default text color", icon: "x", onSelect: () => this.applyTextColor(table, null) },
+          { kind: "separator" },
           { kind: "heading", label: "Inset" },
           {
             kind: "choices",
@@ -1220,31 +1191,6 @@ export class TableToolController {
             current: () => this.selectionInset(table) ?? 5,
             format: value => `${value}pt`,
             onSelect: value => this.applyInset(table, Number(value)),
-          },
-          { kind: "separator" },
-          {
-            kind: "toggle",
-            label: "Rotate content",
-            checked: this.selectionAll(table, cell => cell.rotate),
-            onSelect: () => this.applyRotate(table, !this.selectionAll(table, cell => cell.rotate)),
-          },
-          {
-            kind: "toggle",
-            label: "Keep together",
-            checked: this.selectionAll(table, cell => cell.breakable === false),
-            onSelect: () => this.applyCellBreakable(
-              table,
-              this.selectionAll(table, cell => cell.breakable === false) ? null : false,
-            ),
-          },
-          { kind: "separator" },
-          { kind: "item", label: "Copy formatting", icon: "copy", onSelect: () => this.copyFormatting(table) },
-          {
-            kind: "item",
-            label: "Paste formatting",
-            icon: "clipboardPaste",
-            disabled: !this.copiedFormats,
-            onSelect: () => this.pasteFormatting(table),
           },
         ],
       },
@@ -1303,8 +1249,138 @@ export class TableToolController {
       },
       {
         kind: "menu",
-        id: "table",
-        label: "Table",
+        id: "cells",
+        label: "Cells",
+        entries: () => [
+          { kind: "item", label: "Merge cells", onSelect: () => this.mergeSelection(table) },
+          { kind: "item", label: "Split cells", onSelect: () => this.splitSelection(table) },
+          { kind: "separator" },
+          {
+            kind: "toggle",
+            label: "Typst content",
+            checked: this.selectionIsRaw(table),
+            onSelect: () => this.applyRaw(table, !this.selectionIsRaw(table)),
+          },
+          {
+            kind: "toggle",
+            label: "Rotate content",
+            checked: this.selectionAll(table, cell => cell.rotate),
+            onSelect: () => this.applyRotate(table, !this.selectionAll(table, cell => cell.rotate)),
+          },
+          {
+            kind: "toggle",
+            label: "Keep together",
+            checked: this.selectionAll(table, cell => cell.breakable === false),
+            onSelect: () => this.applyCellBreakable(
+              table,
+              this.selectionAll(table, cell => cell.breakable === false) ? null : false,
+            ),
+          },
+          { kind: "separator" },
+          {
+            kind: "item",
+            label: "Copy formatting",
+            icon: "copy",
+            onSelect: () => this.copyFormatting(table),
+          },
+          {
+            kind: "item",
+            label: "Paste formatting",
+            icon: "clipboardPaste",
+            disabled: !this.copiedFormats,
+            onSelect: () => this.pasteFormatting(table),
+          },
+        ],
+      },
+    ];
+  }
+
+  /** Controls that act on the table as a whole. */
+  private tableToolbarEntries(table: StoredTable): ToolbarEntry[] {
+    return [
+      {
+        kind: "menu",
+        id: "rows",
+        label: "Rows",
+        entries: () => [
+          { kind: "item", label: "Move row up", icon: "arrowUp", onSelect: () => this.moveRow(table, -1) },
+          { kind: "item", label: "Move row down", icon: "arrowDown", onSelect: () => this.moveRow(table, 1) },
+          { kind: "separator" },
+          {
+            kind: "item",
+            label: "Add row",
+            icon: "plus",
+            onSelect: () => this.addRow(table),
+          },
+          {
+            kind: "item",
+            label: "Delete row(s)",
+            icon: "minus",
+            onSelect: () => void this.deleteSelectedRows(table),
+          },
+          { kind: "separator" },
+          { kind: "heading", label: "Row height" },
+          {
+            kind: "choices",
+            values: ["", "40pt", "60pt"],
+            current: () => this.selectionRowSize(table),
+            format: value => (value === "" ? "Auto" : String(value)),
+            onSelect: value => this.applyRowSize(table, String(value)),
+          },
+          {
+            kind: "field",
+            value: this.selectionRowSize(table),
+            placeholder: "e.g. 40pt or 1fr",
+            ariaLabel: "Custom row height",
+            onCommit: value => this.applyRowSize(table, value),
+          },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "columns",
+        label: "Columns",
+        entries: () => [
+          { kind: "item", label: "Move column left", icon: "chevronLeft", onSelect: () => this.moveColumn(table, -1) },
+          { kind: "item", label: "Move column right", icon: "chevronRight", onSelect: () => this.moveColumn(table, 1) },
+          { kind: "separator" },
+          {
+            kind: "item",
+            label: "Add column",
+            icon: "plus",
+            onSelect: () => this.addColumn(table),
+          },
+          {
+            kind: "item",
+            label: "Delete column(s)",
+            icon: "minus",
+            onSelect: () => void this.deleteSelectedColumns(table),
+          },
+          { kind: "separator" },
+          { kind: "heading", label: "Column width" },
+          {
+            kind: "choices",
+            values: ["", "1fr", "2fr", "3fr"],
+            current: () => this.selectionColumnSize(table),
+            format: value => (value === "" ? "Auto" : String(value)),
+            onSelect: value => this.applyColumnSize(table, String(value)),
+          },
+          {
+            kind: "field",
+            value: this.selectionColumnSize(table),
+            placeholder: "e.g. 80pt or 2fr",
+            ariaLabel: "Custom column width",
+            onCommit: value => this.applyColumnSize(table, value),
+          },
+          { kind: "separator" },
+          { kind: "item", label: "Sort ascending", icon: "arrowUp", onSelect: () => this.sortByColumn(table, 1) },
+          { kind: "item", label: "Sort descending", icon: "arrowDown", onSelect: () => this.sortByColumn(table, -1) },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "header",
+        label: "Header",
         entries: () => [
           {
             kind: "toggle",
@@ -1347,6 +1423,32 @@ export class TableToolController {
           { kind: "separator" },
           {
             kind: "toggle",
+            label: "Footer row",
+            checked: table.footerRow,
+            onSelect: () => {
+              table.footerRow = !table.footerRow;
+              this.renderGrid(table);
+              this.emitChange();
+            },
+          },
+          {
+            kind: "toggle",
+            label: "Repeat footer",
+            checked: table.footerRepeat,
+            onSelect: () => {
+              table.footerRepeat = !table.footerRepeat;
+              this.emitChange();
+            },
+          },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "frame",
+        label: "Frame",
+        entries: () => [
+          {
+            kind: "toggle",
             label: "Table border",
             checked: table.stroke === "solid",
             onSelect: () => {
@@ -1378,25 +1480,19 @@ export class TableToolController {
             },
           },
           { kind: "separator" },
+          { kind: "heading", label: `Gutter (${table.gutter}pt)` },
           {
-            kind: "toggle",
-            label: "Footer row",
-            checked: table.footerRow,
-            onSelect: () => {
-              table.footerRow = !table.footerRow;
+            kind: "choices",
+            values: [0, 2, 4, 8],
+            current: () => table.gutter,
+            format: value => `${value}pt`,
+            onSelect: value => {
+              table.gutter = Number(value);
               this.renderGrid(table);
               this.emitChange();
             },
           },
-          {
-            kind: "toggle",
-            label: "Repeat footer",
-            checked: table.footerRepeat,
-            onSelect: () => {
-              table.footerRepeat = !table.footerRepeat;
-              this.emitChange();
-            },
-          },
+          { kind: "separator" },
           {
             kind: "toggle",
             label: "Break across pages",
@@ -1407,8 +1503,15 @@ export class TableToolController {
               this.emitChange();
             },
           },
+        ],
+      },
+      {
+        kind: "menu",
+        id: "table",
+        label: "Table",
+        entries: () => [
+          { kind: "item", label: "Transpose", onSelect: () => this.transpose(table) },
           { kind: "separator" },
-          { kind: "heading", label: "Document" },
           {
             kind: "item",
             label: "Sync linked blocks",
@@ -1424,20 +1527,6 @@ export class TableToolController {
           { kind: "separator" },
           { kind: "item", label: "Export table…", onSelect: () => this.exportTable(table) },
           { kind: "item", label: "Import table…", onSelect: () => void this.importTable() },
-          { kind: "heading", label: `Gutter (${table.gutter}pt)` },
-          {
-            kind: "choices",
-            values: [0, 2, 4, 8],
-            current: () => table.gutter,
-            format: value => `${value}pt`,
-            onSelect: value => {
-              table.gutter = Number(value);
-              this.renderGrid(table);
-              this.emitChange();
-            },
-          },
-          { kind: "separator" },
-          { kind: "item", label: "Transpose", onSelect: () => this.transpose(table) },
         ],
       },
       { kind: "separator" },
@@ -1455,54 +1544,6 @@ export class TableToolController {
         ],
         onChange: value => this.applyTableStyle(table, value as StoredTableStyle),
       },
-      {
-        kind: "select",
-        id: "align",
-        label: "Align",
-        value: "",
-        options: [
-          { value: "", label: "Default" },
-          { value: "left", label: "Left" },
-          { value: "center", label: "Center" },
-          { value: "right", label: "Right" },
-        ],
-        onChange: value => this.applyAlignment(table, (value || null) as StoredTableAlignment | null),
-      },
-      {
-        kind: "select",
-        id: "vertical",
-        label: "Vertical",
-        value: "",
-        options: [
-          { value: "", label: "Default" },
-          { value: "top", label: "Top" },
-          { value: "center", label: "Middle" },
-          { value: "bottom", label: "Bottom" },
-        ],
-        onChange: value => this.applyVerticalAlignment(table, (value || null) as StoredTableVerticalAlignment | null),
-      },
-      { kind: "separator" },
-      {
-        kind: "select",
-        id: "caption-position",
-        label: "Caption",
-        value: table.captionPosition,
-        options: [
-          { value: "bottom", label: "Below" },
-          { value: "top", label: "Above" },
-        ],
-        onChange: value => this.applyCaptionPosition(table, value as StoredTableCaptionPosition),
-      },
-      {
-        kind: "toggle",
-        id: "caption-center",
-        title: "Center caption",
-        icon: "alignCenter",
-        onSelect: () => this.applyCaptionAlign(table, table.captionAlign === "center" ? "left" : "center"),
-      },
-      { kind: "separator" },
-      { kind: "toggle", id: "bold", title: "Bold", icon: "bold", onSelect: () => this.toggleEmphasis(table, "bold") },
-      { kind: "toggle", id: "italic", title: "Italic", icon: "italic", onSelect: () => this.toggleEmphasis(table, "italic") },
     ];
   }
 
@@ -1511,6 +1552,46 @@ export class TableToolController {
     const current = focus ? table.rows[focus.row]?.[focus.column]?.emphasis ?? null : null;
     this.applyEmphasis(table, current === value ? null : value);
     this.syncCellSelects(table);
+  }
+
+  /** The "+" button at the end of the row or column gutter. */
+  private gridAddButton(table: StoredTable, kind: "row" | "column"): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "table-tool-gutter-add";
+    button.dataset.add = kind;
+    button.textContent = "+";
+    button.title = kind === "row" ? "Add a row" : "Add a column";
+    button.setAttribute("aria-label", button.title);
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      if (kind === "row") this.addRow(table);
+      else this.addColumn(table);
+    });
+    return button;
+  }
+
+  private addRow(table: StoredTable): void {
+    if (table.rows.length >= MAX_ROWS) {
+      this.deps.showPreviewMessage?.(`A table can hold at most ${MAX_ROWS} rows.`);
+      return;
+    }
+    table.rows.push(emptyRow(table.columns));
+    table.rowSizes.push("");
+    this.refreshGrid(table);
+    this.emitChange();
+  }
+
+  private addColumn(table: StoredTable): void {
+    if (table.columns >= MAX_COLUMNS) {
+      this.deps.showPreviewMessage?.(`A table can hold at most ${MAX_COLUMNS} columns.`);
+      return;
+    }
+    table.columns += 1;
+    for (const row of table.rows) row.push(emptyCell());
+    table.columnSizes.push("");
+    this.refreshGrid(table);
+    this.emitChange();
   }
 
   private async deleteTable(table: StoredTable): Promise<void> {
@@ -1584,6 +1665,16 @@ export class TableToolController {
       header.addEventListener("click", event => this.selectRow(table, row, event.shiftKey));
       grid.appendChild(header);
     }
+    // Spreadsheet-style insert affordances, so the common case never needs the
+    // Rows or Columns menus. They sit in the implicit trailing gutter cell.
+    const addColumn = this.gridAddButton(table, "column");
+    addColumn.style.gridRow = "1";
+    addColumn.style.gridColumn = `${table.columns + 2}`;
+    grid.appendChild(addColumn);
+    const addRow = this.gridAddButton(table, "row");
+    addRow.style.gridRow = `${table.rows.length + 2}`;
+    addRow.style.gridColumn = "1";
+    grid.appendChild(addRow);
     table.rows.forEach((row, rowIndex) => {
       row.forEach((cell, columnIndex) => {
         if (cell.covered) return;
@@ -1918,18 +2009,22 @@ export class TableToolController {
   }
 
   private syncSelectionSummary(): void {
-    const summary = this.inspector.querySelector<HTMLElement>('[data-field="selection-summary"]');
-    if (!summary) return;
+    const scope = this.inspector.querySelector<HTMLElement>('[data-field="selection-scope"]');
     const range = this.selectionRange();
+    // The selection toolbar only makes sense with a selection: say so, and dim
+    // it, instead of leaving controls that silently do nothing.
+    this.selectionToolbar?.element.classList.toggle("is-inactive", !range);
+    if (!scope) return;
     if (!range) {
-      summary.textContent = "Click a cell to start. Shift+click or Shift+arrows select a range.";
+      scope.textContent = "Applies to selected cells — click a cell to start. "
+        + "Shift+click or Shift+arrows select a range.";
       return;
     }
     const rows = range.maxRow - range.minRow + 1;
     const columns = range.maxColumn - range.minColumn + 1;
-    summary.textContent = rows === 1 && columns === 1
-      ? `Cell R${range.minRow + 1}C${range.minColumn + 1}. Shift+click or Shift+arrows select a range.`
-      : `Selected ${rows} × ${columns} cells.`;
+    scope.textContent = rows === 1 && columns === 1
+      ? "Applies to cell R" + String(range.minRow + 1) + "C" + String(range.minColumn + 1)
+      : `Applies to ${rows} × ${columns} selected cells`;
   }
 
   private applyTableStyle(table: StoredTable, style: StoredTableStyle): void {
@@ -1940,13 +2035,6 @@ export class TableToolController {
 
   private applyCaptionPosition(table: StoredTable, position: StoredTableCaptionPosition): void {
     table.captionPosition = position;
-    this.refreshGrid(table);
-    this.syncCellSelects(table);
-    this.emitChange();
-  }
-
-  private applyCaptionAlign(table: StoredTable, align: StoredTableCaptionAlign): void {
-    table.captionAlign = align;
     this.refreshGrid(table);
     this.syncCellSelects(table);
     this.emitChange();
@@ -2128,18 +2216,44 @@ export class TableToolController {
   }
 
   private selectionInset(table: StoredTable): number | null {
+    return this.selectionSharedValue(table, cell => cell.inset);
+  }
+
+  /**
+   * Shared property of every selected cell, or null when the selection is empty
+   * or mixed. A mixed selection must not read as a single "Default" value.
+   */
+  private selectionSharedValue<T>(table: StoredTable, read: (cell: StoredTableCell) => T): T | null {
     let any = false;
-    let value: number | null = null;
+    let value: T | null = null;
     let mixed = false;
     this.forEachSelectionOrigin(table, cell => {
       if (!any) {
         any = true;
-        value = cell.inset;
-      } else if (cell.inset !== value) {
+        value = read(cell);
+      } else if (read(cell) !== value) {
         mixed = true;
       }
     });
     return any && !mixed ? value : null;
+  }
+
+  private selectionAlign(table: StoredTable): string | null {
+    return this.selectionSharedValue(table, cell => cell.align);
+  }
+
+  private selectionVerticalAlign(table: StoredTable): string | null {
+    return this.selectionSharedValue(table, cell => cell.verticalAlign);
+  }
+
+  private alignmentChoiceLabel(table: StoredTable, value: string): string {
+    if (value !== "") return value[0].toUpperCase() + value.slice(1);
+    return this.selectionAlign(table) === null ? "Mixed" : "Default";
+  }
+
+  private verticalAlignmentChoiceLabel(table: StoredTable, value: string): string {
+    if (value !== "") return value === "center" ? "Middle" : value[0].toUpperCase() + value.slice(1);
+    return this.selectionVerticalAlign(table) === null ? "Mixed" : "Default";
   }
 
   private selectionRowSize(table: StoredTable): string {
@@ -2922,16 +3036,11 @@ export class TableToolController {
   private syncCellSelects(table: StoredTable): void {
     const focus = this.selectionFocus;
     const cell = focus ? table.rows[focus.row]?.[focus.column] : null;
-    this.toolbar?.setSelectValue("align", cell?.align ?? "");
-    this.toolbar?.setDisabled("align", !focus);
-    this.toolbar?.setSelectValue("vertical", cell?.verticalAlign ?? "");
-    this.toolbar?.setDisabled("vertical", !focus);
-    this.toolbar?.setActive("bold", cell?.emphasis === "bold");
-    this.toolbar?.setActive("italic", cell?.emphasis === "italic");
-    this.toolbar?.setDisabled("bold", !focus);
-    this.toolbar?.setDisabled("italic", !focus);
-    this.toolbar?.setSelectValue("caption-position", table.captionPosition);
-    this.toolbar?.setActive("caption-center", table.captionAlign === "center");
+    // Menu-based controls read the whole selection, so a mixed range stays
+    // visible as "Mixed" instead of collapsing to the focus cell.
+    this.selectionToolbar?.setActive("bold", cell?.emphasis === "bold");
+    this.selectionToolbar?.setActive("italic", cell?.emphasis === "italic");
+    this.syncSelectionSummary();
   }
 
   private updateCode(table: StoredTable): void {
