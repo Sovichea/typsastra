@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.9.1": {
+    version: "0.9.1",
+    title: "Table sidebar parity, completion fixes, and Linux ARM64 builds",
+    highlights: [
+      "The Tables sidebar gains the same search, filters, and keyboard navigation as the Images panel, and table links now resolve across the whole project instead of only the open documents.",
+      "Deleting a table flags its `//@table:` directive in the editor gutter, where it can be recreated from the generated source or unlinked while keeping the table.",
+      "Completion now accepts a bare identifier argument and a bare member inside a call, closes quoted values without losing the closing quote or doubling the bracket, and no longer strands text typed while a request was open.",
+      "Syntax highlighting survives a nested hash expression, the Log Console's Clear button clears developer entries, and Linux ARM64 `.deb` and `.AppImage` bundles are built for Raspberry Pi."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.9.1"
+  },
   "0.9.0": {
     version: "0.9.0",
     title: "Table authoring and project templates",
