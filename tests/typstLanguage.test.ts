@@ -154,4 +154,49 @@ describe("Typst stream language", () => {
     expect(tokenName(tokens, "import")).toBe("keyword");
     expect(tokenName(tokens, "timeline") ?? "").not.toContain("strong");
   });
+
+  test("keeps the enclosing statement in code mode after a nested set rule", () => {
+    const doc = [
+      "#let card = v(1cm) + block(",
+      "  align(left)[",
+      '    #set text(font: "something")',
+      "  ]",
+      ") + if answer == [] {",
+      "  v(3cm)",
+      "} else {",
+      "  v(0.2cm) + block()[Something.]",
+      "}",
+    ].join("\n");
+    const tokens = parseTokens(doc);
+
+    // The set rule ends inside the content block; the rest of the `let`
+    // statement is still code rather than markup.
+    expect(tokens.filter(token => token.text === "+").map(token => token.name))
+      .toEqual(["operator", "operator", "operator"]);
+    expect(tokenName(tokens, "if")).toBe("keyword");
+    expect(tokenName(tokens, "else")).toBe("keyword");
+    expect(tokenName(tokens, "v")).toBe("function");
+    expect(tokenName(tokens, "3cm")).toBe("number");
+  });
+
+  test("keeps sibling set rules from ending the enclosing expression", () => {
+    const tokens = parseTokens([
+      "#let f = block[",
+      "  #set text(size: 8pt)",
+      "  #set par(justify: true)",
+      "] + 1",
+    ].join("\n"));
+
+    expect(tokenName(tokens, "+")).toBe("operator");
+    expect(tokenName(tokens, "1")).toBe("number");
+  });
+
+  test("returns to markup when a nested expression's own brackets have closed", () => {
+    const tokens = parseTokens("#a[#b[#c[text]]]\nplain prose\n#emph[y] tail");
+
+    expect(tokenName(tokens, "plain")).toBe("content");
+    expect(tokenName(tokens, "prose")).toBe("content");
+    expect(tokenName(tokens, "emph")).toBe("function");
+    expect(tokenName(tokens, "tail")).toBe("content");
+  });
 });

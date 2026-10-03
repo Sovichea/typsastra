@@ -2,6 +2,17 @@ import { StreamLanguage } from "@codemirror/language";
 import type { IndentContext, StreamParser, StringStream } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 
+// Saved state of the hash expression that encloses a nested one, so a `#` rule
+// inside a content block does not erase its parent's code context when it ends.
+type HashExpressionState = {
+  inCodeExpression: boolean;
+  isStatement: boolean;
+  expressionBracketDepth: number;
+  expressionComplete: boolean;
+  expressionSawWhitespace: boolean;
+  expressionParentMode: "markup" | "math";
+};
+
 type TypstParserState = {
   inBlockComment: boolean;
   inRawBlock: boolean;
@@ -18,6 +29,7 @@ type TypstParserState = {
   expressionComplete: boolean;
   expressionSawWhitespace: boolean;
   expressionParentMode: "markup" | "math";
+  enclosingExpressions: HashExpressionState[];
   lastToken: string | null;
   inTermListHeader: boolean;
   inHeading: boolean;
@@ -90,10 +102,47 @@ function hasTokenName(token: string, name: string): boolean {
 }
 
 function endCodeExpression(state: TypstParserState) {
+  // A hash expression may contain another one, as a set rule inside a content
+  // block does. Restore the enclosing expression so its code context survives
+  // instead of being cleared, discarding snapshots whose own brackets have
+  // already closed.
+  while (state.enclosingExpressions.length > 0) {
+    const outer = state.enclosingExpressions.pop()!;
+    state.inCodeExpression = outer.inCodeExpression;
+    state.isStatement = outer.isStatement;
+    state.expressionBracketDepth = outer.expressionBracketDepth;
+    state.expressionComplete = outer.expressionComplete;
+    state.expressionSawWhitespace = outer.expressionSawWhitespace;
+    state.expressionParentMode = outer.expressionParentMode;
+    if (outer.inCodeExpression && state.bracketStack.length > outer.expressionBracketDepth) {
+      return;
+    }
+  }
   state.inCodeExpression = false;
   state.isStatement = false;
   state.expressionComplete = false;
   state.expressionSawWhitespace = false;
+}
+
+function beginCodeExpression(
+  state: TypstParserState,
+  isStatement: boolean,
+  parentMode: "markup" | "math",
+) {
+  state.enclosingExpressions.push({
+    inCodeExpression: state.inCodeExpression,
+    isStatement: state.isStatement,
+    expressionBracketDepth: state.expressionBracketDepth,
+    expressionComplete: state.expressionComplete,
+    expressionSawWhitespace: state.expressionSawWhitespace,
+    expressionParentMode: state.expressionParentMode,
+  });
+  state.inCodeExpression = true;
+  state.isStatement = isStatement;
+  state.expressionBracketDepth = state.bracketStack.length;
+  state.expressionComplete = false;
+  state.expressionSawWhitespace = false;
+  state.expressionParentMode = parentMode;
 }
 
 const typstParser: StreamParser<TypstParserState> = {
@@ -112,6 +161,7 @@ const typstParser: StreamParser<TypstParserState> = {
       expressionComplete: false,
       expressionSawWhitespace: false,
       expressionParentMode: "markup",
+      enclosingExpressions: [],
       lastToken: null,
       inTermListHeader: false,
       inHeading: false,
@@ -412,12 +462,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
         const rest = stream.string.slice(stream.pos);
         const nextWordMatch = rest.match(identifierRegex);
         if (startsCodeExpression(rest)) {
-          state.inCodeExpression = true;
-          state.expressionBracketDepth = state.bracketStack.length;
-          state.isStatement = nextWordMatch ? statementKeywords.test(nextWordMatch[0]) : false;
-          state.expressionComplete = false;
-          state.expressionSawWhitespace = false;
-          state.expressionParentMode = "markup";
+          beginCodeExpression(state, nextWordMatch ? statementKeywords.test(nextWordMatch[0]) : false, "markup");
           return classifyHashToken(rest);
         }
         return "hashOperator";
@@ -456,12 +501,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
         const rest = stream.string.slice(stream.pos);
         const nextWordMatch = rest.match(identifierRegex);
         if (startsCodeExpression(rest)) {
-          state.inCodeExpression = true;
-          state.expressionBracketDepth = state.bracketStack.length;
-          state.isStatement = nextWordMatch ? statementKeywords.test(nextWordMatch[0]) : false;
-          state.expressionComplete = false;
-          state.expressionSawWhitespace = false;
-          state.expressionParentMode = "math";
+          beginCodeExpression(state, nextWordMatch ? statementKeywords.test(nextWordMatch[0]) : false, "math");
           return classifyHashToken(rest);
         }
         return "hashOperator";
