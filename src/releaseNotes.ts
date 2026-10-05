@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.9.2": {
+    version: "0.9.2",
+    title: "Programmable shortcuts, Windows ARM64, and spellcheck navigation",
+    highlights: [
+      "Keyboard shortcuts can be customized per command, recorded in Settings, checked for conflicts, and reset individually or all at once; two-key chords are supported.",
+      "Windows releases now include a native ARM64 MSI alongside x64, and winget manifest tooling prepares versioned manifests from the published installers.",
+      "Spellcheck moves into a collapsible sidebar pane beside Outline, with grouped words and navigable occurrences; the active pane is remembered per project.",
+      "Khmer double-click selection uses spellcheck diagnostics and provider segmentation to select words in the editor and text fields instead of a single grapheme."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.9.2"
+  },
   "0.9.1": {
     version: "0.9.1",
     title: "Table sidebar parity, completion fixes, and Linux ARM64 builds",
