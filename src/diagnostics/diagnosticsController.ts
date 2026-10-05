@@ -18,6 +18,7 @@ import {
   spellcheckConsoleGroupKey,
   type LogConsoleEntryInput,
 } from "./logConsoleController";
+import { spellcheckSidebarEntries, type SpellcheckSidebarEntry } from "./spellcheckSidebarPane";
 
 export interface DiagnosticsControllerPort {
   editor(): EditorView | undefined;
@@ -37,9 +38,11 @@ export interface DiagnosticsControllerPort {
   openDiagnosticFile(path: string): Promise<void>;
   activeTabContentLoaded(): boolean;
   editorPositionFromSourceLocation(line: number, column: number): number;
+  setSpellcheckEntries(entries: SpellcheckSidebarEntry[]): void;
+  setActiveSpellcheckLocation(filePath: string | null, offset?: number, toOffset?: number): void;
 }
 
-/** Owns LSP/spellcheck diagnostics from publication through editor and Problems UI. */
+/** Owns LSP/spellcheck diagnostics and routes them to their respective panes. */
 export class DiagnosticsController {
   private readonly lspDiagnosticsByFile = new Map<string, LspDiagnostic[]>();
   private readonly compilerRelatedByFile = new Map<string, PreviewCompilerRelatedDiagnostic[]>();
@@ -144,7 +147,7 @@ export class DiagnosticsController {
     const filePath = this.port.activeFilePath();
     const editor = this.editor();
     if (!filePath || !editor) {
-      this.logConsole.setSpellcheckIssues([]);
+      this.port.setSpellcheckEntries([]);
       return;
     }
 
@@ -188,16 +191,7 @@ export class DiagnosticsController {
       }
       grouped.set(key, group);
     }
-    this.logConsole.setSpellcheckIssues([...grouped.values()].map(group => ({
-      kind: group.issue.ignored ? "info" : "warning",
-      channel: "spellcheck",
-      counted: !group.issue.ignored,
-      source: [...group.providers].join(", "),
-      filePath,
-      fileName: fileNameFromPath(filePath),
-      message: `${group.issue.ignored ? "Ignored unknown word" : "Unknown word"}: “${group.issue.sourceText}”`,
-      locations: group.locations,
-    })));
+    this.port.setSpellcheckEntries(spellcheckSidebarEntries(grouped.values()));
     this.syncSelectedSpellingLocation();
   }
 
@@ -205,12 +199,12 @@ export class DiagnosticsController {
     const activePath = this.port.activeFilePath();
     const editor = this.editor();
     if (!activePath || !editor) {
-      this.logConsole.setActiveSpellcheckLocation(null);
+      this.port.setActiveSpellcheckLocation(null);
       return;
     }
     const selection = editor.state.selection.main;
     const issue = this.port.spellcheck().issueAt(selection.from < selection.to ? selection.from : selection.head);
-    this.logConsole.setActiveSpellcheckLocation(activePath, issue?.from, issue?.to);
+    this.port.setActiveSpellcheckLocation(activePath, issue?.from, issue?.to);
   }
 
   clear(): void {

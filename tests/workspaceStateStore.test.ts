@@ -56,7 +56,8 @@ describe("workspace state store", () => {
           inputContainerWidthPct: 60,
           explorerSidebarWidthPx: 300,
           sidebarVisible: false,
-          activeSidebarTool: "explorer"
+          activeSidebarTool: "explorer",
+          activeDocumentPane: "outline"
         },
         selectedToolchain: null,
         previewContentMode: "normal",

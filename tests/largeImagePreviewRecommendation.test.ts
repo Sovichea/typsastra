@@ -72,7 +72,7 @@ describe("large-image preview recommendation", () => {
     expect(warnings).toContain('class: "cm-warningGutter"');
     expect(warnings).toContain("initialSpacer:");
     expect(warnings).toContain('marker.className = "cm-image-optimization-marker"');
-    expect(consoleController).toContain('LogEntryChannel = "lsp" | "spellcheck" | "images" | "dev"');
+    expect(consoleController).toContain('LogEntryChannel = "lsp" | "images" | "dev"');
     expect(consoleController).toContain('this.setTabCount("images", imageWarnings)');
     expect(consoleController).toContain('entry.channel === "images" && entry.locations?.[0]');
     expect(consoleController).toContain("void this.onNavigate({ ...entry, ...first, locations: undefined })");

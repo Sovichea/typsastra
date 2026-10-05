@@ -211,18 +211,13 @@ export class DocumentOutlineController {
 
   constructor(
     private readonly container: HTMLElement,
-    private readonly section: HTMLElement,
+    _section: HTMLElement,
     private readonly onNavigate: (heading: DocumentHeading) => void,
     private readonly onNavigatePdf?: (destination: PdfiumDestination) => void,
     private readonly onActiveHeadingChanged?: (heading: DocumentHeading) => void,
   ) {}
 
   public initialize(): void {
-    const toggle = document.getElementById("document-outline-toggle");
-    toggle?.addEventListener("click", () => {
-      const isCollapsed = this.section.classList.toggle("collapsed");
-      toggle.setAttribute("aria-expanded", String(!isCollapsed));
-    });
     this.container.tabIndex = 0;
     this.container.setAttribute("role", "tree");
     this.container.setAttribute("aria-label", "Document Outline");

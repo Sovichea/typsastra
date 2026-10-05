@@ -243,6 +243,8 @@ describe("WorkspaceLifecycleController behavior", () => {
         clearWorkspace: () => {},
       },
       documentOutlineController: { clear: () => {} },
+      spellcheckSidebarPane: { clear: () => {} },
+      restoreDocumentSidebarPane: () => {},
       renderEditorTabs: () => {},
       setLspStatus: () => {},
       updateWorkspaceViewportVisibility: () => calls.push("update-viewport"),

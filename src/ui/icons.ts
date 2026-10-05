@@ -234,6 +234,7 @@ export function initializeLucideIcons(): void {
   replaceContents("#welcome-import-project .welcome-item-icon", "folderArchive", 18);
   replaceContents("#welcome-open-examples .welcome-item-icon", "bookOpen", 18);
   replaceContents("#document-outline-toggle .sidebar-section-chevron", "chevronDown", 14);
+  replaceContents("#spellcheck-toggle .sidebar-section-chevron", "chevronDown", 14);
   replaceContents("#status-error-icon", "circleX", 13);
   replaceContents("#status-warning-icon", "triangleAlert", 13);
   replaceContents("#settings-storage-warning", "triangleAlert", 18);

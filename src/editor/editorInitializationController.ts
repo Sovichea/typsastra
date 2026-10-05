@@ -108,7 +108,7 @@ export class EditorInitializationController {
             deps.cursorSyncEnabled() && !deps.isInverseSyncSelection(),
           );
         } else if (update.docChanged) {
-          deps.logConsole.setActiveSpellcheckLocation(null);
+          deps.syncSelectedSpellingLocation();
         }
         if (update.selectionSet || update.docChanged) {
           deps.editorController.updateCursorStatus();

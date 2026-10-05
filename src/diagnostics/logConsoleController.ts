@@ -2,7 +2,7 @@ import { createAppIcon } from "../ui/icons";
 import { filePathKey } from "../platform/paths";
 
 export type LogEntryKind = "error" | "warning" | "info" | "log" | "hint";
-export type LogEntryChannel = "lsp" | "spellcheck" | "images" | "dev";
+export type LogEntryChannel = "lsp" | "images" | "dev";
 type LogConsoleTab = "all" | LogEntryChannel;
 
 export type LogConsoleLocationInput = {
@@ -125,10 +125,7 @@ export class LogConsoleController {
   private nextEntryId = 1;
   private diagnostics: LogConsoleEntry[] = [];
   private diagnosticsByFile = new Map<string, LogConsoleEntry[]>();
-  private spellcheckIssues: LogConsoleEntry[] = [];
   private imageOptimizationIssues: LogConsoleEntry[] = [];
-  private expandedSpellcheckEntries = new Set<string>();
-  private activeSpellcheckLocation: { filePath: string; offset: number; toOffset: number } | null = null;
   private logs: LogConsoleEntry[] = [];
   private activeTab: LogConsoleTab = "all";
   private visible = false;
@@ -190,23 +187,9 @@ export class LogConsoleController {
     this.requestRender();
   }
 
-  public setSpellcheckIssues(entries: LogConsoleEntryInput[]): void {
-    this.spellcheckIssues = entries.map(entry => this.createEntry({ ...entry, channel: "spellcheck" }));
-    this.requestRender();
-  }
-
   public setImageOptimizationIssues(entries: LogConsoleEntryInput[]): void {
     this.imageOptimizationIssues = entries.map(entry => this.createEntry({ ...entry, channel: "images" }));
     this.requestRender();
-  }
-
-  public setActiveSpellcheckLocation(filePath: string | null, offset?: number, toOffset?: number): void {
-    this.activeSpellcheckLocation = filePath !== null && offset !== undefined
-      ? { filePath, offset, toOffset: toOffset ?? offset }
-      : null;
-    this.body.querySelectorAll<HTMLElement>(".log-entry-location").forEach(item => {
-      item.classList.toggle("active", this.locationElementIsActive(item));
-    });
   }
 
   public appendLog(entry: LogConsoleEntryInput): void {
@@ -329,7 +312,7 @@ export class LogConsoleController {
       (log.filePath && log.line !== undefined)
       || !duplicatesStructuredDiagnostic(log, structured)
     );
-    const all = [...this.diagnostics, ...this.spellcheckIssues, ...this.imageOptimizationIssues, ...visibleLogs];
+    const all = [...this.diagnostics, ...this.imageOptimizationIssues, ...visibleLogs];
     if (this.activeTab === "all") return all;
     return all.filter(entry => entry.channel === this.activeTab);
   }
@@ -395,15 +378,11 @@ export class LogConsoleController {
     const cluster = document.createElement("div");
     cluster.className = "log-entry-cluster";
     const locations = document.createElement("div");
-    const expansionKey = this.spellcheckExpansionKey(entry);
-    const initiallyExpanded = this.expandedSpellcheckEntries.has(expansionKey);
-    locations.className = `log-entry-locations${initiallyExpanded ? "" : " hidden"}`;
-    item.setAttribute("aria-expanded", String(initiallyExpanded));
+    locations.className = "log-entry-locations hidden";
+    item.setAttribute("aria-expanded", "false");
     item.addEventListener("click", () => {
       const expanded = !locations.classList.toggle("hidden");
       item.setAttribute("aria-expanded", String(expanded));
-      if (expanded) this.expandedSpellcheckEntries.add(expansionKey);
-      else this.expandedSpellcheckEntries.delete(expansionKey);
       if (entry.channel === "images" && entry.locations?.[0]) {
         const first = entry.locations[0];
         void this.onNavigate({ ...entry, ...first, locations: undefined });
@@ -416,16 +395,8 @@ export class LogConsoleController {
       occurrenceButton.dataset.filePath = occurrence.filePath ?? entry.filePath ?? "";
       occurrenceButton.dataset.offset = String(occurrence.offset ?? "");
       occurrenceButton.dataset.toOffset = String(occurrence.toOffset ?? occurrence.offset ?? "");
-      occurrenceButton.classList.toggle("active", this.locationElementIsActive(occurrenceButton));
       occurrenceButton.textContent = `Ln ${occurrence.line}, Col ${occurrence.column}`;
       occurrenceButton.addEventListener("click", () => {
-        if (entry.channel === "spellcheck") {
-          this.setActiveSpellcheckLocation(
-            occurrence.filePath ?? entry.filePath ?? null,
-            occurrence.offset,
-            occurrence.toOffset
-          );
-        }
         void this.onNavigate({ ...entry, ...occurrence, locations: undefined });
       });
       locations.appendChild(occurrenceButton);
@@ -434,26 +405,14 @@ export class LogConsoleController {
     return cluster;
   }
 
-  private spellcheckExpansionKey(entry: LogConsoleEntry): string {
-    return `${entry.filePath ?? ""}\u0000${entry.message}`;
-  }
-
-  private locationElementIsActive(item: HTMLElement): boolean {
-    const active = this.activeSpellcheckLocation;
-    if (!active || filePathKey(item.dataset.filePath ?? "") !== filePathKey(active.filePath)) return false;
-    return Number(item.dataset.offset) === active.offset
-      && Number(item.dataset.toOffset) === active.toOffset;
-  }
-
   private updateCount(): void {
     const countedLogs = countedLogTotals(this.logs);
     const errors = this.diagnostics.filter(entry => entry.kind === "error").length + countedLogs.errors;
     const warnings = this.diagnostics.filter(entry => entry.kind === "warning").length + countedLogs.warnings;
     const total = this.diagnostics.length;
-    const spellcheck = this.spellcheckIssues.filter(entry => entry.counted !== false).length;
     const imageWarnings = this.imageOptimizationIssues.filter(entry => entry.counted !== false).length;
-    const problems = total + spellcheck + imageWarnings + countedLogs.all;
-    const totalWarnings = warnings + spellcheck + imageWarnings;
+    const problems = total + imageWarnings + countedLogs.all;
+    const totalWarnings = warnings + imageWarnings;
 
     this.errorCount.textContent = errors > 99 ? "99+" : String(errors);
     this.warningCount.textContent = totalWarnings > 99 ? "99+" : String(totalWarnings);
@@ -470,7 +429,6 @@ export class LogConsoleController {
 
     this.setTabCount("all", problems);
     this.setTabCount("lsp", total + countedLogs.lsp);
-    this.setTabCount("spellcheck", spellcheck);
     this.setTabCount("images", imageWarnings);
     this.setTabCount("dev", this.logs.filter(entry => entry.channel === "dev").length);
     this.toggleButton.dataset.state = errors ? "error" : totalWarnings ? "warning" : "ok";

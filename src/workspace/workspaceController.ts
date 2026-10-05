@@ -35,6 +35,7 @@ export interface WorkspacePersistenceSnapshot {
   explorerSidebarWidthPx: number;
   sidebarVisible: boolean;
   activeSidebarTool: "explorer" | "images" | "tables";
+  activeDocumentPane: "outline" | "spellcheck" | "none";
   previewContentMode: "normal" | "draft";
   previewRenderMode: PreviewRenderMode;
   previewScrollTop: number;
@@ -121,6 +122,7 @@ export class WorkspaceController {
           explorerSidebarWidthPx: current.explorerSidebarWidthPx,
           sidebarVisible: current.sidebarVisible,
           activeSidebarTool: current.activeSidebarTool,
+          activeDocumentPane: current.activeDocumentPane,
         },
         selectedToolchain: current.selectedToolchain,
         previewContentMode: current.previewContentMode,
@@ -171,6 +173,7 @@ export class WorkspaceController {
       explorerSidebarWidthPx: legacy.explorerSidebarWidthPx,
       sidebarVisible: true,
       activeSidebarTool: "explorer",
+      activeDocumentPane: "outline",
     };
     metadata.workspace.selectedToolchain = legacy.selectedToolchain;
     return metadata;

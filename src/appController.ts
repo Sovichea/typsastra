@@ -68,6 +68,7 @@ import { PdfPreviewRenderController } from "./preview/pdfPreviewRenderController
 import { activeFileCanRenderPreview, previewRefreshStyle, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { DiagnosticsController } from "./diagnostics/diagnosticsController";
+import { SpellcheckSidebarPane, nextDocumentSidebarPane, type DocumentSidebarPane } from "./diagnostics/spellcheckSidebarPane";
 import { PreviewFailureController } from "./diagnostics/previewFailureController";
 import { DeveloperLogController } from "./diagnostics/developerLogController";
 import { PreviewDiagnosticsRecoveryController } from "./diagnostics/previewDiagnosticsRecoveryController";
@@ -1137,6 +1138,31 @@ export class TypsastraWorkspaceController {
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
   private readonly logConsoleController = new LogConsoleController(entry => this.navigateToLogEntry(entry));
+  private readonly spellcheckSidebarPane = new SpellcheckSidebarPane(entry => this.navigateToLogEntry(entry));
+  private activeDocumentPane: DocumentSidebarPane = "outline";
+
+  public restoreDocumentSidebarPane(pane: DocumentSidebarPane): void {
+    this.activeDocumentPane = pane;
+    for (const [name, sectionId, toggleId] of [
+      ["outline", "document-outline-section", "document-outline-toggle"],
+      ["spellcheck", "spellcheck-section", "spellcheck-toggle"],
+    ] as const) {
+      document.getElementById(sectionId)?.classList.toggle("collapsed", pane !== name);
+      document.getElementById(toggleId)?.setAttribute("aria-expanded", String(pane === name));
+    }
+  }
+
+  private initializeDocumentSidebarPanes(): void {
+    for (const [name, toggleId] of [
+      ["outline", "document-outline-toggle"], ["spellcheck", "spellcheck-toggle"],
+    ] as const) {
+      document.getElementById(toggleId)?.addEventListener("click", () => {
+        this.restoreDocumentSidebarPane(nextDocumentSidebarPane(this.activeDocumentPane, name));
+        void this.saveWorkspaceState();
+      });
+    }
+    this.restoreDocumentSidebarPane(this.activeDocumentPane);
+  }
   private readonly developerLogController = new DeveloperLogController({
     logConsole: () => this.logConsoleController,
     activeFilePath: () => this.activeFilePath,
@@ -1174,6 +1200,11 @@ export class TypsastraWorkspaceController {
     },
     activeTabContentLoaded: () => this.getActiveTab()?.contentLoaded === true,
     editorPositionFromSourceLocation: (line, column) => this.editorPositionFromSourceLocation(line, column),
+    setSpellcheckEntries: entries => {
+      this.spellcheckSidebarPane.setEntries(entries);
+    },
+    setActiveSpellcheckLocation: (filePath, offset, toOffset) =>
+      this.spellcheckSidebarPane.setActiveLocation(filePath, offset, toOffset),
   });
   private readonly previewFailureController = new PreviewFailureController(this.logConsoleController, {
     mapToOriginalPath: path => this.mapToOriginalPath(path),
@@ -1244,6 +1275,7 @@ export class TypsastraWorkspaceController {
       ) || DEFAULT_EXPLORER_WIDTH_PX,
       sidebarVisible: this.sidebarController.visible,
       activeSidebarTool: this.sidebarController.activeTool,
+      activeDocumentPane: this.activeDocumentPane,
       previewContentMode: this.draftPreviewController.mode,
       previewRenderMode: this.effectivePreviewRenderMode,
       previewScrollTop: this.previewScrollTop,
@@ -2147,6 +2179,8 @@ export class TypsastraWorkspaceController {
     this.performanceController.timeStartupSync("initialize project templates", () => this.projectTemplateController.initialize());
     this.performanceController.timeStartupSync("initialize CodeMirror", () => this.initCodeMirror());
     this.performanceController.timeStartupSync("initialize document outline", () => this.documentOutlineController.initialize());
+    this.initializeDocumentSidebarPanes();
+    this.spellcheckSidebarPane.initialize();
     this.performanceController.timeStartupSync("apply settings to runtime", () => this.applySettingsToRuntime(this.settingsController.value));
     await this.performanceController.timeStartup("load editor fonts", () => this.editorFontManager.ready());
     this.performanceController.timeStartupSync("initialize explorer", () => this.initExplorer());

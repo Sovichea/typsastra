@@ -333,6 +333,33 @@
                             class="sidebar-section-content outline-tree"
                         ></div>
                     </section>
+                    <section
+                        id="spellcheck-section"
+                        class="sidebar-section spellcheck-section collapsed"
+                    >
+                        <button
+                            id="spellcheck-toggle"
+                            class="sidebar-section-header sidebar-section-toggle"
+                            type="button"
+                            aria-expanded="false"
+                        >
+                            <span
+                                class="sidebar-section-chevron"
+                                aria-hidden="true"
+                                >▾</span
+                            >
+                            <span>SPELLCHECK</span>
+                            <span
+                                id="spellcheck-count"
+                                class="sidebar-section-count"
+                                >0</span
+                            >
+                        </button>
+                        <div
+                            id="spellcheck-list"
+                            class="sidebar-section-content spellcheck-list"
+                        ></div>
+                    </section>
                     </div>
                     <div id="image-tools-sidebar-content" class="sidebar-tool-content hidden">
                         <div class="sidebar-section-header"><span id="image-tools-sidebar-title">IMAGES</span></div>
@@ -365,7 +392,6 @@
                                 <p>WRITE <span aria-hidden="true">•</span> COMPOSE <span aria-hidden="true">•</span> PUBLISH</p>
                             </div>
                         </div>
-
                         <div class="welcome-section">
                             <div class="welcome-section-title">GET STARTED</div>
                             <button
@@ -420,7 +446,6 @@
                                 >
                             </button>
                         </div>
-
                         <div class="welcome-section" id="welcome-recent-projects">
                             <div class="welcome-section-title">
                                 RECENT PROJECTS
@@ -1973,9 +1998,6 @@
                         </button>
                         <button class="log-console-tab" type="button" role="tab" aria-selected="false" data-log-console-tab="lsp">
                             LSP <span data-log-console-count="lsp">0</span>
-                        </button>
-                        <button class="log-console-tab" type="button" role="tab" aria-selected="false" data-log-console-tab="spellcheck">
-                            Spellcheck <span data-log-console-count="spellcheck">0</span>
                         </button>
                         <button class="log-console-tab" type="button" role="tab" aria-selected="false" data-log-console-tab="images">
                             Images <span data-log-console-count="images">0</span>

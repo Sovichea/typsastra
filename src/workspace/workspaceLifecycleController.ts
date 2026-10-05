@@ -134,6 +134,7 @@ export interface WorkspaceLifecycleServices {
   sourceMapSessionController: { registeredTaskId: string | null; reset(): void };
   imagePreviewController: { clear(): void };
   documentOutlineController: { clear(): void };
+  spellcheckSidebarPane: { clear(): void };
   logConsoleController: { clearAllLogs(): void; setVisible(visible: boolean): void };
 }
 
@@ -144,6 +145,7 @@ export interface WorkspaceLifecycleOperations {
   renderEditorTabs(): void;
   getActiveTab(): EditorTab | null;
   saveWorkspaceState(): Promise<void>;
+  restoreDocumentSidebarPane(pane: "outline" | "spellcheck" | "none"): void;
   setPreviewRenderMode(mode: PreviewRenderMode): Promise<void>;
   ensureLargePreviewApproved(path: string): Promise<boolean>;
   preparePinnedMainTypography(path: string): Promise<DocumentTypography | null | false>;
@@ -205,6 +207,7 @@ export class WorkspaceLifecycleController {
         visible: state.layout.sidebarVisible,
         activeTool: state.layout.activeSidebarTool,
       });
+      app.restoreDocumentSidebarPane(state.layout.activeDocumentPane);
       const pinnedMainFilePath = await app.workspaceController.absolutePath(workspacePath, project.mainFile);
       app.pinnedMainFilePath = pinnedMainFilePath
         && await invoke<boolean>("workspace_path_exists", { path: pinnedMainFilePath })
@@ -704,6 +707,8 @@ export class WorkspaceLifecycleController {
     app.workspaceRootPath = null;
     app.renderCacheRootPath = null;
     app.sidebarController.reset();
+    app.restoreDocumentSidebarPane("outline");
+    app.spellcheckSidebarPane.clear();
     document.body.classList.remove("image-tools-active", "table-tools-active");
     void app.imageToolsController.setWorkspace(null, null);
     app.tableToolController.setWorkspace([]);
