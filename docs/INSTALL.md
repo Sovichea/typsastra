@@ -47,6 +47,20 @@ that globally disable Gatekeeper. If Typsastra still cannot be opened after a
 fresh download and this targeted removal, report the release filename, Mac
 model, processor architecture, and macOS version.
 
+### Install with Windows Package Manager
+
+If the manifest has been merged into the
+[winget-pkgs](https://github.com/microsoft/winget-pkgs) community repository,
+Windows can install the matching architecture directly:
+
+```powershell
+winget install --id Typsastra.Typsastra
+```
+
+The install is per-machine and requests administrator rights. Windows
+installers are not code signed, so SmartScreen shows a warning on first
+launch. See [WINGET.md](./WINGET.md) for manifest maintenance.
+
 ### Automatic updates on macOS
 
 Typsastra's in-app update artifacts are cryptographically signed and verified
