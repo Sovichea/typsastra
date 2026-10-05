@@ -76,6 +76,7 @@ export class EditorInitializationController {
         (path, position, view) => deps.insertExplorerImage(path, position, view),
         (images, selection, view) => deps.pasteClipboardImages(images, selection, view),
         () => deps.shortcuts(),
+        position => deps.spellcheck.khmerWordAt(position),
       ),
       deps.spellcheck.extension(),
       EditorView.updateListener.of(update => {

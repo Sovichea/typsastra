@@ -1,3 +1,6 @@
+import { khmerWordBoundaryAtOffset } from "../editor/grapheme";
+import { analyzeKhmerWordAt } from "../editor/khmerWordSelection";
+
 export function splitTypstBlocks(markup: string): string[] {
   const blocks: string[] = [];
   let currentBlock: string[] = [];
@@ -96,7 +99,56 @@ export function renderTypstInlineFormatting(text: string): string {
 }
 
 export class WysiwymAdapter {
-  constructor(private readonly container: HTMLElement) {}
+  private wordRequest = 0;
+
+  constructor(private readonly container: HTMLElement) {
+    container.addEventListener("dblclick", event => {
+      const target = event.target;
+      if (!(target instanceof Node) || event.button !== 0) return;
+      const element = target instanceof Element ? target : target.parentElement;
+      const editable = element?.closest<HTMLElement>("[contenteditable='true']");
+      if (!editable || !container.contains(editable)) return;
+      const selection = window.getSelection();
+      const nativeRange = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      if (!nativeRange || !editable.contains(nativeRange.startContainer)) return;
+      const before = document.createRange();
+      before.selectNodeContents(editable);
+      before.setEnd(nativeRange.startContainer, nativeRange.startOffset);
+      const text = editable.textContent ?? "";
+      const cluster = khmerWordBoundaryAtOffset(text, before.toString().length, 1);
+      if (!cluster || !selection) return;
+      this.selectTextRange(editable, selection, cluster.from, cluster.to);
+      event.preventDefault();
+      const request = ++this.wordRequest;
+      void analyzeKhmerWordAt(text, cluster.from).then(word => {
+        if (request !== this.wordRequest || !word || editable.textContent !== text
+          || !selection.rangeCount || !editable.contains(selection.getRangeAt(0).startContainer)
+          || selection.toString() !== text.slice(cluster.from, cluster.to)) return;
+        this.selectTextRange(editable, selection, word.from, word.to);
+      });
+    });
+  }
+
+  private selectTextRange(editable: HTMLElement, selection: Selection, from: number, to: number): void {
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let position = 0;
+    let startFound = false;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const length = node.textContent?.length ?? 0;
+      if (!startFound && from <= position + length) {
+        range.setStart(node, from - position);
+        startFound = true;
+      }
+      if (startFound && to <= position + length) {
+        range.setEnd(node, to - position);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+      }
+      position += length;
+    }
+  }
 
   render(markup: string): void {
     this.container.innerHTML = "";

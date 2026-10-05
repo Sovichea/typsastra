@@ -857,11 +857,12 @@ export function getEditorExtensions(
     view: EditorView,
   ) => void,
   getShortcuts: () => ShortcutOverrides = () => ({}),
+  getKhmerWordAt?: (position: number) => { from: number; to: number } | null,
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
     ...editingPolicyRegistry.editorExtensions(),
-    graphemePointerSelection(onGraphemePointerDebug),
+    graphemePointerSelection(onGraphemePointerDebug, getKhmerWordAt),
     graphemeSelectionBoundaryFilter,
     showZwsCompartment.of(showZeroWidthSpaces),
     selectionPairReplacementExtension,

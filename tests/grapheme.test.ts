@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { EditorSelection, EditorState, Text } from "@codemirror/state";
 import { closeBrackets } from "@codemirror/autocomplete";
 import type { EditorView } from "@codemirror/view";
-import { codePointDeletionRange, completeTrailingGraphemeBoundary, deletionRangesForSelection, deletePreviousGraphemeOrPair, graphemeBoundaries, graphemeSelectionBoundaryFilter, khmerGraphemeBoundaryAtOffset, moveSelectionByGrapheme, nextGraphemeBoundary, previousGraphemeBoundary, snapPositionToGraphemeBoundary, snapSelectionToGraphemeBoundaries } from "../src/editor/grapheme";
+import { codePointDeletionRange, completeTrailingGraphemeBoundary, deletionRangesForSelection, deletePreviousGraphemeOrPair, graphemeBoundaries, graphemeSelectionBoundaryFilter, khmerGraphemeBoundaryAtOffset, khmerWordBoundaryAtOffset, moveSelectionByGrapheme, nextGraphemeBoundary, previousGraphemeBoundary, snapPositionToGraphemeBoundary, snapSelectionToGraphemeBoundaries } from "../src/editor/grapheme";
 import { getTemporaryKhmerBoundary, khmerCompositionBoundaryState } from "../src/editor/editingPolicies/khmer/composition";
 
 describe("editor grapheme navigation", () => {
@@ -68,10 +68,20 @@ describe("editor grapheme navigation", () => {
     expect(khmerGraphemeBoundaryAtOffset("Latin", 0, 1)).toBeNull();
   });
 
-  test("owns Khmer double-click selection instead of using a platform word boundary", async () => {
-    const source = await Bun.file(new URL("../src/editor/grapheme.ts", import.meta.url)).text();
-    expect(source).toContain("if (event.detail === 2) return khmerDoubleClickSelection(view, event)");
-    expect(source).toContain("khmerGraphemeRangeAtCoordinates(view, currentEvent)");
+  test("prefers a spelling diagnostic to a single Khmer cluster on double-click", () => {
+    const text = "កខ្មែរ គ";
+    const issue = { from: 0, to: "កខ្មែរ".length };
+    expect(khmerWordBoundaryAtOffset(text, 2, 1, issue)).toEqual(issue);
+    expect(khmerWordBoundaryAtOffset(text, text.length - 1, 1, issue)).toEqual({ from: text.length - 1, to: text.length });
+    expect(khmerWordBoundaryAtOffset("abc", 1, 1, issue)).toBeNull();
+  });
+
+  test("uses provider spans for known Khmer words and never guesses a whole run", () => {
+    const text = "ខ្មែរ គ";
+    expect(khmerWordBoundaryAtOffset(text, 0, 1, { from: 0, to: text.indexOf(" ") }))
+      .toEqual({ from: 0, to: "ខ្មែរ".length });
+    expect(khmerWordBoundaryAtOffset(text, 1, 1, { from: 1, to: 3 })).toEqual({ from: 0, to: 4 });
+    expect(khmerWordBoundaryAtOffset("កខគឃ", 0, 1)).toEqual({ from: 0, to: 1 });
   });
 
   test("uses the pointer side when placing a caret in a line-leading COENG cluster", () => {

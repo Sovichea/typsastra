@@ -2,6 +2,7 @@ import { EditorSelection, EditorState, type Extension, type Text, type Transacti
 import { EditorView, type MouseSelectionStyle, type ViewUpdate } from "@codemirror/view";
 import { deleteBracketPair } from "@codemirror/autocomplete";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
+import { analyzeKhmerWordAt } from "./khmerWordSelection";
 
 function getTemporaryEditingBoundary(state: EditorState): number | null {
   return editingPolicyRegistry.temporaryBoundary(state);
@@ -151,14 +152,15 @@ export type GraphemePointerDebugEvent = {
 };
 
 export function graphemePointerSelection(
-  onDebug?: (event: GraphemePointerDebugEvent) => void
+  onDebug?: (event: GraphemePointerDebugEvent) => void,
+  wordAt?: (position: number) => { from: number; to: number } | null,
 ): Extension {
   return EditorView.mouseSelectionStyle.of((view, event) => {
   if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
     return null;
   }
 
-  if (event.detail === 2) return khmerDoubleClickSelection(view, event);
+   if (event.detail === 2) return khmerDoubleClickSelection(view, event, wordAt);
   if (event.detail !== 1) return null;
 
   const initial = pointerSelectionAtCoordinates(view, event, onDebug);
@@ -180,14 +182,49 @@ export function graphemePointerSelection(
   });
 }
 
-function khmerDoubleClickSelection(view: EditorView, event: MouseEvent): MouseSelectionStyle | null {
-  const initial = khmerGraphemeRangeAtCoordinates(view, event);
+function khmerDoubleClickSelection(
+  view: EditorView,
+  event: MouseEvent,
+  wordAt?: (position: number) => { from: number; to: number } | null,
+): MouseSelectionStyle | null {
+  const rangeAt = (pointer: Pick<MouseEvent, "clientX" | "clientY">) => {
+    const cluster = khmerGraphemeRangeAtCoordinates(view, pointer);
+    if (!cluster) return null;
+    const line = view.state.doc.lineAt(cluster.from);
+    const wordSpan = wordAt?.(cluster.from);
+    const localSpan = wordSpan && wordSpan.from >= line.from && wordSpan.to <= line.to
+      ? { from: wordSpan.from - line.from, to: wordSpan.to - line.from }
+      : null;
+    const word = khmerWordBoundaryAtOffset(line.text, cluster.from - line.from, 1, localSpan);
+    return word ? { from: line.from + word.from, to: line.from + word.to } : cluster;
+  };
+  const initial = rangeAt(event);
   if (!initial) return null;
   let start = initial;
+  const pending = !wordAt?.(initial.from);
+
+  if (pending) {
+    const doc = view.state.doc;
+    const line = doc.lineAt(initial.from);
+    void analyzeKhmerWordAt(line.text, initial.from - line.from, "typstSource").then(word => {
+      const selection = view.state.selection.main;
+      if (!word || view.state.doc !== doc || !selection.empty || selection.head !== initial.from) return;
+      const from = line.from + word.from;
+      const to = line.from + word.to;
+      if (from <= initial.from && initial.to <= to) {
+        view.dispatch({ selection: EditorSelection.range(from, to), userEvent: "select.pointer" });
+      }
+    });
+  }
 
   return {
     get(currentEvent) {
-      const current = khmerGraphemeRangeAtCoordinates(view, currentEvent) ?? start;
+      const current = rangeAt(currentEvent) ?? start;
+      // A provisional nonempty selection makes the search-match overlay flash
+      // over one grapheme before the provider returns the real word boundary.
+      if (pending && current.from === start.from && current.to === start.to) {
+        return EditorSelection.create([EditorSelection.cursor(start.from)]);
+      }
       const range = current.from < start.from
         ? EditorSelection.range(start.to, current.from)
         : EditorSelection.range(start.from, current.to);
@@ -201,6 +238,21 @@ function khmerDoubleClickSelection(view: EditorView, event: MouseEvent): MouseSe
       };
     },
   };
+}
+
+/** Use a provider word/diagnostic span without ever splitting a Khmer cluster. */
+export function khmerWordBoundaryAtOffset(
+  text: string,
+  offset: number,
+  association = 0,
+  span: GraphemeBoundary | null = null,
+): GraphemeBoundary | null {
+  const cluster = khmerGraphemeBoundaryAtOffset(text, offset, association);
+  if (!cluster) return null;
+  if (span && span.from <= cluster.from && span.to >= cluster.to
+    && span.from < span.to && span.to <= text.length
+    && /[\u1780-\u17ff]/u.test(text.slice(span.from, span.to))) return span;
+  return cluster;
 }
 
 function khmerGraphemeRangeAtCoordinates(

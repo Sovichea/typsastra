@@ -230,6 +230,8 @@ export class SpellcheckController {
   private scopedIgnoredWords: ScopedIgnoredWord[] = [];
   private terminologySignature = "";
   public issues: SpellingIssue[] = [];
+  private khmerWords: Array<{ from: number; to: number; sourceText: string }> = [];
+  private khmerWordsDocument: Text | null = null;
   private suggestionCache = new Map<string, string[]>();
   private providers: ProviderCapabilities[] = [];
   private scriptLanguages: ScriptLanguageAssignment[] = [];
@@ -409,6 +411,8 @@ export class SpellcheckController {
   public documentChanged(update: ViewUpdate): void {
     if (!this.enabled || !this.documentKey) return;
     this.revision++;
+    this.khmerWords = [];
+    this.khmerWordsDocument = null;
     this.suggestionRequestGeneration++;
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
@@ -507,6 +511,18 @@ export class SpellcheckController {
       .sort((a, b) => (a.to - a.from) - (b.to - b.from))[0] ?? null;
   }
 
+  /** An unknown-word diagnostic takes precedence over the provider's known-word tokens. */
+  public khmerWordAt(position: number): { from: number; to: number } | null {
+    const issue = this.issueAt(position);
+    if (issue && issue.provider === "khmer-segmenter" && !issue.synthetic
+      && this.isCurrentIssue(issue)) return { from: issue.from, to: issue.to };
+    const doc = this.getEditor()?.state.doc;
+    if (!this.enabled || !doc || doc !== this.khmerWordsDocument) return null;
+    const word = this.khmerWords.find(token => token.from <= position && position < token.to
+      && doc.sliceString(token.from, token.to) === token.sourceText);
+    return word ? { from: word.from, to: word.to } : null;
+  }
+
   public issuesInRange(from: number, to: number): SpellingIssue[] {
     const start = Math.min(from, to);
     const end = Math.max(from, to);
@@ -571,6 +587,8 @@ export class SpellcheckController {
     this.timer = null;
     this.pendingRanges = [];
     this.queuedRequest = null;
+    this.khmerWords = [];
+    this.khmerWordsDocument = null;
     if (!clearIssues) return;
     this.issues = [];
     this.onIssuesChanged?.([]);
@@ -703,6 +721,17 @@ export class SpellcheckController {
     const docIdentity = editor.state.doc;
     const documentKey = this.documentKey;
     const revision = this.revision;
+
+    this.khmerWords = [
+      ...(this.khmerWordsDocument === docIdentity ? this.khmerWords.filter(word =>
+        !analyzedRanges.some(range => word.from < range.to && range.from < word.to)) : []),
+      ...response.tokens.filter(token => token.provider === "khmer-segmenter"
+        && token.sourceFromUtf16 < token.sourceToUtf16
+        && this.providerMatchesDocumentScripts(token.provider, token.sourceFromUtf16, token.sourceToUtf16)
+        && this.isProvenProse(editor.state, token.sourceFromUtf16, token.sourceToUtf16))
+        .map(token => ({ from: token.sourceFromUtf16, to: token.sourceToUtf16, sourceText: token.sourceText })),
+    ].sort((a, b) => a.from - b.from || a.to - b.to);
+    this.khmerWordsDocument = docIdentity;
 
     const failedRanges = response.failures ?? [];
     // Remove successful providers' existing issues inside analyzed ranges, but

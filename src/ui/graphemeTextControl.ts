@@ -1,8 +1,47 @@
 import { editingPolicyRegistry } from "../editor/editingPolicies/registry";
+import { khmerWordBoundaryAtOffset } from "../editor/grapheme";
+import { analyzeKhmerWordAt } from "../editor/khmerWordSelection";
 
 export type GraphemeTextControl = HTMLInputElement | HTMLTextAreaElement;
 
 const installedControls = new WeakSet<object>();
+
+/** Hit-test rendered text, not selectionStart (which WebKit may reset to zero). */
+export function textControlOffsetAtPoint(control: GraphemeTextControl, x: number, y: number): number | null {
+  const doc = control.ownerDocument;
+  if (!doc?.body || (!doc.caretPositionFromPoint && !doc.caretRangeFromPoint)) return null;
+  const rect = control.getBoundingClientRect();
+  const computed = getComputedStyle(control);
+  const mirror = doc.createElement("div");
+  Object.assign(mirror.style, {
+    position: "fixed", left: `${rect.left}px`, top: `${rect.top}px`,
+    width: `${rect.width}px`, height: `${rect.height}px`,
+    boxSizing: "border-box", padding: computed.padding, border: computed.border,
+    font: computed.font, letterSpacing: computed.letterSpacing,
+    lineHeight: computed.lineHeight, textAlign: computed.textAlign,
+    direction: computed.direction, tabSize: computed.tabSize,
+    whiteSpace: control instanceof HTMLTextAreaElement ? "pre-wrap" : "pre",
+    overflowWrap: "break-word", overflow: "hidden", opacity: "0",
+    zIndex: "2147483647", pointerEvents: "auto",
+  });
+  mirror.textContent = control.value || " ";
+  doc.body.appendChild(mirror);
+  try {
+    mirror.scrollLeft = control.scrollLeft;
+    mirror.scrollTop = control.scrollTop;
+    const caret = doc.caretPositionFromPoint?.(x, y);
+    const legacyCaret = caret ? null : doc.caretRangeFromPoint?.(x, y);
+    const node = caret?.offsetNode ?? legacyCaret?.startContainer;
+    const offset = caret?.offset ?? legacyCaret?.startOffset;
+    if (!node || offset === undefined || !mirror.contains(node)) return null;
+    const before = doc.createRange();
+    before.selectNodeContents(mirror);
+    before.setEnd(node, offset);
+    return Math.min(before.toString().length, control.value.length);
+  } finally {
+    mirror.remove();
+  }
+}
 
 export function previousTextControlBoundary(text: string, offset: number, selection = false): number {
   const clamped = clampOffset(text, offset);
@@ -66,13 +105,29 @@ export function snapTextControlOffset(
 }
 
 /** Apply Typsastra's script-aware grapheme policy to a native text control. */
-export function installGraphemeTextControl(control: GraphemeTextControl): void {
+export function installGraphemeTextControl(
+  control: GraphemeTextControl,
+  offsetAtPoint = textControlOffsetAtPoint,
+): void {
   if (installedControls.has(control)) return;
   installedControls.add(control);
 
   let pointerActive = false;
   let compositionActive = false;
   let normalizing = false;
+  let wordRequest = 0;
+  let pendingDoubleClick: { text: string; from: number; to: number } | null = null;
+
+  const interceptSecondClick = (event: MouseEvent) => {
+    if (event.detail !== 2 || event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+    const position = offsetAtPoint(control, event.clientX, event.clientY);
+    const cluster = position === null ? null : khmerWordBoundaryAtOffset(control.value, position, 1);
+    if (!cluster) return;
+    pendingDoubleClick = { text: control.value, ...cluster };
+    // WebKit can select the entire Khmer run on mousedown before dblclick.
+    // Cancel the native second press itself, not only the later dblclick event.
+    event.preventDefault();
+  };
 
   const normalizeSelection = () => {
     if (pointerActive || compositionActive || normalizing) return;
@@ -90,6 +145,7 @@ export function installGraphemeTextControl(control: GraphemeTextControl): void {
 
   control.addEventListener("keydown", rawEvent => {
     const event = rawEvent as KeyboardEvent;
+    wordRequest++;
     if (event.defaultPrevented || event.isComposing || compositionActive) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
@@ -111,9 +167,20 @@ export function installGraphemeTextControl(control: GraphemeTextControl): void {
     deleteSelection(control, event.inputType === "deleteContentBackward" ? "backward" : "forward");
   });
 
-  control.addEventListener("pointerdown", () => {
+  control.addEventListener("pointerdown", rawEvent => {
+    const event = rawEvent as PointerEvent;
+    if (event.detail === 1) wordRequest++;
+    interceptSecondClick(event);
     pointerActive = true;
+  }, { capture: true });
+  control.addEventListener("mousedown", event => {
+    interceptSecondClick(event as MouseEvent);
+  }, { capture: true });
+  control.addEventListener("click", rawEvent => {
+    const event = rawEvent as MouseEvent;
+    if (event.detail === 2 && pendingDoubleClick) event.preventDefault();
   });
+  control.addEventListener("input", () => { wordRequest++; });
   control.addEventListener("pointerup", () => {
     pointerActive = false;
     normalizeSelection();
@@ -121,6 +188,23 @@ export function installGraphemeTextControl(control: GraphemeTextControl): void {
   control.addEventListener("pointercancel", () => {
     pointerActive = false;
     normalizeSelection();
+  });
+  control.addEventListener("dblclick", rawEvent => {
+    const event = rawEvent as MouseEvent;
+    if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
+      || compositionActive || control.selectionStart === null) return;
+    const text = control.value;
+    const position = offsetAtPoint(control, event.clientX, event.clientY);
+    const cluster = pendingDoubleClick?.text === text
+      ? pendingDoubleClick : position === null ? null : khmerWordBoundaryAtOffset(text, position, 1);
+    pendingDoubleClick = null;
+    if (!cluster) return;
+    event.preventDefault();
+    const request = ++wordRequest;
+    void analyzeKhmerWordAt(text, cluster.from).then(word => {
+      if (request !== wordRequest || !word || control.value !== text) return;
+      control.setSelectionRange(word.from, word.to);
+    });
   });
   control.addEventListener("lostpointercapture", () => {
     pointerActive = false;

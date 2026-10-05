@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test, afterEach } from "bu
 import { EditorState, Text } from "@codemirror/state";
 import { typstLanguage } from "../src/editor/typstLanguage";
 import { dictionaryWordsForSelection } from "../src/components/contextMenuController";
+import { analyzeKhmerWordAt } from "../src/editor/khmerWordSelection";
 
 type Invocation = { command: string; resolve: (value: unknown) => void; reject: (error: unknown) => void; args?: any };
 const invocations: Invocation[] = [];
@@ -187,6 +188,62 @@ describe("spellcheck request safety", () => {
     request.resolve(analysis("ខុស"));
     await wait(20);
     expect(fixture.controller.issues).toEqual([]);
+  });
+
+  test("uses Khmer provider tokens for adjacent known words and diagnostics for unknown words", async () => {
+    const text = "សាលារៀនខុស";
+    const fixture = await controllerFor(text);
+    const request = await startAnalysis(fixture.controller);
+    const boundaries = [0, 4, 7, text.length];
+    request.resolve({
+      tokens: boundaries.slice(0, -1).map((from, index) => ({
+        provider: "khmer-segmenter",
+        sourceFromUtf16: from,
+        sourceToUtf16: boundaries[index + 1],
+        sourceText: text.slice(from, boundaries[index + 1]),
+        normalizedText: text.slice(from, boundaries[index + 1]),
+        known: index !== 2,
+        knownPrefix: false,
+      })),
+      failures: [],
+    });
+    await wait(20);
+    expect(fixture.controller.khmerWordAt(1)).toEqual({ from: 0, to: 4 });
+    expect(fixture.controller.khmerWordAt(5)).toEqual({ from: 4, to: 7 });
+    expect(fixture.controller.khmerWordAt(8)).toEqual({ from: 7, to: text.length });
+    expect(fixture.controller.khmerWordAt(text.length)).toBeNull();
+  });
+
+  test("native text controls select a Khmer provider token instead of the entire run", async () => {
+    const text = "សាលារៀនខុស";
+    const pending = analyzeKhmerWordAt(text, 4);
+    const request = invocations.shift();
+    expect(request?.command).toBe("analyze_language_ranges");
+    expect(request?.args?.request.chunks[0]).toEqual({
+      text, startUtf16: 0, provider: "khmer-segmenter", contentMode: "plainText",
+    });
+    request?.resolve({
+      tokens: [
+        { provider: "khmer-segmenter", sourceFromUtf16: 0, sourceToUtf16: 4, sourceText: text.slice(0, 4) },
+        { provider: "khmer-segmenter", sourceFromUtf16: 4, sourceToUtf16: 7, sourceText: text.slice(4, 7) },
+        { provider: "khmer-segmenter", sourceFromUtf16: 7, sourceToUtf16: text.length, sourceText: text.slice(7) },
+      ],
+      failures: [],
+    });
+    expect(await pending).toEqual({ from: 4, to: 7 });
+  });
+
+  test("editor on-demand selection analyzes Typst markup rather than raw text", async () => {
+    const text = "#strong[សាលារៀន]";
+    const pending = analyzeKhmerWordAt(text, text.indexOf("ស"), "typstSource");
+    const request = invocations.shift();
+    expect(request?.args?.request.chunks[0].contentMode).toBe("typstSource");
+    const from = text.indexOf("ស");
+    request?.resolve({ tokens: [{
+      provider: "khmer-segmenter", sourceFromUtf16: from, sourceToUtf16: from + 4,
+      sourceText: text.slice(from, from + 4), known: true,
+    }], failures: [] });
+    expect(await pending).toEqual({ from, to: from + 4 });
   });
 
   test("returns only complete misspelled words contained in an editor selection", async () => {
