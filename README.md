@@ -10,7 +10,7 @@ Typsastra has pre-built desktop releases.
 
 Available packages:
 
-- Windows: `.msi`
+- Windows: `.msi` for x64 and ARM64
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 

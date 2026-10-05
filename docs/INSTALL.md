@@ -8,7 +8,7 @@ Pre-built desktop packages are available from the GitHub releases page:
 
 Available packages:
 
-- Windows: `.msi`
+- Windows: `.msi` for x64 and ARM64
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 

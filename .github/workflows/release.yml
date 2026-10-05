@@ -20,9 +20,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows
+          - name: Windows x64
             platform: windows-latest
             args: '--bundles msi'
+          - name: Windows ARM64
+            # ARM64 hosted runners are free only in public repositories.
+            platform: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            args: '--target aarch64-pc-windows-msvc --bundles msi'
           - name: macOS Apple Silicon
             platform: macos-latest
             target: aarch64-apple-darwin
@@ -68,8 +73,8 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add macOS Rust Target
-        if: matrix.platform == 'macos-latest'
+      - name: Add Cross-Compilation Rust Target
+        if: matrix.target != ''
         run: rustup target add ${{ matrix.target }}
 
       - name: Rust Cache
@@ -120,6 +125,27 @@ jobs:
           args: ${{ matrix.args }}
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
+
+      - name: Verify Windows MSI
+        if: matrix.platform == 'windows-latest' || matrix.platform == 'windows-11-arm'
+        shell: bash
+        run: |
+          # Guard against an ARM64 build silently publishing an x64 package.
+          # Tauri names bundles by the Rust target architecture.
+          if [ "${{ matrix.target }}" = "aarch64-pc-windows-msvc" ]; then
+            expected="arm64"
+            search="src-tauri/target/aarch64-pc-windows-msvc/release/bundle/msi"
+          else
+            expected="x64"
+            search="src-tauri/target/release/bundle/msi"
+          fi
+          msi=$(find "$search" -maxdepth 1 -name "*_${expected}.msi" -print -quit 2>/dev/null || true)
+          if [ -z "$msi" ]; then
+            echo "::error::No ${expected} MSI found in $search"
+            find src-tauri/target -name '*.msi' -print || true
+            exit 1
+          fi
+          echo "Verifying MSI: $msi"
 
       - name: Verify AppImage Structure
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'ubuntu-22.04-arm'
