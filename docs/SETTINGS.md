@@ -314,10 +314,30 @@ Typst formatting is available from **Edit → Format Document** or `Ctrl+Shift+F
 
 ## Keyboard shortcuts
 
+Settings → Shortcuts lists the application, editor, history, search, folding and
+completion bindings supported by the current keymaps. Click a command's shortcut
+to open the recorder, then press its new key combination. Escape cancels, and
+conflicting assignments remain in the recorder until you try another combination
+or cancel. Labels use uppercase letters consistently. Conflicts are checked for
+both Windows/Linux and macOS. Reset restores the default. Overrides are saved in
+`settings.json` under `shortcuts` and apply immediately to the editor and the
+macOS native menu. This command registry is separate from the editor's
+reconfigurable keymap layer, allowing a future Vim mode to replace that layer
+without changing users' saved preferences. OS-owned menu items (such as Undo,
+Redo, Hide, Cut and Paste) retain their system bindings and are excluded from
+the programmable list.
+
+To bind a two-key shortcut, select **Record two keys** in the recorder and press
+the prefix and final key in order, for example Ctrl+K followed by O. The list
+shows `Ctrl+K, O`. Both a prefix already used by a one-key action and a one-key
+assignment that would steal an existing chord prefix are rejected.
+
+These are defaults, before any customizations:
+
 | Action | Windows and Linux | macOS |
 | --- | --- | --- |
 | New File | `Ctrl+N` | `Cmd+N` |
-| Open Project | `Ctrl+K Ctrl+O` | `Cmd+K Cmd+O` |
+| Open Project | `Ctrl+O` | `Cmd+O` |
 | Save | `Ctrl+S` | `Cmd+S` |
 | Save As | `Ctrl+Shift+S` | `Cmd+Shift+S` |
 | Open Settings | `Ctrl+,` | `Cmd+,` |

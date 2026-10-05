@@ -13,6 +13,7 @@ describe("application settings", () => {
     expect(settings.appearance.theme).toBe("nord");
     expect(settings.developerMode).toBe(false);
     expect(settings.developerLogs).toEqual(defaultAppSettings.developerLogs);
+    expect(settings.shortcuts).toEqual({});
     expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.unicodeFonts).toEqual({});
@@ -36,6 +37,16 @@ describe("application settings", () => {
     expect(settings.toolchain.tinymistVersion).toBeNull();
     expect(settings.toolchain.enhancedUnicodeEngineEnabled).toBe(false);
     expect(settings.toolchain.enhancedUnicodeEnginePath).toBeNull();
+  });
+
+  test("restores valid shortcut overrides without persisting invalid or colliding assignments", () => {
+    const settings = normalizeAppSettings({ shortcuts: {
+      "editor.unindent": "Alt-F9",
+      "editor.tab": "Mod-S",
+      "obsolete.command": "Mod-K",
+      "action-open-folder": "unmodified",
+    } });
+    expect(settings.shortcuts).toEqual({ "editor.unindent": "Alt-F9" });
   });
 
   test("drops the retired Khmer render-preparation setting", () => {

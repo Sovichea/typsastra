@@ -2,13 +2,12 @@ import { Extension, Compartment, EditorSelection, EditorState, StateEffect, Rang
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, RectangleMarker, layer, tooltips } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, insertNewlineAndIndent, insertTab } from "@codemirror/commands";
+import { history, historyKeymap, indentLess, insertNewlineAndIndent, insertTab, toggleLineComment } from "@codemirror/commands";
 import {
   SearchQuery,
   closeSearchPanel,
   getSearchQuery,
   search,
-  searchKeymap,
   searchPanelOpen
 } from "@codemirror/search";
 import { TypsastraSearchPanel } from "./search";
@@ -16,7 +15,6 @@ import { baseEditorLayoutTheme, editorFontTheme, typstColorHighlighting, typstFo
 import {
   codeFolding,
   foldGutter,
-  foldKeymap,
   foldedRanges,
   foldService,
   indentUnit,
@@ -37,14 +35,12 @@ import {
 } from "./autocomplete";
 import {
   acceptCompletion,
-  completionKeymap,
   completionStatus,
   closeBrackets,
   moveCompletionSelection,
   startCompletion
 } from "@codemirror/autocomplete";
 import { bracketMatching } from "@codemirror/language";
-import { toggleLineComment } from "@codemirror/commands";
 import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
 import type { TinymistLspClient } from "../compiler/lsp";
@@ -66,6 +62,8 @@ import { contextualDoubleQuoteExtension } from "./quoteEditing";
 import { imageOptimizationWarningsExtension } from "./imageWarnings";
 import { tableDirectiveGutterExtension } from "./tableDirectives";
 import { selectionPairReplacementExtension } from "./selectionPairEditing";
+import { isMacShortcutPlatform } from "../platform/shortcuts";
+import { canonicalShortcut, shortcutDefinitions, shortcutFor, shortcutFromEvent, type ShortcutOverrides } from "../platform/shortcutRegistry";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -78,6 +76,8 @@ export const tabSizeCompartment = new Compartment();
 export const completionCompartment = new Compartment();
 export const showZwsCompartment = new Compartment();
 export const languageCompartment = new Compartment();
+/** Kept separate so Vim can replace the command layer without rewriting shortcuts. */
+export const editorKeymapCompartment = new Compartment();
 
 const selectionStateClass = EditorView.editorAttributes.compute(["selection"], state => ({
   class: state.selection.ranges.some(range => !range.empty) ? "cm-has-selection" : ""
@@ -145,15 +145,19 @@ export function scrollPastDocumentEnd(): Extension {
   });
 }
 
-const completionNavigationHandler = Prec.highest(EditorView.domEventHandlers({
+function completionNavigationHandler(getShortcuts: () => ShortcutOverrides): Extension {
+  return Prec.highest(EditorView.domEventHandlers({
   keydown(event, view) {
     let handled = false;
     const completionActive = completionStatus(view.state) === "active";
+    const mac = isMacShortcutPlatform();
+    const pressed = shortcutFromEvent(event, mac);
+    const isShortcut = (id: string) => pressed !== null && canonicalShortcut(pressed, mac) === canonicalShortcut(shortcutFor(id, getShortcuts(), mac), mac);
     const insideFunctionArguments = isInsideTypstFunctionArgumentsAt(
       view.state.doc,
       view.state.selection.main.head
     );
-    if (event.ctrlKey && !event.altKey && !event.metaKey && event.code === "Space") {
+    if (isShortcut("editor.startCompletion")) {
       // Escape can dismiss the menu while an asynchronous LSP query is still
       // settling. Resetting the selection transaction aborts that stale query
       // before explicitly starting a new one, so Ctrl+Space can reopen the
@@ -161,27 +165,101 @@ const completionNavigationHandler = Prec.highest(EditorView.domEventHandlers({
       view.dispatch({ selection: view.state.selection });
       queueMicrotask(() => startCompletion(view));
       handled = true;
-    } else if (event.key === "ArrowDown") {
+    } else if (completionActive && isShortcut("editor.completionDown")) {
       handled = moveCompletionSelection(true)(view);
-    } else if (event.key === "ArrowUp") {
+    } else if (completionActive && isShortcut("editor.completionUp")) {
       handled = moveCompletionSelection(false)(view);
-    } else if (event.key === "PageDown") {
+    } else if (completionActive && isShortcut("editor.completionPageDown")) {
       handled = moveCompletionSelection(true, "page")(view);
-    } else if (event.key === "PageUp") {
+    } else if (completionActive && isShortcut("editor.completionPageUp")) {
       handled = moveCompletionSelection(false, "page")(view);
-    } else if (event.key === "Enter" && event.ctrlKey && insideFunctionArguments) {
+    } else if (isShortcut("editor.argumentNewline") && insideFunctionArguments) {
       handled = insertNewlineAndIndent(view);
       if (handled) queueMicrotask(() => startCompletion(view));
-    } else if (event.key === "Tab" && completionActive) {
+    } else if (completionActive && isShortcut("editor.acceptCompletion")) {
       handled = acceptCompletion(view);
-    } else if (event.key === "Enter") {
+    } else if (completionActive && isShortcut("editor.completionEnter")) {
       handled = acceptCompletion(view);
     }
     if (!handled) return false;
     event.preventDefault();
     return true;
   }
-}));
+  }));
+}
+
+function unindentWithShiftTab(view: EditorView): boolean {
+  indentLess(view);
+  // Even at column zero, keep Shift+Tab in the editor instead of allowing the
+  // browser to move focus to the previous control.
+  return true;
+}
+
+export function configuredEditorKeymap(overrides: ShortcutOverrides, mac: boolean = isMacShortcutPlatform()): Extension {
+  // KeyboardEvent.key is lowercase for an unshifted letter. Our persisted
+  // specs and UI use uppercase physical key names, so translate at the
+  // CodeMirror boundary (including the unmodified second stroke of a chord).
+  const codeMirrorKey = (value: string) => value.split(" ").map(stroke => {
+    const parts = stroke.split("-");
+    const key = parts.pop()!;
+    return [...parts, /^[A-Z]$/.test(key) && !parts.includes("Shift") ? key.toLowerCase() : key].join("-");
+  }).join(" ");
+  const commands: Partial<Record<string, (view: EditorView) => boolean>> = {
+    "editor.comment": toggleLineComment,
+    "editor.backspace": deletePreviousGraphemeOrPair,
+    "editor.delete": deleteNextGrapheme,
+    "editor.left": movePreviousGrapheme,
+    "editor.right": moveNextGrapheme,
+    "editor.selectLeft": selectPreviousGrapheme,
+    "editor.selectRight": selectNextGrapheme,
+    "editor.unindent": unindentWithShiftTab,
+    "editor.tab": insertTab,
+  };
+  const highPriority = shortcutDefinitions.flatMap(entry => {
+    const run = commands[entry.id];
+    const key = shortcutFor(entry.id, overrides, mac);
+    return run && key ? [{ key: codeMirrorKey(key), run }] : [];
+  });
+  const chordCommands: Partial<Record<string, (view: EditorView) => boolean>> = {
+    "editor.startCompletion": view => {
+      view.dispatch({ selection: view.state.selection });
+      queueMicrotask(() => startCompletion(view));
+      return true;
+    },
+    "editor.argumentNewline": view => {
+      if (!isInsideTypstFunctionArgumentsAt(view.state.doc, view.state.selection.main.head)) return false;
+      const handled = insertNewlineAndIndent(view);
+      if (handled) queueMicrotask(() => startCompletion(view));
+      return handled;
+    },
+    "editor.acceptCompletion": view => completionStatus(view.state) === "active" && acceptCompletion(view),
+    "editor.completionEnter": view => completionStatus(view.state) === "active" && acceptCompletion(view),
+    "editor.completionDown": view => completionStatus(view.state) === "active" && moveCompletionSelection(true)(view),
+    "editor.completionUp": view => completionStatus(view.state) === "active" && moveCompletionSelection(false)(view),
+    "editor.completionPageDown": view => completionStatus(view.state) === "active" && moveCompletionSelection(true, "page")(view),
+    "editor.completionPageUp": view => completionStatus(view.state) === "active" && moveCompletionSelection(false, "page")(view),
+  };
+  const chords = shortcutDefinitions.flatMap(entry => {
+    const key = shortcutFor(entry.id, overrides, mac);
+    const run = chordCommands[entry.id];
+    return run && key.includes(" ") ? [{ key: codeMirrorKey(key), run }] : [];
+  });
+  const upstream = shortcutDefinitions.flatMap(entry => {
+    if (!entry.binding || !entry.id.startsWith("editor.")) return [];
+    const key = shortcutFor(entry.id, overrides, mac);
+    if (!key) return [];
+    if (Object.prototype.hasOwnProperty.call(overrides, entry.id)) {
+      return [{ ...entry.binding, key: codeMirrorKey(key), mac: undefined, win: undefined, linux: undefined }];
+    }
+    return [entry.binding];
+  });
+  return keymap.of([...highPriority, ...chords, ...upstream, ...historyKeymap.slice(0, 3)]);
+}
+
+/** The replaceable editing layer. A future Vim mode can install its own layer here. */
+export function configuredEditorShortcuts(overrides: ShortcutOverrides, getShortcuts: () => ShortcutOverrides): Extension {
+  return [completionNavigationHandler(getShortcuts), configuredEditorKeymap(overrides)];
+}
 
 const functionArgumentCompletionTrigger = EditorView.updateListener.of(update => {
   if (!update.docChanged) return;
@@ -778,6 +856,7 @@ export function getEditorExtensions(
     selection: { from: number; to: number },
     view: EditorView,
   ) => void,
+  getShortcuts: () => ShortcutOverrides = () => ({}),
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
@@ -900,24 +979,9 @@ export function getEditorExtensions(
     createHoverTooltip(getClient, getUri),
     completionCompartment.of(createTypstAutocomplete(getClient, getUri, flushLspSync, true, getProviders)),
     functionArgumentCompletionTrigger,
-    completionNavigationHandler,
     themeCompartment.of(getThemeExtension("default")),
     editorFontCompartment.of(editorFontTheme()),
-    keymap.of([
-      { key: "Mod-/", run: toggleLineComment },
-      { key: "Backspace", run: deletePreviousGraphemeOrPair },
-      { key: "Delete", run: deleteNextGrapheme },
-      { key: "ArrowLeft", run: movePreviousGrapheme },
-      { key: "ArrowRight", run: moveNextGrapheme },
-      { key: "Shift-ArrowLeft", run: selectPreviousGrapheme },
-      { key: "Shift-ArrowRight", run: selectNextGrapheme },
-      ...completionKeymap,
-      { key: "Tab", run: insertTab }, 
-      ...defaultKeymap, 
-      ...historyKeymap, 
-      ...searchKeymap, 
-      ...foldKeymap
-    ])
+    editorKeymapCompartment.of(configuredEditorShortcuts(getShortcuts(), getShortcuts))
   ];
 }
 

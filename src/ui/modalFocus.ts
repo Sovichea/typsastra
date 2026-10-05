@@ -59,6 +59,9 @@ export function installModalFocusTrap(documentRoot: Document = document): () => 
     if (event.key !== "Tab") return;
     const dialog = visibleModalDialog(documentRoot);
     if (!dialog) return;
+    // The shortcut recorder intentionally captures Tab and Shift+Tab. Its
+    // focused dialog handles the key and prevents the browser's focus move.
+    if (dialog.hasAttribute("data-shortcut-recorder")) return;
     const focusable = focusableElements(dialog);
     const active = documentRoot.activeElement;
     const currentIndex = active instanceof HTMLElement ? focusable.indexOf(active) : -1;

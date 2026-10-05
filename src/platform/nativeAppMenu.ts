@@ -15,8 +15,10 @@ import {
   workspaceScopedMenuIds,
   type NativeMenuNode,
 } from "./nativeAppMenuSpec";
+import { applicationShortcuts, shortcutFor, type ShortcutOverrides } from "./shortcutRegistry";
 
 export interface NativeAppMenuDependencies {
+  shortcuts(): ShortcutOverrides;
   wordWrapEnabled(): boolean;
   editorToolbarVisible(): boolean;
   workspaceOpen(): boolean;
@@ -31,6 +33,8 @@ export interface NativeAppMenuCheckState {
 }
 
 export interface NativeAppMenuHandle {
+  syncShortcuts(shortcuts: ShortcutOverrides): void;
+  setShortcutCaptureActive(active: boolean): Promise<void>;
   syncCheckState(state: NativeAppMenuCheckState): void;
   syncWorkspaceState(open: boolean): void;
   refreshRecentProjects(): void;
@@ -38,6 +42,12 @@ export interface NativeAppMenuHandle {
 }
 
 type ActionMenuItem = MenuItem | CheckMenuItem;
+
+export function menuAccelerator(value: string): string | undefined {
+  // Native menus only accept single strokes. Chords remain available through
+  // the application key dispatcher even on macOS.
+  return value && !value.includes(" ") ? value.replace(/\bMod\b/g, "CmdOrCtrl").replace(/-/g, "+") : undefined;
+}
 
 export function nativeAppMenuSupported(input?: RuntimeTitlebarInput): boolean {
   const state = resolveRuntimeTitlebar(input ?? {
@@ -89,7 +99,7 @@ async function materializeNode(
         id: node.id,
         text: node.label,
         enabled: node.workspaceScoped ? deps.workspaceOpen() : undefined,
-        accelerator: node.accelerator,
+        accelerator: menuAccelerator(shortcutFor(node.id, deps.shortcuts(), true)),
         action: () => document.getElementById(node.elementId)?.click(),
       });
       items.set(node.id, item);
@@ -101,7 +111,7 @@ async function materializeNode(
         text: node.label,
         checked: node.check === "wordWrap" ? deps.wordWrapEnabled() : deps.editorToolbarVisible(),
         enabled: node.workspaceScoped ? deps.workspaceOpen() : undefined,
-        accelerator: node.accelerator,
+        accelerator: menuAccelerator(shortcutFor(node.id, deps.shortcuts(), true)),
         action: () => document.getElementById(node.elementId)?.click(),
       });
       items.set(node.id, item);
@@ -117,6 +127,9 @@ async function materializeNode(
 }
 
 class NativeAppMenuHandleImpl implements NativeAppMenuHandle {
+  private readonly accelerators = new Map<string, string>();
+  private shortcutCaptureActive = false;
+  private shortcutChanges = Promise.resolve();
   private lastWorkspaceOpen: boolean;
   private lastWordWrap: boolean;
   private lastEditorToolbar: boolean;
@@ -137,6 +150,46 @@ class NativeAppMenuHandleImpl implements NativeAppMenuHandle {
     this.lastWordWrap = deps.wordWrapEnabled();
     this.lastEditorToolbar = deps.editorToolbarVisible();
     this.recentSubmenu = initialRecent;
+  }
+
+  syncShortcuts(shortcuts: ShortcutOverrides): void {
+    if (this.shortcutCaptureActive) return;
+    for (const { id } of applicationShortcuts) {
+      if (!this.items.has(id)) continue;
+      const value = shortcutFor(id, shortcuts, true);
+      if (this.accelerators.get(id) === value) continue;
+      this.accelerators.set(id, value);
+      void this.queueAccelerator(id, menuAccelerator(value) ?? null).catch(error => {
+        console.warn(`Could not update native shortcut ${id}:`, error);
+      });
+    }
+  }
+
+  setShortcutCaptureActive(active: boolean): Promise<void> {
+    if (active === this.shortcutCaptureActive) return this.shortcutChanges;
+    this.shortcutCaptureActive = active;
+    if (active) {
+      // macOS menu accelerators execute before a WebView keydown. Release them
+      // while the recorder is open so Cmd+S, Cmd+Q and friends can be captured.
+      const changes = applicationShortcuts
+        .filter(({ id }) => this.items.has(id))
+        .map(({ id }) => this.queueAccelerator(id, null));
+      return Promise.all(changes).then(() => undefined);
+    } else {
+      this.accelerators.clear();
+      this.syncShortcuts(this.deps.shortcuts());
+      return this.shortcutChanges;
+    }
+  }
+
+  private queueAccelerator(id: string, value: string | null): Promise<void> {
+    const change = this.shortcutChanges
+      .then(() => this.items.get(id)?.setAccelerator(value))
+      .then(() => undefined);
+    // A failed item must not block later changes, but its caller still receives
+    // the rejection so the recorder knows it isn't safe to start listening.
+    this.shortcutChanges = change.catch(() => {});
+    return change;
   }
 
   syncWorkspaceState(open: boolean): void {

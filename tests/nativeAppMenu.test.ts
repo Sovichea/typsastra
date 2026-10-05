@@ -6,12 +6,18 @@ import {
   setNativeAppMenuInstalled,
   workspaceScopedMenuIds,
 } from "../src/platform/nativeAppMenuSpec";
+import { menuAccelerator } from "../src/platform/nativeAppMenu";
 
 async function source(path: string): Promise<string> {
   return Bun.file(new URL(path, import.meta.url)).text();
 }
 
 const acceleratorPattern = /^(CmdOrCtrl|Alt|Shift)(\+(CmdOrCtrl|Alt|Shift))*\+[^+]+$/;
+
+test("native menus own one stroke; application chords stay in the WebView dispatcher", () => {
+  expect(menuAccelerator("Mod-K")).toBe("CmdOrCtrl+K");
+  expect(menuAccelerator("Mod-K O")).toBeUndefined();
+});
 
 const expectedWorkspaceScoped = [
   "action-new-file",
@@ -180,49 +186,24 @@ describe("native menu installation drift", () => {
 
   test("gates JavaScript shortcuts once the native menu owns them", async () => {
     const events = await source("../src/ui/appEventBindings.ts");
-    const settings = await source("../src/settingsController.ts");
     const specSource = await source("../src/platform/nativeAppMenuSpec.ts");
 
     expect(specSource).toContain("export function nativeAppMenuOwnsShortcuts");
-    expect(events).toContain("nativeAppMenuOwnsShortcuts()");
-    expect(settings).toContain("nativeAppMenuOwnsShortcuts()");
+    expect(events).toContain('!nativeAppMenuOwnsShortcuts() || shortcutStrokes(shortcutFor(appShortcut, actions.shortcuts(), isMac)).length === 2');
   });
 
-  test("gates every individual shortcut branch the native menu takes over", async () => {
-    const lines = (await source("../src/ui/appEventBindings.ts")).split("\n");
-
-    /** The `if (` line enclosing the first occurrence of `marker`. */
-    const enclosingBranch = (marker: string): string => {
-      const index = lines.findIndex(line => line.includes(marker));
-      expect(index).toBeGreaterThanOrEqual(0);
-      for (let cursor = index; cursor >= 0; cursor -= 1) {
-        if (lines[cursor].trimStart().startsWith("if (")) return lines[cursor];
-      }
-      return "";
-    };
-
-    // Every accelerator the native macOS menu declares must be gated here, or it
-    // fires twice on macOS. The inner Mod+S branch sits inside the actionByKey block.
-    const gatedMarkers = [
-      'keyCode === "KeyF"',   // Shift+CmdOrCtrl+F  Format Document
-      'keyCode === "KeyS"',   // Shift+CmdOrCtrl+S  Save As
-      'keyCode === "KeyT"',   // Shift+CmdOrCtrl+T  Editor Toolbar
-      "const actionByKey",    // Mod+O/N/B/E/Q/Backquote and Mod+S
-      'keyCode === "KeyZ"',   // Alt+Z              Word Wrap
-    ];
-    for (const marker of gatedMarkers) {
-      expect(enclosingBranch(marker)).toContain("nativeAppMenuOwnsShortcuts()");
-    }
-
-    const gateCount = [...(lines.join("\n")).matchAll(/nativeAppMenuOwnsShortcuts\(\)/g)].length;
-    expect(gateCount).toBeGreaterThanOrEqual(gatedMarkers.length);
+  test("reconfigures native accelerators as shortcuts change", async () => {
+    const nativeMenu = await source("../src/platform/nativeAppMenu.ts");
+    expect(nativeMenu).toContain("this.queueAccelerator(id, menuAccelerator(value) ?? null)");
+    expect(nativeMenu).toContain("setShortcutCaptureActive(active: boolean)");
+    expect(nativeMenu).toContain("shortcutFor(node.id, deps.shortcuts(), true)");
   });
 
   test("gates the settings accelerator without disabling Escape-to-close", async () => {
     const settings = await source("../src/settingsController.ts");
-    const commaBranch = settings.split("\n").find(line => line.includes('event.code === "Comma"'));
-    expect(commaBranch).toBeDefined();
-    expect(commaBranch).toContain("nativeAppMenuOwnsShortcuts()");
+    const events = await source("../src/ui/appEventBindings.ts");
+    expect(events).toContain("sequence.handle(event, actions.shortcuts(), isMac");
+    expect(events).toContain('appShortcut?.startsWith("action-")');
     // Escape must stay ungated so the dialog still closes under a native menu.
     const escapeBranch = settings.split("\n").find(line => line.includes('event.key === "Escape"'));
     expect(escapeBranch).toBeDefined();

@@ -8,7 +8,7 @@ import type { PreviewClickPoint } from "../preview/previewFrame";
 import type { PreviewScrollPositionPayload } from "../preview/previewWindowController";
 import type { PreviewContentMode } from "../preview/draftPreviewController";
 import type { PreviewColorMode } from "../settings";
-import { recentProjectShortcutIndex } from "../workspace/recentProjectsController";
+import { ApplicationShortcutSequence, shortcutFor, shortcutStrokes, type ShortcutOverrides } from "../platform/shortcutRegistry";
 import { installWelcomeKeyboardNavigation } from "../workspace/welcomeNavigation";
 import { installModalFocusTrap } from "./modalFocus";
 import { isAltGraphKeyboardEvent } from "./keyboardModifiers";
@@ -37,6 +37,7 @@ export interface AppEventActions {
   saveActiveFileAs: () => Promise<void> | void;
   saveActiveFile: () => Promise<void> | void;
   openRecentProject: (index: number) => boolean;
+  shortcuts: () => ShortcutOverrides;
 
   openWorkspace: (path: string) => Promise<void> | void;
   importProject: () => Promise<void> | void;
@@ -87,12 +88,25 @@ export interface AppEventActions {
 }
 
 function bindKeyboardShortcuts(actions: AppEventActions): void {
+  const sequence = new ApplicationShortcutSequence();
+  window.addEventListener("blur", () => sequence.reset());
   document.addEventListener("keydown", event => {
     if (isAltGraphKeyboardEvent(event)) return;
 
     const isMac = navigator.userAgent.toLowerCase().includes("mac");
     const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
     const keyCode = event.code;
+    const welcomeScreen = document.getElementById("welcome-screen");
+    const welcomeVisible = !!welcomeScreen && !welcomeScreen.classList.contains("hidden");
+    const shortcutResult = sequence.handle(event, actions.shortcuts(), isMac, Date.now(), id =>
+      !id.startsWith("app.recent.") || welcomeVisible,
+    );
+    if (shortcutResult.kind === "pending" || shortcutResult.kind === "cancelled") {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    const appShortcut = shortcutResult.kind === "matched" ? shortcutResult.id : null;
 
     if (
       cmdOrCtrl
@@ -114,12 +128,6 @@ function bindKeyboardShortcuts(actions: AppEventActions): void {
       void invoke("open_devtools");
     }
 
-    if (event.altKey && !cmdOrCtrl && !event.shiftKey && keyCode === "Enter") {
-      event.preventDefault();
-      actions.revealCursorInPreview();
-      return;
-    }
-
     if (["F5", "F6", "F7", "F11"].includes(keyCode)) event.preventDefault();
     if (cmdOrCtrl && ["KeyR", "KeyP", "KeyJ", "KeyU", "KeyD"].includes(keyCode)) event.preventDefault();
 
@@ -134,55 +142,22 @@ function bindKeyboardShortcuts(actions: AppEventActions): void {
       event.preventDefault();
     }
 
-    if (!nativeAppMenuOwnsShortcuts() && cmdOrCtrl && event.shiftKey && !event.altKey && keyCode === "KeyF") {
+    if (appShortcut === "app.revealPreview") {
       event.preventDefault();
-      void actions.formatActiveDocument();
+      actions.revealCursorInPreview();
       return;
     }
-    if (!nativeAppMenuOwnsShortcuts() && cmdOrCtrl && event.shiftKey && !event.altKey && keyCode === "KeyS") {
-      event.preventDefault();
-      void actions.saveActiveFileAs();
+    if (appShortcut?.startsWith("app.recent.") && welcomeVisible) {
+      if (actions.openRecentProject(Number(appShortcut.slice(-1)) - 1)) event.preventDefault();
       return;
     }
-    if (!nativeAppMenuOwnsShortcuts() && cmdOrCtrl && event.shiftKey && !event.altKey && keyCode === "KeyT") {
+    if (appShortcut?.startsWith("action-")
+      && (!nativeAppMenuOwnsShortcuts() || shortcutStrokes(shortcutFor(appShortcut, actions.shortcuts(), isMac)).length === 2)) {
+      if (appShortcut === "action-select-all"
+        && (event.target as Element | null)?.closest("input, textarea, [contenteditable]")
+        && !(event.target as Element | null)?.closest(".cm-editor")) return;
       event.preventDefault();
-      actions.toggleEditorToolbar();
-      return;
-    }
-
-    const recentProjectIndex = recentProjectShortcutIndex(event);
-    const welcomeScreen = document.getElementById("welcome-screen");
-    if (
-      recentProjectIndex !== null
-      && welcomeScreen
-      && !welcomeScreen.classList.contains("hidden")
-      && actions.openRecentProject(recentProjectIndex)
-    ) {
-      event.preventDefault();
-      return;
-    }
-
-    if (!nativeAppMenuOwnsShortcuts() && cmdOrCtrl && !event.shiftKey && !event.altKey) {
-      const actionByKey: Partial<Record<string, string>> = {
-        KeyO: "action-open-folder",
-        KeyN: "action-new-file",
-        KeyB: "action-toggle-sidebar",
-        KeyE: "action-export-pdf",
-        KeyQ: "action-exit",
-        Backquote: "action-toggle-logs",
-      };
-      if (keyCode === "KeyS") {
-        event.preventDefault();
-        void actions.saveActiveFile();
-      } else if (actionByKey[keyCode]) {
-        event.preventDefault();
-        document.getElementById(actionByKey[keyCode]!)?.click();
-      }
-    }
-
-    if (!nativeAppMenuOwnsShortcuts() && event.altKey && !cmdOrCtrl && !event.shiftKey && keyCode === "KeyZ") {
-      event.preventDefault();
-      document.getElementById("action-toggle-word-wrap")?.click();
+      document.getElementById(appShortcut)?.click();
     }
   });
 }

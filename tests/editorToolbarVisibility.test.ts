@@ -35,8 +35,8 @@ describe("editor toolbar visibility", () => {
 
   test("routes the shortcut and the menu entry through the persisted setting", async () => {
     const bindings = await appEventBindings();
-    expect(bindings).toContain('keyCode === "KeyT"');
-    expect(bindings).toContain("actions.toggleEditorToolbar()");
+    expect(bindings).toContain("sequence.handle(event, actions.shortcuts(), isMac");
+    expect(bindings).toContain("document.getElementById(appShortcut)?.click()");
     expect(bindings).toContain('document.getElementById("action-toggle-editor-toolbar")?.addEventListener("click", actions.toggleEditorToolbar)');
 
     const source = await appController();

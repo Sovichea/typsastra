@@ -11,6 +11,10 @@ describe("platform shortcut labels", () => {
     expect(formatShortcut("Mod+S", true)).toBe("Cmd+S");
     expect(formatShortcut("Mod+Shift+T", false)).toBe("Ctrl+Shift+T");
     expect(formatShortcut("Mod+Shift+T", true)).toBe("Cmd+Shift+T");
+    expect(formatShortcut("Mod+a", false)).toBe("Ctrl+A");
+    expect(formatShortcut("Ctrl+b", true)).toBe("Control+B");
+    expect(formatShortcut("Alt+l", false)).toBe("Alt+L");
+    expect(formatShortcut("Mod+Backquote", false)).toBe("Ctrl+`");
   });
 
   test("names Alt as Option and Ctrl as Control on macOS only", () => {
@@ -21,8 +25,9 @@ describe("platform shortcut labels", () => {
   });
 
   test("keeps chords and punctuation keys intact", () => {
-    expect(formatShortcut("Mod+K Mod+O", false)).toBe("Ctrl+K Ctrl+O");
-    expect(formatShortcut("Mod+K Mod+O", true)).toBe("Cmd+K Cmd+O");
+    expect(formatShortcut("Mod+K O", false)).toBe("Ctrl+K, O");
+    expect(formatShortcut("Mod+K Mod+O", true)).toBe("Cmd+K, Cmd+O");
+    expect(formatShortcut("Mod+K O", false)).toBe("Ctrl+K, O");
     expect(formatShortcut("Mod+,", true)).toBe("Cmd+,");
     expect(formatShortcut("Mod+`", true)).toBe("Cmd+`");
   });
@@ -64,6 +69,8 @@ describe("shortcut label markup", () => {
     const html = await indexHtml();
     expect(html).toContain('data-shortcut="Mod+B">Ctrl+B<');
     expect(html).toContain('data-shortcut="Mod+Shift+T">Ctrl+Shift+T<');
+    expect(html).toContain('data-shortcut="Mod+O">Ctrl+O<');
+    expect(html).not.toContain('data-shortcut="Mod+K Mod+O"');
   });
 
   test("labels redo with its real macOS binding", async () => {

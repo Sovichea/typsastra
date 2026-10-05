@@ -1,3 +1,5 @@
+import { normalizeShortcutOverrides, type ShortcutOverrides } from "./platform/shortcutRegistry";
+
 export const themeNames = [
   "default",
   "typsastraLight",
@@ -34,6 +36,7 @@ export type AppSettings = {
   version: 2;
   developerMode: boolean;
   developerLogs: DeveloperLogSettings;
+  shortcuts: ShortcutOverrides;
   appearance: {
     theme: ThemeName;
     editorFontSize: number;
@@ -98,6 +101,7 @@ export const defaultAppSettings: AppSettings = {
     spellcheck: true,
     general: true
   },
+  shortcuts: {},
   appearance: {
     theme: "default",
     editorFontSize: 14,
@@ -276,6 +280,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       spellcheck: booleanValue(developerLogs.spellcheck, defaultAppSettings.developerLogs.spellcheck),
       general: booleanValue(developerLogs.general, defaultAppSettings.developerLogs.general)
     },
+    shortcuts: normalizeShortcutOverrides(root.shortcuts),
     appearance: {
       theme,
       editorFontSize: boundedNumber(appearance.editorFontSize, defaultAppSettings.appearance.editorFontSize, 10, 32),

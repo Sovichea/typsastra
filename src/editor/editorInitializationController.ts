@@ -15,6 +15,7 @@ import type { PreviewSyncController } from "../preview/previewSyncController";
 import type { EditorFontManager } from "./fontManager";
 import type { DraftPreviewController, DraftThumbnailQueueMetric } from "../preview/draftPreviewController";
 import type { ClipboardImageData } from "./imageDrop";
+import type { ShortcutOverrides } from "../platform/shortcutRegistry";
 
 export interface EditorInitializationDependencies {
   editorFontManager: EditorFontManager;
@@ -42,6 +43,7 @@ export interface EditorInitializationDependencies {
   cursorSyncEnabled(): boolean;
   forwardSyncDebounceMs(): number;
   isDeveloperPerformanceLogEnabled(): boolean;
+  shortcuts(): ShortcutOverrides;
   insertExplorerImage(path: string, position: number, view: EditorView): void;
   pasteClipboardImages(
     images: readonly ClipboardImageData[],
@@ -73,6 +75,7 @@ export class EditorInitializationController {
         }),
         (path, position, view) => deps.insertExplorerImage(path, position, view),
         (images, selection, view) => deps.pasteClipboardImages(images, selection, view),
+        () => deps.shortcuts(),
       ),
       deps.spellcheck.extension(),
       EditorView.updateListener.of(update => {

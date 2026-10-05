@@ -29,7 +29,7 @@
                                     id="action-open-folder"
                                 >
                                     Open Project...
-                                    <span class="hotkey" data-shortcut="Mod+K Mod+O">Ctrl+K Ctrl+O</span>
+                                    <span class="hotkey" data-shortcut="Mod+O">Ctrl+O</span>
                                 </div>
                                 <div
                                     class="dropdown-item"
@@ -377,11 +377,6 @@
                                 <span class="welcome-item-text"
                                     >Create New Project</span
                                 >
-                                <span
-                                    class="welcome-item-hotkey"
-                                    data-shortcut="Mod+K Mod+N"
-                                    >Ctrl+K Ctrl+N</span
-                                >
                             </button>
                             <button
                                 class="welcome-item"
@@ -394,8 +389,8 @@
                                 >
                                 <span
                                     class="welcome-item-hotkey"
-                                    data-shortcut="Mod+K Mod+O"
-                                    >Ctrl+K Ctrl+O</span
+                                    data-shortcut="Mod+O"
+                                    >Ctrl+O</span
                                 >
                             </button>
                             <button
@@ -2423,6 +2418,9 @@
                         >
                             Editor
                         </button>
+                        <button class="settings-nav-item" type="button" data-settings-panel="shortcuts">
+                            Shortcuts
+                        </button>
                         <button
                             class="settings-nav-item"
                             type="button"
@@ -2458,6 +2456,16 @@
                         </button>
                     </nav>
                     <div class="settings-panels">
+                        <div class="settings-panel" data-settings-panel-content="shortcuts">
+                            <h3>Keyboard shortcuts</h3>
+                            <p class="settings-help">Click a shortcut to record a new key combination. Conflicting shortcuts are rejected. Editor shortcuts are kept separate from future Vim mode bindings.</p>
+                            <div class="settings-field">
+                                <label for="settings-shortcut-search">Search commands</label>
+                                <input id="settings-shortcut-search" type="search" placeholder="Search shortcuts" autocomplete="off" />
+                            </div>
+                            <div id="settings-shortcut-error" role="alert" aria-live="polite"></div>
+                            <div id="settings-shortcut-list" class="settings-shortcut-list"></div>
+                        </div>
                         <div
                             class="settings-panel active"
                             data-settings-panel-content="appearance"
@@ -3145,6 +3153,32 @@
                             Done
                         </button>
                     </div>
+                </footer>
+            </section>
+        </div>
+
+        <div id="shortcut-capture-overlay" class="settings-overlay shortcut-capture-overlay hidden" role="presentation">
+            <section
+                id="shortcut-capture-dialog"
+                class="settings-dialog shortcut-capture-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="shortcut-capture-title"
+                aria-describedby="shortcut-capture-description"
+                data-shortcut-recorder=""
+                tabindex="-1"
+            >
+                <header class="settings-header"><h2 id="shortcut-capture-title">Record shortcut</h2></header>
+                <div class="shortcut-capture-body">
+                    <p id="shortcut-capture-description">Press your new key combination. Press Escape to cancel.</p>
+                    <label class="shortcut-capture-chord-option">
+                        <input id="shortcut-capture-chord" type="checkbox" />
+                        Record two keys (for example, Ctrl+K, O)
+                    </label>
+                    <div id="shortcut-capture-status" class="shortcut-capture-status" role="status" aria-live="polite">Waiting for a key press…</div>
+                </div>
+                <footer class="settings-footer">
+                    <button id="shortcut-capture-cancel" type="button">Cancel</button>
                 </footer>
             </section>
         </div>

@@ -11,7 +11,7 @@ import { indentUnit } from "@codemirror/language";
 import { closeBrackets } from "@codemirror/autocomplete";
 import { closeSearchPanel, openSearchPanel, SearchQuery, setSearchQuery } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { themeCompartment, getThemeExtension, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, showZwsCompartment, showZeroWidthSpaces, visibleIndentationMarkers } from "./editor/extensions";
+import { themeCompartment, getThemeExtension, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, showZwsCompartment, showZeroWidthSpaces, visibleIndentationMarkers, editorKeymapCompartment, configuredEditorShortcuts } from "./editor/extensions";
 import { typstLanguage } from "./editor/typstLanguage";
 import { createTypstAutocomplete } from "./editor/autocomplete";
 import { collapseSearchSelection } from "./editor/search";
@@ -126,6 +126,7 @@ import { WebviewStorageController } from "./webviewStorageController";
 import { SystemResumeMonitor } from "./platform/systemResume";
 import { WorkspaceResumeController } from "./platform/workspaceResumeController";
 import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativeAppMenu";
+import { setShortcutLabelOverrides } from "./platform/shortcuts";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
 import { createAppIcon } from "./ui/icons";
@@ -465,7 +466,8 @@ export class TypsastraWorkspaceController {
     settings => this.applySettingsToRuntime(settings),
     providers => this.handleLanguageProvidersChanged(providers),
     () => this.typographyController.privateFontDirectoriesChanged(),
-    () => this.typographyController.privateFontDirectoriesChanged()
+    () => this.typographyController.privateFontDirectoriesChanged(),
+    active => this.nativeAppMenu?.setShortcutCaptureActive(active),
   );
   private readonly toolchainController = new ToolchainController({
     getSelectedVersion: () => this.settingsController.value.toolchain.tinymistVersion,
@@ -1942,6 +1944,7 @@ export class TypsastraWorkspaceController {
     cursorSyncEnabled: () => this.settingsController.value.preview.cursorSync,
     forwardSyncDebounceMs: () => this.settingsRuntimeController.forwardSyncDebounceMs,
     isDeveloperPerformanceLogEnabled: () => this.isDeveloperLogEnabled("performance"),
+    shortcuts: () => this.settingsController.value.shortcuts,
     insertExplorerImage: (path, position, view) => this.fileDropController.insertExplorerImage(path, position, view),
     pasteClipboardImages: (images, selection, view) => {
       this.fileDropController.pasteClipboardImages(images, selection, view);
@@ -2214,6 +2217,7 @@ export class TypsastraWorkspaceController {
   private async installNativeAppMenu(): Promise<void> {
     this.recentProjectsController.observe(() => this.nativeAppMenu?.refreshRecentProjects());
     this.nativeAppMenu = await installNativeAppMenu({
+      shortcuts: () => this.settingsController.value.shortcuts,
       wordWrapEnabled: () => this.settingsController.value.editor.wordWrap,
       editorToolbarVisible: () => this.settingsController.value.editor.visualToolbar,
       workspaceOpen: () => this.workspaceRootPath !== null,
@@ -2364,6 +2368,7 @@ export class TypsastraWorkspaceController {
 
   private applySettingsToRuntime(settings: AppSettings): void {
     const { editor } = settings;
+    setShortcutLabelOverrides(settings.shortcuts);
     this.settingsRuntimeController.apply(settings);
     this.previewFrame.setColorMode(settings.preview.colorMode);
     this.updatePreviewColorModeButton(settings.preview.colorMode);
@@ -2377,6 +2382,7 @@ export class TypsastraWorkspaceController {
     }
     this.editorToolbarController.setVisible(editor.visualToolbar);
     this.nativeAppMenu?.syncCheckState({ wordWrap: editor.wordWrap, editorToolbar: editor.visualToolbar });
+    this.nativeAppMenu?.syncShortcuts(settings.shortcuts);
   }
 
   private updatePreviewColorModeButton(mode: PreviewColorMode): void {
@@ -2399,6 +2405,10 @@ export class TypsastraWorkspaceController {
       activeLineCompartment.reconfigure(editor.highlightActiveLine ? [highlightActiveLineGutter(), highlightActiveLine()] : []),
       closeBracketsCompartment.reconfigure(editor.autoCloseBrackets ? closeBrackets() : []),
       indentationGuidesCompartment.reconfigure(editor.indentationGuides ? visibleIndentationMarkers() : []),
+      editorKeymapCompartment.reconfigure(configuredEditorShortcuts(
+        this.settingsController.value.shortcuts,
+        () => this.settingsController.value.shortcuts,
+      )),
       tabSizeCompartment.reconfigure([EditorState.tabSize.of(editor.tabSize), indentUnit.of(indentation)]),
       showZwsCompartment.reconfigure(editor.showZws ? showZeroWidthSpaces : []),
       completionCompartment.reconfigure(this.editorCompletionForPath(this.activeFilePath ?? ""))
@@ -3704,6 +3714,7 @@ export class TypsastraWorkspaceController {
       saveActiveFileAs: () => this.saveActiveFileAs(),
       saveActiveFile: () => this.saveActiveFile(),
       openRecentProject: index => this.recentProjectsController.openAt(index),
+      shortcuts: () => this.settingsController.value.shortcuts,
       openWorkspace: path => this.openWorkspace(path),
       importProject: () => this.importTypsastraProject(),
       createProjectFromTemplate: () => this.createProjectFromTemplate(),

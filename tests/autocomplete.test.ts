@@ -347,7 +347,7 @@ describe("LSP autocomplete edits", () => {
 
   test("restarts an explicitly dismissed completion at the same token", async () => {
     const source = await Bun.file(new URL("../src/editor/extensions.ts", import.meta.url)).text();
-    expect(source).toContain('event.ctrlKey && !event.altKey && !event.metaKey && event.code === "Space"');
+    expect(source).toContain('isShortcut("editor.startCompletion")');
     expect(source).toContain("view.dispatch({ selection: view.state.selection })");
     expect(source).toContain("queueMicrotask(() => startCompletion(view))");
   });
@@ -925,13 +925,14 @@ describe("LSP autocomplete edits", () => {
 
   test("uses Tab and Enter to accept completions and Ctrl+Enter for argument newlines", async () => {
     const source = await Bun.file(new URL("../src/editor/extensions.ts", import.meta.url)).text();
-    expect(source).toContain('event.key === "Tab" && completionActive');
+    expect(source).toContain('completionActive && isShortcut("editor.acceptCompletion")');
+    expect(source).toContain('"editor.unindent": unindentWithShiftTab');
     expect(source).toContain("handled = acceptCompletion(view)");
     expect(source).not.toContain("namedArgumentSelected");
     expect(source).not.toContain("closeCompletion(view)");
-    expect(source).toContain('event.key === "Enter" && event.ctrlKey && insideFunctionArguments');
+    expect(source).toContain('isShortcut("editor.argumentNewline") && insideFunctionArguments');
     expect(source).not.toContain('event.key === "Enter" && namedArgumentSelected');
-    expect(source).toContain('else if (event.key === "Enter")');
+    expect(source).toContain('completionActive && isShortcut("editor.completionEnter")');
     expect(source).toContain("handled = insertNewlineAndIndent(view)");
     expect(source).toContain("queueMicrotask(() => startCompletion(view))");
   });

@@ -1,4 +1,12 @@
 import { resolveRuntimeTitlebar, type RuntimeTitlebarInput } from "./runtimeTitlebar";
+import { applicationShortcuts, canonicalShortcut, shortcutFor, type ShortcutOverrides } from "./shortcutRegistry";
+
+let configuredShortcuts: ShortcutOverrides = {};
+
+export function setShortcutLabelOverrides(overrides: ShortcutOverrides): void {
+  configuredShortcuts = overrides;
+  applyShortcutLabels();
+}
 
 /**
  * Shortcut labels are authored once in a platform-neutral form and rendered per
@@ -32,8 +40,9 @@ export function isMacShortcutPlatform(input: RuntimeTitlebarInput = {
 export function formatShortcut(spec: string, mac: boolean): string {
   const names = mac ? macModifierNames : standardModifierNames;
   return spec.trim().split(/\s+/).filter(Boolean).map(chord =>
-    chord.split("+").map(part => names[part] ?? part).join("+")
-  ).join(" ");
+    chord.split("+").map(part => names[part]
+      ?? (part.length === 1 && /[a-z]/.test(part) ? part.toUpperCase() : part === "Backquote" ? "`" : part === "Comma" ? "," : part)).join("+")
+  ).join(", ");
 }
 
 /**
@@ -57,7 +66,13 @@ export function applyShortcutLabels(root: ParentNode = document, mac: boolean = 
   root.querySelectorAll<HTMLElement>("[data-shortcut]").forEach(element => {
     const spec = element.dataset.shortcut;
     if (!spec) return;
-    const label = shortcutLabel(spec, element.dataset.shortcutMac ?? spec, mac);
+    const original = mac ? element.dataset.shortcutMac ?? spec : spec;
+    const entry = applicationShortcuts.find(candidate => {
+      const defaultSpec = mac ? candidate.macKey ?? candidate.defaultKey : candidate.defaultKey;
+      return canonicalShortcut(defaultSpec, mac) === canonicalShortcut(original.replace(/\+/g, "-"), mac);
+    });
+    const binding = entry ? shortcutFor(entry.id, configuredShortcuts, mac).replace(/-/g, "+") : original;
+    const label = formatShortcut(binding, mac);
     const title = element.dataset.shortcutTitle;
     if (title === undefined) element.textContent = label;
     else element.title = title.replace("{}", label);

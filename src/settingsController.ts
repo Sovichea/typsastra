@@ -15,6 +15,8 @@ import {
   unicodeEditorFonts,
   unicodeFontPreferenceOptions,
 } from "./editor/fontCatalog";
+import { isMacShortcutPlatform, shortcutLabel } from "./platform/shortcuts";
+import { captureShortcut, shortcutCollision, shortcutDefinitions, shortcutFor, shortcutFromEvent, validShortcut, type ShortcutDefinition } from "./platform/shortcutRegistry";
 import {
   parseLanguageCatalog,
   parseLanguageProviderCapabilitiesList,
@@ -25,8 +27,6 @@ import {
   type LanguageCatalogCapabilities,
   type LanguageProviderCapabilities
 } from "./languageSupport";
-import { isAltGraphKeyboardEvent } from "./ui/keyboardModifiers";
-import { nativeAppMenuOwnsShortcuts } from "./platform/nativeAppMenuSpec";
 
 type SettingsPayload = { path: string; settings: unknown | null };
 type SystemFontCatalog = { all: string[]; monospace: string[] };
@@ -112,12 +112,16 @@ export class SettingsController {
   private scaledFontCacheLoading = false;
   private enhancedUnicodeEngineInstalling = false;
   private enhancedUnicodeEngineInstallStatus: string | null = null;
+  private shortcutCapture: { entry: ShortcutDefinition; trigger: HTMLButtonElement } | null = null;
+  private shortcutCaptureOpening = false;
+  private shortcutChordPrefix: string | null = null;
 
   constructor(
     private readonly applySettings: (settings: AppSettings) => void,
     private readonly onLanguageProvidersChanged: (providers: LanguageProviderOption[]) => void = () => {},
     private readonly onPrivateFontDirectoriesChanged: () => void | Promise<void> = () => {},
-    private readonly onScaledFontCacheChanged: () => void | Promise<void> = () => {}
+    private readonly onScaledFontCacheChanged: () => void | Promise<void> = () => {},
+    private readonly onShortcutCaptureChange: (active: boolean) => void | Promise<void> = () => {},
   ) {}
 
   public get value(): AppSettings {
@@ -219,7 +223,10 @@ export class SettingsController {
       document.dispatchEvent(new Event("typsastra:settings-opened"));
       (document.querySelector(".settings-nav-item.active") as HTMLButtonElement | null)?.focus();
     };
-    const closeSettings = () => overlay.classList.add("hidden");
+    const closeSettings = () => {
+      this.closeShortcutRecorder(false);
+      overlay.classList.add("hidden");
+    };
 
     document.getElementById("action-open-settings")?.addEventListener("click", () => openSettings());
     document.getElementById("settings-status-button")?.addEventListener("click", () => openSettings());
@@ -230,6 +237,22 @@ export class SettingsController {
     });
     document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
       item.addEventListener("click", () => activatePanel(item.dataset.settingsPanel ?? "appearance"));
+    });
+    document.getElementById("settings-shortcut-search")?.addEventListener("input", () => this.populateShortcuts());
+    document.getElementById("shortcut-capture-cancel")?.addEventListener("click", () => this.closeShortcutRecorder());
+    document.getElementById("shortcut-capture-overlay")?.addEventListener("mousedown", event => {
+      if (event.target === event.currentTarget) this.closeShortcutRecorder();
+    });
+    document.getElementById("shortcut-capture-dialog")?.addEventListener("keydown", event => this.handleShortcutCaptureKeydown(event));
+    document.getElementById("shortcut-capture-chord")?.addEventListener("change", () => {
+      this.shortcutChordPrefix = null;
+      const status = document.getElementById("shortcut-capture-status");
+      if (status) {
+        status.classList.remove("error");
+        status.textContent = (document.getElementById("shortcut-capture-chord") as HTMLInputElement).checked
+          ? "Waiting for the first key…"
+          : "Waiting for a key press…";
+      }
     });
     document.addEventListener("typsastra:open-settings", event => {
       openSettings((event as CustomEvent<{ panel?: string }>).detail?.panel);
@@ -360,12 +383,7 @@ export class SettingsController {
       if (this.filePath) void invoke("reveal_in_explorer", { path: this.filePath });
     });
     document.addEventListener("keydown", event => {
-      if (isAltGraphKeyboardEvent(event)) return;
-      const isMac = navigator.userAgent.toLowerCase().includes("mac");
-      if ((isMac ? event.metaKey : event.ctrlKey) && event.code === "Comma" && !nativeAppMenuOwnsShortcuts()) {
-        event.preventDefault();
-        openSettings();
-      } else if (event.key === "Escape" && !overlay.classList.contains("hidden")) {
+      if (event.key === "Escape" && !overlay.classList.contains("hidden")) {
         event.preventDefault();
         closeSettings();
       }
@@ -612,6 +630,7 @@ export class SettingsController {
     setChecked("settings-show-zws", editor.showZws);
     setChecked("settings-format-on-save", editor.formatOnSave);
     setChecked("settings-auto-save", editor.autoSave);
+    this.populateShortcuts();
     const autoSaveInterval = document.getElementById("settings-auto-save-interval") as HTMLInputElement | null;
     if (autoSaveInterval) {
       autoSaveInterval.disabled = !editor.autoSave;
@@ -675,6 +694,181 @@ export class SettingsController {
     }
     const status = document.getElementById("settings-save-status");
     if (status && this.loadError) status.textContent = `Using defaults: ${this.loadError}`;
+  }
+
+  private async openShortcutRecorder(entry: ShortcutDefinition, trigger: HTMLButtonElement): Promise<void> {
+    if (this.shortcutCapture || this.shortcutCaptureOpening) return;
+    const overlay = document.getElementById("shortcut-capture-overlay");
+    const dialog = document.getElementById("shortcut-capture-dialog");
+    const settings = document.getElementById("settings-overlay");
+    if (!overlay || !dialog || settings?.classList.contains("hidden")) return;
+    this.shortcutCaptureOpening = true;
+    try {
+      // macOS native menu accelerators fire before WebView keydown events.
+      // Wait for them to be disabled before showing a recorder that claims to
+      // be ready for the next key press.
+      await this.onShortcutCaptureChange(true);
+    } catch (error) {
+      void this.onShortcutCaptureChange(false);
+      const message = document.getElementById("settings-shortcut-error");
+      if (message) message.textContent = `Could not start shortcut recording: ${String(error)}`;
+      return;
+    } finally {
+      this.shortcutCaptureOpening = false;
+    }
+    if (settings?.classList.contains("hidden")) {
+      void this.onShortcutCaptureChange(false);
+      return;
+    }
+    this.shortcutCapture = { entry, trigger };
+    this.shortcutChordPrefix = null;
+    const chord = document.getElementById("shortcut-capture-chord") as HTMLInputElement | null;
+    if (chord) chord.checked = false;
+    const title = document.getElementById("shortcut-capture-title");
+    if (title) title.textContent = `Shortcut for ${entry.label}`;
+    const status = document.getElementById("shortcut-capture-status");
+    if (status) {
+      status.textContent = "Waiting for a key press…";
+      status.classList.remove("error");
+    }
+    overlay.classList.remove("hidden");
+    dialog.focus();
+  }
+
+  private closeShortcutRecorder(restoreFocus = true): void {
+    const capture = this.shortcutCapture;
+    const overlay = document.getElementById("shortcut-capture-overlay");
+    if (!capture && overlay?.classList.contains("hidden")) return;
+    this.shortcutCapture = null;
+    this.shortcutChordPrefix = null;
+    overlay?.classList.add("hidden");
+    void this.onShortcutCaptureChange(false);
+    if (!restoreFocus || !capture) return;
+    const trigger = capture.trigger.isConnected
+      ? capture.trigger
+      : [...document.querySelectorAll<HTMLButtonElement>("button[data-shortcut-id]")]
+        .find(button => button.dataset.shortcutId === capture.entry.id);
+    (trigger ?? document.getElementById("settings-shortcut-search"))?.focus();
+  }
+
+  private handleShortcutCaptureKeydown(event: KeyboardEvent): void {
+    const capture = this.shortcutCapture;
+    if (!capture) return;
+    if (event.target === document.getElementById("shortcut-capture-cancel")
+      && (event.key === "Enter" || event.key === " ")) return;
+    if (event.target === document.getElementById("shortcut-capture-chord") && event.key === " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      this.closeShortcutRecorder();
+      return;
+    }
+    const status = document.getElementById("shortcut-capture-status");
+    const showError = (text: string) => {
+      if (!status) return;
+      status.textContent = text;
+      status.classList.add("error");
+    };
+    const mac = isMacShortcutPlatform();
+    const chord = (document.getElementById("shortcut-capture-chord") as HTMLInputElement | null)?.checked === true;
+    if (chord && this.shortcutChordPrefix === null) {
+      const first = shortcutFromEvent(event, mac);
+      if (!first) {
+        if (!["Alt", "Control", "Meta", "Shift"].includes(event.key)) {
+          showError("Start with a key combination such as Ctrl+K, then press the second key.");
+        }
+        return;
+      }
+      if (!validShortcut(`${first} O`)) {
+        showError("Start a two-key shortcut with a modified key such as Ctrl+K.");
+        return;
+      }
+      this.shortcutChordPrefix = first;
+      if (status) {
+        status.textContent = `${shortcutLabel(first.replace(/-/g, "+"), undefined, mac)}, … — waiting for the second key`;
+        status.classList.remove("error");
+      }
+      return;
+    }
+    const result = captureShortcut(capture.entry.id, event, this.settings.shortcuts, mac, this.shortcutChordPrefix);
+    if (result.kind === "waiting") return;
+    if (result.kind === "invalid") {
+      showError(result.reason === "application"
+        ? "Application shortcuts need a modifier or a function key."
+        : "Press a key combination (not just a printable letter). Try again or press Escape to cancel.");
+      return;
+    }
+    if (result.kind === "conflict") {
+      const label = shortcutLabel(result.key.replace(/-/g, "+"), undefined, result.platform === "macOS");
+      showError(`${label} conflicts with ${result.command.label} (${result.platform}). Try another shortcut.`);
+      return;
+    }
+    this.update(settings => { settings.shortcuts[capture.entry.id] = result.key; });
+    this.closeShortcutRecorder();
+  }
+
+  private populateShortcuts(): void {
+    const list = document.getElementById("settings-shortcut-list");
+    const error = document.getElementById("settings-shortcut-error");
+    if (!list) return;
+    const mac = isMacShortcutPlatform();
+    const labelForShortcut = (key: string) => shortcutLabel(key.replace(/-/g, "+"), undefined, mac);
+    const query = (document.getElementById("settings-shortcut-search") as HTMLInputElement | null)?.value.trim().toLocaleLowerCase() ?? "";
+    const matching = shortcutDefinitions.filter(entry => {
+      if (entry.group === "System") return false;
+      const key = shortcutFor(entry.id, this.settings.shortcuts, mac);
+      return key && `${entry.group} ${entry.label} ${key}`.toLocaleLowerCase().includes(query);
+    });
+    // Applying a shortcut re-renders Settings. Retain the input, its focus, and
+    // the search query when the visible command list is unchanged.
+    const signature = matching.map(entry => entry.id).join("\0");
+    if (list.dataset.signature === signature) {
+      for (const entry of matching) {
+        const button = Array.from(list.querySelectorAll<HTMLButtonElement>("button[data-shortcut-id]"))
+          .find(candidate => candidate.dataset.shortcutId === entry.id);
+        if (button) button.textContent = labelForShortcut(shortcutFor(entry.id, this.settings.shortcuts, mac));
+      }
+      return;
+    }
+    list.dataset.signature = signature;
+    list.replaceChildren();
+    let previousGroup = "";
+    for (const entry of matching) {
+      if (entry.group !== previousGroup) {
+        previousGroup = entry.group;
+        const heading = document.createElement("h4");
+        heading.className = "settings-shortcut-group";
+        heading.textContent = entry.group;
+        list.appendChild(heading);
+      }
+      const row = document.createElement("div");
+      row.className = "settings-shortcut-row";
+      const label = document.createElement("label");
+      label.textContent = entry.label;
+      const binding = document.createElement("button");
+      binding.type = "button";
+      binding.className = "settings-secondary-button settings-shortcut-binding";
+      binding.dataset.shortcutId = entry.id;
+      binding.textContent = labelForShortcut(shortcutFor(entry.id, this.settings.shortcuts, mac));
+      label.htmlFor = binding.id = `shortcut-${entry.id.replace(/[^a-zA-Z0-9]/g, "-")}`;
+      binding.setAttribute("aria-label", `Change shortcut for ${entry.label}`);
+      binding.addEventListener("click", () => void this.openShortcutRecorder(entry, binding));
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "settings-secondary-button";
+      reset.textContent = "Reset";
+      reset.setAttribute("aria-label", `Reset ${entry.label} shortcut`);
+      reset.addEventListener("click", () => {
+        const fallback = shortcutFor(entry.id, {}, mac);
+        const conflicting = [false, true].some(platform => shortcutCollision(entry.id, shortcutFor(entry.id, {}, platform), this.settings.shortcuts, platform));
+        if (conflicting) { if (error) error.textContent = `Another shortcut uses the default for ${entry.label}. Reset that one first.`; return; }
+        this.update(settings => { delete settings.shortcuts[entry.id]; });
+        binding.textContent = labelForShortcut(fallback);
+        if (error) error.textContent = "";
+      });
+      row.append(label, binding, reset);
+      list.appendChild(row);
+    }
   }
 
   private populateEnhancedUnicodeEngine(): void {
