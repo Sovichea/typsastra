@@ -139,7 +139,8 @@ jobs:
             expected="x64"
             search="src-tauri/target/release/bundle/msi"
           fi
-          msi=$(find "$search" -maxdepth 1 -name "*_${expected}.msi" -print -quit 2>/dev/null || true)
+          # Tauri appends a locale suffix, e.g. Typsastra_0.9.1_arm64_en-US.msi.
+          msi=$(find "$search" -maxdepth 1 -name "*_${expected}_*.msi" -print -quit 2>/dev/null || true)
           if [ -z "$msi" ]; then
             echo "::error::No ${expected} MSI found in $search"
             find src-tauri/target -name '*.msi' -print || true
