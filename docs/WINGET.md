@@ -21,58 +21,87 @@ files plus the package icon:
 
 ```
 winget/manifests/t/Typsastra/Typsastra/<version>/
-  Typsastra.yaml               # version manifest
-  Typsastra.locale.en-US.yaml  # locale manifest
-  Typsastra.installer.yaml     # installer manifest
-  Typsastra.png                # package icon
+  Typsastra.Typsastra.yaml               # version manifest
+  Typsastra.Typsastra.locale.en-US.yaml  # locale manifest
+  Typsastra.Typsastra.installer.yaml     # installer manifest
+  Typsastra.Typsastra.png                # package icon
+  README.md                              # local notes, not submitted
 ```
 
 The folder path is significant. `PackageIdentifier` is
 `Typsastra.Typsastra`, and winget-pkgs requires the manifest path to match it
-case-sensitively.
+case-sensitively. Filenames carry the full identifier as a prefix for the same
+reason.
 
 ## Publishing a new version
 
-The manifest is submitted to winget-pkgs, so a new version means a new
-directory, a new pull request there, and an update to the icon path. The steps:
+Every release needs its own pull request to winget-pkgs. The repository stores
+one manifest directory per version and the client resolves to the highest
+semantic version, so there is no single manifest to keep updated. Manifest
+submissions must contain exactly one package version and manifest files only,
+which the repository enforces.
 
-1. Publish the release so the MSI assets are downloadable.
-2. Copy the previous version directory and rename it to the new version.
-3. Update `PackageVersion` in all three YAML files.
-4. Update the release URLs and asset filenames to the new version.
-5. Recompute `InstallerSha256` for each architecture:
+Do not copy manifest values between versions. `InstallerSha256` changes with
+every build, `ProductCode` changes with every build, and `ReleaseDate` follows
+the release. Generate the directory instead:
 
-   ```powershell
-   gh release download v<version> --pattern "Typsastra_<version>_*_en-US.msi"
-   winget hash "Typsastra_<version>_x64_en-US.msi"
-   winget hash "Typsastra_<version>_arm64_en-US.msi"
-   ```
+```powershell
+# After publishing the release
+bun run generate:winget-manifest 0.10.0
+```
 
-6. Update `ReleaseDate` to the release date in `YYYY-MM-DD` form.
-7. Set `LicenseUrl` and the documentation URLs to the matching tag, not `main`,
-   so they resolve to the code that shipped.
-8. Run `winget validate` as described below.
-9. Copy the manifest directory into a winget-pkgs checkout and run
-   `wingetcreate` or open a pull request manually.
+The script downloads both MSIs from the published release, hashes them, reads
+each `Property` table for `ProductCode` and `UpgradeCode`, reads the publication
+date, and rewrites the version directory. It then runs `winget validate`. It
+requires Windows because MSI property inspection uses the Windows Installer COM
+API, and `gh` on the `PATH` for downloading release assets.
+
+Useful flags:
+
+- `--dry-run` reports whether each file would change and writes nothing.
+- `--release-date YYYY-MM-DD` overrides the date read from the release.
+
+The script refuses to write when the two architectures or the preceding
+checked-in version disagree on `UpgradeCode`, since that breaks upgrades, and
+it warns when the generated `ShortDescription` drifts from the previous manifest. Edit
+`LOCALE_METADATA` in the script when prose metadata changes intentionally.
+
+Then submit to winget-pkgs:
+
+1. Copy the three YAML files from
+   `winget/manifests/t/Typsastra/Typsastra/<version>/` into a winget-pkgs
+   checkout at `manifests/t/Typsastra/Typsastra/<version>/`. Do not copy the
+   local icon or `README.md`; winget-pkgs populates icon metadata during
+   validation and accepts manifest files only. Filenames already have the full
+   package identifier prefix.
+2. Open a pull request from a branch. No separate issue is required for a
+   routine version bump.
+3. Microsoft validation runs on the PR. Response labels and failures are
+   documented in the
+   [Validation Failure Guide](https://github.com/microsoft/winget-pkgs/blob/master/doc/ValidationFailureGuide.md).
+   Unsigned packages typically wait on the installer scan while SmartScreen
+   reputation accrues, which can take days on a first submission.
 
 ### Recomputing installer identity
-
-`ProductCode` changes with every build and must be read from the published MSI
-rather than copied from an older manifest. `UpgradeCode` stays stable for a
-given product identity, and Typsastra uses one `UpgradeCode` shared by both
-architectures, so upgrading switches architecture correctly.
 
 `UpgradeCode` must appear under `AppsAndFeaturesEntries`, not at the installer
 top level. The schema has no top-level `UpgradeCode`, so a misplaced value is
 reported as an unknown field and `winget validate` fails.
 
-The values currently published were read from the MSI `Property` table:
+`UpgradeCode` is stable for a given product identity, and Typsastra shares one
+across architectures so upgrading switches architecture correctly. The values
+published for v0.9.1, read from the MSI `Property` table:
 
 | Architecture | ProductCode |
 | --- | --- |
 | x64 | `{9EE6BED8-BE0F-490E-8E49-80994ED972B9}` |
 | arm64 | `{F0726CCE-9ACF-475E-93FA-0E11D8E49E31}` |
 | both | `{552C8F47-DD8F-586E-B36F-B23E2CEC2A14}` (`UpgradeCode`) |
+
+### Package icons
+
+Icon metadata is populated during Microsoft's validation, not authored in
+manifest PRs. The generated PNG is kept locally for project use only.
 
 ## Validating before submitting
 

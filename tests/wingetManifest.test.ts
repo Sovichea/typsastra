@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -71,9 +71,11 @@ describe("winget manifests", () => {
   for (const version of versions) {
     describe(`${version}`, () => {
       const directory = join(manifestRoot, version);
-      const versionFile = join(directory, "Typsastra.yaml");
-      const localeFile = join(directory, "Typsastra.locale.en-US.yaml");
-      const installerFile = join(directory, "Typsastra.installer.yaml");
+      // winget-pkgs requires the full package identifier as the filename prefix.
+      const identifier = "Typsastra.Typsastra";
+      const versionFile = join(directory, `${identifier}.yaml`);
+      const localeFile = join(directory, `${identifier}.locale.en-US.yaml`);
+      const installerFile = join(directory, `${identifier}.installer.yaml`);
 
       const versionManifest = parseManifest(readFileSync(versionFile, "utf8"));
       const localeManifest = parseManifest(readFileSync(localeFile, "utf8"));
@@ -168,19 +170,23 @@ describe("winget manifests", () => {
         // a scratch directory instead of pointing it at the icon.
         if (spawnSync("winget", ["--version"], { shell: true }).status !== 0) return;
         const staging = mkdtempSync(join(tmpdir(), "typsastra-winget-"));
-        for (const file of ["Typsastra.yaml", "Typsastra.locale.en-US.yaml", "Typsastra.installer.yaml"]) {
-          writeFileSync(join(staging, file), readFileSync(join(directory, file)));
+        try {
+          for (const file of [`${identifier}.yaml`, `${identifier}.locale.en-US.yaml`, `${identifier}.installer.yaml`]) {
+            writeFileSync(join(staging, file), readFileSync(join(directory, file)));
+          }
+          const result = spawnSync("winget", ["validate", "--manifest", staging], {
+            shell: true,
+            encoding: "utf8",
+          });
+          const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+          expect(output).toContain("Manifest validation succeeded");
+        } finally {
+          rmSync(staging, { recursive: true, force: true });
         }
-        const result = spawnSync("winget", ["validate", "--manifest", staging], {
-          shell: true,
-          encoding: "utf8",
-        });
-        const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-        expect(output).toContain("Manifest validation succeeded");
       });
 
       test("ships a square package icon", () => {
-        const icon = join(directory, "Typsastra.png");
+        const icon = join(directory, `${identifier}.png`);
         expect(existsSync(icon)).toBe(true);
         const header = readFileSync(icon).subarray(0, 24);
         expect(header.subarray(1, 4).toString()).toBe("PNG");
@@ -191,8 +197,22 @@ describe("winget manifests", () => {
       test("documents the required manifest maintenance", () => {
         const readme = readFileSync(join(directory, "README.md"), "utf8");
         expect(readme).toContain("winget-pkgs");
-        expect(readme).toContain("InstallerSha256");
+        expect(readme).toContain("SHA-256");
       });
     });
   }
+
+  test("every version filename uses the full package identifier", () => {
+    const identifier = "Typsastra.Typsastra";
+    for (const version of versions) {
+      const files = readdirSync(join(manifestRoot, version)).sort();
+      expect(files).toEqual([
+        "README.md",
+        `${identifier}.installer.yaml`,
+        `${identifier}.locale.en-US.yaml`,
+        `${identifier}.png`,
+        `${identifier}.yaml`,
+      ]);
+    }
+  });
 });
