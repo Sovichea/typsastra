@@ -6182,6 +6182,16 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   overflow: auto;
 }
 
+.settings-shortcut-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+#settings-shortcut-custom-count { color: var(--ui-muted-text); }
+
 .settings-shortcut-group {
   margin: 14px 0 2px;
   color: var(--ui-muted-text);
@@ -6193,6 +6203,22 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   gap: 8px;
   align-items: center;
 }
+
+.settings-shortcut-row.is-custom {
+  padding-left: 6px;
+  border-left: 2px solid var(--ui-accent-color);
+  background: var(--ui-navigation-background);
+}
+
+.settings-shortcut-custom-tag {
+  display: none;
+  margin-left: 8px;
+  color: var(--ui-accent-color);
+  font-size: 11px;
+}
+
+.settings-shortcut-row.is-custom .settings-shortcut-custom-tag { display: inline; }
+.settings-shortcut-row.is-custom .settings-shortcut-binding { border-color: var(--ui-accent-color); }
 
 .settings-shortcut-binding {
   min-width: 0;

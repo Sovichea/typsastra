@@ -16,7 +16,7 @@ import {
   unicodeFontPreferenceOptions,
 } from "./editor/fontCatalog";
 import { isMacShortcutPlatform, shortcutLabel } from "./platform/shortcuts";
-import { captureShortcut, shortcutCollision, shortcutDefinitions, shortcutFor, shortcutFromEvent, validShortcut, type ShortcutDefinition } from "./platform/shortcutRegistry";
+import { captureShortcut, isCustomizedShortcut, shortcutCollision, shortcutDefinitions, shortcutFor, shortcutFromEvent, validShortcut, type ShortcutDefinition } from "./platform/shortcutRegistry";
 import {
   parseLanguageCatalog,
   parseLanguageProviderCapabilitiesList,
@@ -239,6 +239,7 @@ export class SettingsController {
       item.addEventListener("click", () => activatePanel(item.dataset.settingsPanel ?? "appearance"));
     });
     document.getElementById("settings-shortcut-search")?.addEventListener("input", () => this.populateShortcuts());
+    document.getElementById("settings-shortcut-reset-all")?.addEventListener("click", () => void this.resetAllShortcuts());
     document.getElementById("shortcut-capture-cancel")?.addEventListener("click", () => this.closeShortcutRecorder());
     document.getElementById("shortcut-capture-overlay")?.addEventListener("mousedown", event => {
       if (event.target === event.currentTarget) this.closeShortcutRecorder();
@@ -807,26 +808,53 @@ export class SettingsController {
     this.closeShortcutRecorder();
   }
 
+  private async resetAllShortcuts(): Promise<void> {
+    const count = shortcutDefinitions.filter(entry => entry.group !== "System" && isCustomizedShortcut(entry.id, this.settings.shortcuts)).length;
+    if (!count) return;
+    if (!await confirm(`Reset all ${count} customized shortcut${count === 1 ? "" : "s"} to their defaults?`, {
+      title: "Reset Keyboard Shortcuts",
+      kind: "warning",
+      okLabel: "Reset all",
+      cancelLabel: "Cancel",
+    })) return;
+    this.update(settings => { settings.shortcuts = {}; });
+    const error = document.getElementById("settings-shortcut-error");
+    if (error) error.textContent = "";
+  }
+
   private populateShortcuts(): void {
     const list = document.getElementById("settings-shortcut-list");
     const error = document.getElementById("settings-shortcut-error");
     if (!list) return;
     const mac = isMacShortcutPlatform();
     const labelForShortcut = (key: string) => shortcutLabel(key.replace(/-/g, "+"), undefined, mac);
+    const customizedCount = shortcutDefinitions.filter(entry => entry.group !== "System" && isCustomizedShortcut(entry.id, this.settings.shortcuts)).length;
+    const resetAll = document.getElementById("settings-shortcut-reset-all") as HTMLButtonElement | null;
+    if (resetAll) resetAll.disabled = customizedCount === 0;
+    const count = document.getElementById("settings-shortcut-custom-count");
+    if (count) count.textContent = `${customizedCount} customized`;
+    const refreshRow = (entry: ShortcutDefinition, binding: HTMLButtonElement) => {
+      const row = binding.closest<HTMLElement>(".settings-shortcut-row");
+      const customized = isCustomizedShortcut(entry.id, this.settings.shortcuts);
+      row?.classList.toggle("is-custom", customized);
+      const reset = row?.querySelector<HTMLButtonElement>("button.settings-shortcut-reset");
+      if (reset) reset.disabled = !customized;
+      binding.textContent = labelForShortcut(shortcutFor(entry.id, this.settings.shortcuts, mac));
+    };
     const query = (document.getElementById("settings-shortcut-search") as HTMLInputElement | null)?.value.trim().toLocaleLowerCase() ?? "";
     const matching = shortcutDefinitions.filter(entry => {
       if (entry.group === "System") return false;
       const key = shortcutFor(entry.id, this.settings.shortcuts, mac);
       return key && `${entry.group} ${entry.label} ${key}`.toLocaleLowerCase().includes(query);
     });
-    // Applying a shortcut re-renders Settings. Retain the input, its focus, and
-    // the search query when the visible command list is unchanged.
+    // Applying a shortcut re-renders Settings. Retain the buttons, their focus,
+    // and the search query when the visible command list is unchanged.
     const signature = matching.map(entry => entry.id).join("\0");
     if (list.dataset.signature === signature) {
       for (const entry of matching) {
         const button = Array.from(list.querySelectorAll<HTMLButtonElement>("button[data-shortcut-id]"))
           .find(candidate => candidate.dataset.shortcutId === entry.id);
-        if (button) button.textContent = labelForShortcut(shortcutFor(entry.id, this.settings.shortcuts, mac));
+        if (button) refreshRow(entry, button);
       }
       return;
     }
@@ -845,6 +873,10 @@ export class SettingsController {
       row.className = "settings-shortcut-row";
       const label = document.createElement("label");
       label.textContent = entry.label;
+      const customizedTag = document.createElement("small");
+      customizedTag.className = "settings-shortcut-custom-tag";
+      customizedTag.textContent = "Customized";
+      label.appendChild(customizedTag);
       const binding = document.createElement("button");
       binding.type = "button";
       binding.className = "settings-secondary-button settings-shortcut-binding";
@@ -855,7 +887,7 @@ export class SettingsController {
       binding.addEventListener("click", () => void this.openShortcutRecorder(entry, binding));
       const reset = document.createElement("button");
       reset.type = "button";
-      reset.className = "settings-secondary-button";
+      reset.className = "settings-secondary-button settings-shortcut-reset";
       reset.textContent = "Reset";
       reset.setAttribute("aria-label", `Reset ${entry.label} shortcut`);
       reset.addEventListener("click", () => {
@@ -867,6 +899,7 @@ export class SettingsController {
         if (error) error.textContent = "";
       });
       row.append(label, binding, reset);
+      refreshRow(entry, binding);
       list.appendChild(row);
     }
   }

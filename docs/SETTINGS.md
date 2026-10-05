@@ -327,6 +327,10 @@ without changing users' saved preferences. OS-owned menu items (such as Undo,
 Redo, Hide, Cut and Paste) retain their system bindings and are excluded from
 the programmable list.
 
+Customized shortcuts have a highlighted row and a **Customized** label. **Reset
+all to default** clears all custom shortcuts after confirmation; the per-command
+Reset button restores just one.
+
 To bind a two-key shortcut, select **Record two keys** in the recorder and press
 the prefix and final key in order, for example Ctrl+K followed by O. The list
 shows `Ctrl+K, O`. Both a prefix already used by a one-key action and a one-key

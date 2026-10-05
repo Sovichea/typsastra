@@ -8,6 +8,7 @@ import {
   ApplicationShortcutSequence,
   applicationShortcutForEvent,
   captureShortcut,
+  isCustomizedShortcut,
   canonicalShortcut,
   normalizeShortcutOverrides,
   shortcutCollision,
@@ -53,6 +54,14 @@ describe("programmable shortcuts", () => {
     expect(applicationShortcutForEvent(key("KeyS", { ctrlKey: true }), {}, false)).toBe("action-save-file");
   });
 
+  test("marks only shortcuts that differ from their effective defaults", () => {
+    expect(isCustomizedShortcut("editor.unindent", {})).toBe(false);
+    expect(isCustomizedShortcut("editor.unindent", { "editor.unindent": "Shift-Tab" })).toBe(false);
+    expect(isCustomizedShortcut("editor.unindent", { "editor.unindent": "Alt-F9" })).toBe(true);
+    // A stored override may match one platform's default but change another.
+    expect(isCustomizedShortcut("editor.history.4", { "editor.history.4": "Alt-u" })).toBe(true);
+  });
+
   test("does not treat deliberate built-in popup overlaps as user collisions", () => {
     for (const mac of [false, true]) {
       for (const entry of shortcutDefinitions) {
@@ -88,10 +97,13 @@ describe("programmable shortcuts", () => {
     expect(html).toContain('id="shortcut-capture-dialog"');
     expect(html).toContain('data-shortcut-recorder=""');
     expect(html).toContain('id="shortcut-capture-chord"');
+    expect(html).toContain('id="settings-shortcut-reset-all"');
     expect(html).toContain('aria-modal="true"');
     expect(settings).toContain('binding.addEventListener("click", () => void this.openShortcutRecorder(entry, binding))');
     expect(settings).toContain('captureShortcut(capture.entry.id, event, this.settings.shortcuts');
     expect(settings).toContain('this.closeShortcutRecorder();');
+    expect(settings).toContain('this.update(settings => { settings.shortcuts = {}; });');
+    expect(settings).toContain('row?.classList.toggle("is-custom", customized)');
     expect(focus).toContain('dialog.hasAttribute("data-shortcut-recorder")');
   });
 

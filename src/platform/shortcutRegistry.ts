@@ -130,6 +130,15 @@ export function shortcutFor(id: string, overrides: ShortcutOverrides, mac: boole
   return Object.prototype.hasOwnProperty.call(overrides, id) ? overrides[id] : mac && entry.macKey !== undefined ? entry.macKey : entry.defaultKey;
 }
 
+/** A custom shortcut differs from the shipped key on at least one platform. */
+export function isCustomizedShortcut(id: string, overrides: ShortcutOverrides): boolean {
+  if (!Object.prototype.hasOwnProperty.call(overrides, id)) return false;
+  return [false, true].some(mac =>
+    canonicalShortcut(shortcutFor(id, overrides, mac), mac)
+      !== canonicalShortcut(shortcutFor(id, {}, mac), mac)
+  );
+}
+
 /** The stored form uses spaces, while the UI also accepts Ctrl+K,O notation. */
 export function shortcutStrokes(value: string): string[] {
   const input = value.trim().replace(/\+/g, "-");
