@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.28.0.schema.json
+
 PackageIdentifier: Typsastra.Typsastra
 PackageVersion: 0.9.1
 PackageLocale: en-US
@@ -24,4 +26,4 @@ Documentations:
   - DocumentLabel: Troubleshooting
     DocumentUrl: https://github.com/Sovichea/typsastra/blob/v0.9.1/docs/TROUBLESHOOTING.md
 ManifestType: defaultLocale
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0

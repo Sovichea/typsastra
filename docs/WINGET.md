@@ -51,7 +51,8 @@ directory, a new pull request there, and an update to the icon path. The steps:
 6. Update `ReleaseDate` to the release date in `YYYY-MM-DD` form.
 7. Set `LicenseUrl` and the documentation URLs to the matching tag, not `main`,
    so they resolve to the code that shipped.
-8. Copy the manifest directory into a winget-pkgs checkout and run
+8. Run `winget validate` as described below.
+9. Copy the manifest directory into a winget-pkgs checkout and run
    `wingetcreate` or open a pull request manually.
 
 ### Recomputing installer identity
@@ -61,6 +62,10 @@ rather than copied from an older manifest. `UpgradeCode` stays stable for a
 given product identity, and Typsastra uses one `UpgradeCode` shared by both
 architectures, so upgrading switches architecture correctly.
 
+`UpgradeCode` must appear under `AppsAndFeaturesEntries`, not at the installer
+top level. The schema has no top-level `UpgradeCode`, so a misplaced value is
+reported as an unknown field and `winget validate` fails.
+
 The values currently published were read from the MSI `Property` table:
 
 | Architecture | ProductCode |
@@ -68,6 +73,31 @@ The values currently published were read from the MSI `Property` table:
 | x64 | `{9EE6BED8-BE0F-490E-8E49-80994ED972B9}` |
 | arm64 | `{F0726CCE-9ACF-475E-93FA-0E11D8E49E31}` |
 | both | `{552C8F47-DD8F-586E-B36F-B23E2CEC2A14}` (`UpgradeCode`) |
+
+## Validating before submitting
+
+`winget validate` is the fastest way to catch schema mistakes:
+
+```powershell
+$check = Join-Path $env:TEMP "winget-check"
+Remove-Item -Recurse -Force $check -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $check | Out-Null
+Copy-Item "winget/manifests/t/Typsastra/Typsastra/<version>/*.yaml" $check
+winget validate --manifest $check
+```
+
+Point it at a directory of YAML copies rather than the manifest directory
+itself, because `validate` parses every file it finds and the icon is binary.
+
+Two requirements that are easy to miss:
+
+- Every YAML file needs a `# yaml-language-server: $schema=` header matching its
+  manifest type. Without it validation warns.
+- `Platform` is a list of `Windows.Desktop` or `Windows.Universal`, not the
+  string `Windows.Latest`.
+
+The manifest tests run `winget validate` when the CLI is present, so CI-style
+local runs catch these too.
 
 ## Silent installation
 
