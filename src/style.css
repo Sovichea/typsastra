@@ -6259,6 +6259,17 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   box-shadow: inset 0 2px 0 var(--ui-accent-color), 2px 0 5px rgba(0, 0, 0, 0.12);
 }
 
+/* A file opened beside a project without belonging to it. */
+.editor-tab.off-project {
+  background: color-mix(in srgb, var(--ui-warning-color, #d29922) 14%, var(--ui-bg));
+}
+.editor-tab.off-project .editor-tab-title {
+  color: var(--ui-warning-color, #d29922);
+}
+.editor-tab.off-project.active {
+  box-shadow: inset 0 2px 0 var(--ui-warning-color, #d29922);
+}
+
 #interactive-image-fit-btn {
   transition: filter 0.15s ease;
 }

@@ -31,7 +31,7 @@ export class EditorTabViewController {
         pinnedMainFilePath && filePathKey(tab.path) === filePathKey(pinnedMainFilePath),
       );
       const tabButton = document.createElement("button");
-      tabButton.className = `editor-tab${isActive ? " active" : ""}${tab.isDirty ? " dirty" : ""}${tab.temporary ? " temporary" : ""}${isPinnedMain ? " pinned-main-tab" : ""}`;
+      tabButton.className = `editor-tab${isActive ? " active" : ""}${tab.isDirty ? " dirty" : ""}${tab.temporary ? " temporary" : ""}${isPinnedMain ? " pinned-main-tab" : ""}${tab.offProject ? " off-project" : ""}`;
       tabButton.type = "button";
       tabButton.role = "tab";
       tabButton.title = tab.path;

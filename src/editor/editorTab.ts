@@ -30,6 +30,11 @@ export type EditorTab = {
   sizeBytes?: number;
   lineCount?: number;
   temporary?: boolean;
+  /**
+   * True when the file is open beside a project without belonging to it. The
+   * tab is marked, has no explorer entry, and hides project gutter tools.
+   */
+  offProject?: boolean;
   undoHistory?: EditorUndoHistory;
   /**
    * Runtime-only CodeMirror state retained while the tab is inactive.

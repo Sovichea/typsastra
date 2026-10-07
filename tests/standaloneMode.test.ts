@@ -31,4 +31,13 @@ describe("standalone document guards", () => {
     expect(body(controller, "public async refreshTableDirectiveIndex", "private tableLinkFor"))
       .toContain("if (this.standaloneFilePath !== null)");
   });
+
+  test("opening a standalone file while a project is open adds an off-project tab", async () => {
+    const controller = await read();
+    const open = body(controller, "private async openStandaloneFile", "private discardStandaloneCache");
+    expect(open).toContain("tab.offProject = true");
+    expect(open).not.toContain("confirmUnsaved");
+    const view = await Bun.file(new URL("../src/editor/editorTabViewController.ts", import.meta.url)).text();
+    expect(view).toContain('tab.offProject ? " off-project" : ""');
+  });
 });

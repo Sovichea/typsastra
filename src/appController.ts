@@ -2274,9 +2274,10 @@ export class TypsastraWorkspaceController {
       standalone: this.standaloneFilePath !== null,
     });
     this.nativeAppMenu?.syncWorkspaceState(this.workspaceRootPath !== null && this.standaloneFilePath === null);
-    // Gutter affordances for the Image and Table tools hide in standalone mode.
+    // Gutter affordances for the Image and Table tools hide when the active
+    // document is edited outside a project.
     this.editorInstance?.dispatch({
-      effects: setStandaloneDocumentEffect.of(this.standaloneFilePath !== null),
+      effects: setStandaloneDocumentEffect.of(this.activeDocumentIsStandalone()),
     });
   }
 
@@ -2532,6 +2533,16 @@ export class TypsastraWorkspaceController {
 
   private renderEditorTabs(): void {
     this.editorTabViewController.render();
+    // The active tab may be an off-project file, which changes gutter tools.
+    this.editorInstance?.dispatch({
+      effects: setStandaloneDocumentEffect.of(this.activeDocumentIsStandalone()),
+    });
+  }
+
+  /** True when the active document is edited outside a project. */
+  private activeDocumentIsStandalone(): boolean {
+    if (this.standaloneFilePath !== null) return true;
+    return this.getActiveTab()?.offProject === true;
   }
 
   private promoteToPermanent(tab: EditorTab): Promise<void> {
@@ -3002,9 +3013,7 @@ export class TypsastraWorkspaceController {
   }
 
   private renderPdfPreview(contents: string, force = false): Promise<void> {
-    // A standalone file only compiles in isolation, so a local import or include
-    // is reported instead of rendered.
-    if (this.blockStandaloneMultiFilePreview(contents)) return Promise.resolve();
+    if (this.blockStandalonePreview(contents)) return Promise.resolve();
     // While the table tool owns the preview pane, the document preview must
     // not render over it; switching back restores the preview.
     if (this.sidebarController.activeTool === "tables") return Promise.resolve();
@@ -3012,15 +3021,31 @@ export class TypsastraWorkspaceController {
   }
 
   /**
-   * Blocks standalone preview when the document depends on other local files.
-   * Returns true when the multi-file recommendation was shown.
+   * Blocks live preview for a document edited outside a project. A dedicated
+   * standalone file renders only when it has no local dependency; an
+   * off-project tab inside a project has no isolated preview yet.
+   * Returns true when a message was shown.
    */
-  private blockStandaloneMultiFilePreview(contents: string): boolean {
-    if (this.standaloneFilePath === null) return false;
-    const dependencies = standaloneLocalDependencies(contents);
-    if (dependencies.length === 0) return false;
-    this.showStandaloneProjectRecommendation(dependencies);
+  private blockStandalonePreview(contents: string): boolean {
+    if (!this.activeDocumentIsStandalone()) return false;
+    if (this.standaloneFilePath !== null) {
+      const dependencies = standaloneLocalDependencies(contents);
+      if (dependencies.length === 0) return false;
+      this.showStandaloneProjectRecommendation(dependencies);
+      return true;
+    }
+    this.showOffProjectPreviewMessage();
     return true;
+  }
+
+  private showOffProjectPreviewMessage(): void {
+    this.previewFrame.setMessage(
+      `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
+      `<div class="preview-disabled-title preview-accent-title">Off-project file</div>` +
+      `<div class="preview-disabled-msg">This file is open beside the current project and is not part of it. ` +
+      `Live preview is available when the file is opened on its own.</div>` +
+      `</div></div>`,
+    );
   }
 
   private showStandaloneProjectRecommendation(dependencies: readonly string[]): void {
@@ -3697,8 +3722,8 @@ export class TypsastraWorkspaceController {
   }
 
   private refreshActivePreviewRoot(forceRender = false): Promise<void> {
-    if (this.standaloneFilePath !== null
-      && this.blockStandaloneMultiFilePreview(this.editorInstance.state.doc.toString())) {
+    if (this.activeDocumentIsStandalone()
+      && this.blockStandalonePreview(this.editorInstance.state.doc.toString())) {
       return Promise.resolve();
     }
     return this.previewContentController.refreshActivePreviewRoot(forceRender);
@@ -3967,9 +3992,14 @@ export class TypsastraWorkspaceController {
    * directory instead of the folder-keyed workspace cache.
    */
   private async openStandaloneFile(path: string): Promise<void> {
+    // A project is already open: add the file as an off-project tab beside it
+    // rather than closing the project.
     if (this.workspaceRootPath !== null && this.standaloneFilePath === null) {
-      const closed = await this.workspaceLifecycleController.close({ confirmUnsaved: true });
-      if (!closed) return;
+      await this.loadFile(path);
+      const tab = this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path));
+      if (tab) tab.offProject = true;
+      this.renderEditorTabs();
+      return;
     }
     this.standaloneFilePath = path;
     this.workspaceRootPath = await dirname(path);
