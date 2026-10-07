@@ -24,6 +24,11 @@ type ProjectTableDirectiveIndex = {
   directives: Record<string, { path: string; line: number; column: number }>;
   scannedTypstFiles: number;
 };
+/** An OS launch request, classified by the native layer. */
+type PendingLaunchRequest = {
+  kind: "projectArchive" | "folder" | "standaloneFile";
+  path: string;
+};
 import type { EditorFoldRange } from "./editor/folding";
 import { WorkspaceExplorer } from "./components/explorer";
 import { SidebarController } from "./sidebar/sidebarController";
@@ -426,6 +431,12 @@ export class TypsastraWorkspaceController {
   private set mainDocumentScripts(value: DocumentTypography["fonts"]) { this.documentLanguageController.mainDocumentScripts = value; }
   private workspaceRootPath: string | null = null;
   private renderCacheRootPath: string | null = null;
+  /**
+   * Set while a lone .typ/.md file is edited without a project. The containing
+   * folder is used only to resolve the document; no `.typsastra` metadata is
+   * written and the preview cache lives in the application data directory.
+   */
+  private standaloneFilePath: string | null = null;
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
   private workspaceServicesDeferredForLargeFile = false;
@@ -1011,7 +1022,7 @@ export class TypsastraWorkspaceController {
     },
   );
   private readonly sidebarController = new SidebarController({
-    hasWorkspace: () => !!this.workspaceRootPath,
+    hasWorkspace: () => !!this.workspaceRootPath && this.standaloneFilePath === null,
     isWorkspaceLoading: () => this.workspaceLoading,
     isActiveSurfaceNonText: () => {
       const path = this.activeFilePath;
@@ -2231,7 +2242,8 @@ export class TypsastraWorkspaceController {
     await this.performanceController.timeStartup("initialize Tinymist LSP", () => this.initLsp(
       Boolean(toolchain?.lspAvailable) && !this.settingsController.value.preview.lowMemoryMode
     ));
-    await this.drainPendingProjectImports();
+    this.pruneStandaloneCaches();
+    await this.drainPendingLaunchRequests();
     this.performanceController.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
   }
 
@@ -2242,10 +2254,12 @@ export class TypsastraWorkspaceController {
   private updateWorkspaceViewportVisibility() {
     this.workspaceController.updateViewport({
       activeFilePath: this.activeFilePath,
-      workspaceRootPath: this.workspaceRootPath,
+      // A standalone file has no project chrome: pass no root so the explorer,
+      // activity bar, and project sidebar stay hidden.
+      workspaceRootPath: this.standaloneFilePath === null ? this.workspaceRootPath : null,
       loading: this.workspaceLoading,
     });
-    this.nativeAppMenu?.syncWorkspaceState(this.workspaceRootPath !== null);
+    this.nativeAppMenu?.syncWorkspaceState(this.workspaceRootPath !== null && this.standaloneFilePath === null);
   }
 
   private async installNativeAppMenu(): Promise<void> {
@@ -3371,6 +3385,9 @@ export class TypsastraWorkspaceController {
   }
 
   private saveWorkspaceState(): Promise<void> {
+    // A standalone file has no project, so there is no `.typsastra` metadata to
+    // persist and nothing may be written beside the source file.
+    if (this.standaloneFilePath !== null) return Promise.resolve();
     return this.workspaceController.saveState();
   }
 
@@ -3610,6 +3627,8 @@ export class TypsastraWorkspaceController {
   }
 
   private openWorkspace(selected: string): Promise<void> {
+    // Opening a project leaves standalone-file mode and drops its temp cache.
+    this.discardStandaloneCache();
     return this.workspaceLifecycleController.open(selected);
   }
 
@@ -3729,7 +3748,7 @@ export class TypsastraWorkspaceController {
       previewContentMode: () => this.draftPreviewController.mode,
       openLastPreviewExternally: () => this.lastPdfPath ? this.openFileExternally(this.lastPdfPath) : undefined,
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),
-      drainPendingProjectImports: () => this.drainPendingProjectImports(),
+      drainPendingLaunchRequests: () => this.drainPendingLaunchRequests(),
       navigateToImageTool: imagePath => this.navigateToImageTool(imagePath),
       navigateToTableTool: tableId => this.navigateToTableTool(tableId),
       handleTableDirectiveAction: (tableId, x, y) => this.handleTableDirectiveAction(tableId, x, y),
@@ -3740,6 +3759,7 @@ export class TypsastraWorkspaceController {
         }
         this.workspaceController.stopWatching();
         void this.saveWorkspaceState();
+        this.discardStandaloneCache();
         this.settingsController.flush();
       },
       dismissSpellcheckTyping: () => this.spellcheckController.dismissActiveTyping(),
@@ -3840,17 +3860,66 @@ export class TypsastraWorkspaceController {
     });
   }
 
-  private async drainPendingProjectImports(): Promise<void> {
-    const paths = await invoke<string[]>("take_pending_project_imports").catch(error => {
-      console.error("Failed to read pending Typsastra project imports:", error);
-      return [];
+  private async drainPendingLaunchRequests(): Promise<void> {
+    const requests = await invoke<PendingLaunchRequest[]>("take_pending_launch_requests").catch(error => {
+      console.error("Failed to read pending Typsastra launch requests:", error);
+      return [] as PendingLaunchRequest[];
     });
-    for (const path of paths) {
+    for (const request of requests) {
       this.projectImportQueue = this.projectImportQueue
-        .then(() => this.importTypsastraProject(path))
-        .catch(error => console.error("Queued Typsastra project import failed:", error));
+        .then(async () => {
+          if (request.kind === "projectArchive") await this.importTypsastraProject(request.path);
+          else if (request.kind === "folder") await this.openWorkspace(request.path);
+          else await this.openStandaloneFile(request.path);
+        })
+        .catch(error => console.error("Queued Typsastra launch request failed:", error));
     }
     await this.projectImportQueue;
+  }
+
+  /**
+   * Opens a lone `.typ`/`.md` file without a project. The containing folder is
+   * kept only so Typst can resolve relative references; it is never written to,
+   * and the preview cache uses a temporary directory under the application data
+   * directory instead of the folder-keyed workspace cache.
+   */
+  private async openStandaloneFile(path: string): Promise<void> {
+    if (this.workspaceRootPath !== null && this.standaloneFilePath === null) {
+      const closed = await this.workspaceLifecycleController.close({ confirmUnsaved: true });
+      if (!closed) return;
+    }
+    this.standaloneFilePath = path;
+    this.workspaceRootPath = await dirname(path);
+    this.workspaceMetadata = null;
+    this.renderCacheRootPath = await invoke<string>("prepare_standalone_preview_cache", { filePath: path })
+      .catch(error => {
+        console.error("Failed to prepare the standalone preview cache:", error);
+        return null;
+      });
+    this.sidebarController.reset();
+    this.updateWorkspaceViewportVisibility();
+    await this.loadFile(path);
+  }
+
+  /** Removes the current standalone document's preview cache. */
+  private discardStandaloneCache(): void {
+    const path = this.standaloneFilePath;
+    if (path === null) return;
+    this.standaloneFilePath = null;
+    void invoke("remove_standalone_preview_cache", { filePath: path }).catch(error =>
+      console.error("Failed to remove the standalone preview cache:", error));
+  }
+
+  /**
+   * Deletes standalone preview caches that have not been used within the
+   * retention window, so abandoned standalone documents do not accumulate.
+   */
+  private pruneStandaloneCaches(): void {
+    const retentionMs = 7 * 24 * 60 * 60 * 1000;
+    void invoke<number>("prune_standalone_preview_caches", {
+      activeFilePaths: this.standaloneFilePath === null ? [] : [this.standaloneFilePath],
+      maxAgeMs: retentionMs,
+    }).catch(error => console.error("Failed to prune standalone preview caches:", error));
   }
 
   private mapMarkupToWysiwym(markup: string) {
