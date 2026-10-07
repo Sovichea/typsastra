@@ -1688,6 +1688,136 @@ fn cleanup_workspace_preview_files(
         .map(|path| path.to_string_lossy().to_string())
 }
 
+/// Standalone documents are not projects, so they must never place generated
+/// state beside the source file. Their caches live under the application data
+/// directory and are keyed by the file's canonical path.
+pub fn standalone_preview_cache_root(
+    app_local_data_dir: &std::path::Path,
+    file_path: &std::path::Path,
+) -> std::path::PathBuf {
+    use sha2::{Digest, Sha256};
+    let canonical = file_path
+        .canonicalize()
+        .unwrap_or_else(|_| file_path.to_path_buf());
+    let mut identity = canonical.to_string_lossy().replace('\\', "/");
+    if cfg!(windows) {
+        identity.make_ascii_lowercase();
+    }
+    let digest = Sha256::digest(identity.as_bytes());
+    let file_key = digest[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    app_local_data_dir.join("standalone-cache").join(file_key)
+}
+
+#[tauri::command]
+fn prepare_standalone_preview_cache(
+    app_handle: tauri::AppHandle,
+    file_path: String,
+) -> Result<String, String> {
+    let app_local_data_dir = app_handle.path().app_local_data_dir().map_err(|error| {
+        format!("Failed to resolve the local application data directory: {error}")
+    })?;
+    let source = PathBuf::from(&file_path);
+    if !source.is_file() {
+        return Err("The standalone document no longer exists.".to_string());
+    }
+    let cache_root = standalone_preview_cache_root(&app_local_data_dir, &source);
+    std::fs::create_dir_all(&cache_root)
+        .map_err(|error| format!("Failed to create the standalone preview cache: {error}"))?;
+    Ok(cache_root.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn remove_standalone_preview_cache(
+    app_handle: tauri::AppHandle,
+    file_path: String,
+) -> Result<(), String> {
+    let app_local_data_dir = app_handle.path().app_local_data_dir().map_err(|error| {
+        format!("Failed to resolve the local application data directory: {error}")
+    })?;
+    let cache_root = standalone_preview_cache_root(&app_local_data_dir, Path::new(&file_path));
+    remove_dir_if_present(&cache_root)
+}
+
+/// Deletes standalone caches that have not been touched within `max_age_ms` and
+/// are not in `active_file_paths`. Runs at startup so abandoned edits cannot
+/// accumulate without bound.
+#[tauri::command]
+fn prune_standalone_preview_caches(
+    app_handle: tauri::AppHandle,
+    active_file_paths: Vec<String>,
+    max_age_ms: u64,
+) -> Result<usize, String> {
+    let app_local_data_dir = app_handle.path().app_local_data_dir().map_err(|error| {
+        format!("Failed to resolve the local application data directory: {error}")
+    })?;
+    let root = app_local_data_dir.join("standalone-cache");
+    if !root.is_dir() {
+        return Ok(0);
+    }
+    let active: std::collections::HashSet<std::path::PathBuf> = active_file_paths
+        .iter()
+        .map(|path| standalone_preview_cache_root(&app_local_data_dir, Path::new(path)))
+        .collect();
+    let now = std::time::SystemTime::now();
+    let mut removed = 0usize;
+    let entries = std::fs::read_dir(&root)
+        .map_err(|error| format!("Failed to read the standalone preview cache: {error}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() || active.contains(&path) {
+            continue;
+        }
+        let age = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok());
+        if age.is_some_and(|age| age.as_millis() as u64 >= max_age_ms)
+            && remove_dir_if_present(&path).is_ok()
+        {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+fn remove_dir_if_present(path: &std::path::Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    std::fs::remove_dir_all(path)
+        .map_err(|error| format!("Failed to remove {}: {error}", path.display()))
+}
+
+#[cfg(test)]
+mod standalone_cache_tests {
+    use super::standalone_preview_cache_root;
+
+    #[test]
+    fn keys_the_cache_by_canonical_file_path_not_the_parent_folder() {
+        let app_data = tempfile::tempdir().unwrap();
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first = first_dir.path().join("chapter.typ");
+        let second = second_dir.path().join("chapter.typ");
+        std::fs::write(&first, b"= One").unwrap();
+        std::fs::write(&second, b"= Two").unwrap();
+        let first_cache = standalone_preview_cache_root(app_data.path(), &first);
+        let second_cache = standalone_preview_cache_root(app_data.path(), &second);
+        assert_ne!(first_cache, second_cache);
+        assert!(first_cache.starts_with(app_data.path().join("standalone-cache")));
+        // A different relative spelling of the same file resolves to one cache.
+        let aliased = first_dir.path().join(".").join("chapter.typ");
+        assert_eq!(
+            standalone_preview_cache_root(app_data.path(), &aliased),
+            first_cache
+        );
+    }
+}
+
 #[tauri::command]
 fn save_workspace_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(&path, contents).map_err(|e| format!("Failed to save file: {}", e))
@@ -2220,9 +2350,49 @@ fn get_memory_diagnostics() -> Result<Vec<ProcessMemorySample>, String> {
     process_memory_samples()
 }
 
+/// How the operating system asked Typsastra to open something.
+///
+/// A `.typsastra` archive is imported as a project, a folder is opened as a
+/// project, and a lone `.typ`/`.md` file is edited as a standalone document that
+/// deliberately has no project metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+enum LaunchKind {
+    ProjectArchive,
+    Folder,
+    StandaloneFile,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LaunchRequest {
+    kind: LaunchKind,
+    path: String,
+}
+
 #[derive(Default)]
-struct PendingProjectImports {
-    paths: Mutex<Vec<PathBuf>>,
+struct PendingLaunchRequests {
+    items: Mutex<Vec<(LaunchKind, PathBuf)>>,
+}
+
+fn launch_kind_for(candidate: &Path) -> Option<LaunchKind> {
+    if candidate.is_dir() {
+        return Some(LaunchKind::Folder);
+    }
+    if !candidate.is_file() {
+        return None;
+    }
+    let extension = candidate.extension().and_then(|value| value.to_str())?;
+    if extension.eq_ignore_ascii_case("typsastra") || extension.eq_ignore_ascii_case("typstella") {
+        return Some(LaunchKind::ProjectArchive);
+    }
+    if extension.eq_ignore_ascii_case("typ")
+        || extension.eq_ignore_ascii_case("md")
+        || extension.eq_ignore_ascii_case("markdown")
+    {
+        return Some(LaunchKind::StandaloneFile);
+    }
+    None
 }
 
 #[derive(Default)]
@@ -2242,7 +2412,7 @@ fn cancel_typsastra_project_import(
     }
 }
 
-impl PendingProjectImports {
+impl PendingLaunchRequests {
     fn from_process_args() -> Self {
         let pending = Self::default();
         for argument in std::env::args_os().skip(1) {
@@ -2252,37 +2422,31 @@ impl PendingProjectImports {
     }
 
     fn push(&self, candidate: PathBuf) {
-        if !candidate
-            .extension()
-            .and_then(|value| value.to_str())
-            .is_some_and(|value| {
-                value.eq_ignore_ascii_case("typsastra") || value.eq_ignore_ascii_case("typstella")
-            })
-        {
+        let Some(kind) = launch_kind_for(&candidate) else {
             return;
-        }
+        };
         let path = dunce::canonicalize(&candidate).unwrap_or(candidate);
-        if !path.is_file() {
-            return;
-        }
         let key = project_import_path_key(&path);
-        if let Ok(mut paths) = self.paths.lock() {
-            if !paths
+        if let Ok(mut items) = self.items.lock() {
+            if !items
                 .iter()
-                .any(|existing| project_import_path_key(existing) == key)
+                .any(|(_, existing)| project_import_path_key(existing) == key)
             {
-                paths.push(path);
+                items.push((kind, path));
             }
         }
     }
 
-    fn take(&self) -> Vec<String> {
-        self.paths
+    fn take(&self) -> Vec<LaunchRequest> {
+        self.items
             .lock()
-            .map(|mut paths| {
-                paths
+            .map(|mut items| {
+                items
                     .drain(..)
-                    .map(|path| path.to_string_lossy().into_owned())
+                    .map(|(kind, path)| LaunchRequest {
+                        kind,
+                        path: path.to_string_lossy().into_owned(),
+                    })
                     .collect()
             })
             .unwrap_or_default()
@@ -2299,30 +2463,43 @@ fn project_import_path_key(path: &Path) -> String {
 }
 
 #[tauri::command]
-fn take_pending_project_imports(state: tauri::State<'_, PendingProjectImports>) -> Vec<String> {
+fn take_pending_launch_requests(
+    state: tauri::State<'_, PendingLaunchRequests>,
+) -> Vec<LaunchRequest> {
     state.take()
 }
 
 #[cfg(test)]
 mod project_open_queue_tests {
-    use super::PendingProjectImports;
+    use super::{LaunchKind, PendingLaunchRequests};
 
     #[test]
-    fn accepts_only_existing_typsastra_files_and_deduplicates_canonical_paths() {
+    fn classifies_archives_folders_and_standalone_sources_and_deduplicates() {
         let directory = tempfile::tempdir().unwrap();
         let archive = directory.path().join("គម្រោង test.typsastra");
         let source = directory.path().join("main.typ");
+        let markdown = directory.path().join("notes.md");
         std::fs::write(&archive, b"archive").unwrap();
         std::fs::write(&source, b"source").unwrap();
-        let queue = PendingProjectImports::default();
+        std::fs::write(&markdown, b"# notes").unwrap();
+        let queue = PendingLaunchRequests::default();
         queue.push(archive.clone());
         queue.push(directory.path().join(".").join("គម្រោង test.typsastra"));
         queue.push(source);
+        queue.push(markdown);
+        queue.push(directory.path().to_path_buf());
         queue.push(directory.path().join("missing.typsastra"));
+        queue.push(directory.path().join("photo.png"));
 
-        let paths = queue.take();
-        assert_eq!(paths.len(), 1);
-        assert!(paths[0].ends_with("គម្រោង test.typsastra"));
+        let requests = queue.take();
+        assert_eq!(requests.len(), 4);
+        assert_eq!(requests[0].kind, LaunchKind::ProjectArchive);
+        assert!(requests[0].path.ends_with("គម្រោង test.typsastra"));
+        assert_eq!(requests[1].kind, LaunchKind::StandaloneFile);
+        assert!(requests[1].path.ends_with("main.typ"));
+        assert_eq!(requests[2].kind, LaunchKind::StandaloneFile);
+        assert!(requests[2].path.ends_with("notes.md"));
+        assert_eq!(requests[3].kind, LaunchKind::Folder);
         assert!(queue.take().is_empty());
     }
 }
@@ -7680,7 +7857,7 @@ pub fn run() {
         registry_start,
     );
     let setup_timings = startup_timings.clone();
-    let pending_project_imports = PendingProjectImports::from_process_args();
+    let pending_launch_requests = PendingLaunchRequests::from_process_args();
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -7691,14 +7868,14 @@ pub fn run() {
                 }
             }
         })
-        .manage(pending_project_imports)
+        .manage(pending_launch_requests)
         .manage(ProjectImportOperations::default())
         .manage(PdfRangeSources::default())
         .manage(PdfiumPreviewState::default())
         .manage(PdfExportOperations::default())
         .plugin(tauri_plugin_single_instance::init(
             |app, arguments, _working_directory| {
-                let pending = app.state::<PendingProjectImports>();
+                let pending = app.state::<PendingLaunchRequests>();
                 for argument in arguments.into_iter().skip(1) {
                     pending.push(PathBuf::from(argument));
                 }
@@ -7791,6 +7968,9 @@ pub fn run() {
             inspect_legacy_workspace_cache,
             remove_legacy_workspace_cache,
             cleanup_workspace_preview_files,
+            prepare_standalone_preview_cache,
+            remove_standalone_preview_cache,
+            prune_standalone_preview_caches,
             export_source_zip,
             export_typsastra_project,
             inspect_typsastra_project,
@@ -7809,7 +7989,7 @@ pub fn run() {
             create_blank_project,
             cancel_project_template_operation,
             select_project_toolchain,
-            take_pending_project_imports,
+            take_pending_launch_requests,
             save_workspace_file,
             create_workspace_dir,
             rename_workspace_file,
