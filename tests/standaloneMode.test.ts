@@ -32,6 +32,17 @@ describe("standalone document guards", () => {
       .toContain("if (this.standaloneFilePath !== null)");
   });
 
+  test("promote opens an existing project without the create confirmation", async () => {
+    const controller = await read();
+    const promote = body(controller, "private async promoteStandaloneToProject", "private async recompilePreviewManually");
+    const existingIndex = promote.indexOf("folderHasProject(folder)");
+    const confirmIndex = promote.indexOf("await confirm(");
+    expect(existingIndex).toBeGreaterThanOrEqual(0);
+    expect(confirmIndex).toBeGreaterThan(existingIndex);
+    expect(body(controller, "private async folderHasProject", "private async recompilePreviewManually"))
+      .toContain('"load_workspace_metadata"');
+  });
+
   test("opening a standalone file while a project is open adds an off-project tab", async () => {
     const controller = await read();
     const open = body(controller, "private async openStandaloneFile", "private discardStandaloneCache");

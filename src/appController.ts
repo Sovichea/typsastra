@@ -3080,6 +3080,12 @@ export class TypsastraWorkspaceController {
       ?? (activeTab?.offProject ? activeTab.path : null);
     if (path === null) return;
     const folder = await dirname(path);
+    // An existing project in the folder is opened directly; only a folder
+    // without project metadata needs the create confirmation.
+    if (await this.folderHasProject(folder)) {
+      await this.openWorkspace(folder);
+      return;
+    }
     const approved = await confirm(
       `Create a Typsastra project in this folder?\n\n${folder}\n\n` +
       "Typsastra writes a .typsastra folder with project settings and opens the file as the project's main document.",
@@ -3088,6 +3094,15 @@ export class TypsastraWorkspaceController {
     if (!approved) return;
     await this.openWorkspace(folder);
     if (this.workspaceRootPath !== null) await this.setPinnedMainFile(path);
+  }
+
+  /** True when the folder already carries Typsastra project metadata. */
+  private async folderHasProject(folder: string): Promise<boolean> {
+    const metadata = await invoke<{ project: unknown | null; workspace: unknown | null }>(
+      "load_workspace_metadata",
+      { workspaceRootPath: folder },
+    ).catch(() => null);
+    return metadata !== null && (metadata.project !== null || metadata.workspace !== null);
   }
 
   private async recompilePreviewManually(): Promise<void> {
