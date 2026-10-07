@@ -829,6 +829,14 @@ export class TypsastraWorkspaceController {
    */
   public async refreshTableDirectiveIndex(force = false): Promise<void> {
     const root = this.workspaceRootPath;
+    // Table links are a project feature; a standalone file has no project to
+    // scan and must not walk its containing folder.
+    if (this.standaloneFilePath !== null) {
+      this.tableDirectiveIndex = null;
+      this.tableDirectiveIndexRoot = null;
+      this.tableDirectiveIndexError = null;
+      return;
+    }
     if (!root) {
       this.tableDirectiveIndex = null;
       this.tableDirectiveIndexRoot = null;
@@ -1034,11 +1042,14 @@ export class TypsastraWorkspaceController {
     },
     invalidatePreview: reason => this.invalidatePreviewWork(reason),
     showImageTools: () => {
+      // Project tools stay closed for a standalone file.
+      if (this.standaloneFilePath !== null) return;
       this.previewContentController.suspendDocumentPreviewForImageTools();
       this.imageToolsController.show();
     },
     hideImageTools: () => this.imageToolsController.hide(),
     showTableTools: () => {
+      if (this.standaloneFilePath !== null) return;
       // The filters depend on the workspace anchor index, so make sure it is warm
       // before the list paints.
       void this.refreshTableDirectiveIndex();
@@ -1660,6 +1671,7 @@ export class TypsastraWorkspaceController {
         this.editorInstance.dispatch({ effects: setImageOptimizationWarningsEffect.of(warnings) });
       },
       showImages: async imagePath => {
+        if (this.standaloneFilePath !== null) return;
         this.sidebarController.setTool("images");
         if (imagePath) await this.imageToolsController.selectImage(imagePath);
       },
@@ -2290,12 +2302,15 @@ export class TypsastraWorkspaceController {
   }
 
   private async navigateToImageTool(imagePath: string): Promise<void> {
+    // Image Tools inventory the project, which a standalone file does not have.
+    if (this.standaloneFilePath !== null) return;
     this.sidebarController.setTool("images");
     await this.imageToolsController.selectImage(imagePath);
   }
 
   /** Opens the Table tool and selects the table linked by a directive. */
   private navigateToTableTool(tableId: string): void {
+    if (this.standaloneFilePath !== null) return;
     this.sidebarController.setTool("tables");
     this.tableToolController.show();
     this.tableToolController.selectTable(tableId);
@@ -2310,6 +2325,7 @@ export class TypsastraWorkspaceController {
 
   /** Menu for an orphaned directive: recreate the table or unlink it. */
   private handleTableDirectiveAction(tableId: string, x: number, y: number): void {
+    if (this.standaloneFilePath !== null) return;
     this.contextMenuController.showCustomMenu([
       {
         label: "Recreate table in Table tool",
