@@ -3,14 +3,19 @@
   Windows shell integration for Typsastra.
 
   Referenced from tauri.conf.json (bundle.windows.wix). It registers:
-    - .typ and .md as Typsastra source documents, with Typsastra as the
-      default HKCR handler.
+    - .typ and .md as Typsastra source documents, with Typsastra listed under
+      the file's "Open with" menu and set as the default HKCR handler.
     - "Open with Typsastra" for a folder and for a folder's empty background.
 
-  INSTALLDIR and the Typsastra.exe file name match the WiX template Tauri
-  generates (see src-tauri/target/release/wix/<arch>/main.wxs). Windows still
-  honors a per-user "Open with" choice, so an existing UserChoice for .typ or
-  .md keeps that handler until the user changes it.
+  The installed executable is typsastra.exe (the Cargo binary name Tauri
+  bundles), so the RegistryValue paths use [INSTALLDIR]typsastra.exe. INSTALLDIR
+  matches the WiX template Tauri generates in
+  src-tauri/target/release/wix/<arch>/main.wxs.
+
+  Windows 11 keeps classic registry verbs such as Directory\shell and
+  Directory\Background\shell under "Show more options". Listing them in the
+  top-level Windows 11 menu requires a packaged context-menu extension, not
+  registry entries.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Fragment>
@@ -19,15 +24,18 @@
                 <RegistryKey Root="HKCR" Key=".typ">
                     <RegistryValue Type="string" Value="Typsastra.TypstSource" KeyPath="yes" />
                 </RegistryKey>
+                <RegistryKey Root="HKCR" Key=".typ\OpenWithProgids">
+                    <RegistryValue Name="Typsastra.TypstSource" Type="string" Value="" />
+                </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Typsastra.TypstSource">
                     <RegistryValue Type="string" Value="Typst Document" />
                     <RegistryValue Name="FriendlyTypeName" Type="string" Value="Typst Document" />
                 </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Typsastra.TypstSource\DefaultIcon">
-                    <RegistryValue Type="string" Value="[INSTALLDIR]Typsastra.exe,0" />
+                    <RegistryValue Type="string" Value="[INSTALLDIR]typsastra.exe,0" />
                 </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Typsastra.TypstSource\shell\open\command">
-                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Typsastra.exe&quot; &quot;%1&quot;" />
+                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]typsastra.exe&quot; &quot;%1&quot;" />
                 </RegistryKey>
             </Component>
 
@@ -35,32 +43,53 @@
                 <RegistryKey Root="HKCR" Key=".md">
                     <RegistryValue Type="string" Value="Typsastra.Markdown" KeyPath="yes" />
                 </RegistryKey>
+                <RegistryKey Root="HKCR" Key=".md\OpenWithProgids">
+                    <RegistryValue Name="Typsastra.Markdown" Type="string" Value="" />
+                </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Typsastra.Markdown">
                     <RegistryValue Type="string" Value="Markdown Document" />
                     <RegistryValue Name="FriendlyTypeName" Type="string" Value="Markdown Document" />
                 </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Typsastra.Markdown\DefaultIcon">
-                    <RegistryValue Type="string" Value="[INSTALLDIR]Typsastra.exe,0" />
+                    <RegistryValue Type="string" Value="[INSTALLDIR]typsastra.exe,0" />
                 </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Typsastra.Markdown\shell\open\command">
-                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Typsastra.exe&quot; &quot;%1&quot;" />
+                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]typsastra.exe&quot; &quot;%1&quot;" />
+                </RegistryKey>
+            </Component>
+
+            <!-- Application registration is what makes Typsastra appear in the
+                 Windows "Open with" list for .typ and .md. -->
+            <Component Id="TypsastraApplicationRegistration" Directory="INSTALLDIR" Guid="*">
+                <RegistryKey Root="HKCR" Key="Applications\typsastra.exe">
+                    <RegistryValue Name="FriendlyAppName" Type="string" Value="Typsastra" KeyPath="yes" />
+                </RegistryKey>
+                <RegistryKey Root="HKCR" Key="Applications\typsastra.exe\SupportedTypes">
+                    <RegistryValue Name=".typ" Type="string" Value="" />
+                    <RegistryValue Name=".md" Type="string" Value="" />
+                </RegistryKey>
+                <RegistryKey Root="HKCR" Key="Applications\typsastra.exe\DefaultIcon">
+                    <RegistryValue Type="string" Value="[INSTALLDIR]typsastra.exe,0" />
+                </RegistryKey>
+                <RegistryKey Root="HKCR" Key="Applications\typsastra.exe\shell\open\command">
+                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]typsastra.exe&quot; &quot;%1&quot;" />
                 </RegistryKey>
             </Component>
 
             <Component Id="TypsastraFolderContextMenu" Directory="INSTALLDIR" Guid="*">
                 <RegistryKey Root="HKCR" Key="Directory\shell\Typsastra">
                     <RegistryValue Type="string" Value="Open with Typsastra" KeyPath="yes" />
-                    <RegistryValue Name="Icon" Type="string" Value="[INSTALLDIR]Typsastra.exe,0" />
+                    <RegistryValue Name="Icon" Type="string" Value="[INSTALLDIR]typsastra.exe,0" />
                 </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Directory\shell\Typsastra\command">
-                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Typsastra.exe&quot; &quot;%1&quot;" />
+                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]typsastra.exe&quot; &quot;%1&quot;" />
                 </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Directory\Background\shell\Typsastra">
                     <RegistryValue Type="string" Value="Open with Typsastra" />
-                    <RegistryValue Name="Icon" Type="string" Value="[INSTALLDIR]Typsastra.exe,0" />
+                    <RegistryValue Name="Icon" Type="string" Value="[INSTALLDIR]typsastra.exe,0" />
                 </RegistryKey>
                 <RegistryKey Root="HKCR" Key="Directory\Background\shell\Typsastra\command">
-                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Typsastra.exe&quot; &quot;%V&quot;" />
+                    <RegistryValue Type="string" Value="&quot;[INSTALLDIR]typsastra.exe&quot; &quot;%V&quot;" />
                 </RegistryKey>
             </Component>
         </ComponentGroup>
