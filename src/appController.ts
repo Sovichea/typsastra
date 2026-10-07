@@ -3891,11 +3891,16 @@ export class TypsastraWorkspaceController {
     this.standaloneFilePath = path;
     this.workspaceRootPath = await dirname(path);
     this.workspaceMetadata = null;
-    this.renderCacheRootPath = await invoke<string>("prepare_standalone_preview_cache", { filePath: path })
-      .catch(error => {
-        console.error("Failed to prepare the standalone preview cache:", error);
-        return null;
-      });
+    // The native preview pipeline verifies that the cache root is the managed
+    // cache for the workspace root, so a standalone document reuses that
+    // machine-local cache for its folder. Nothing is written beside the source
+    // file; the cache lives under the application data directory.
+    this.renderCacheRootPath = await invoke<string>("cleanup_workspace_preview_files", {
+      workspaceRootPath: this.workspaceRootPath,
+    }).catch(error => {
+      console.error("Failed to prepare the standalone preview cache:", error);
+      return null;
+    });
     this.sidebarController.reset();
     this.updateWorkspaceViewportVisibility();
     await this.loadFile(path);
