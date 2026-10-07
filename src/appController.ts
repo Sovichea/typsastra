@@ -1,4 +1,4 @@
-import { message, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Channel, invoke } from "@tauri-apps/api/core";
@@ -19,10 +19,17 @@ import { EditorController } from "./editor/editorController";
 import { EditorInitializationController } from "./editor/editorInitializationController";
 import { SurroundWithDiscoveryController } from "./editor/surroundWithDiscoveryController";
 import { isForwardSyncContentPosition } from "./editor/forwardSyncEligibility";
+import { setStandaloneDocumentEffect } from "./editor/standaloneDocument";
+import { standaloneLocalDependencies } from "./preview/standalonePreview";
 /** Payload of the workspace-wide `//@table:<id>` scan. */
 type ProjectTableDirectiveIndex = {
   directives: Record<string, { path: string; line: number; column: number }>;
   scannedTypstFiles: number;
+};
+/** An OS launch request, classified by the native layer. */
+type PendingLaunchRequest = {
+  kind: "projectArchive" | "folder" | "standaloneFile";
+  path: string;
 };
 import type { EditorFoldRange } from "./editor/folding";
 import { WorkspaceExplorer } from "./components/explorer";
@@ -426,6 +433,14 @@ export class TypsastraWorkspaceController {
   private set mainDocumentScripts(value: DocumentTypography["fonts"]) { this.documentLanguageController.mainDocumentScripts = value; }
   private workspaceRootPath: string | null = null;
   private renderCacheRootPath: string | null = null;
+  /**
+   * Set while a lone .typ/.md file is edited without a project. The containing
+   * folder is used only to resolve the document; no `.typsastra` metadata is
+   * written and the preview cache lives in the application data directory.
+   */
+  private standaloneFilePath: string | null = null;
+  /** Standalone preview cache roots for off-project tabs, keyed by folder. */
+  private readonly offProjectPreviewRoots = new Map<string, string>();
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
   private workspaceServicesDeferredForLargeFile = false;
@@ -647,8 +662,8 @@ export class TypsastraWorkspaceController {
     getPreviewMainPath: () => this.previewMainPath,
     getPinnedMainFilePath: () => this.pinnedMainFilePath,
     isPreviewStandalone: () => this.previewStandalone,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
-    getCacheRootPath: () => this.getCacheRootPath(),
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
+    getCacheRootPath: () => this.previewCacheRootPath(),
     mapToOriginalPath: path => this.mapToOriginalPath(path),
     getOpenTabs: () => this.openTabs,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
@@ -818,6 +833,14 @@ export class TypsastraWorkspaceController {
    */
   public async refreshTableDirectiveIndex(force = false): Promise<void> {
     const root = this.workspaceRootPath;
+    // Table links are a project feature; a standalone file has no project to
+    // scan and must not walk its containing folder.
+    if (this.standaloneFilePath !== null) {
+      this.tableDirectiveIndex = null;
+      this.tableDirectiveIndexRoot = null;
+      this.tableDirectiveIndexError = null;
+      return;
+    }
     if (!root) {
       this.tableDirectiveIndex = null;
       this.tableDirectiveIndexRoot = null;
@@ -1011,7 +1034,7 @@ export class TypsastraWorkspaceController {
     },
   );
   private readonly sidebarController = new SidebarController({
-    hasWorkspace: () => !!this.workspaceRootPath,
+    hasWorkspace: () => !!this.workspaceRootPath && this.standaloneFilePath === null,
     isWorkspaceLoading: () => this.workspaceLoading,
     isActiveSurfaceNonText: () => {
       const path = this.activeFilePath;
@@ -1023,11 +1046,14 @@ export class TypsastraWorkspaceController {
     },
     invalidatePreview: reason => this.invalidatePreviewWork(reason),
     showImageTools: () => {
+      // Project tools stay closed for a standalone file.
+      if (this.standaloneFilePath !== null) return;
       this.previewContentController.suspendDocumentPreviewForImageTools();
       this.imageToolsController.show();
     },
     hideImageTools: () => this.imageToolsController.hide(),
     showTableTools: () => {
+      if (this.standaloneFilePath !== null) return;
       // The filters depend on the workspace anchor index, so make sure it is warm
       // before the list paints.
       void this.refreshTableDirectiveIndex();
@@ -1649,6 +1675,7 @@ export class TypsastraWorkspaceController {
         this.editorInstance.dispatch({ effects: setImageOptimizationWarningsEffect.of(warnings) });
       },
       showImages: async imagePath => {
+        if (this.standaloneFilePath !== null) return;
         this.sidebarController.setTool("images");
         if (imagePath) await this.imageToolsController.selectImage(imagePath);
       },
@@ -1681,6 +1708,7 @@ export class TypsastraWorkspaceController {
   private readonly documentPersistenceController = new DocumentPersistenceController({
     activeFilePath: () => this.activeFilePath,
     activeMode: () => this.activeMode,
+    previewRenderMode: () => this.effectivePreviewRenderMode,
     workspaceRootPath: () => this.workspaceRootPath,
     openTabs: () => this.openTabs,
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
@@ -1794,7 +1822,7 @@ export class TypsastraWorkspaceController {
     isPreviewDisabled: () => this.previewDisabled,
     getPreviewRootPath: () => this.previewRootPath,
     getPreviewSessionKey: () => this.previewSessionKey,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     // The durable PDF/index pair represents the on-disk workspace snapshot.
@@ -1807,7 +1835,7 @@ export class TypsastraWorkspaceController {
       this.buildLowMemorySyncIndex(preparedRootPath, generation, pdfPath, sourceSignature),
     ensureLargePreviewApproved: rootPath => this.ensureLargePreviewApproved(rootPath),
     isPdfBlocked: path => this.blockedLargePdfPaths.has(filePathKey(path)),
-    getCacheRootPath: () => this.getCacheRootPath(),
+    getCacheRootPath: () => this.previewCacheRootPath(),
     getEditorText: () => this.editorInstance.state.doc.toString(),
     cancelManualForwardSync: () => this.cancelManualForwardSync(),
     updateManualForwardSyncAction: () => this.updateManualForwardSyncAction(),
@@ -1887,7 +1915,7 @@ export class TypsastraWorkspaceController {
     getEditor: () => this.editorInstance,
     getActiveFilePath: () => this.activeFilePath,
     getOpenTabs: () => this.openTabs,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
     getPreviewRootPath: () => this.previewRootPath,
     isPreviewStandalone: () => this.previewStandalone,
     getSourceMapRootPath: () => this.pdfPreviewSourceMapRootPath,
@@ -1934,7 +1962,7 @@ export class TypsastraWorkspaceController {
     isTableToolActive: () => this.sidebarController.activeTool === "tables",
     getActiveFilePath: () => this.activeFilePath,
     getPinnedMainFilePath: () => this.pinnedMainFilePath,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
     getPreviewSessionKey: () => this.previewSessionKey,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     getActiveTab: () => this.getActiveTab(),
@@ -2231,7 +2259,8 @@ export class TypsastraWorkspaceController {
     await this.performanceController.timeStartup("initialize Tinymist LSP", () => this.initLsp(
       Boolean(toolchain?.lspAvailable) && !this.settingsController.value.preview.lowMemoryMode
     ));
-    await this.drainPendingProjectImports();
+    this.pruneStandaloneCaches();
+    await this.drainPendingLaunchRequests();
     this.performanceController.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
   }
 
@@ -2244,8 +2273,15 @@ export class TypsastraWorkspaceController {
       activeFilePath: this.activeFilePath,
       workspaceRootPath: this.workspaceRootPath,
       loading: this.workspaceLoading,
+      // A standalone file hides the project sidebar but keeps the menu bar.
+      standalone: this.standaloneFilePath !== null,
     });
-    this.nativeAppMenu?.syncWorkspaceState(this.workspaceRootPath !== null);
+    this.nativeAppMenu?.syncWorkspaceState(this.workspaceRootPath !== null && this.standaloneFilePath === null);
+    // Gutter affordances for the Image and Table tools hide when the active
+    // document is edited outside a project.
+    this.editorInstance?.dispatch({
+      effects: setStandaloneDocumentEffect.of(this.activeDocumentIsStandalone()),
+    });
   }
 
   private async installNativeAppMenu(): Promise<void> {
@@ -2276,12 +2312,15 @@ export class TypsastraWorkspaceController {
   }
 
   private async navigateToImageTool(imagePath: string): Promise<void> {
+    // Image Tools inventory the project, which a standalone file does not have.
+    if (this.standaloneFilePath !== null) return;
     this.sidebarController.setTool("images");
     await this.imageToolsController.selectImage(imagePath);
   }
 
   /** Opens the Table tool and selects the table linked by a directive. */
   private navigateToTableTool(tableId: string): void {
+    if (this.standaloneFilePath !== null) return;
     this.sidebarController.setTool("tables");
     this.tableToolController.show();
     this.tableToolController.selectTable(tableId);
@@ -2296,6 +2335,7 @@ export class TypsastraWorkspaceController {
 
   /** Menu for an orphaned directive: recreate the table or unlink it. */
   private handleTableDirectiveAction(tableId: string, x: number, y: number): void {
+    if (this.standaloneFilePath !== null) return;
     this.contextMenuController.showCustomMenu([
       {
         label: "Recreate table in Table tool",
@@ -2496,6 +2536,41 @@ export class TypsastraWorkspaceController {
 
   private renderEditorTabs(): void {
     this.editorTabViewController.render();
+    // The active tab may be an off-project file, which changes gutter tools.
+    this.editorInstance?.dispatch({
+      effects: setStandaloneDocumentEffect.of(this.activeDocumentIsStandalone()),
+    });
+  }
+
+  /** True when the active document is edited outside a project. */
+  private activeDocumentIsStandalone(): boolean {
+    if (this.standaloneFilePath !== null) return true;
+    return this.getActiveTab()?.offProject === true;
+  }
+
+  /**
+   * Preview roots for the active document. An off-project tab is previewed in
+   * the same isolated way as a dedicated standalone file: its folder is the
+   * compilation root and its cache is the managed standalone cache for that
+   * folder, not the open project's cache.
+   */
+  private previewWorkspaceRootPath(): string | null {
+    const tab = this.getActiveTab();
+    if (tab?.offProject) return this.folderOfPath(tab.path);
+    return this.workspaceRootPath;
+  }
+
+  private previewCacheRootPath(): string | null {
+    const tab = this.getActiveTab();
+    if (tab?.offProject) {
+      return this.offProjectPreviewRoots.get(this.folderOfPath(tab.path)) ?? null;
+    }
+    return this.renderCacheRootPath;
+  }
+
+  private folderOfPath(path: string): string {
+    const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+    return separator > 0 ? path.slice(0, separator) : path;
   }
 
   private promoteToPermanent(tab: EditorTab): Promise<void> {
@@ -2966,10 +3041,69 @@ export class TypsastraWorkspaceController {
   }
 
   private renderPdfPreview(contents: string, force = false): Promise<void> {
+    if (this.blockStandalonePreview(contents)) return Promise.resolve();
     // While the table tool owns the preview pane, the document preview must
     // not render over it; switching back restores the preview.
     if (this.sidebarController.activeTool === "tables") return Promise.resolve();
     return this.pdfPreviewRenderController.render(contents, force);
+  }
+
+  /**
+   * Blocks live preview for a document edited outside a project. A dedicated
+   * standalone file renders only when it has no local dependency; an
+   * off-project tab inside a project has no isolated preview yet.
+   * Returns true when a message was shown.
+   */
+  private blockStandalonePreview(contents: string): boolean {
+    if (!this.activeDocumentIsStandalone()) return false;
+    const dependencies = standaloneLocalDependencies(contents);
+    if (dependencies.length === 0) return false;
+    this.showStandaloneProjectRecommendation(dependencies);
+    return true;
+  }
+
+  private showStandaloneProjectRecommendation(dependencies: readonly string[]): void {
+    this.previewFrame.setConfirmationMessage({
+      title: "Multi-file document",
+      message: `This file imports or includes ${dependencies.join(", ")}. `
+        + "A standalone preview compiles a single file. Promote this folder to a project to render it correctly.",
+      confirmLabel: "Promote to Project",
+      onConfirm: () => this.promoteStandaloneToProject(),
+    });
+  }
+
+  /** Turns the standalone folder into a project and opens it. */
+  private async promoteStandaloneToProject(): Promise<void> {
+    // The recommendation is shown for a dedicated standalone file and for an
+    // off-project tab, so take the path from whichever is active.
+    const activeTab = this.getActiveTab();
+    const path = this.standaloneFilePath
+      ?? (activeTab?.offProject ? activeTab.path : null);
+    if (path === null) return;
+    const folder = await dirname(path);
+    // An existing project in the folder is opened directly; only a folder
+    // without project metadata needs the create confirmation.
+    if (await this.folderHasProject(folder)) {
+      await this.openWorkspace(folder);
+      return;
+    }
+    const approved = await confirm(
+      `Create a Typsastra project in this folder?\n\n${folder}\n\n` +
+      "Typsastra writes a .typsastra folder with project settings and opens the file as the project's main document.",
+      { title: "Promote to Project", kind: "info", okLabel: "Create project", cancelLabel: "Cancel" },
+    );
+    if (!approved) return;
+    await this.openWorkspace(folder);
+    if (this.workspaceRootPath !== null) await this.setPinnedMainFile(path);
+  }
+
+  /** True when the folder already carries Typsastra project metadata. */
+  private async folderHasProject(folder: string): Promise<boolean> {
+    const metadata = await invoke<{ project: unknown | null; workspace: unknown | null }>(
+      "load_workspace_metadata",
+      { workspaceRootPath: folder },
+    ).catch(() => null);
+    return metadata !== null && (metadata.project !== null || metadata.workspace !== null);
   }
 
   private async recompilePreviewManually(): Promise<void> {
@@ -3371,6 +3505,9 @@ export class TypsastraWorkspaceController {
   }
 
   private saveWorkspaceState(): Promise<void> {
+    // A standalone file has no project, so there is no `.typsastra` metadata to
+    // persist and nothing may be written beside the source file.
+    if (this.standaloneFilePath !== null) return Promise.resolve();
     return this.workspaceController.saveState();
   }
 
@@ -3601,6 +3738,10 @@ export class TypsastraWorkspaceController {
   }
 
   private refreshActivePreviewRoot(forceRender = false): Promise<void> {
+    if (this.activeDocumentIsStandalone()
+      && this.blockStandalonePreview(this.editorInstance.state.doc.toString())) {
+      return Promise.resolve();
+    }
     return this.previewContentController.refreshActivePreviewRoot(forceRender);
   }
 
@@ -3610,6 +3751,8 @@ export class TypsastraWorkspaceController {
   }
 
   private openWorkspace(selected: string): Promise<void> {
+    // Opening a project leaves standalone-file mode and drops its temp cache.
+    this.discardStandaloneCache();
     return this.workspaceLifecycleController.open(selected);
   }
 
@@ -3729,7 +3872,7 @@ export class TypsastraWorkspaceController {
       previewContentMode: () => this.draftPreviewController.mode,
       openLastPreviewExternally: () => this.lastPdfPath ? this.openFileExternally(this.lastPdfPath) : undefined,
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),
-      drainPendingProjectImports: () => this.drainPendingProjectImports(),
+      drainPendingLaunchRequests: () => this.drainPendingLaunchRequests(),
       navigateToImageTool: imagePath => this.navigateToImageTool(imagePath),
       navigateToTableTool: tableId => this.navigateToTableTool(tableId),
       handleTableDirectiveAction: (tableId, x, y) => this.handleTableDirectiveAction(tableId, x, y),
@@ -3740,6 +3883,7 @@ export class TypsastraWorkspaceController {
         }
         this.workspaceController.stopWatching();
         void this.saveWorkspaceState();
+        this.discardStandaloneCache();
         this.settingsController.flush();
       },
       dismissSpellcheckTyping: () => this.spellcheckController.dismissActiveTyping(),
@@ -3840,17 +3984,88 @@ export class TypsastraWorkspaceController {
     });
   }
 
-  private async drainPendingProjectImports(): Promise<void> {
-    const paths = await invoke<string[]>("take_pending_project_imports").catch(error => {
-      console.error("Failed to read pending Typsastra project imports:", error);
-      return [];
+  private async drainPendingLaunchRequests(): Promise<void> {
+    const requests = await invoke<PendingLaunchRequest[]>("take_pending_launch_requests").catch(error => {
+      console.error("Failed to read pending Typsastra launch requests:", error);
+      return [] as PendingLaunchRequest[];
     });
-    for (const path of paths) {
+    for (const request of requests) {
       this.projectImportQueue = this.projectImportQueue
-        .then(() => this.importTypsastraProject(path))
-        .catch(error => console.error("Queued Typsastra project import failed:", error));
+        .then(async () => {
+          if (request.kind === "projectArchive") await this.importTypsastraProject(request.path);
+          else if (request.kind === "folder") await this.openWorkspace(request.path);
+          else await this.openStandaloneFile(request.path);
+        })
+        .catch(error => console.error("Queued Typsastra launch request failed:", error));
     }
     await this.projectImportQueue;
+  }
+
+  /**
+   * Opens a lone `.typ`/`.md` file without a project. The containing folder is
+   * kept only so Typst can resolve relative references; it is never written to,
+   * and the preview cache uses a temporary directory under the application data
+   * directory instead of the folder-keyed workspace cache.
+   */
+  private async openStandaloneFile(path: string): Promise<void> {
+    const folder = this.folderOfPath(path);
+    // A project is already open: add the file as an off-project tab beside it
+    // rather than closing the project. Its preview uses the managed standalone
+    // cache for its own folder.
+    if (this.workspaceRootPath !== null && this.standaloneFilePath === null) {
+      const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
+      if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
+      await this.loadFile(path);
+      const tab = this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path));
+      if (tab) tab.offProject = true;
+      this.renderEditorTabs();
+      return;
+    }
+    this.standaloneFilePath = path;
+    this.workspaceRootPath = folder;
+    this.workspaceMetadata = null;
+    // A standalone document never writes beside its source: the preview cache
+    // lives in the application data directory, not the folder-keyed workspace
+    // cache.
+    this.renderCacheRootPath = await this.prepareStandaloneCacheRoot(folder);
+    this.sidebarController.reset();
+    this.updateWorkspaceViewportVisibility();
+    await this.loadFile(path);
+  }
+
+  private async prepareStandaloneCacheRoot(folder: string): Promise<string | null> {
+    return invoke<string>("prepare_standalone_preview_cache", { workspaceRootPath: folder })
+      .catch(error => {
+        console.error("Failed to prepare the standalone preview cache:", error);
+        return null;
+      });
+  }
+
+  /** Removes standalone preview caches for the current documents. */
+  private discardStandaloneCache(): void {
+    const folders = new Set<string>(this.offProjectPreviewRoots.keys());
+    const path = this.standaloneFilePath;
+    if (path !== null) folders.add(this.folderOfPath(path));
+    this.standaloneFilePath = null;
+    this.offProjectPreviewRoots.clear();
+    for (const folder of folders) {
+      void invoke("remove_standalone_preview_cache", { workspaceRootPath: folder }).catch(error =>
+        console.error("Failed to remove the standalone preview cache:", error));
+    }
+  }
+
+  /**
+   * Deletes standalone preview caches that have not been used within the
+   * retention window, so abandoned standalone documents do not accumulate.
+   */
+  private pruneStandaloneCaches(): void {
+    const retentionMs = 7 * 24 * 60 * 60 * 1000;
+    const active = new Set<string>(this.offProjectPreviewRoots.keys());
+    if (this.standaloneFilePath !== null) active.add(this.folderOfPath(this.standaloneFilePath));
+    void invoke<number>("prune_standalone_preview_caches", {
+      activeWorkspaceRoots: [...active],
+      maxAgeMs: retentionMs,
+    }).catch(error => console.error("Failed to prune standalone preview caches:", error));
   }
 
   private mapMarkupToWysiwym(markup: string) {

@@ -25,7 +25,7 @@ export interface AppEventActions {
   previewContentMode: () => PreviewContentMode;
   openLastPreviewExternally: () => Promise<void> | void;
   handlePdfPreviewClick: (point: PreviewClickPoint) => Promise<void> | void;
-  drainPendingProjectImports: () => Promise<void> | void;
+  drainPendingLaunchRequests: () => Promise<void> | void;
   navigateToImageTool: (imagePath: string) => Promise<void> | void;
   navigateToTableTool: (tableId: string) => Promise<void> | void;
   handleTableDirectiveAction: (tableId: string, x: number, y: number) => void;
@@ -308,7 +308,7 @@ export function bindAppEvents(actions: AppEventActions): void {
     });
   }).catch(error => console.error("Error setting up Tauri preview event listeners", error));
 
-  void listen("typsastra-project-open-requested", () => void actions.drainPendingProjectImports());
+  void listen("typsastra-project-open-requested", () => void actions.drainPendingLaunchRequests());
   window.addEventListener("beforeunload", actions.beforeUnload);
   bindKeyboardShortcuts(actions);
 

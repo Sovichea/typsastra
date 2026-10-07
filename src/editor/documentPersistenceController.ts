@@ -3,6 +3,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import type { LspStatus } from "../compiler/lsp";
 import { fileExtension, isBinaryImagePath, isTypstDocumentPath } from "../platform/fileTypes";
 import { filePathKey } from "../platform/paths";
+import type { PreviewRenderMode } from "../settings";
 import type { EditorTab } from "./editorTab";
 
 export type SaveIntent = "manual" | "automatic";
@@ -10,6 +11,7 @@ export type SaveIntent = "manual" | "automatic";
 type DocumentPersistenceDependencies = {
   activeFilePath: () => string | null;
   activeMode: () => "CODE" | "WYSIWYM";
+  previewRenderMode: () => PreviewRenderMode;
   workspaceRootPath: () => string | null;
   openTabs: () => EditorTab[];
   isInternallySupportedPath: (path: string) => boolean;
@@ -175,12 +177,21 @@ export class DocumentPersistenceController {
     try {
       const saveDiagnosticId = ++this.saveMemoryDiagnosticGeneration;
       await this.deps.logMemoryDiagnostics(`save ${saveDiagnosticId}: before write`);
-      if (intent === "manual" && this.deps.activeMode() === "CODE" && this.deps.formatOnSave()) {
+      const activeTab = this.deps.openTabs().find(tab => filePathKey(tab.path) === filePathKey(activeFilePath)) ?? null;
+      const contentBeforeSave = this.currentContent();
+      const savedContentBeforeSave = activeTab?.savedContent ?? contentBeforeSave;
+      const hasUnsavedContent = contentBeforeSave !== savedContentBeforeSave;
+      // Do not let Format on Save mutate an already-clean document. Formatter
+      // edits are document changes and would otherwise trigger render-on-type
+      // even though the user only asked to save an unchanged file.
+      if (intent === "manual" && hasUnsavedContent
+        && this.deps.activeMode() === "CODE" && this.deps.formatOnSave()) {
         await this.deps.formatActiveDocument({ silent: true });
         this.deps.removeTrailingSpaces();
       }
 
       const content = this.currentContent();
+      const contentChanged = content !== savedContentBeforeSave;
       await invoke("save_workspace_file", { path: activeFilePath, contents: content });
       await this.deps.logMemoryDiagnostics(`save ${saveDiagnosticId}: after workspace write`);
 
@@ -190,7 +201,6 @@ export class DocumentPersistenceController {
       }
       await this.deps.logMemoryDiagnostics(`save ${saveDiagnosticId}: after LSP save notification`);
 
-      const activeTab = this.deps.openTabs().find(tab => filePathKey(tab.path) === filePathKey(activeFilePath)) ?? null;
       if (activeTab) {
         activeTab.content = content;
         activeTab.savedContent = content;
@@ -199,7 +209,8 @@ export class DocumentPersistenceController {
         this.deps.renderEditorTabs();
       }
       this.deps.setLspStatus({ kind: "preview-ready", message: "File saved" });
-      if (intent === "manual" && isTypstDocumentPath(activeFilePath)) {
+      if (intent === "manual" && contentChanged && isTypstDocumentPath(activeFilePath)
+        && this.deps.previewRenderMode() === "on-save") {
         // Saving has already succeeded. Start preview refresh separately so a
         // compiler/indexing failure is reported by the preview without
         // incorrectly presenting the successful file write as a save failure.

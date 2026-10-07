@@ -45,6 +45,8 @@ export interface WorkspaceViewportInput {
   activeFilePath: string | null;
   workspaceRootPath: string | null;
   loading: boolean;
+  /** A standalone file keeps the menu bar but hides all project chrome. */
+  standalone?: boolean;
 }
 
 export interface WorkspaceControllerPort {
@@ -207,7 +209,7 @@ export class WorkspaceController {
     // open when a tab activates (for example during inverse sync).
     if (viewport.showEditor) this.port.ensureDockedPreviewVisible();
 
-    if (viewport.showWorkspaceChrome) {
+    if (viewport.showWorkspaceChrome && input.standalone !== true) {
       sidebarActivityBar?.classList.remove("hidden");
       this.port.applySidebarVisibility();
       appMenus?.classList.remove("hidden");
@@ -217,7 +219,9 @@ export class WorkspaceController {
     explorerSidebar?.classList.add("hidden");
     explorerResizer?.classList.add("hidden");
     sidebarActivityBar?.classList.add("hidden");
-    appMenus?.classList.add("hidden");
+    // A standalone file has no project sidebar, but the application menu bar
+    // still drives File, Edit, and the other document commands.
+    appMenus?.classList.toggle("hidden", input.standalone !== true);
   }
 
   private enqueueChange(change: WorkspaceChange): void {

@@ -3,6 +3,7 @@ import type { Extension } from "@codemirror/state";
 import { GutterMarker, gutter } from "@codemirror/view";
 import { createAppIcon } from "../ui/icons";
 import { editorDiagnosticsStateField } from "./diagnostics";
+import { isStandaloneDocument } from "./standaloneDocument";
 
 export type ImageOptimizationWarning = {
   from: number;
@@ -191,16 +192,20 @@ const sharedWarningGutter = gutter({
       imageSeverity?: "warning" | "info";
     }>();
 
-    imageMarkers.between(0, view.state.doc.length, (from, _to, marker) => {
-      if (marker instanceof ImageOptimizationMarker) {
-        byLine.set(from, {
-          severity: "image",
-          message: marker.message,
-          imagePath: marker.imagePath,
-          imageSeverity: marker.severity,
-        });
-      }
-    });
+    // Image optimization is a project tool; keep LSP errors but drop the
+    // clickable Image Tools marker for a standalone document.
+    if (!isStandaloneDocument(view.state)) {
+      imageMarkers.between(0, view.state.doc.length, (from, _to, marker) => {
+        if (marker instanceof ImageOptimizationMarker) {
+          byLine.set(from, {
+            severity: "image",
+            message: marker.message,
+            imagePath: marker.imagePath,
+            imageSeverity: marker.severity,
+          });
+        }
+      });
+    }
 
     for (const diagnostic of diagnostics) {
       if (diagnostic.severity !== "error" && diagnostic.severity !== "related") continue;

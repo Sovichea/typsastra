@@ -3,6 +3,7 @@ import type { Extension, Text } from "@codemirror/state";
 import { GutterMarker, gutter } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
 import { createAppIcon } from "../ui/icons";
+import { isStandaloneDocument } from "./standaloneDocument";
 
 /** `//@table:<id>` on its own line links a document location to a tool table. */
 const DIRECTIVE_PATTERN = /^\s*\/\/@table:([A-Za-z0-9_]+)\s*$/u;
@@ -123,6 +124,8 @@ function markersFor(doc: Text): RangeSet<GutterMarker> {
 export const tableDirectiveGutterExtension: Extension = gutter({
   class: "cm-table-directive-gutter",
   markers(view) {
+    // A standalone document cannot open the Table tool, so no link marker.
+    if (isStandaloneDocument(view.state)) return RangeSet.empty;
     return markersFor(view.state.doc);
   },
   initialSpacer: () => new TableDirectiveSpacerMarker(),

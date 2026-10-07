@@ -200,6 +200,9 @@ export class PreviewFrame {
   private observer: IntersectionObserver | null = null;
   private pageDimensions = new Map<number, PageDimensions>();
   private pageSlots: HTMLElement[] = [];
+  /** Previous rendered surface retained underneath a replacement until its visible pages paint. */
+  private retainedViewer: HTMLElement | null = null;
+  private pendingReplacementPages = new Set<number>();
   private activeRenders = new Map<number, ActivePageRender>();
   private readonly pageRenderOwnership = new PreviewPageRenderOwnership<CleanablePdfPage>();
   private readonly renderScheduler = new PreviewRenderScheduler();
@@ -685,7 +688,6 @@ export class PreviewFrame {
     if (existingIframeDoc) {
       if (this.iframe) this.iframe.dataset.previewSurface = surface;
       existingIframeDoc.documentElement.dataset.previewSurface = surface;
-      this.preparePdfReplacementSurface(existingIframeDoc);
     }
     const obsoleteLoadingTask = this.pendingPdfLoadingTask;
     this.pendingPdfLoadingTask = null;
@@ -701,6 +703,8 @@ export class PreviewFrame {
     const restoringSavedPosition = restoredViewportAnchor !== null
       || restoredScrollTop !== null;
     const previousScrollTop = restoredScrollTop ?? this.captureScrollPosition();
+    // Snapshot scroll before moving the current page layer out of document flow.
+    if (existingIframeDoc) this.preparePdfReplacementSurface(existingIframeDoc);
     this.clearErrorOverlay();
     // A large-file guardrail can leave a message host above the preview pane.
     // Loading a real PDF must always replace that surface, including when the
@@ -929,12 +933,13 @@ export class PreviewFrame {
       this.createPageSlots(iframeDoc, false);
       this.updateHorizontalOverflow();
       this.setupIframeInteractions();
-      this.installPageObserver(iframe);
       if (restoredViewportAnchor) {
         this.restoreScrollAnchor(restoredViewportAnchor, true);
       } else {
         this.restoreScrollPosition(previousScrollTop);
       }
+      this.trackReplacementPagePaints(iframeDoc);
+      this.installPageObserver(iframe);
       await this.onLoadStage?.("viewer installed", {
         transport: transportStats.transport,
         pdfBytes: pdfByteLength,
@@ -988,6 +993,7 @@ export class PreviewFrame {
       this.pageDimensions.clear();
       this.observer?.disconnect();
       this.observer = null;
+      this.discardRetainedViewer();
       this.finishPdfReplacementSurface(this.iframe?.contentDocument ?? null);
       if (surface === "pdf") {
         const failure = classifyStandalonePdfLoadFailure(error);
@@ -1058,6 +1064,7 @@ export class PreviewFrame {
     if (this.iframe?.contentDocument?.getElementById("viewer-container")) return this.iframe;
     this.previewPointerInside = false;
     if (this.iframe) {
+      this.discardRetainedViewer();
       releaseCanvasResources(this.iframe.contentDocument?.documentElement ?? null);
       this.iframe.remove();
       this.pageSlots = [];
@@ -1076,7 +1083,10 @@ export class PreviewFrame {
       body::-webkit-scrollbar-button{display:none;width:0;height:0}
       html,body{margin:0;width:100%;height:100%;background:var(--preview-surface-bg)}
       body{overflow:auto;font-family:sans-serif}
-      #viewer-container{box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
+       body{position:relative}
+       #viewer-container{position:relative;z-index:3;box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
+       .pdf-retained-viewer{position:absolute;z-index:2;top:0;left:0;pointer-events:none;box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
+       :root[data-pdf-replacing="true"] #viewer-container .pdf-page-container{background:transparent;box-shadow:none}
       .pdf-page-container{position:relative;box-sizing:border-box;flex:none;margin:0 auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);overflow:hidden}
       .pdf-page-canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
       .pdf-page-canvas-dark{display:none}
@@ -1152,20 +1162,90 @@ export class PreviewFrame {
     this.previewLinkModifierHeld = false;
     this.previewPointerInside = false;
     this.setPreviewLinkModifier(doc, false);
-    const viewer = doc.getElementById("viewer-container");
+    let viewer = doc.getElementById("viewer-container");
     if (viewer) {
-      viewer.setAttribute("aria-busy", "true");
-      releaseCanvasResources(viewer);
-      replaceElementChildren(viewer);
+      if (this.retainedViewer) {
+        // A newer render superseded one that was still painting. Keep the last
+        // completed surface and discard only the incomplete intermediate one.
+        releaseCanvasResources(viewer);
+        viewer.remove();
+      } else if (this.pdfDoc && viewer.querySelector(".pdf-page-canvas")) {
+        viewer.removeAttribute("id");
+        viewer.classList.add("pdf-retained-viewer");
+        viewer.setAttribute("aria-hidden", "true");
+        this.retainedViewer = viewer;
+      } else {
+        replaceElementChildren(viewer);
+      }
     }
+    if (!doc.getElementById("viewer-container")) {
+      viewer = doc.createElement("div");
+      viewer.id = "viewer-container";
+      if (this.retainedViewer?.parentNode === doc.body) {
+        doc.body.insertBefore(viewer, this.retainedViewer);
+      } else {
+        doc.body.appendChild(viewer);
+      }
+    } else {
+      viewer = doc.getElementById("viewer-container");
+    }
+    if (viewer && this.retainedViewer) {
+      // Keep the document's scroll range stable while the fresh page slots are
+      // being created. Without this spacer, moving the old layer out of flow
+      // clamps scrollTop to zero during a long compile.
+      viewer.style.minHeight = `${this.retainedViewer.scrollHeight}px`;
+    }
+    viewer?.setAttribute("aria-busy", "true");
     doc.documentElement.dataset.pdfReplacing = "true";
-    this.pageSlots = [];
+    this.pendingReplacementPages.clear();
   }
 
   private finishPdfReplacementSurface(doc: Document | null): void {
     if (!doc) return;
+    if (this.retainedViewer) return;
     delete doc.documentElement.dataset.pdfReplacing;
     doc.getElementById("viewer-container")?.removeAttribute("aria-busy");
+  }
+
+  /** Hold the previous PDF underneath until every currently visible page paints. */
+  private trackReplacementPagePaints(doc: Document): void {
+    if (!this.retainedViewer) {
+      this.finishPdfReplacementSurface(doc);
+      return;
+    }
+    const viewportHeight = this.iframe?.clientHeight ?? doc.documentElement.clientHeight;
+    for (const slot of this.pageSlots) {
+      if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration)) continue;
+      const rect = slot.getBoundingClientRect();
+      if (rect.bottom > 0 && rect.top < viewportHeight) {
+        const pageNo = Number(slot.dataset.pageNo);
+        if (Number.isFinite(pageNo)) this.pendingReplacementPages.add(pageNo);
+      }
+    }
+    if (this.pendingReplacementPages.size === 0 && this.pageSlots[0]) {
+      this.pendingReplacementPages.add(Number(this.pageSlots[0].dataset.pageNo) || 1);
+    }
+    if (this.pendingReplacementPages.size === 0) this.discardRetainedViewer();
+  }
+
+  private markReplacementPagePainted(pageNo: number): void {
+    if (!this.retainedViewer || !this.pendingReplacementPages.has(pageNo)) return;
+    this.pendingReplacementPages.delete(pageNo);
+    if (this.pendingReplacementPages.size > 0) return;
+    const doc = this.iframe?.contentDocument;
+    this.discardRetainedViewer();
+    if (!doc) return;
+    delete doc.documentElement.dataset.pdfReplacing;
+    doc.getElementById("viewer-container")?.removeAttribute("aria-busy");
+  }
+
+  private discardRetainedViewer(): void {
+    if (this.retainedViewer) releaseCanvasResources(this.retainedViewer);
+    this.retainedViewer?.remove();
+    this.retainedViewer = null;
+    this.pendingReplacementPages.clear();
+    const viewer = this.iframe?.contentDocument?.getElementById("viewer-container");
+    if (viewer) viewer.style.minHeight = "";
   }
 
   private createPageSlots(doc: Document, preserveExistingPages = false): void {
@@ -1192,13 +1272,14 @@ export class PreviewFrame {
     }
     this.pageSlots = [...viewer.querySelectorAll<HTMLElement>(":scope > .pdf-page-container")];
     this.layoutPageSlots({ preserveExistingPages });
+    viewer.style.minHeight = "";
   }
 
   private layoutPageSlots(options: { preserveExistingPages?: boolean } = {}): void {
     const doc = this.iframe?.contentDocument;
     if (!doc) return;
     const zoom = this.previewZoomPercent / 100;
-    for (const slot of doc.querySelectorAll<HTMLElement>(".pdf-page-container")) {
+    for (const slot of doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container")) {
       const pageNo = Number(slot.dataset.pageNo);
       const dimensions = this.pageDimensions.get(pageNo);
       if (!dimensions) continue;
@@ -1293,7 +1374,7 @@ export class PreviewFrame {
     const doc = this.iframe?.contentDocument;
     if (!doc) return;
     const viewportHeight = this.iframe?.clientHeight ?? 0;
-    for (const slot of doc.querySelectorAll<HTMLElement>(".pdf-page-container")) {
+    for (const slot of doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container")) {
       const rect = slot.getBoundingClientRect();
       if (rect.bottom >= -1000 && rect.top <= viewportHeight + 1000) {
         this.queuePageRender(Number(slot.dataset.pageNo), 2, "directional-neighbor");
@@ -1545,6 +1626,7 @@ export class PreviewFrame {
       this.commitFinalCanvas(slot, canvas);
       active.canvasCommitted = true;
       slot.dataset.renderKey = renderKey;
+      this.markReplacementPagePainted(pageNo);
       // Keep the shared loading presentation visible until PDF.js has
       // produced an actual page. Installing page slots alone would expose a
       // blank viewer while the first visible canvas is still rendering.
@@ -1865,7 +1947,7 @@ export class PreviewFrame {
   private renderedPageNumbers(): number[] {
     const doc = this.iframe?.contentDocument;
     if (!doc) return [];
-    return [...doc.querySelectorAll<HTMLElement>(".pdf-page-container[data-render-key]")]
+    return [...doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container[data-render-key]")]
       .map(slot => Number(slot.dataset.pageNo))
       .filter(Number.isFinite);
   }
@@ -2103,7 +2185,7 @@ export class PreviewFrame {
     const doc = this.iframe?.contentDocument;
     const view = this.iframe?.contentWindow;
     if (!doc || !view) return null;
-    const pages = [...doc.querySelectorAll<HTMLElement>(".pdf-page-container")]
+    const pages = [...doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container")]
       .map(slot => {
         const rect = slot.getBoundingClientRect();
         return {
@@ -3167,6 +3249,7 @@ export class PreviewFrame {
   public async clear(): Promise<void> {
     this.hideDraftImagePopover();
     ++this.pdfGeneration;
+    this.discardRetainedViewer();
     releaseCanvasResources(this.iframe?.contentDocument?.documentElement ?? null);
     this.iframe?.remove();
     this.iframe = null;
@@ -3373,6 +3456,7 @@ export class PreviewFrame {
   public setMessage(html: string): void {
     this.hideDraftImagePopover();
     ++this.pdfGeneration;
+    this.discardRetainedViewer();
     releaseCanvasResources(this.iframe?.contentDocument?.documentElement ?? null);
     this.iframe?.remove();
     this.iframe = null;

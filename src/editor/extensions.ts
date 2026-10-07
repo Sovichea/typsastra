@@ -61,6 +61,7 @@ import { wrappedLineIndentation } from "./wrappedIndent";
 import { contextualDoubleQuoteExtension } from "./quoteEditing";
 import { imageOptimizationWarningsExtension } from "./imageWarnings";
 import { tableDirectiveGutterExtension } from "./tableDirectives";
+import { standaloneDocumentField } from "./standaloneDocument";
 import { selectionPairReplacementExtension } from "./selectionPairEditing";
 import { isMacShortcutPlatform } from "../platform/shortcuts";
 import { canonicalShortcut, shortcutDefinitions, shortcutFor, shortcutFromEvent, type ShortcutOverrides } from "../platform/shortcutRegistry";
@@ -861,6 +862,7 @@ export function getEditorExtensions(
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
+    standaloneDocumentField,
     ...editingPolicyRegistry.editorExtensions(),
     graphemePointerSelection(onGraphemePointerDebug, getKhmerWordAt),
     graphemeSelectionBoundaryFilter,
