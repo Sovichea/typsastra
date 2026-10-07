@@ -1,4 +1,4 @@
-import { message, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Channel, invoke } from "@tauri-apps/api/core";
@@ -19,6 +19,8 @@ import { EditorController } from "./editor/editorController";
 import { EditorInitializationController } from "./editor/editorInitializationController";
 import { SurroundWithDiscoveryController } from "./editor/surroundWithDiscoveryController";
 import { isForwardSyncContentPosition } from "./editor/forwardSyncEligibility";
+import { setStandaloneDocumentEffect } from "./editor/standaloneDocument";
+import { standaloneLocalDependencies } from "./preview/standalonePreview";
 /** Payload of the workspace-wide `//@table:<id>` scan. */
 type ProjectTableDirectiveIndex = {
   directives: Record<string, { path: string; line: number; column: number }>;
@@ -2272,6 +2274,10 @@ export class TypsastraWorkspaceController {
       standalone: this.standaloneFilePath !== null,
     });
     this.nativeAppMenu?.syncWorkspaceState(this.workspaceRootPath !== null && this.standaloneFilePath === null);
+    // Gutter affordances for the Image and Table tools hide in standalone mode.
+    this.editorInstance?.dispatch({
+      effects: setStandaloneDocumentEffect.of(this.standaloneFilePath !== null),
+    });
   }
 
   private async installNativeAppMenu(): Promise<void> {
@@ -2996,10 +3002,67 @@ export class TypsastraWorkspaceController {
   }
 
   private renderPdfPreview(contents: string, force = false): Promise<void> {
+    // A standalone file only compiles in isolation, so a local import or include
+    // is reported instead of rendered.
+    if (this.blockStandaloneMultiFilePreview(contents)) return Promise.resolve();
     // While the table tool owns the preview pane, the document preview must
     // not render over it; switching back restores the preview.
     if (this.sidebarController.activeTool === "tables") return Promise.resolve();
     return this.pdfPreviewRenderController.render(contents, force);
+  }
+
+  /**
+   * Blocks standalone preview when the document depends on other local files.
+   * Returns true when the multi-file recommendation was shown.
+   */
+  private blockStandaloneMultiFilePreview(contents: string): boolean {
+    if (this.standaloneFilePath === null) return false;
+    const dependencies = standaloneLocalDependencies(contents);
+    if (dependencies.length === 0) return false;
+    this.showStandaloneProjectRecommendation(dependencies);
+    return true;
+  }
+
+  private showStandaloneProjectRecommendation(dependencies: readonly string[]): void {
+    const items = dependencies
+      .map(dependency => `<li>${this.escapeHtmlText(dependency)}</li>`)
+      .join("");
+    this.previewFrame.setMessage(
+      `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
+      `<div class="preview-disabled-title preview-accent-title">Multi-file document</div>` +
+      `<div class="preview-disabled-msg">This standalone file imports or includes other files:` +
+      `<ul class="standalone-dependency-list">${items}</ul>` +
+      `A standalone preview compiles one file. Promote this folder to a project to render it correctly.</div>` +
+      `<button type="button" id="standalone-promote-project" class="standalone-promote-button">Promote to Project</button>` +
+      `</div></div>`,
+    );
+    this.previewFrame.element
+      ?.querySelector<HTMLButtonElement>("#standalone-promote-project")
+      ?.addEventListener("click", () => void this.promoteStandaloneToProject());
+  }
+
+  private escapeHtmlText(value: string): string {
+    return value.replace(/[&<>"]/gu, character => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+    }[character] ?? character));
+  }
+
+  /** Turns the standalone folder into a project and opens it. */
+  private async promoteStandaloneToProject(): Promise<void> {
+    const path = this.standaloneFilePath;
+    if (path === null) return;
+    const folder = await dirname(path);
+    const approved = await confirm(
+      `Create a Typsastra project in this folder?\n\n${folder}\n\n` +
+      "Typsastra writes a .typsastra folder with project settings and opens the file as the project's main document.",
+      { title: "Promote to Project", kind: "info", okLabel: "Create project", cancelLabel: "Cancel" },
+    );
+    if (!approved) return;
+    await this.openWorkspace(folder);
+    if (this.workspaceRootPath !== null) await this.setPinnedMainFile(path);
   }
 
   private async recompilePreviewManually(): Promise<void> {
@@ -3634,6 +3697,10 @@ export class TypsastraWorkspaceController {
   }
 
   private refreshActivePreviewRoot(forceRender = false): Promise<void> {
+    if (this.standaloneFilePath !== null
+      && this.blockStandaloneMultiFilePreview(this.editorInstance.state.doc.toString())) {
+      return Promise.resolve();
+    }
     return this.previewContentController.refreshActivePreviewRoot(forceRender);
   }
 
