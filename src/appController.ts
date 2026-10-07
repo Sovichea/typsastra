@@ -1708,6 +1708,7 @@ export class TypsastraWorkspaceController {
   private readonly documentPersistenceController = new DocumentPersistenceController({
     activeFilePath: () => this.activeFilePath,
     activeMode: () => this.activeMode,
+    previewRenderMode: () => this.effectivePreviewRenderMode,
     workspaceRootPath: () => this.workspaceRootPath,
     openTabs: () => this.openTabs,
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
