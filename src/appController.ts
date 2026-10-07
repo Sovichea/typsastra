@@ -2254,10 +2254,10 @@ export class TypsastraWorkspaceController {
   private updateWorkspaceViewportVisibility() {
     this.workspaceController.updateViewport({
       activeFilePath: this.activeFilePath,
-      // A standalone file has no project chrome: pass no root so the explorer,
-      // activity bar, and project sidebar stay hidden.
-      workspaceRootPath: this.standaloneFilePath === null ? this.workspaceRootPath : null,
+      workspaceRootPath: this.workspaceRootPath,
       loading: this.workspaceLoading,
+      // A standalone file hides the project sidebar but keeps the menu bar.
+      standalone: this.standaloneFilePath !== null,
     });
     this.nativeAppMenu?.syncWorkspaceState(this.workspaceRootPath !== null && this.standaloneFilePath === null);
   }
