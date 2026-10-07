@@ -7930,6 +7930,9 @@ pub fn run() {
                 }
                 let _ = app.emit("typsastra-project-open-requested", ());
                 if let Some(window) = app.get_webview_window("main") {
+                    // A minimized window is not restored by show()/set_focus()
+                    // on Windows, so unminimize before raising it.
+                    let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
