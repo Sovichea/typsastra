@@ -3062,35 +3062,22 @@ export class TypsastraWorkspaceController {
   }
 
   private showStandaloneProjectRecommendation(dependencies: readonly string[]): void {
-    const items = dependencies
-      .map(dependency => `<li>${this.escapeHtmlText(dependency)}</li>`)
-      .join("");
-    this.previewFrame.setMessage(
-      `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
-      `<div class="preview-disabled-title preview-accent-title">Multi-file document</div>` +
-      `<div class="preview-disabled-msg">This standalone file imports or includes other files:` +
-      `<ul class="standalone-dependency-list">${items}</ul>` +
-      `A standalone preview compiles one file. Promote this folder to a project to render it correctly.</div>` +
-      `<button type="button" id="standalone-promote-project" class="standalone-promote-button">Promote to Project</button>` +
-      `</div></div>`,
-    );
-    this.previewFrame.element
-      ?.querySelector<HTMLButtonElement>("#standalone-promote-project")
-      ?.addEventListener("click", () => void this.promoteStandaloneToProject());
-  }
-
-  private escapeHtmlText(value: string): string {
-    return value.replace(/[&<>"]/gu, character => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-    }[character] ?? character));
+    this.previewFrame.setConfirmationMessage({
+      title: "Multi-file document",
+      message: `This file imports or includes ${dependencies.join(", ")}. `
+        + "A standalone preview compiles a single file. Promote this folder to a project to render it correctly.",
+      confirmLabel: "Promote to Project",
+      onConfirm: () => this.promoteStandaloneToProject(),
+    });
   }
 
   /** Turns the standalone folder into a project and opens it. */
   private async promoteStandaloneToProject(): Promise<void> {
-    const path = this.standaloneFilePath;
+    // The recommendation is shown for a dedicated standalone file and for an
+    // off-project tab, so take the path from whichever is active.
+    const activeTab = this.getActiveTab();
+    const path = this.standaloneFilePath
+      ?? (activeTab?.offProject ? activeTab.path : null);
     if (path === null) return;
     const folder = await dirname(path);
     const approved = await confirm(

@@ -6053,24 +6053,7 @@ button.welcome-item:disabled {
   color: var(--ui-header-text);
 }
 
-.standalone-dependency-list {
-  margin: 6px 0 10px;
-  padding-left: 18px;
-  font-family: var(--editor-code-font), monospace;
-  color: var(--ui-text);
-}
 
-.standalone-promote-button {
-  padding: 6px 14px;
-  border: 1px solid var(--ui-accent-color);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--ui-accent-color);
-  font: inherit;
-  cursor: pointer;
-}
-.standalone-promote-button:hover { background: var(--ui-hover); }
-.standalone-promote-button:focus-visible { outline: 1px solid var(--ui-accent-color); outline-offset: 1px; }
 
 .editor-file-placeholder {
   padding: 0;
