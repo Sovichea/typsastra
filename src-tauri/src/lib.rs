@@ -5158,17 +5158,18 @@ fn resolve_render_preview_compile_paths(
         return Err("The preview project directory is unavailable.".into());
     }
 
-    let expected_cache_root = workspace_render_cache_root(app_local_data_dir, &workspace_root);
     let cache_root = dunce::canonicalize(cache_root_path)
         .map_err(|error| format!("Failed to resolve the preview cache: {error}"))?;
-    let expected_cache_root = dunce::canonicalize(&expected_cache_root)
-        .map_err(|error| format!("Failed to resolve the managed preview cache: {error}"))?;
     // A standalone document is not a project, so its cache is the managed
     // standalone cache for the containing folder instead of the workspace cache.
-    if cache_root != expected_cache_root
-        && !is_standalone_preview_cache(app_local_data_dir, &cache_root)
-    {
-        return Err("The PDF preview cache does not belong to the active project.".into());
+    // Check this before the workspace cache, which may not exist yet.
+    if !is_standalone_preview_cache(app_local_data_dir, &cache_root) {
+        let expected_cache_root = workspace_render_cache_root(app_local_data_dir, &workspace_root);
+        let expected_cache_root = dunce::canonicalize(&expected_cache_root)
+            .map_err(|error| format!("Failed to resolve the managed preview cache: {error}"))?;
+        if cache_root != expected_cache_root {
+            return Err("The PDF preview cache does not belong to the active project.".into());
+        }
     }
 
     let render_root = dunce::canonicalize(cache_root.join("render"))
@@ -6209,14 +6210,17 @@ fn resolve_managed_workspace_cache_root(
     workspace_root: &Path,
     cache_root_path: &str,
 ) -> Result<PathBuf, String> {
-    let expected = workspace_render_cache_root(app_local_data_dir, workspace_root);
     let cache_root = dunce::canonicalize(cache_root_path)
         .map_err(|error| format!("Failed to resolve the preview cache: {error}"))?;
-    let expected = dunce::canonicalize(&expected)
-        .map_err(|error| format!("Failed to resolve the managed preview cache: {error}"))?;
     // Standalone documents use the managed standalone cache for their folder.
-    if cache_root != expected && !is_standalone_preview_cache(app_local_data_dir, &cache_root) {
-        return Err("The preview cache does not belong to the active project.".into());
+    // Check this before the workspace cache, which may not exist yet.
+    if !is_standalone_preview_cache(app_local_data_dir, &cache_root) {
+        let expected = workspace_render_cache_root(app_local_data_dir, workspace_root);
+        let expected = dunce::canonicalize(&expected)
+            .map_err(|error| format!("Failed to resolve the managed preview cache: {error}"))?;
+        if cache_root != expected {
+            return Err("The preview cache does not belong to the active project.".into());
+        }
     }
     Ok(cache_root)
 }
@@ -6570,7 +6574,30 @@ async fn load_low_memory_sync_index(
 
 #[cfg(test)]
 mod low_memory_cache_root_tests {
-    use super::{resolve_managed_workspace_cache_root, workspace_render_cache_root};
+    use super::{
+        resolve_managed_workspace_cache_root, standalone_preview_cache_root,
+        workspace_render_cache_root,
+    };
+
+    #[test]
+    fn accepts_a_standalone_cache_before_the_workspace_cache_exists() {
+        let app_data = tempfile::tempdir().expect("create app data");
+        let workspace = tempfile::tempdir().expect("create workspace");
+        // The workspace cache is deliberately never created: resolving the
+        // standalone cache must not fail on the missing workspace cache.
+        let standalone = standalone_preview_cache_root(app_data.path(), workspace.path());
+        std::fs::create_dir_all(&standalone).expect("create standalone cache");
+        let resolved = resolve_managed_workspace_cache_root(
+            app_data.path(),
+            workspace.path(),
+            standalone.to_str().unwrap(),
+        )
+        .expect("standalone cache root is accepted");
+        assert_eq!(
+            resolved,
+            dunce::canonicalize(&standalone).expect("canonical standalone cache")
+        );
+    }
 
     #[test]
     fn accepts_the_managed_cache_root_and_rejects_foreign_roots() {
