@@ -439,6 +439,8 @@ export class TypsastraWorkspaceController {
    * written and the preview cache lives in the application data directory.
    */
   private standaloneFilePath: string | null = null;
+  /** Standalone preview cache roots for off-project tabs, keyed by folder. */
+  private readonly offProjectPreviewRoots = new Map<string, string>();
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
   private workspaceServicesDeferredForLargeFile = false;
@@ -660,8 +662,8 @@ export class TypsastraWorkspaceController {
     getPreviewMainPath: () => this.previewMainPath,
     getPinnedMainFilePath: () => this.pinnedMainFilePath,
     isPreviewStandalone: () => this.previewStandalone,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
-    getCacheRootPath: () => this.getCacheRootPath(),
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
+    getCacheRootPath: () => this.previewCacheRootPath(),
     mapToOriginalPath: path => this.mapToOriginalPath(path),
     getOpenTabs: () => this.openTabs,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
@@ -1819,7 +1821,7 @@ export class TypsastraWorkspaceController {
     isPreviewDisabled: () => this.previewDisabled,
     getPreviewRootPath: () => this.previewRootPath,
     getPreviewSessionKey: () => this.previewSessionKey,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     isLowMemoryMode: () => this.settingsController.value.preview.lowMemoryMode,
     // The durable PDF/index pair represents the on-disk workspace snapshot.
@@ -1832,7 +1834,7 @@ export class TypsastraWorkspaceController {
       this.buildLowMemorySyncIndex(preparedRootPath, generation, pdfPath, sourceSignature),
     ensureLargePreviewApproved: rootPath => this.ensureLargePreviewApproved(rootPath),
     isPdfBlocked: path => this.blockedLargePdfPaths.has(filePathKey(path)),
-    getCacheRootPath: () => this.getCacheRootPath(),
+    getCacheRootPath: () => this.previewCacheRootPath(),
     getEditorText: () => this.editorInstance.state.doc.toString(),
     cancelManualForwardSync: () => this.cancelManualForwardSync(),
     updateManualForwardSyncAction: () => this.updateManualForwardSyncAction(),
@@ -1912,7 +1914,7 @@ export class TypsastraWorkspaceController {
     getEditor: () => this.editorInstance,
     getActiveFilePath: () => this.activeFilePath,
     getOpenTabs: () => this.openTabs,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
     getPreviewRootPath: () => this.previewRootPath,
     isPreviewStandalone: () => this.previewStandalone,
     getSourceMapRootPath: () => this.pdfPreviewSourceMapRootPath,
@@ -1959,7 +1961,7 @@ export class TypsastraWorkspaceController {
     isTableToolActive: () => this.sidebarController.activeTool === "tables",
     getActiveFilePath: () => this.activeFilePath,
     getPinnedMainFilePath: () => this.pinnedMainFilePath,
-    getWorkspaceRootPath: () => this.workspaceRootPath,
+    getWorkspaceRootPath: () => this.previewWorkspaceRootPath(),
     getPreviewSessionKey: () => this.previewSessionKey,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     getActiveTab: () => this.getActiveTab(),
@@ -2545,6 +2547,31 @@ export class TypsastraWorkspaceController {
     return this.getActiveTab()?.offProject === true;
   }
 
+  /**
+   * Preview roots for the active document. An off-project tab is previewed in
+   * the same isolated way as a dedicated standalone file: its folder is the
+   * compilation root and its cache is the managed standalone cache for that
+   * folder, not the open project's cache.
+   */
+  private previewWorkspaceRootPath(): string | null {
+    const tab = this.getActiveTab();
+    if (tab?.offProject) return this.folderOfPath(tab.path);
+    return this.workspaceRootPath;
+  }
+
+  private previewCacheRootPath(): string | null {
+    const tab = this.getActiveTab();
+    if (tab?.offProject) {
+      return this.offProjectPreviewRoots.get(this.folderOfPath(tab.path)) ?? null;
+    }
+    return this.renderCacheRootPath;
+  }
+
+  private folderOfPath(path: string): string {
+    const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+    return separator > 0 ? path.slice(0, separator) : path;
+  }
+
   private promoteToPermanent(tab: EditorTab): Promise<void> {
     return this.editorTabStateController.promoteToPermanent(tab);
   }
@@ -3028,24 +3055,10 @@ export class TypsastraWorkspaceController {
    */
   private blockStandalonePreview(contents: string): boolean {
     if (!this.activeDocumentIsStandalone()) return false;
-    if (this.standaloneFilePath !== null) {
-      const dependencies = standaloneLocalDependencies(contents);
-      if (dependencies.length === 0) return false;
-      this.showStandaloneProjectRecommendation(dependencies);
-      return true;
-    }
-    this.showOffProjectPreviewMessage();
+    const dependencies = standaloneLocalDependencies(contents);
+    if (dependencies.length === 0) return false;
+    this.showStandaloneProjectRecommendation(dependencies);
     return true;
-  }
-
-  private showOffProjectPreviewMessage(): void {
-    this.previewFrame.setMessage(
-      `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
-      `<div class="preview-disabled-title preview-accent-title">Off-project file</div>` +
-      `<div class="preview-disabled-msg">This file is open beside the current project and is not part of it. ` +
-      `Live preview is available when the file is opened on its own.</div>` +
-      `</div></div>`,
-    );
   }
 
   private showStandaloneProjectRecommendation(dependencies: readonly string[]): void {
@@ -3992,9 +4005,13 @@ export class TypsastraWorkspaceController {
    * directory instead of the folder-keyed workspace cache.
    */
   private async openStandaloneFile(path: string): Promise<void> {
+    const folder = this.folderOfPath(path);
     // A project is already open: add the file as an off-project tab beside it
-    // rather than closing the project.
+    // rather than closing the project. Its preview uses the managed standalone
+    // cache for its own folder.
     if (this.workspaceRootPath !== null && this.standaloneFilePath === null) {
+      const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
+      if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
       await this.loadFile(path);
       const tab = this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path));
       if (tab) tab.offProject = true;
@@ -4002,30 +4019,36 @@ export class TypsastraWorkspaceController {
       return;
     }
     this.standaloneFilePath = path;
-    this.workspaceRootPath = await dirname(path);
+    this.workspaceRootPath = folder;
     this.workspaceMetadata = null;
-    // The native preview pipeline verifies that the cache root is the managed
-    // cache for the workspace root, so a standalone document reuses that
-    // machine-local cache for its folder. Nothing is written beside the source
-    // file; the cache lives under the application data directory.
-    this.renderCacheRootPath = await invoke<string>("cleanup_workspace_preview_files", {
-      workspaceRootPath: this.workspaceRootPath,
-    }).catch(error => {
-      console.error("Failed to prepare the standalone preview cache:", error);
-      return null;
-    });
+    // A standalone document never writes beside its source: the preview cache
+    // lives in the application data directory, not the folder-keyed workspace
+    // cache.
+    this.renderCacheRootPath = await this.prepareStandaloneCacheRoot(folder);
     this.sidebarController.reset();
     this.updateWorkspaceViewportVisibility();
     await this.loadFile(path);
   }
 
-  /** Removes the current standalone document's preview cache. */
+  private async prepareStandaloneCacheRoot(folder: string): Promise<string | null> {
+    return invoke<string>("prepare_standalone_preview_cache", { workspaceRootPath: folder })
+      .catch(error => {
+        console.error("Failed to prepare the standalone preview cache:", error);
+        return null;
+      });
+  }
+
+  /** Removes standalone preview caches for the current documents. */
   private discardStandaloneCache(): void {
+    const folders = new Set<string>(this.offProjectPreviewRoots.keys());
     const path = this.standaloneFilePath;
-    if (path === null) return;
+    if (path !== null) folders.add(this.folderOfPath(path));
     this.standaloneFilePath = null;
-    void invoke("remove_standalone_preview_cache", { filePath: path }).catch(error =>
-      console.error("Failed to remove the standalone preview cache:", error));
+    this.offProjectPreviewRoots.clear();
+    for (const folder of folders) {
+      void invoke("remove_standalone_preview_cache", { workspaceRootPath: folder }).catch(error =>
+        console.error("Failed to remove the standalone preview cache:", error));
+    }
   }
 
   /**
@@ -4034,8 +4057,10 @@ export class TypsastraWorkspaceController {
    */
   private pruneStandaloneCaches(): void {
     const retentionMs = 7 * 24 * 60 * 60 * 1000;
+    const active = new Set<string>(this.offProjectPreviewRoots.keys());
+    if (this.standaloneFilePath !== null) active.add(this.folderOfPath(this.standaloneFilePath));
     void invoke<number>("prune_standalone_preview_caches", {
-      activeFilePaths: this.standaloneFilePath === null ? [] : [this.standaloneFilePath],
+      activeWorkspaceRoots: [...active],
       maxAgeMs: retentionMs,
     }).catch(error => console.error("Failed to prune standalone preview caches:", error));
   }

@@ -1688,42 +1688,54 @@ fn cleanup_workspace_preview_files(
         .map(|path| path.to_string_lossy().to_string())
 }
 
-/// Standalone documents are not projects, so they must never place generated
-/// state beside the source file. Their caches live under the application data
-/// directory and are keyed by the file's canonical path.
+/// Base directory for preview caches that belong to documents edited outside a
+/// project. It lives under the application data directory so a standalone file
+/// never places generated state beside its source.
+fn standalone_preview_cache_base(app_local_data_dir: &std::path::Path) -> std::path::PathBuf {
+    app_local_data_dir.join("standalone-cache")
+}
+
+/// True when `cache_root` is managed as a standalone preview cache.
+fn is_standalone_preview_cache(app_local_data_dir: &std::path::Path, cache_root: &Path) -> bool {
+    let base = standalone_preview_cache_base(app_local_data_dir);
+    let base = dunce::canonicalize(&base).unwrap_or(base);
+    cache_root.starts_with(&base)
+}
+
+/// Standalone preview caches are keyed by the canonical folder of the document.
 pub fn standalone_preview_cache_root(
     app_local_data_dir: &std::path::Path,
-    file_path: &std::path::Path,
+    workspace_root: &std::path::Path,
 ) -> std::path::PathBuf {
     use sha2::{Digest, Sha256};
-    let canonical = file_path
+    let canonical = workspace_root
         .canonicalize()
-        .unwrap_or_else(|_| file_path.to_path_buf());
+        .unwrap_or_else(|_| workspace_root.to_path_buf());
     let mut identity = canonical.to_string_lossy().replace('\\', "/");
     if cfg!(windows) {
         identity.make_ascii_lowercase();
     }
     let digest = Sha256::digest(identity.as_bytes());
-    let file_key = digest[..16]
+    let folder_key = digest[..16]
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    app_local_data_dir.join("standalone-cache").join(file_key)
+    standalone_preview_cache_base(app_local_data_dir).join(folder_key)
 }
 
 #[tauri::command]
 fn prepare_standalone_preview_cache(
     app_handle: tauri::AppHandle,
-    file_path: String,
+    workspace_root_path: String,
 ) -> Result<String, String> {
     let app_local_data_dir = app_handle.path().app_local_data_dir().map_err(|error| {
         format!("Failed to resolve the local application data directory: {error}")
     })?;
-    let source = PathBuf::from(&file_path);
-    if !source.is_file() {
-        return Err("The standalone document no longer exists.".to_string());
+    let root = PathBuf::from(&workspace_root_path);
+    if !root.is_dir() {
+        return Err("The standalone document folder no longer exists.".to_string());
     }
-    let cache_root = standalone_preview_cache_root(&app_local_data_dir, &source);
+    let cache_root = standalone_preview_cache_root(&app_local_data_dir, &root);
     std::fs::create_dir_all(&cache_root)
         .map_err(|error| format!("Failed to create the standalone preview cache: {error}"))?;
     Ok(cache_root.to_string_lossy().to_string())
@@ -1732,32 +1744,33 @@ fn prepare_standalone_preview_cache(
 #[tauri::command]
 fn remove_standalone_preview_cache(
     app_handle: tauri::AppHandle,
-    file_path: String,
+    workspace_root_path: String,
 ) -> Result<(), String> {
     let app_local_data_dir = app_handle.path().app_local_data_dir().map_err(|error| {
         format!("Failed to resolve the local application data directory: {error}")
     })?;
-    let cache_root = standalone_preview_cache_root(&app_local_data_dir, Path::new(&file_path));
+    let cache_root =
+        standalone_preview_cache_root(&app_local_data_dir, Path::new(&workspace_root_path));
     remove_dir_if_present(&cache_root)
 }
 
 /// Deletes standalone caches that have not been touched within `max_age_ms` and
-/// are not in `active_file_paths`. Runs at startup so abandoned edits cannot
-/// accumulate without bound.
+/// are not in `active_workspace_roots`. Runs at startup so abandoned edits
+/// cannot accumulate without bound.
 #[tauri::command]
 fn prune_standalone_preview_caches(
     app_handle: tauri::AppHandle,
-    active_file_paths: Vec<String>,
+    active_workspace_roots: Vec<String>,
     max_age_ms: u64,
 ) -> Result<usize, String> {
     let app_local_data_dir = app_handle.path().app_local_data_dir().map_err(|error| {
         format!("Failed to resolve the local application data directory: {error}")
     })?;
-    let root = app_local_data_dir.join("standalone-cache");
+    let root = standalone_preview_cache_base(&app_local_data_dir);
     if !root.is_dir() {
         return Ok(0);
     }
-    let active: std::collections::HashSet<std::path::PathBuf> = active_file_paths
+    let active: std::collections::HashSet<std::path::PathBuf> = active_workspace_roots
         .iter()
         .map(|path| standalone_preview_cache_root(&app_local_data_dir, Path::new(path)))
         .collect();
@@ -1797,24 +1810,28 @@ mod standalone_cache_tests {
     use super::standalone_preview_cache_root;
 
     #[test]
-    fn keys_the_cache_by_canonical_file_path_not_the_parent_folder() {
+    fn keys_the_cache_by_canonical_folder_and_stays_under_standalone_cache() {
         let app_data = tempfile::tempdir().unwrap();
         let first_dir = tempfile::tempdir().unwrap();
         let second_dir = tempfile::tempdir().unwrap();
-        let first = first_dir.path().join("chapter.typ");
-        let second = second_dir.path().join("chapter.typ");
-        std::fs::write(&first, b"= One").unwrap();
-        std::fs::write(&second, b"= Two").unwrap();
-        let first_cache = standalone_preview_cache_root(app_data.path(), &first);
-        let second_cache = standalone_preview_cache_root(app_data.path(), &second);
+        let first_cache = standalone_preview_cache_root(app_data.path(), first_dir.path());
+        let second_cache = standalone_preview_cache_root(app_data.path(), second_dir.path());
         assert_ne!(first_cache, second_cache);
         assert!(first_cache.starts_with(app_data.path().join("standalone-cache")));
-        // A different relative spelling of the same file resolves to one cache.
-        let aliased = first_dir.path().join(".").join("chapter.typ");
+        // A different relative spelling of the same folder resolves to one cache.
+        let aliased = first_dir.path().join(".");
         assert_eq!(
             standalone_preview_cache_root(app_data.path(), &aliased),
             first_cache
         );
+        assert!(super::is_standalone_preview_cache(
+            app_data.path(),
+            &first_cache
+        ));
+        assert!(!super::is_standalone_preview_cache(
+            app_data.path(),
+            &app_data.path().join("workspace-cache").join("deadbeef")
+        ));
     }
 }
 
@@ -5146,7 +5163,11 @@ fn resolve_render_preview_compile_paths(
         .map_err(|error| format!("Failed to resolve the preview cache: {error}"))?;
     let expected_cache_root = dunce::canonicalize(&expected_cache_root)
         .map_err(|error| format!("Failed to resolve the managed preview cache: {error}"))?;
-    if cache_root != expected_cache_root {
+    // A standalone document is not a project, so its cache is the managed
+    // standalone cache for the containing folder instead of the workspace cache.
+    if cache_root != expected_cache_root
+        && !is_standalone_preview_cache(app_local_data_dir, &cache_root)
+    {
         return Err("The PDF preview cache does not belong to the active project.".into());
     }
 
@@ -6193,7 +6214,8 @@ fn resolve_managed_workspace_cache_root(
         .map_err(|error| format!("Failed to resolve the preview cache: {error}"))?;
     let expected = dunce::canonicalize(&expected)
         .map_err(|error| format!("Failed to resolve the managed preview cache: {error}"))?;
-    if cache_root != expected {
+    // Standalone documents use the managed standalone cache for their folder.
+    if cache_root != expected && !is_standalone_preview_cache(app_local_data_dir, &cache_root) {
         return Err("The preview cache does not belong to the active project.".into());
     }
     Ok(cache_root)
