@@ -437,7 +437,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-toggle-editor-toolbar")?.addEventListener("click", actions.toggleEditorToolbar);
   document.getElementById("action-clear-logs")?.addEventListener("click", actions.clearLogs);
   document.getElementById("action-restart-lsp")?.addEventListener("click", () => void actions.restartLsp());
-  document.getElementById("action-docs-typsastra")?.addEventListener("click", () => void openUrl("https://github.com/sovichea/typsastra"));
+  document.getElementById("action-docs-typsastra")?.addEventListener("click", () => void openUrl("https://docs.typsastra.com/"));
   document.getElementById("action-docs-typst")?.addEventListener("click", () => void openUrl("https://typst.app/docs"));
   bindAboutDialog();
   document.getElementById("action-toggle-logs")?.addEventListener("click", actions.toggleLogConsole);
