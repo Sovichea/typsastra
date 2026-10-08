@@ -2,6 +2,10 @@
 //!
 //! This is intentionally separate from stdout/stderr: it exposes only entries
 //! already admitted by the DeveloperLogController's user-configured categories.
+// The module's runtime server is only started in debug builds. Release builds
+// retain the no-op Tauri command surface, so the API's private handlers and
+// request types are expected to be unused there.
+#![cfg_attr(not(debug_assertions), allow(dead_code))]
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
