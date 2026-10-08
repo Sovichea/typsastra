@@ -1,4 +1,4 @@
-site_name: Typsastra Documentation
+site_name: Typsastra
 site_description: User guides, feature references, and contributor documentation for Typsastra.
 site_url: https://docs.typsastra.com/
 repo_url: https://github.com/Sovichea/typsastra
@@ -9,9 +9,12 @@ site_dir: site
 use_directory_urls: true
 exclude_docs: |
   /README.md
+  /DEPLOYMENT.md
 
 theme:
   name: material
+  logo: demo-project/assets/typsastra-icon.png
+  favicon: demo-project/assets/typsastra-icon.png
   features:
     - navigation.sections
     - navigation.top
@@ -83,7 +86,6 @@ nav:
       - Troubleshooting: TROUBLESHOOTING.md
   - Contributors:
       - Development: DEVELOPMENT.md
-      - Publish the documentation: DEPLOYMENT.md
       - Language contributor guide: LANGUAGE_CONTRIBUTOR_GUIDE.md
       - Script editing policies: SCRIPT_EDITING_POLICIES.md
       - Compatibility policy: COMPATIBILITY_POLICY.md

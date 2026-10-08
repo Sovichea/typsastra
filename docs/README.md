@@ -42,7 +42,6 @@ the reference documents when you need exact behavior or contributor contracts.
 ## Contributors and architecture
 
 - [Development guide](DEVELOPMENT.md)
-- [Documentation deployment](DEPLOYMENT.md)
 - [Language contributor guide](LANGUAGE_CONTRIBUTOR_GUIDE.md)
 - [Script editing policies](SCRIPT_EDITING_POLICIES.md)
 - [Compatibility policy](COMPATIBILITY_POLICY.md)
