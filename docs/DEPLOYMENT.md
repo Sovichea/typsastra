@@ -1,31 +1,35 @@
 # Publish the documentation
 
 The documentation is built with MkDocs Material and hosted as a static site on
-Cloudflare Pages. Markdown remains in this repository; Cloudflare rebuilds the
-site when changes are pushed to `main`.
+Cloudflare Pages. The GitHub Actions workflow builds every documentation change
+and deploys it to Pages when changes are pushed to `main`.
 
-## Cloudflare Pages setup
+## Configure automatic deployment
 
-1. In Cloudflare, open **Workers & Pages → Create → Pages → Connect to Git** and
-   select the `Sovichea/typsastra` repository.
-2. Configure the build:
+The `Documentation site` workflow in `.github/workflows/docs.yml` builds the
+`site/` directory and uploads it to the existing Pages project `typsastra-docs`.
+Pull requests run the strict build check; pushes to `main` also deploy.
 
-   | Setting | Value |
-   | --- | --- |
-   | Production branch | `main` |
-   | Build command | `pip install -r requirements-docs.txt && mkdocs build --strict` |
-   | Build output directory | `site` |
+Add these repository Actions secrets in GitHub under **Settings → Secrets and
+variables → Actions**:
 
-   `wrangler.toml` names the Pages project `typsastra-docs` and declares the
-   `site` output directory.
-3. Save and deploy. Cloudflare builds the site on each push to `main` and
-   provides preview deployments for pull requests.
-4. In the Pages project, open **Custom domains** and add
-   `docs.typsastra.com`. Cloudflare will provision HTTPS and configure the DNS
-   record when the domain is on Cloudflare DNS.
+| Secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | An account API token with Cloudflare Pages edit access for the account containing `typsastra-docs` |
+| `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account ID that owns `typsastra-docs` |
 
-After the custom domain is selected, update `site_url` in `mkdocs.yml` and the
-documentation link in the root `README.md` to that exact URL.
+Create the token from the account's [API Tokens page](https://dash.cloudflare.com/?to=/:account/api-tokens), not the user profile's API Tokens page. Keep it in GitHub Secrets; never commit it. Cloudflare's [Pages CI deployment guide](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/) has the token setup steps.
+
+`wrangler.toml` identifies the Pages project and output directory. The workflow
+uses `wrangler pages deploy`; do not use `wrangler deploy`, which targets
+Workers.
+
+To use `docs.typsastra.com`, add it under **Custom domains** for the
+`typsastra-docs` Pages project. Cloudflare provisions HTTPS and configures the
+DNS record when the domain is on Cloudflare DNS.
+
+The `site_url` in `mkdocs.yml` and the root `README.md` already use
+`https://docs.typsastra.com/`.
 
 ## Build locally
 
