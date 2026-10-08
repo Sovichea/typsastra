@@ -23,6 +23,7 @@ export interface PreviewDiagnosticsRecoveryDependencies {
 export class PreviewDiagnosticsRecoveryController {
   private failedContents: string | null = null;
   private lastRequestedContents: string | null = null;
+  private acceptedErrorRecoveryPending = false;
   private acceptedErrorFilePath: string | null = null;
   private acceptedErrors: readonly LspDiagnostic[] = [];
 
@@ -35,12 +36,19 @@ export class PreviewDiagnosticsRecoveryController {
     // PDF can still be the last successful revision while the active editor
     // revision has accepted LSP errors, so restore that diagnostic until the
     // language server explicitly accepts an error-free revision.
-    if (!this.deps.previewRenderQueued()) this.showAcceptedErrors();
+    if (!this.deps.previewRenderQueued()) {
+      if (this.acceptedErrors.length === 0) this.acceptedErrorRecoveryPending = false;
+      this.showAcceptedErrors();
+    }
   }
 
   onRenderFailed(contents: string): void {
     this.failedContents = contents;
     this.lastRequestedContents = null;
+  }
+
+  needsExternalPreviewRecovery(): boolean {
+    return this.acceptedErrorRecoveryPending || this.failedContents !== null;
   }
 
   recoverAfterAcceptedDiagnostics(diagnostics: readonly LspDiagnostic[]): void {
@@ -49,6 +57,7 @@ export class PreviewDiagnosticsRecoveryController {
     this.acceptedErrors = errors;
     const canRenderActiveFile = this.canRenderActiveFile();
     if (errors.length > 0) {
+      this.acceptedErrorRecoveryPending = true;
       if (
         canRenderActiveFile
         && this.failedContents === null

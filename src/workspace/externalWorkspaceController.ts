@@ -13,6 +13,7 @@ export interface ExternalWorkspaceControllerPort {
   openTabPaths(): readonly string[];
   conflictPaths(): ReadonlySet<string>;
   managedPathKeys(): ReadonlySet<string>;
+  previewRecoveryPending(): boolean;
   reloadOpenFiles(refreshPreview: boolean): Promise<boolean>;
   pathsExist(paths: readonly string[]): Promise<boolean[]>;
   lspClient(): TinymistLspClient | undefined;
@@ -68,7 +69,10 @@ export class ExternalWorkspaceController {
     if (this.port.workspaceRoot() !== workspaceRoot) return;
 
     const externalPathKeys = externalPaths.map(this.port.pathKey);
-    if (shouldSuppressWorkspaceSelfSave(openFilesChanged, externalPathKeys, openPathKeys)) {
+    if (
+      shouldSuppressWorkspaceSelfSave(openFilesChanged, externalPathKeys, openPathKeys)
+      && !this.port.previewRecoveryPending()
+    ) {
       this.port.log(
         "info",
         "Workspace watcher self-save event suppressed; mirror preparation and duplicate Tinymist invalidation skipped.",

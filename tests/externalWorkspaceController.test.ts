@@ -10,6 +10,7 @@ describe("external workspace diagnostics", () => {
       openTabPaths: () => [],
       conflictPaths: () => new Set(),
       managedPathKeys: () => new Set(),
+      previewRecoveryPending: () => false,
       reloadOpenFiles: async () => false,
       pathsExist: async paths => paths.map(() => true),
       lspClient: () => undefined,
@@ -50,6 +51,7 @@ describe("external workspace diagnostics", () => {
       openTabPaths: () => [],
       conflictPaths: () => new Set(),
       managedPathKeys: () => new Set(),
+      previewRecoveryPending: () => false,
       reloadOpenFiles: async () => false,
       pathsExist: async paths => paths.map(path => path.endsWith("main.typ")),
       lspClient: () => client,
@@ -92,6 +94,7 @@ describe("external workspace diagnostics", () => {
       openTabPaths: () => [],
       conflictPaths: () => new Set(),
       managedPathKeys: () => new Set(),
+      previewRecoveryPending: () => false,
       reloadOpenFiles: async () => false,
       pathsExist: async paths => paths.map(path => path.endsWith("new.typ")),
       lspClient: () => client,
@@ -116,5 +119,49 @@ describe("external workspace diagnostics", () => {
     });
 
     expect(notifiedTypes).toEqual([3, 1]);
+  });
+
+  test("refreshes an unchanged open document after a recoverable LSP error", async () => {
+    const events: string[] = [];
+    const client = {
+      notifyWorkspaceFilesChanged: async () => { events.push("lsp-change"); },
+    } as unknown as import("../src/compiler/lsp").TinymistLspClient;
+    const controller = new ExternalWorkspaceController({
+      workspaceRoot: () => "C:\\Project",
+      pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
+      openTabPaths: () => ["C:\\Project\\main.typ"],
+      conflictPaths: () => new Set(),
+      managedPathKeys: () => new Set(),
+      previewRecoveryPending: () => true,
+      reloadOpenFiles: async () => false,
+      pathsExist: async paths => paths.map(() => true),
+      lspClient: () => client,
+      lspReady: () => true,
+      loadExplorer: async () => { events.push("explorer"); },
+      refreshImageTools: () => {},
+      refreshTableDirectives: () => {},
+      imageToolsActive: () => false,
+      clearDiagnostics: () => { events.push("clear-diagnostics"); },
+      retireSourceMap: async () => {},
+      refreshPreview: async force => { events.push(`preview:${force}`); },
+      waitForPreviewRefresh: async () => { events.push("settled"); },
+      setRefreshPending: () => {},
+      updateForwardSyncAction: () => {},
+      log: () => {},
+    });
+
+    await controller.handleChange({
+      rootPath: "C:\\Project",
+      kind: "modify",
+      paths: ["C:\\Project\\main.typ"],
+    });
+
+    expect(events).toEqual([
+      "clear-diagnostics",
+      "lsp-change",
+      "explorer",
+      "preview:true",
+      "settled",
+    ]);
   });
 });

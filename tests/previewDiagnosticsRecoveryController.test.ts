@@ -104,13 +104,18 @@ describe("preview diagnostics recovery controller", () => {
 
     controller.recoverAfterAcceptedDiagnostics([error]);
     expect(overlayCount).toBe(1);
+    expect(controller.needsExternalPreviewRecovery()).toBeTrue();
 
     controller.onRenderSucceeded();
     expect(overlayCount).toBe(2);
     expect(clearCount).toBe(0);
+    expect(controller.needsExternalPreviewRecovery()).toBeTrue();
 
     controller.recoverAfterAcceptedDiagnostics([]);
     expect(clearCount).toBe(1);
+    expect(controller.needsExternalPreviewRecovery()).toBeTrue();
+    controller.onRenderSucceeded();
+    expect(controller.needsExternalPreviewRecovery()).toBeFalse();
   });
 
   test("waits for an in-flight PDF presentation before showing an accepted error", () => {

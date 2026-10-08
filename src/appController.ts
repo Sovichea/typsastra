@@ -1381,6 +1381,7 @@ export class TypsastraWorkspaceController {
       ...this.managedPreviewPdfPathKeys,
       ...this.managedImageToolPathKeys,
     ]),
+    previewRecoveryPending: () => this.previewDiagnosticsRecoveryController.needsExternalPreviewRecovery(),
     reloadOpenFiles: refreshPreview => this.reloadOpenFilesFromDisk(refreshPreview),
     pathsExist: paths => invoke<boolean[]>("workspace_paths_exist", { paths: [...paths] }),
     lspClient: () => this.lspClient,
