@@ -11,6 +11,10 @@ installs writable copies in a versioned Documents folder such as
 `Typsastra Examples v0.7.0` and opens `START-HERE.typ`. Every release uses a new
 folder, so upgrading never overwrites or silently reuses an older example copy.
 
+To follow the documentation walkthroughs, open the repository's
+[`demo-project`](../demo-project/README.md). It contains a main file, included
+chapters, local images, and a table anchor for the Table Tools tutorial.
+
 ## Choose the main document
 
 Right-click a `.typ` file in Explorer or its editor tab and choose **Set as Main

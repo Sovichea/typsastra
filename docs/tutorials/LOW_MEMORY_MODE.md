@@ -61,7 +61,7 @@ session.
 
 After a successful save, Typsastra:
 
-1. prepares the private render tree under `.typsastra/cache`;
+1. prepares the private render tree in the machine-local workspace render cache;
 2. starts a one-shot Tinymist process;
 3. compiles the main document PDF;
 4. builds an approximate sync index for the main file and reachable includes;
@@ -130,11 +130,12 @@ and decorating extremely large documents.
 
 ## Cache and privacy
 
-Generated PDFs, instrumented sources, and sync indexes remain inside the
-project's private `.typsastra/cache` directory. Typsastra does not create a PDF
-beside the user's source without confirmation. Temporary indexing processes
-and preparation files are cleaned up or replaced through the same cache
-lifecycle used by normal preview generation.
+Generated PDFs, instrumented sources, and sync indexes remain in Typsastra's
+machine-local application-data cache, outside the project. `.typsastra` stores
+portable project configuration and local workspace session state, not render
+outputs. Typsastra does not create a PDF beside the user's source without
+confirmation. Temporary indexing processes and preparation files are cleaned up
+or replaced through the same cache lifecycle used by normal preview generation.
 
 If the project directory is synchronized by a cloud-storage client, that client
 may still upload `.typsastra` unless the directory is excluded in the provider's

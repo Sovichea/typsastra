@@ -5,6 +5,8 @@ PDF files. Only a bounded set of visible and nearby pages receives rendered
 canvases, keeping long-document memory independent of total page count as far as
 practical.
 
+![Document and dark preview color modes side by side with the editor](../assets/screenshots/demo-preview-dark.png)
+
 ## Preview color modes
 
 Open the preview overflow menu or **Settings → Preview** to choose:

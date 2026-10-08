@@ -16,7 +16,7 @@ Generated caches, generated PDFs, `.git`, `.typsastra`, `node_modules`, `target`
 
 ## Manifest v2
 
-The locked frontend fixture is [`tests/fixtures/projectArchive/manifest-v2.json`](../tests/fixtures/projectArchive/manifest-v2.json).
+The locked frontend fixture is [`tests/fixtures/projectArchive/manifest-v2.json`](https://github.com/Sovichea/typsastra/blob/main/tests/fixtures/projectArchive/manifest-v2.json).
 
 ```json
 {

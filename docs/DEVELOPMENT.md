@@ -85,6 +85,7 @@ debug app to use another loopback bind address. The API is not started in releas
 - `GET /project/images` returns indexed image metadata; `GET /project/tables` returns project table summaries.
 - `POST /ui/action` performs the named editor/tool action through the running frontend and returns `202 Accepted`. Example actions:
   - `{"action":"sidebar-tool","tool":"images"}`
+  - `{"action":"project-templates"}`
   - `{"action":"preview-color-mode","mode":"inverted"}`
   - `{"action":"preview-zoom","direction":"in"}`
   - `{"action":"preview-recompile"}`

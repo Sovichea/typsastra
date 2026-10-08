@@ -49,7 +49,9 @@ export default defineConfig({
     watch: {
       // The Rust backend is compiled by cargo; watching its target directory
       // throws EBUSY on Windows when cargo holds a lock on a dependency DLL.
-      ignored: ["**/src-tauri/**"],
+      // Documentation assets are not part of the WebView app, and Windows may
+      // also reject watches on screenshots opened by an image viewer.
+      ignored: ["**/src-tauri/**", "**/docs/**"],
     },
   },
   envPrefix: ['VITE_', 'TAURI_'],

@@ -101,10 +101,10 @@ editor. It also never copies the original font files into `.typsastra` or a
 project export. A recipient therefore needs the same font dependency installed
 or configured on their own machine.
 
-Typsastra recommends no more than 10 cached scale variants per font face. It
-asks before creating another variant and keeps every existing variant until the
-user explicitly manages the cache. Cache inspection, deletion, and renewal
-controls are planned for a future update.
+Typsastra recommends no more than 10 cached scale variants per font face and
+asks before creating another. Open **Settings → Storage → Scaled-font cache** to
+inspect variants, renew an entry, remove selected entries, or remove unused
+entries. Typsastra does not delete cached variants automatically.
 
 Keep script scales between `0.90×` and `1.10×` when possible. Typsastra warns
 before applying a larger adjustment because this control is for fine optical

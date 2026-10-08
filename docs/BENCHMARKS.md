@@ -227,4 +227,4 @@ bun run build
 bun run benchmark:performance
 ```
 
-The harness writes a Markdown report and raw JSON under the ignored `artifacts/performance/` directory. The raw data for this published run is committed at [`benchmarks/results/2026-07-18-windows.json`](../benchmarks/results/2026-07-18-windows.json).
+The harness writes a Markdown report and raw JSON under the ignored `artifacts/performance/` directory. The raw data for this published run is committed at [`benchmarks/results/2026-07-18-windows.json`](https://github.com/Sovichea/typsastra/blob/main/benchmarks/results/2026-07-18-windows.json).

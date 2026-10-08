@@ -226,7 +226,7 @@ tests expose selection, search, clipboard, and geometry interoperability.
 ## Engine release 0.4.1
 
 The current reproducible engine packages are defined by
-[`release-v0.4.1.json`](../toolchains/enhanced-unicode/release-v0.4.1.json) and
+[`release-v0.4.1.json`](https://github.com/Sovichea/typsastra/blob/main/toolchains/enhanced-unicode/release-v0.4.1.json) and
 published from this repository under the scoped tag
 `enhanced-unicode-v0.4.1`. Keeping the artifacts in the Typsastra repository
 avoids presenting the Typst fork as an unrelated or official upstream binary.

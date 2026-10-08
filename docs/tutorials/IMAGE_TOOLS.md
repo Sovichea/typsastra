@@ -3,6 +3,8 @@
 Image Tools provides an explicit workspace for inspecting and optimizing local
 raster assets without silently modifying the source project.
 
+![Image Tools showing asset metadata, references, crop controls, and an optimization preview](../assets/screenshots/demo-image-tools.png)
+
 Open a workspace, select **Image Tools** from the sidebar, and choose an image.
 The sidebar can filter all images, images used by the current document,
 referenced or unused images, and images whose encoded or decoded size exceeds
@@ -41,7 +43,7 @@ of decoding a pathological source image again. Reopening a project restores the
 active image only after its preview source is ready, so an old image is not
 mistaken for the selected asset while loading.
 
-Use the bundled `06-v0.6-feature-showcase/01-draft-preview-and-image-guidance`
-project to exercise Image Tools with local raster files. Draft Preview remains
+Use the documentation [`demo-project`](../demo-project/README.md) or the bundled
+`06-v0.6-feature-showcase/01-draft-preview-and-image-guidance` project to
+exercise Image Tools with local raster files. Draft Preview remains
 a separate source-preserving preview mode and never exports placeholders.
-
