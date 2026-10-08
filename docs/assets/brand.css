@@ -1,0 +1,15 @@
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #0b6841;
+  --md-primary-fg-color--light: #18784e;
+  --md-primary-fg-color--dark: #06492f;
+  --md-accent-fg-color: #3d8c37;
+  --md-typeset-a-color: #176b3e;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0a4e36;
+  --md-primary-fg-color--light: #126344;
+  --md-primary-fg-color--dark: #063a28;
+  --md-accent-fg-color: #91d653;
+  --md-typeset-a-color: #a0df6b;
+}

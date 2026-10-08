@@ -15,21 +15,28 @@ theme:
   name: material
   logo: demo-project/assets/typsastra-icon.png
   favicon: demo-project/assets/typsastra-icon.png
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.sections
     - navigation.top
     - search.highlight
     - search.suggest
     - content.code.copy
-  palette:
-    - scheme: default
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+
+extra_css:
+  - assets/brand.css
 
 plugins:
   - search
@@ -53,28 +60,35 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Tutorials:
-      - Getting started: tutorials/GETTING_STARTED.md
-      - Feature demo project: demo-project/README.md
-      - Projects and main files: tutorials/PROJECTS_AND_MAIN_FILES.md
-      - Create from templates: tutorials/PROJECT_TEMPLATES.md
-      - Explorer and project files: tutorials/EXPLORER_AND_PROJECTS.md
-      - Editor and PDF preview: tutorials/EDITOR_AND_PREVIEW.md
-      - Editor productivity: tutorials/EDITOR_PRODUCTIVITY.md
-      - Standalone files and PDFs: tutorials/STANDALONE_FILES_AND_PDFS.md
-      - Long-document workflow: tutorials/LONG_DOCUMENT_WORKFLOW.md
-      - PDF preview and synchronization: tutorials/PDF_PREVIEW_AND_SYNC.md
-      - Draft Preview: tutorials/DRAFT_PREVIEW.md
-      - Markdown live preview: tutorials/MARKDOWN_PREVIEW.md
-      - Image Tools: tutorials/IMAGE_TOOLS.md
-      - Table Tools: tutorials/TABLE_TOOLS.md
-      - Project import and export: tutorials/PROJECT_IMPORT_AND_EXPORT.md
-      - Multilingual spellcheck: tutorials/MULTILINGUAL_SPELLCHECK.md
-      - Keyboard language completion: tutorials/KEYBOARD_LANGUAGE_COMPLETION.md
-      - Document typography: tutorials/DOCUMENT_TYPOGRAPHY.md
-      - Toolchain and storage: tutorials/TOOLCHAIN_AND_STORAGE.md
-      - Language provider installation: tutorials/LANGUAGE_PROVIDER_INSTALLATION.md
-      - Low-Memory Mode: tutorials/LOW_MEMORY_MODE.md
-      - Troubleshooting: tutorials/TROUBLESHOOTING.md
+      - Start here:
+          - Getting started: tutorials/GETTING_STARTED.md
+          - Feature demo project: demo-project/README.md
+      - Projects and files:
+          - Projects and main files: tutorials/PROJECTS_AND_MAIN_FILES.md
+          - Explorer and project files: tutorials/EXPLORER_AND_PROJECTS.md
+          - Create from templates: tutorials/PROJECT_TEMPLATES.md
+          - Project import and export: tutorials/PROJECT_IMPORT_AND_EXPORT.md
+      - Writing and editing:
+          - Editor and PDF preview: tutorials/EDITOR_AND_PREVIEW.md
+          - Editor productivity: tutorials/EDITOR_PRODUCTIVITY.md
+          - Document typography: tutorials/DOCUMENT_TYPOGRAPHY.md
+          - Markdown live preview: tutorials/MARKDOWN_PREVIEW.md
+      - Preview and PDFs:
+          - PDF preview and synchronization: tutorials/PDF_PREVIEW_AND_SYNC.md
+          - Standalone files and PDFs: tutorials/STANDALONE_FILES_AND_PDFS.md
+          - Draft Preview: tutorials/DRAFT_PREVIEW.md
+      - Visual tools:
+          - Image Tools: tutorials/IMAGE_TOOLS.md
+          - Table Tools: tutorials/TABLE_TOOLS.md
+      - Language support:
+          - Multilingual spellcheck: tutorials/MULTILINGUAL_SPELLCHECK.md
+          - Keyboard language completion: tutorials/KEYBOARD_LANGUAGE_COMPLETION.md
+          - Language provider installation: tutorials/LANGUAGE_PROVIDER_INSTALLATION.md
+      - Advanced workflows:
+          - Long-document workflow: tutorials/LONG_DOCUMENT_WORKFLOW.md
+          - Low-Memory Mode: tutorials/LOW_MEMORY_MODE.md
+          - Toolchain and storage: tutorials/TOOLCHAIN_AND_STORAGE.md
+          - Troubleshooting: tutorials/TROUBLESHOOTING.md
   - User reference:
       - Feature guide: FEATURES.md
       - Settings: SETTINGS.md
