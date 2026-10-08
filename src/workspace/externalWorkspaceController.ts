@@ -14,6 +14,7 @@ export interface ExternalWorkspaceControllerPort {
   conflictPaths(): ReadonlySet<string>;
   managedPathKeys(): ReadonlySet<string>;
   reloadOpenFiles(refreshPreview: boolean): Promise<boolean>;
+  pathsExist(paths: readonly string[]): Promise<boolean[]>;
   lspClient(): TinymistLspClient | undefined;
   lspReady(): boolean;
   loadExplorer(rootPath: string): Promise<void>;
@@ -96,18 +97,23 @@ export class ExternalWorkspaceController {
       await this.port.retireSourceMap("accepted external workspace change");
       const client = this.port.lspClient();
       if (this.port.lspReady() && client) {
-        const defaultType: 1 | 2 | 3 = change.kind === "create"
-          ? 1
-          : change.kind === "remove"
-            ? 3
-            : 2;
-        const lastPathIndex = acceptedPaths.length - 1;
-        const changes = acceptedPaths.map((path, index) => ({
-          uri: filePathToUri(path),
-          type: change.kind === "rename" && change.paths.length > 1
-            ? (index === lastPathIndex ? 1 : 3) as 1 | 3
-            : defaultType,
-        }));
+        const existingPaths = await this.port.pathsExist(acceptedPaths);
+        if (this.port.workspaceRoot() !== workspaceRoot) return;
+        const changes = acceptedPaths.map((path, index) => {
+          const exists = existingPaths[index] ?? false;
+          const type: 1 | 2 | 3 = change.kind === "rename" && change.paths.length > 1
+            ? exists ? 1 : 3
+            : exists
+              ? change.kind === "create" ? 1 : 2
+              : 3;
+          if (change.kind === "remove" && exists) {
+            this.port.log("warning", `Watcher reported removal for a path that exists; notifying Tinymist as changed: ${path}`);
+          }
+          if (change.kind === "create" && !exists) {
+            this.port.log("warning", `Watcher reported creation for a path that is missing; notifying Tinymist as deleted: ${path}`);
+          }
+          return { uri: filePathToUri(path), type };
+        });
         await client.notifyWorkspaceFilesChanged(changes);
       }
       await this.port.loadExplorer(workspaceRoot);

@@ -1378,6 +1378,7 @@ export class TypsastraWorkspaceController {
       ...this.managedImageToolPathKeys,
     ]),
     reloadOpenFiles: refreshPreview => this.reloadOpenFilesFromDisk(refreshPreview),
+    pathsExist: paths => invoke<boolean[]>("workspace_paths_exist", { paths: [...paths] }),
     lspClient: () => this.lspClient,
     lspReady: () => this.lspReady,
     loadExplorer: rootPath => this.explorer.loadWorkspace(rootPath),
@@ -3762,6 +3763,17 @@ export class TypsastraWorkspaceController {
     return this.workspaceLifecycleController.open(selected).then(() => this.syncDevProjectContext());
   }
 
+  private async openProjectDocumentFromDevApi(request: {
+    path: string;
+    approveLargePreview: boolean;
+  }): Promise<void> {
+    if (!this.workspaceRootPath) throw new Error("Open a project before requesting one of its documents.");
+    await this.loadFile(request.path);
+    if (request.approveLargePreview) {
+      await this.editorFileGuardController.confirmLargeFile(request.path);
+    }
+  }
+
 
   private startWorkspaceServices(selected: string): Promise<void> {
     return this.workspaceLifecycleController.startServices(selected);
@@ -3895,6 +3907,7 @@ export class TypsastraWorkspaceController {
         Object.assign(settings.developerLogs, update.developerLogs);
       }),
       setProjectMain: path => this.setPinnedMainFile(path),
+      openProjectDocument: request => this.openProjectDocumentFromDevApi(request),
       previewContentMode: () => this.draftPreviewController.mode,
       openLastPreviewExternally: () => this.lastPdfPath ? this.openFileExternally(this.lastPdfPath) : undefined,
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),

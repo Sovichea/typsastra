@@ -1529,6 +1529,14 @@ fn workspace_path_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
+#[tauri::command]
+fn workspace_paths_exist(paths: Vec<String>) -> Vec<bool> {
+    paths
+        .iter()
+        .map(|path| std::path::Path::new(path).exists())
+        .collect()
+}
+
 struct TempFileGuard {
     path: std::path::PathBuf,
 }
@@ -8062,6 +8070,7 @@ pub fn run() {
             open_file_externally,
             read_workspace_file_as_base64,
             workspace_path_exists,
+            workspace_paths_exist,
             inspect_legacy_workspace_cache,
             remove_legacy_workspace_cache,
             cleanup_workspace_preview_files,

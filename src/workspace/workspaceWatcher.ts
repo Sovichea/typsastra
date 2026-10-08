@@ -34,7 +34,7 @@ export function excludeManagedWorkspacePaths(
 }
 
 export function workspaceChangeKind(type: WatchEventKind): WorkspaceChangeKind | null {
-  if (typeof type === "string") return null;
+  if (typeof type === "string") return type === "any" || type === "other" ? "modify" : null;
   if ("create" in type) return "create";
   if ("remove" in type) return "remove";
   if ("modify" in type) {

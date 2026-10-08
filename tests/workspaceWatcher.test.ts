@@ -14,10 +14,10 @@ describe("workspace watcher", () => {
     expect(workspaceChangeKind({ modify: { kind: "rename", mode: "both" } })).toBe("rename");
   });
 
-  test("ignores access and unspecified events", () => {
+  test("ignores access events and conservatively processes unclassified file events", () => {
     expect(workspaceChangeKind({ access: { kind: "open", mode: "read" } })).toBeNull();
-    expect(workspaceChangeKind("other")).toBeNull();
-    expect(workspaceChangeKind("any")).toBeNull();
+    expect(workspaceChangeKind("other")).toBe("modify");
+    expect(workspaceChangeKind("any")).toBe("modify");
   });
 
   test("suppresses only matching self-save notifications", () => {

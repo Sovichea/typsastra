@@ -81,6 +81,7 @@ debug app to use another loopback bind address. The API is not started in releas
 - `POST /project/open` with `{"path":"<project-folder>"}` opens a project in the app.
 - `GET /project/files` returns the current project's files as root-relative paths and marks the main document.
 - `PUT /project/main` with `{"path":"chapter.typ"}` sets a project-relative or absolute `.typ` file as main.
+- `POST /project/open-document` with `{"path":"main.typ","approveLargePreview":true}` opens a Typst document in the editor and can explicitly accept its large-preview confirmation.
 
 Project open/main requests return `202 Accepted` after being handed to the app; the
 frontend performs the normal workspace operation and reflects its result. Project

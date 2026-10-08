@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
 import { fileExtension, isBinaryImagePath, isTypstDocumentPath } from "../platform/fileTypes";
-import { fileNameFromPath } from "../platform/paths";
+import { fileNameFromPath, filePathKey } from "../platform/paths";
 import type { PreviewFrame } from "../preview/previewFrame";
 import { formatFileSize, type LargeFileOpeningNotice } from "../workspace/largeFileOpening";
 import type { EditorTab } from "./editorTab";
@@ -21,6 +21,7 @@ type EditorFileGuardDependencies = {
 
 export class EditorFileGuardController {
   private alignmentObserver: ResizeObserver | null = null;
+  private readonly pendingLargeFileConfirmations = new Map<string, () => Promise<void>>();
 
   constructor(private readonly deps: EditorFileGuardDependencies) {}
 
@@ -232,6 +233,7 @@ export class EditorFileGuardController {
         throw error;
       }
     };
+    this.pendingLargeFileConfirmations.set(filePathKey(path), openConfirmedFile);
 
     content.append(icon, title, fileName, description);
     if (notice.kind === "pdf") {
@@ -251,7 +253,7 @@ export class EditorFileGuardController {
       confirmButton.addEventListener("click", () => {
         confirmButton.disabled = true;
         confirmButton.textContent = "Opening…";
-        void openConfirmedFile().catch(error => {
+        void this.confirmLargeFile(path).catch(error => {
           console.error("Failed to open large file:", error);
           confirmButton.disabled = false;
           confirmButton.textContent = confirmLabel;
@@ -265,6 +267,15 @@ export class EditorFileGuardController {
     }
     placeholder.append(content);
     info.replaceChildren(placeholder);
+  }
+
+  async confirmLargeFile(path: string): Promise<boolean> {
+    const key = filePathKey(path);
+    const confirm = this.pendingLargeFileConfirmations.get(key);
+    if (!confirm) return false;
+    await confirm();
+    this.pendingLargeFileConfirmations.delete(key);
+    return true;
   }
 
   private observeAlignment(): void {

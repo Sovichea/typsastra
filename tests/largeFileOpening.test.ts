@@ -142,4 +142,18 @@ describe("large file opening notice", () => {
     expect(resumeIndex).toBeGreaterThan(-1);
     expect(resumeIndex).toBeLessThan(prepareIndex);
   });
+
+  test("lets the developer API open a document through the same large-file confirmation", async () => {
+    const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const bindings = await Bun.file(new URL("../src/ui/appEventBindings.ts", import.meta.url)).text();
+    const guard = await Bun.file(
+      new URL("../src/editor/editorFileGuardController.ts", import.meta.url),
+    ).text();
+
+    expect(bindings).toContain('"typsastra-dev-api-open-document"');
+    expect(app).toContain("openProjectDocumentFromDevApi(request)");
+    expect(app).toContain("this.editorFileGuardController.confirmLargeFile(request.path)");
+    expect(guard).toContain("async confirmLargeFile(path: string): Promise<boolean>");
+    expect(guard).toContain("await this.deps.startConfirmedTypstPreview()");
+  });
 });

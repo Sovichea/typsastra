@@ -24,6 +24,7 @@ export interface AppEventActions {
   changePreviewColorMode: (mode: PreviewColorMode) => void;
   applyDeveloperLogSettings: (settings: { developerMode: boolean; developerLogs: DeveloperLogSettings }) => void;
   setProjectMain: (path: string) => Promise<void> | void;
+  openProjectDocument: (request: { path: string; approveLargePreview: boolean }) => Promise<void> | void;
   previewContentMode: () => PreviewContentMode;
   openLastPreviewExternally: () => Promise<void> | void;
   handlePdfPreviewClick: (point: PreviewClickPoint) => Promise<void> | void;
@@ -310,6 +311,14 @@ export function bindAppEvents(actions: AppEventActions): void {
         console.error("Failed to set the project main document requested through the developer API", error);
       });
     });
+    void listenEvent<{ path: string; approveLargePreview: boolean }>(
+      "typsastra-dev-api-open-document",
+      event => {
+        void Promise.resolve(actions.openProjectDocument(event.payload)).catch(error => {
+          console.error("Failed to open the document requested through the developer API", error);
+        });
+      },
+    );
     void listenEvent<"export-pdf" | "open-external">("preview-window-action", event => {
       if (event.payload === "export-pdf") document.getElementById("action-export-pdf")?.click();
       else void actions.openLastPreviewExternally();

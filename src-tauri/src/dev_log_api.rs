@@ -78,6 +78,14 @@ struct ProjectPathRequest {
     path: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProjectOpenDocumentRequest {
+    path: String,
+    #[serde(default)]
+    approve_large_preview: bool,
+}
+
 #[derive(Clone, Debug)]
 struct DevProjectContext {
     root: PathBuf,
@@ -375,6 +383,24 @@ async fn handle_connection(
                 Err(error) => (400, "Bad Request", "text/plain", error.to_string().into_bytes()),
             }
         }
+        ("POST", "/project/open-document") => {
+            match serde_json::from_slice::<ProjectOpenDocumentRequest>(&request[header_end + 4..]) {
+                Ok(payload) => match project_state.validate_main(&payload.path) {
+                    Ok(path) => {
+                        let request = serde_json::json!({
+                            "path": path.to_string_lossy(),
+                            "approveLargePreview": payload.approve_large_preview,
+                        });
+                        match app.emit("typsastra-dev-api-open-document", request) {
+                            Ok(()) => (202, "Accepted", "application/json", br#"{"accepted":true}"#.to_vec()),
+                            Err(error) => (500, "Internal Server Error", "text/plain", error.to_string().into_bytes()),
+                        }
+                    }
+                    Err(error) => (422, "Unprocessable Content", "text/plain", error.into_bytes()),
+                },
+                Err(error) => (400, "Bad Request", "text/plain", error.to_string().into_bytes()),
+            }
+        }
         ("GET", "/settings") => match read_dev_log_settings(&app) {
             Ok(settings) => match serde_json::to_vec(&settings) {
                 Ok(body) => (200, "OK", "application/json; charset=utf-8", body),
@@ -400,9 +426,9 @@ async fn handle_connection(
             200,
             "OK",
             "text/plain; charset=utf-8",
-            b"Typsastra developer API. GET /logs?after=<sequence>, GET /settings, PATCH /settings, GET /project/files, POST /project/open, PUT /project/main, GET /health.\n".to_vec(),
+            b"Typsastra developer API. GET /logs?after=<sequence>, GET /settings, PATCH /settings, GET /project/files, POST /project/open, PUT /project/main, POST /project/open-document, GET /health.\n".to_vec(),
         ),
-        (_, "/logs" | "/settings" | "/health" | "/project/files" | "/project/open" | "/project/main") => (
+        (_, "/logs" | "/settings" | "/health" | "/project/files" | "/project/open" | "/project/main" | "/project/open-document") => (
             405,
             "Method Not Allowed",
             "text/plain",
@@ -739,7 +765,7 @@ fn truncate_utf8(value: &mut String, max_bytes: usize) {
 mod tests {
     use super::{
         default_dev_log_settings, dev_log_settings_from_value, is_allowed_origin, is_loopback_host,
-        parse_query_value, DevLogBuffer, DevLogInput, DevProjectState,
+        parse_query_value, DevLogBuffer, DevLogInput, DevProjectState, ProjectOpenDocumentRequest,
     };
 
     #[test]
@@ -820,5 +846,15 @@ mod tests {
             .iter()
             .any(|file| file.path.starts_with(".git/")));
         assert!(state.validate_main("../outside.typ").is_err());
+    }
+
+    #[test]
+    fn large_document_open_requires_explicit_preview_approval() {
+        let ordinary: ProjectOpenDocumentRequest =
+            serde_json::from_str(r#"{"path":"main.typ"}"#).unwrap();
+        let approved: ProjectOpenDocumentRequest =
+            serde_json::from_str(r#"{"path":"main.typ","approveLargePreview":true}"#).unwrap();
+        assert!(!ordinary.approve_large_preview);
+        assert!(approved.approve_large_preview);
     }
 }
