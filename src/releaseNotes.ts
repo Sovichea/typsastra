@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.9.3": {
+    version: "0.9.3",
+    title: "Standalone files and more reliable preview recovery",
+    highlights: [
+      "Open Typst and Markdown files directly, and open supported off-project files in temporary tabs beside a project.",
+      "Promote a standalone Typst file and its local dependencies into a project when you need the full workspace workflow.",
+      "External corrections now recover the PDF preview after intermediate LSP errors, even when the final file matches its previously saved contents.",
+      "Keep the last successful PDF visible while a new preview compiles; editor caret rendering and release-build diagnostics are improved."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.9.3"
+  },
   "0.9.2": {
     version: "0.9.2",
     title: "Programmable shortcuts, Windows ARM64, and spellcheck navigation",
