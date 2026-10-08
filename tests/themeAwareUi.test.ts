@@ -168,6 +168,17 @@ describe("theme-aware application accents", () => {
     expect(caret).toContain('zIndex: "200 !important"');
     expect(caret).not.toContain("height:");
     expect(caret).not.toContain("transform:");
+    const content = editorThemes.slice(
+      editorThemes.indexOf('".cm-content": {'),
+      editorThemes.indexOf('".cm-content::after": {')
+    );
+    const cursorLayer = editorThemes.slice(
+      editorThemes.indexOf('".cm-cursorLayer": {'),
+      editorThemes.indexOf('".cm-focused .cm-cursor": {')
+    );
+    expect(content).toContain('position: "relative"');
+    expect(content).toContain('zIndex: "1"');
+    expect(cursorLayer).toContain('zIndex: "0 !important"');
     expect(editorThemes).toContain('".cm-cursor::before, .cm-dropCursor::before"');
     expect(editorThemes).toContain('height: "var(--editor-line-height-px, 23.8px)"');
     expect(editorThemes).toContain('transform: "translateY(-50%)"');

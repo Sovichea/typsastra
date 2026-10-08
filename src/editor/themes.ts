@@ -16,6 +16,8 @@ export const baseEditorLayoutTheme = EditorView.theme({
   ".cm-content": {
       color: "var(--ui-text, #333333) !important",
       WebkitTextFillColor: "currentColor",
+      position: "relative",
+      zIndex: "1",
       paddingBottom: "0 !important"
   },
   ".cm-content::after": {
@@ -101,7 +103,7 @@ export const baseEditorLayoutTheme = EditorView.theme({
       pointerEvents: "none"
   },
   ".cm-cursorLayer": {
-      zIndex: "200 !important"
+      zIndex: "0 !important"
   },
   ".cm-focused .cm-cursor": {
       animation: "typsastra-cursor-pulse 1.05s steps(1) infinite"
