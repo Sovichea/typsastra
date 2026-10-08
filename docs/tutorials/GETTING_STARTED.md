@@ -6,6 +6,8 @@ Launch Typsastra and choose **Open Project**, or select one of the five recent
 projects. **Show All Recent Projects** opens fuzzy search across up to 32 stored
 projects. A project is a directory containing ordinary Typst source and assets.
 
+![Typsastra welcome screen with project actions and recent projects](../assets/screenshots/screenshot-welcome.png)
+
 To learn without changing your own files, choose **Open Examples**. Typsastra
 installs writable copies in a versioned Documents folder such as
 `Typsastra Examples v0.7.0` and opens `START-HERE.typ`. Every release uses a new

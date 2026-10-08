@@ -6,6 +6,8 @@ Typst source when linked to a document.
 
 ![Table Tools with a sample table, cell editor, and live preview](../assets/screenshots/demo-table-tools.png)
 
+![New Table dialog with built-in table layouts and data import](../assets/screenshots/screenshot-create-table.png)
+
 ## Create or select a table
 
 Open **Table Tools** in the sidebar. Choose **New** to create an empty table,

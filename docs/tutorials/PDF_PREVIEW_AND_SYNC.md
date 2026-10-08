@@ -51,10 +51,20 @@ forward sync. Tinymist currently supplies page and source-line positioning, not
 a reliable exact horizontal word coordinate. Typsastra therefore lands at the
 line position instead of guessing by PDF text matching.
 
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/c3e44128-9e7b-49ff-aec2-3965de3572e1" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/c3e44128-9e7b-49ff-aec2-3965de3572e1">Open the source and document navigation demo.</a>
+</video>
+
 Inverse sync depends on the source-map data-plane connection. Preview loading
 warms the hidden source-map session without requesting a memory-heavy vector
 snapshot. If synchronization fails, inspect the Typst synchronization log for
 session readiness, WebSocket connection, request, and timeout events.
+
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/56add64e-5d10-47fc-8b0a-30ce1388c46f" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/56add64e-5d10-47fc-8b0a-30ce1388c46f">Open the inverse sync and preview links demo.</a>
+</video>
 
 ## Compilation failures
 

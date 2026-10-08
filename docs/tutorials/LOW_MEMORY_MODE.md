@@ -10,7 +10,10 @@ than the computer can comfortably keep available. Normal mode remains the
 recommended default for projects that benefit from live diagnostics,
 completion, formatting, and exact source synchronization.
 
-https://github.com/user-attachments/assets/563b6809-4003-4901-b5ee-4c56ed959d11
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/563b6809-4003-4901-b5ee-4c56ed959d11" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/563b6809-4003-4901-b5ee-4c56ed959d11">Open the Low-Memory Mode demo.</a>
+</video>
 
 ## How it works
 

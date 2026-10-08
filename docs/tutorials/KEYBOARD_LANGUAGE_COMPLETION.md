@@ -1,5 +1,7 @@
 # Document-language word completion
 
+![Khmer word suggestions shown while typing in a Typst document](../assets/screenshots/screenshot-khmer-word-suggestion.png)
+
 Typsastra word completion does not follow the operating-system keyboard layout.
 Keyboard detection is unreliable across platforms and can conflict with users
 who type several languages through one layout.

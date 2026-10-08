@@ -4,7 +4,7 @@ The **Create New Project** browser creates ordinary Typst workspaces from a
 blank starter, a Typst Universe template, a downloaded template, or a managed
 user template.
 
-![Create New Project browser with Universe, downloaded, and user templates](../assets/screenshots/demo-create-project.png)
+![Create New Project browser with Universe, downloaded, and user templates](../assets/screenshots/screenshot-create-project.png)
 
 ## Browse and search
 

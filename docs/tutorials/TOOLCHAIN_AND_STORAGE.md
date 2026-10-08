@@ -40,6 +40,8 @@ for font discovery, priority ordering, scripts, and supported file formats.
 
 ## Project render caches
 
+![Storage settings showing workspace render-cache sizes and locations](../assets/screenshots/screenshot-machine-local-cache-monitor.png)
+
 Live-preview mirrors, generated PDFs, source maps, draft thumbnails, and other
 temporary compiler outputs are kept in machine-local application data, outside
 the project folder. Settings → Storage lists prepared project caches, their

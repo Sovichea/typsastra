@@ -43,6 +43,11 @@ mouse.
 - The completion catalog uses Tinymist metadata when ready and retains a local
   fallback so common Typst completions do not depend on a live network lookup.
 
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/990277b9-b9df-4154-b6b5-bba293f07dc4" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/990277b9-b9df-4154-b6b5-bba293f07dc4">Open the drag, drop, and paste images demo.</a>
+</video>
+
 For complex scripts, cursor movement, deletion, selection, and composition can
 follow a language's editing policy rather than treating each UTF-16 code unit as
 an independent character. Khmer is the reference implementation; see

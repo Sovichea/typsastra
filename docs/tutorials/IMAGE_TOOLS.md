@@ -27,6 +27,11 @@ resized or re-encoded; animated GIFs remain inspection-only.
 5. Optionally enable replacement of indexed static Typst paths with the saved
    copy.
 
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/b9de3d81-47e7-4b34-b3d8-2fdb4e702e19" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/b9de3d81-47e7-4b34-b3d8-2fdb4e702e19">Open the image optimization guidance demo.</a>
+</video>
+
 The original image is not overwritten automatically. Reference updates apply
 to all indexed exact static references for that asset; v0.7.0 does not offer a
 single-reference-only rewrite. Dynamic paths, package resources, remote assets,

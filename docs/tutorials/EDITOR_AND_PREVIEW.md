@@ -33,6 +33,11 @@ type are reflected in the status and toolbar.
 - Undock the preview to place it in a separate window. Its page position and
   color mode follow the document preview.
 
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/c1278ad8-eca5-43c7-8aed-ba371ee8a14e" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/c1278ad8-eca5-43c7-8aed-ba371ee8a14e">Open the docked and undocked preview demo.</a>
+</video>
+
 ## Source synchronization
 
 Use **Reveal Cursor in Preview** or `Alt+Enter` (`Option+Enter` on macOS) for

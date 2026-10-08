@@ -1,5 +1,7 @@
 # Markdown live preview
 
+![Markdown source and live preview open side by side in Typsastra](../assets/screenshots/screenshot-markdown-preview.png)
+
 Open a `.md` or `.markdown` file inside a Typsastra workspace to activate the
 Markdown editor and live preview. Markdown uses its own renderer: it does not
 start Tinymist, compile Typst, change the configured main file, or discard the
@@ -44,4 +46,3 @@ until a Typst or PDF document becomes active again.
 
 Try the bundled `07-v0.7-feature-showcase/01-markdown-live-preview` example for
 a table, task list, mixed scripts, code, workspace links, and a local image.
-

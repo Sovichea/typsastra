@@ -18,6 +18,26 @@ guides, and contributor documentation.
 
 ![Typsastra's editor, project Explorer, and live PDF preview](assets/screenshots/demo-editor-preview.png)
 
+## Watch feature demos
+
+### Draft Preview
+
+See image placeholders preserve document layout while you work:
+
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db">Watch the Draft Preview demo.</a>
+</video>
+
+### Khmer and document typography
+
+See script-aware font and language settings in a real workspace:
+
+<video controls preload="none" playsinline width="100%">
+  <source src="https://github.com/user-attachments/assets/f58e3133-e900-4a4b-9c63-7dee587b7e90" type="video/mp4">
+  Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/f58e3133-e900-4a4b-9c63-7dee587b7e90">Watch the typography and language tools demo.</a>
+</video>
+
 ## Explore the documentation
 
 Use the navigation to browse tutorials and user references. The [feature
