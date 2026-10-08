@@ -36,7 +36,11 @@ import { WorkspaceExplorer } from "./components/explorer";
 import { SidebarController } from "./sidebar/sidebarController";
 import { TypographyController } from "./typography/typographyController";
 import { PinnedMainTypographyController } from "./typography/pinnedMainTypographyController";
-import { ImageToolsController, type ProjectImageReference } from "./components/imageTools";
+import {
+  ImageToolsController,
+  type ImageToolOptimizationOptions,
+  type ProjectImageReference,
+} from "./components/imageTools";
 import { TinymistLspClient } from "./compiler/lsp";
 import { previewErrorText } from "./compiler/previewError";
 import { DocumentSessionController } from "./session/documentSessionController";
@@ -117,7 +121,7 @@ import { ToolchainController, type SystemToolchain, type ToolchainStatus } from 
 import { ToolchainSetupController, type ToolchainInstallProgress } from "./toolchain/toolchainSetupController";
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { WindowStateController } from "./window/windowStateController";
-import { bindAppEvents } from "./ui/appEventBindings";
+import { bindAppEvents, type DevUiAction } from "./ui/appEventBindings";
 import { ReleaseSummaryController } from "./ui/releaseSummaryController";
 import { ProjectExportController } from "./export/projectExportController";
 import type { DocumentTypography } from "./editor/documentTypography";
@@ -3774,6 +3778,84 @@ export class TypsastraWorkspaceController {
     }
   }
 
+  private async performDevUiAction(action: DevUiAction): Promise<void> {
+    switch (action.action) {
+      case "sidebar-tool":
+        if (action.tool !== "explorer" && !this.workspaceRootPath) {
+          throw new Error("Open a project before using project tools.");
+        }
+        this.sidebarController.setTool(action.tool);
+        return;
+      case "preview-recompile":
+        await this.recompilePreviewManually();
+        return;
+      case "preview-color-mode":
+        this.settingsController.update(settings => {
+          settings.preview.colorMode = action.mode;
+        });
+        return;
+      case "preview-zoom":
+        if (action.direction === "in") this.zoomIn();
+        else if (action.direction === "out") this.zoomOut();
+        else this.zoomToFit();
+        return;
+      case "editor-setting":
+        this.settingsController.update(settings => {
+          settings.editor[action.setting] = action.value;
+        });
+        return;
+      case "image-select":
+        if (!this.workspaceRootPath) throw new Error("Open a project before selecting an image.");
+        this.sidebarController.setTool("images");
+        if (!await this.imageToolsController.selectImage(action.path)) {
+          throw new Error(`Image Tools did not index the requested image: ${action.path}`);
+        }
+        return;
+      case "image-filter":
+        if (!this.workspaceRootPath) throw new Error("Open a project before filtering its images.");
+        this.sidebarController.setTool("images");
+        await this.imageToolsController.setFilter(action.filter, action.query ?? "");
+        return;
+      case "image-preview-optimization": {
+        if (!this.workspaceRootPath) throw new Error("Open a project before optimizing an image.");
+        this.sidebarController.setTool("images");
+        const options: ImageToolOptimizationOptions = {
+          width: action.width,
+          height: action.height,
+          format: action.format,
+          quality: action.quality,
+          crop: action.crop,
+        };
+        if (!await this.imageToolsController.previewOptimization(action.path, options)) {
+          throw new Error(`Image optimization preview failed for: ${action.path}`);
+        }
+        return;
+      }
+      case "table-select":
+        if (!this.workspaceRootPath) throw new Error("Open a project before selecting a table.");
+        if (!this.tableToolController.tableNames().some(table => table.id === action.tableId)) {
+          throw new Error(`No project table has id ${action.tableId}.`);
+        }
+        this.navigateToTableTool(action.tableId);
+        return;
+      case "table-create":
+        if (!this.workspaceRootPath) throw new Error("Open a project before creating a table.");
+        this.sidebarController.setTool("tables");
+        if (!this.tableToolController.createTableFromSample(action.sampleId)) {
+          throw new Error(`Unknown table sample: ${action.sampleId}`);
+        }
+        return;
+      case "table-set-cell":
+        if (!this.workspaceRootPath) throw new Error("Open a project before editing a table.");
+        this.sidebarController.setTool("tables");
+        if (!this.tableToolController.setCellText(action.tableId, action.row, action.column, action.text)) {
+          throw new Error(`Could not set cell ${action.row},${action.column} in table ${action.tableId}.`);
+        }
+        this.tableToolController.selectTable(action.tableId);
+        return;
+    }
+  }
+
 
   private startWorkspaceServices(selected: string): Promise<void> {
     return this.workspaceLifecycleController.startServices(selected);
@@ -3908,6 +3990,7 @@ export class TypsastraWorkspaceController {
       }),
       setProjectMain: path => this.setPinnedMainFile(path),
       openProjectDocument: request => this.openProjectDocumentFromDevApi(request),
+      performDevUiAction: action => this.performDevUiAction(action),
       previewContentMode: () => this.draftPreviewController.mode,
       openLastPreviewExternally: () => this.lastPdfPath ? this.openFileExternally(this.lastPdfPath) : undefined,
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),

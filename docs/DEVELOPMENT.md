@@ -82,11 +82,28 @@ debug app to use another loopback bind address. The API is not started in releas
 - `GET /project/files` returns the current project's files as root-relative paths and marks the main document.
 - `PUT /project/main` with `{"path":"chapter.typ"}` sets a project-relative or absolute `.typ` file as main.
 - `POST /project/open-document` with `{"path":"main.typ","approveLargePreview":true}` opens a Typst document in the editor and can explicitly accept its large-preview confirmation.
+- `GET /project/images` returns indexed image metadata; `GET /project/tables` returns project table summaries.
+- `POST /ui/action` performs the named editor/tool action through the running frontend and returns `202 Accepted`. Example actions:
+  - `{"action":"sidebar-tool","tool":"images"}`
+  - `{"action":"preview-color-mode","mode":"inverted"}`
+  - `{"action":"preview-zoom","direction":"in"}`
+  - `{"action":"preview-recompile"}`
+  - `{"action":"editor-setting","setting":"lineNumbers","value":false}`
+  - `{"action":"image-select","path":"assets/cover.png"}`
+  - `{"action":"image-filter","filter":"unused","query":"cover"}`
+  - `{"action":"image-preview-optimization","path":"assets/cover.png","width":1200,"height":800,"format":"jpeg","quality":80,"crop":{"x":0,"y":0,"width":1200,"height":800}}`
+  - `{"action":"table-create","sampleId":"basic"}`
+  - `{"action":"table-select","tableId":"basic_table"}`
+  - `{"action":"table-set-cell","tableId":"basic_table","row":1,"column":0,"text":"Updated"}`
+- `GET /screenshot/window` returns the main window as a PNG image. Add `restore=true` to show/focus it if hidden or minimized.
+- `GET /screenshot/region?x=40&y=80&width=640&height=400` returns a cropped PNG. Coordinates are physical pixels relative to the top-left of the window screenshot; it also accepts `restore=true`.
 
 Project open/main requests return `202 Accepted` after being handed to the app; the
 frontend performs the normal workspace operation and reflects its result. Project
 file listings omit `.git`, `node_modules`, `target`, and `.typsastra` folders and
 are capped at 50,000 files.
+Screenshot regions must fit within the window and are limited to 32 megapixels.
+Native screenshot capture is currently available on Windows and macOS; Linux returns `501 Not Implemented`.
 
 The log buffer retains up to 10,000 entries. Settings changes are persisted to
 the application's normal `settings.json` and applied in the running app.

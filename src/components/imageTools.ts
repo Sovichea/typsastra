@@ -46,6 +46,14 @@ export type ImageToolCrop = {
   height: number;
 };
 
+export type ImageToolOptimizationOptions = {
+  width: number;
+  height: number;
+  format: "png" | "jpeg" | "webp";
+  quality: number;
+  crop?: ImageToolCrop | null;
+};
+
 export type ImageToolCropOverlay = {
   show(
     rect: ImageToolCrop,
@@ -281,6 +289,47 @@ export class ImageToolsController {
     if (!image) return false;
     await this.commit(image);
     return true;
+  }
+
+  public async setFilter(filter: ImageToolFilter, query = ""): Promise<void> {
+    this.filter = filter;
+    this.query = query.slice(0, 256);
+    if (!this.workspaceRoot) return;
+    if (!this.loaded) {
+      await this.refresh();
+      return;
+    }
+    this.renderSidebar();
+  }
+
+  public async previewOptimization(
+    path: string,
+    options: ImageToolOptimizationOptions,
+  ): Promise<boolean> {
+    if (!await this.selectImage(path)) return false;
+    const image = this.committed;
+    const previewButton = this.inspector.querySelector<HTMLButtonElement>('[data-action="preview"]');
+    const saveButton = this.inspector.querySelector<HTMLButtonElement>('[data-action="save"]');
+    if (!image || !previewButton || !saveButton) return false;
+    const width = this.inspector.querySelector<HTMLInputElement>('[data-field="width"]');
+    const height = this.inspector.querySelector<HTMLInputElement>('[data-field="height"]');
+    const format = this.inspector.querySelector<HTMLSelectElement>('[data-field="format"]');
+    const quality = this.inspector.querySelector<HTMLInputElement>('[data-field="quality"]');
+    if (!width || !height || !format || !quality) return false;
+    width.value = String(options.width);
+    height.value = String(options.height);
+    format.value = options.format;
+    quality.value = String(options.quality);
+    quality.disabled = options.format !== "jpeg";
+    const qualityOutput = quality.nextElementSibling as HTMLOutputElement | null;
+    if (qualityOutput) qualityOutput.textContent = options.format === "jpeg" ? String(options.quality) : "Lossless";
+    this.crop = options.crop ? clampCrop(options.crop, image) : null;
+    this.syncCropFields(image);
+    await this.generateOptimizationPreview(image, {
+      ...options,
+      crop: options.crop ? clampCrop(options.crop, image) : null,
+    }, previewButton, saveButton);
+    return this.generatedPreview !== null;
   }
 
   private filteredImages(): ProjectImageAsset[] {

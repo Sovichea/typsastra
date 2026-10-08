@@ -425,6 +425,26 @@ export class TableToolController {
     this.createFromSample(TABLE_SAMPLES[0]);
   }
 
+  public createTableFromSample(sampleId: string): string | null {
+    const sample = TABLE_SAMPLES.find(candidate => candidate.id === sampleId);
+    if (!sample) return null;
+    this.createFromSample(sample);
+    return this.selectedId;
+  }
+
+  public setCellText(id: string, row: number, column: number, text: string): boolean {
+    const table = this.tables.find(candidate => candidate.id === id);
+    if (!table || !Number.isInteger(row) || !Number.isInteger(column)) return false;
+    const cell = table.rows[row]?.[column];
+    if (!cell || cell.covered) return false;
+    cell.text = text;
+    this.selectedId = id;
+    this.resetSelection();
+    this.refreshGrid(table);
+    this.emitChange();
+    return true;
+  }
+
   /**
    * Recreates the table for an orphaned `//@table:<id>` directive. The id is
    * preserved so the existing linked block reconnects, and the columns and cells

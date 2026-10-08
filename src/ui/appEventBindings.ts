@@ -17,6 +17,40 @@ import { nativeAppMenuOwnsShortcuts } from "../platform/nativeAppMenuSpec";
 
 export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 
+export type DevUiAction =
+  | { action: "sidebar-tool"; tool: "explorer" | "images" | "tables" }
+  | { action: "preview-recompile" }
+  | { action: "preview-color-mode"; mode: PreviewColorMode }
+  | { action: "preview-zoom"; direction: "in" | "out" | "fit" }
+  | {
+      action: "editor-setting";
+      setting:
+        | "wordWrap"
+        | "lineNumbers"
+        | "highlightActiveLine"
+        | "indentationGuides"
+        | "autoCloseBrackets"
+        | "spellcheck"
+        | "wordCompletion"
+        | "showZws"
+        | "visualToolbar";
+      value: boolean;
+    }
+  | { action: "image-select"; path: string }
+  | { action: "image-filter"; filter: "all" | "current" | "referenced" | "unused" | "recommended"; query?: string }
+  | {
+      action: "image-preview-optimization";
+      path: string;
+      width: number;
+      height: number;
+      format: "png" | "jpeg" | "webp";
+      quality: number;
+      crop?: { x: number; y: number; width: number; height: number } | null;
+    }
+  | { action: "table-select"; tableId: string }
+  | { action: "table-create"; sampleId: string }
+  | { action: "table-set-cell"; tableId: string; row: number; column: number; text: string };
+
 export interface AppEventActions {
   previewWindowUpdate: () => PreviewWindowUpdate | null;
   restoreUndockedPreviewScrollPosition: (position: PreviewScrollPositionPayload) => void;
@@ -25,6 +59,7 @@ export interface AppEventActions {
   applyDeveloperLogSettings: (settings: { developerMode: boolean; developerLogs: DeveloperLogSettings }) => void;
   setProjectMain: (path: string) => Promise<void> | void;
   openProjectDocument: (request: { path: string; approveLargePreview: boolean }) => Promise<void> | void;
+  performDevUiAction: (action: DevUiAction) => Promise<void> | void;
   previewContentMode: () => PreviewContentMode;
   openLastPreviewExternally: () => Promise<void> | void;
   handlePdfPreviewClick: (point: PreviewClickPoint) => Promise<void> | void;
@@ -319,6 +354,11 @@ export function bindAppEvents(actions: AppEventActions): void {
         });
       },
     );
+    void listenEvent<DevUiAction>("typsastra-dev-api-ui-action", event => {
+      void Promise.resolve(actions.performDevUiAction(event.payload)).catch(error => {
+        console.error("Developer API UI action failed", error);
+      });
+    });
     void listenEvent<"export-pdf" | "open-external">("preview-window-action", event => {
       if (event.payload === "export-pdf") document.getElementById("action-export-pdf")?.click();
       else void actions.openLastPreviewExternally();
