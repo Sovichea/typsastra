@@ -13,7 +13,8 @@
 
 These writable examples progress from ordinary Typst source to multilingual,
 multi-file research projects. Start with the first two sections, then open the
-example that matches the feature you want to learn.
+example that matches the feature you want to learn. The matching walkthroughs
+are in the #link("https://docs.typsastra.com/")[Typsastra documentation].
 
 == 01. Basics
 
@@ -32,7 +33,7 @@ example that matches the feature you want to learn.
   keyboard-layout detection (the folder name is retained for compatibility).
 - `04-complex-script-typography`: shaping samples for several complex scripts.
 - `05-script-and-direction-samples`: mixed scripts, CJK, and bidirectional
-  rendering samples. First-class RTL editing is planned for v0.9.0.
+  rendering samples. First-class RTL editing remains a future pre-1.0 milestone.
 
 == 03. Language providers
 

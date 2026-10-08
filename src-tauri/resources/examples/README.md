@@ -1,7 +1,7 @@
 # Typsastra examples
 
 This workspace is a writable learning copy installed in a versioned folder in
-your Documents directory, such as `Typsastra Examples v0.7.0`. Open
+your Documents directory, such as `Typsastra Examples v0.9.3`. Open
 `START-HERE.typ` for the recommended order.
 
 Each application release creates and opens its own examples folder. A newer
@@ -18,7 +18,10 @@ provider behavior.
 The source remains ordinary Typst. Generated PDFs, preview caches, downloaded
 providers, and font binaries do not belong in this workspace's bundled source.
 
-Tutorials: <https://github.com/Sovichea/typsastra/tree/main/docs/tutorials>
+Start with the published [Typsastra documentation](https://docs.typsastra.com/).
+Its tutorials explain the workflows demonstrated in these examples. The
+[tutorial sources](https://github.com/Sovichea/typsastra/tree/main/docs/tutorials)
+remain available in the repository.
 
 The Basics section includes a diacritic-aware search fixture for testing exact
 accent matching, accent-insensitive matching, replacement ranges, and the
@@ -35,6 +38,10 @@ The `06-v0.6-feature-showcase` section provides short exercises for:
 These complement the existing multilingual and research projects. The examples
 do not bundle pathological images or private fonts; use your own assets when you
 want to test those machine-specific workflows.
+See the [Draft Preview](https://docs.typsastra.com/tutorials/DRAFT_PREVIEW/),
+[preview synchronization](https://docs.typsastra.com/tutorials/PDF_PREVIEW_AND_SYNC/),
+and [Document Typography](https://docs.typsastra.com/tutorials/DOCUMENT_TYPOGRAPHY/)
+guides for the workflows demonstrated here.
 
 ## v0.7.0 showcase
 
@@ -47,3 +54,8 @@ The `07-v0.7-feature-showcase` section provides exercises for:
 - theme-aware search matches and exact scrollbar-marker navigation;
 - shared preview position across main and included source tabs;
 - machine-local cache accounting and reveal actions in the Storage panel.
+
+See the [Markdown live preview](https://docs.typsastra.com/tutorials/MARKDOWN_PREVIEW/),
+[Image Tools](https://docs.typsastra.com/tutorials/IMAGE_TOOLS/), and
+[Toolchain and storage](https://docs.typsastra.com/tutorials/TOOLCHAIN_AND_STORAGE/)
+guides alongside these exercises.

@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.9.1.
+Typsastra is currently beta software. The latest release is v0.9.3.
 
 Windows users can also install through
 [Windows Package Manager](https://learn.microsoft.com/windows/package-manager/winget/)

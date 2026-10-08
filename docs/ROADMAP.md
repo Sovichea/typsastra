@@ -357,8 +357,7 @@ The long-term research tasks and gates are in the [v2 implementation plan](./V2_
 
 ## Current release status
 
-Typsastra is beta software. The latest release is v0.7.0; see the
-[release notes](./RELEASE_NOTES_V0.7.0.md). Current development targets v0.8.0
-Unicode PDF reliability and interoperability. Later pre-1.0 milestones remain
+Typsastra is beta software. The latest release is v0.9.3; see the
+[release notes](./RELEASE_NOTES_V0.9.3.md). Later pre-1.0 milestones remain
 unassigned until their scope is ready, and v1.0 is gated by demonstrated
 maturity rather than a predetermined version sequence.

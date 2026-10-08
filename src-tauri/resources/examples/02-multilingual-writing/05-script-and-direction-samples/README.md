@@ -5,4 +5,5 @@ bidirectional content, and CJK text.
 
 The bidirectional example demonstrates rendered Typst output only. Typsastra
 does not claim first-class RTL editor navigation, selection, deletion, or mixed-
-direction conformance in v0.6.0; that work is planned for v0.9.0.
+direction conformance in v0.6.0; first-class RTL editing remains a future
+pre-1.0 milestone.
