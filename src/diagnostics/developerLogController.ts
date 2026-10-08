@@ -7,6 +7,7 @@ import type { LogConsoleController } from "./logConsoleController";
 export interface DeveloperLogDependencies {
   logConsole(): LogConsoleController;
   activeFilePath(): string | null;
+  publishApiLog(entry: { kind: string; source: string; message: string; filePath?: string }): void;
   developerLogging(): {
     enabled: boolean;
     categories: Record<DeveloperLogCategory, boolean>;
@@ -29,6 +30,7 @@ export class DeveloperLogController {
   appendDeveloper(entry: LspLogEntry): void {
     const source = entry.source ?? "developer";
     if (!this.isEnabled(this.categoryFor(source))) return;
+    this.deps.publishApiLog({ kind: entry.kind, source, message: entry.message });
     this.deps.logConsole().appendLog({
       kind: entry.kind,
       source,
@@ -45,6 +47,12 @@ export class DeveloperLogController {
     const message = `${event.stage} [revision ${event.revision}]: ${JSON.stringify(event.detail)}`;
     console.info(`[spellcheck debug] ${event.documentKey || "no-document"} ${message}`);
     const filePath = this.deps.activeFilePath() ?? undefined;
+    this.deps.publishApiLog({
+      kind: event.stage.endsWith("failed") ? "warning" : "info",
+      source: "spellcheck debug",
+      message,
+      filePath,
+    });
     this.deps.logConsole().appendLog({
       kind: event.stage.endsWith("failed") ? "warning" : "info",
       source: "spellcheck debug",

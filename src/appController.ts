@@ -1192,6 +1192,12 @@ export class TypsastraWorkspaceController {
   private readonly developerLogController = new DeveloperLogController({
     logConsole: () => this.logConsoleController,
     activeFilePath: () => this.activeFilePath,
+    publishApiLog: entry => {
+      if (!import.meta.env.DEV) return;
+      void invoke("publish_dev_log", { entry }).catch(error => {
+        console.warn("Failed to publish developer log to the local API:", error);
+      });
+    },
     developerLogging: () => ({
       enabled: this.settingsController.value.developerMode,
       categories: this.settingsController.value.developerLogs,
@@ -3753,7 +3759,7 @@ export class TypsastraWorkspaceController {
   private openWorkspace(selected: string): Promise<void> {
     // Opening a project leaves standalone-file mode and drops its temp cache.
     this.discardStandaloneCache();
-    return this.workspaceLifecycleController.open(selected);
+    return this.workspaceLifecycleController.open(selected).then(() => this.syncDevProjectContext());
   }
 
 
@@ -3830,11 +3836,26 @@ export class TypsastraWorkspaceController {
   }
 
   private setPinnedMainFile(path: string | null): Promise<void> {
-    return this.pinnedMainFileController.set(path);
+    return this.pinnedMainFileController.set(path).then(() => this.syncDevProjectContext());
   }
 
   private closeProject(options: { confirmUnsaved?: boolean } = {}): Promise<boolean> {
-    return this.workspaceLifecycleController.close(options);
+    return this.workspaceLifecycleController.close(options).then(async closed => {
+      if (closed) await this.syncDevProjectContext();
+      return closed;
+    });
+  }
+
+  private async syncDevProjectContext(): Promise<void> {
+    if (!import.meta.env.DEV) return;
+    try {
+      await invoke("set_dev_project_context", {
+        workspaceRootPath: this.workspaceRootPath,
+        mainFilePath: this.pinnedMainFilePath,
+      });
+    } catch (error) {
+      console.warn("Failed to update developer API project context:", error);
+    }
   }
 
 
@@ -3869,6 +3890,11 @@ export class TypsastraWorkspaceController {
       changePreviewColorMode: mode => this.settingsController.update(settings => {
         settings.preview.colorMode = mode;
       }),
+      applyDeveloperLogSettings: update => this.settingsController.update(settings => {
+        settings.developerMode = update.developerMode;
+        Object.assign(settings.developerLogs, update.developerLogs);
+      }),
+      setProjectMain: path => this.setPinnedMainFile(path),
       previewContentMode: () => this.draftPreviewController.mode,
       openLastPreviewExternally: () => this.lastPdfPath ? this.openFileExternally(this.lastPdfPath) : undefined,
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),

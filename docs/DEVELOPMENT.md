@@ -67,6 +67,29 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib khmer_reference_provider_f
 - Khmer is the locked reference implementation documented in [KHMER_SPELLCHECK.md](./KHMER_SPELLCHECK.md); its fixtures record the pinned upstream commit and exact editing, normalization, segmentation, and completion behavior.
 - Settings are stored in a versioned `settings.json` in the platform application-config directory.
 
+### Developer log API
+
+Debug builds expose the structured developer log over a loopback-only HTTP API at
+`http://127.0.0.1:17342`. Set `TYPSASTRA_DEV_LOG_API_ADDR` before launching the
+debug app to use another loopback bind address. The API is not started in release builds.
+
+- `GET /health` returns `{ "ok": true }`.
+- `GET /logs?after=<sequence>` returns buffered entries after the optional sequence number.
+- `GET /settings` returns `developerMode` and the `developerLogs` category flags.
+- `PATCH /settings` updates either setting, for example:
+  `{"developerMode":true,"developerLogs":{"preview":false}}`.
+- `POST /project/open` with `{"path":"<project-folder>"}` opens a project in the app.
+- `GET /project/files` returns the current project's files as root-relative paths and marks the main document.
+- `PUT /project/main` with `{"path":"chapter.typ"}` sets a project-relative or absolute `.typ` file as main.
+
+Project open/main requests return `202 Accepted` after being handed to the app; the
+frontend performs the normal workspace operation and reflects its result. Project
+file listings omit `.git`, `node_modules`, `target`, and `.typsastra` folders and
+are capped at 50,000 files.
+
+The log buffer retains up to 10,000 entries. Settings changes are persisted to
+the application's normal `settings.json` and applied in the running app.
+
 ## Preview behavior
 
 Each preview root has a uniquely identified Tinymist task whose iframe is cached across tab switches. Imported files normally preview through the top-level `main.typ` and update on save.

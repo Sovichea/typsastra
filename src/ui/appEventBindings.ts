@@ -7,7 +7,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { PreviewClickPoint } from "../preview/previewFrame";
 import type { PreviewScrollPositionPayload } from "../preview/previewWindowController";
 import type { PreviewContentMode } from "../preview/draftPreviewController";
-import type { PreviewColorMode } from "../settings";
+import type { DeveloperLogSettings, PreviewColorMode } from "../settings";
 import { ApplicationShortcutSequence, shortcutFor, shortcutStrokes, type ShortcutOverrides } from "../platform/shortcutRegistry";
 import { installWelcomeKeyboardNavigation } from "../workspace/welcomeNavigation";
 import { installModalFocusTrap } from "./modalFocus";
@@ -22,6 +22,8 @@ export interface AppEventActions {
   restoreUndockedPreviewScrollPosition: (position: PreviewScrollPositionPayload) => void;
   changePreviewContentMode: (mode: PreviewContentMode) => Promise<void> | void;
   changePreviewColorMode: (mode: PreviewColorMode) => void;
+  applyDeveloperLogSettings: (settings: { developerMode: boolean; developerLogs: DeveloperLogSettings }) => void;
+  setProjectMain: (path: string) => Promise<void> | void;
   previewContentMode: () => PreviewContentMode;
   openLastPreviewExternally: () => Promise<void> | void;
   handlePdfPreviewClick: (point: PreviewClickPoint) => Promise<void> | void;
@@ -298,6 +300,15 @@ export function bindAppEvents(actions: AppEventActions): void {
     });
     void listenEvent<PreviewColorMode>("preview-color-mode-request", event => {
       actions.changePreviewColorMode(event.payload);
+    });
+    void listenEvent<{ developerMode: boolean; developerLogs: DeveloperLogSettings }>(
+      "typsastra-dev-log-settings-updated",
+      event => actions.applyDeveloperLogSettings(event.payload),
+    );
+    void listenEvent<string>("typsastra-dev-api-set-main", event => {
+      void Promise.resolve(actions.setProjectMain(event.payload)).catch(error => {
+        console.error("Failed to set the project main document requested through the developer API", error);
+      });
     });
     void listenEvent<"export-pdf" | "open-external">("preview-window-action", event => {
       if (event.payload === "export-pdf") document.getElementById("action-export-pdf")?.click();

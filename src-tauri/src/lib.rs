@@ -16,6 +16,7 @@ use tokio_tungstenite::{
 };
 
 mod compatibility;
+mod dev_log_api;
 mod enhanced_unicode_toolchain;
 mod examples;
 mod font_store;
@@ -29,6 +30,7 @@ mod templates;
 mod toolchain;
 mod webview_storage;
 use compatibility::{get_linux_renderer_compatibility, prepare_linux_renderer_relaunch};
+use dev_log_api::{DevLogBuffer, DevLogInput, DevProjectState};
 use examples::prepare_examples_workspace;
 use formatted_clipboard::write_formatted_clipboard;
 use pdfium_preview::{
@@ -510,6 +512,29 @@ fn open_devtools(window: tauri::WebviewWindow) {
 #[tauri::command]
 #[cfg(not(debug_assertions))]
 fn open_devtools(_window: tauri::WebviewWindow) {}
+
+#[tauri::command]
+fn publish_dev_log(
+    buffer: tauri::State<'_, Arc<DevLogBuffer>>,
+    entry: DevLogInput,
+) -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        buffer.push(entry);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_dev_project_context(
+    state: tauri::State<'_, Arc<DevProjectState>>,
+    workspace_root_path: Option<String>,
+    main_file_path: Option<String>,
+) -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        state.update(workspace_root_path.as_deref(), main_file_path.as_deref())?;
+    }
+    Ok(())
+}
 
 #[tauri::command]
 async fn install_unicode_font(font_id: String) -> Result<font_store::InstalledFont, String> {
@@ -7907,6 +7932,12 @@ pub fn run() {
     );
     let setup_timings = startup_timings.clone();
     let pending_launch_requests = PendingLaunchRequests::from_process_args();
+    let dev_log_buffer = Arc::new(DevLogBuffer::default());
+    let dev_project_state = Arc::new(DevProjectState::default());
+    #[cfg(debug_assertions)]
+    let setup_dev_log_buffer = dev_log_buffer.clone();
+    #[cfg(debug_assertions)]
+    let setup_dev_project_state = dev_project_state.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -7918,6 +7949,8 @@ pub fn run() {
             }
         })
         .manage(pending_launch_requests)
+        .manage(dev_log_buffer)
+        .manage(dev_project_state)
         .manage(ProjectImportOperations::default())
         .manage(PdfRangeSources::default())
         .manage(PdfiumPreviewState::default())
@@ -7951,6 +7984,18 @@ pub fn run() {
         .manage(segmentation_registry)
         .setup(move |app| {
             let setup_start = Instant::now();
+            #[cfg(debug_assertions)]
+            {
+                let buffer = setup_dev_log_buffer.clone();
+                let project_state = setup_dev_project_state.clone();
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = dev_log_api::serve(buffer, app_handle, project_state).await
+                    {
+                        eprintln!("Developer log API stopped: {error}");
+                    }
+                });
+            }
             let examples_start = Instant::now();
             if let Err(error) = examples::install_examples_workspace(app.handle()) {
                 eprintln!("Failed to install bundled examples: {error}");
@@ -8087,6 +8132,8 @@ pub fn run() {
             install_hunspell_dictionary,
             remove_hunspell_dictionary,
             open_devtools,
+            publish_dev_log,
+            set_dev_project_context,
             complete_language_word,
             prepare_examples_workspace,
             list_tinymist_releases,
