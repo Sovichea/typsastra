@@ -31,6 +31,7 @@ import {
   createTypstAutocomplete,
   isInsideTypstFunctionArgumentsAt,
   isTypstFunctionArgumentContextAt,
+  shouldTriggerQuotedValueCompletion,
   type ProviderCapabilities
 } from "./autocomplete";
 import {
@@ -266,17 +267,33 @@ export function configuredEditorShortcuts(overrides: ShortcutOverrides, getShort
 const functionArgumentCompletionTrigger = EditorView.updateListener.of(update => {
   if (!update.docChanged) return;
   let enteredArgumentSlot = false;
+  let typedQuote = false;
   update.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
-    if (/[,\s]$/u.test(inserted.toString())) enteredArgumentSlot = true;
+    const text = inserted.toString();
+    if (/[,\s]$/u.test(text)) enteredArgumentSlot = true;
+    if (text.endsWith('"')) typedQuote = true;
   });
-  if (!enteredArgumentSlot) return;
 
   const head = update.state.selection.main.head;
-  if (!isTypstFunctionArgumentContextAt(update.state.doc, head)) return;
+  const shouldStartForArgument = enteredArgumentSlot
+    && isTypstFunctionArgumentContextAt(update.state.doc, head);
+  const shouldStartForQuote = typedQuote
+    && shouldTriggerQuotedValueCompletion(update.state.doc, head);
+  if (!shouldStartForArgument && !shouldStartForQuote) return;
   window.setTimeout(() => {
     if (!update.view.dom.isConnected) return;
     const currentHead = update.view.state.selection.main.head;
-    if (!isTypstFunctionArgumentContextAt(update.view.state.doc, currentHead)) return;
+    const stillInArgument = shouldStartForArgument
+      && isTypstFunctionArgumentContextAt(update.view.state.doc, currentHead);
+    const stillInQuotedValue = shouldStartForQuote
+      && shouldTriggerQuotedValueCompletion(update.view.state.doc, currentHead);
+    if (!stillInArgument && !stillInQuotedValue) return;
+    if (stillInQuotedValue) {
+      // Re-open on every typed opening quote, even when CodeMirror still has
+      // an active (possibly stale) result from before the quote was deleted.
+      startCompletion(update.view);
+      return;
+    }
     if (completionStatus(update.view.state) === null) startCompletion(update.view);
   }, 0);
 });

@@ -844,6 +844,42 @@ export function isInsideQuotedValue(doc: Text, cursorPosition: number): boolean 
   return quoted;
 }
 
+export function quotedValueStart(doc: Text, cursorPosition: number): number | null {
+  const line = doc.lineAt(cursorPosition);
+  const cursor = cursorPosition - line.from;
+  let openingQuote = -1;
+  for (let index = 0; index < cursor; index += 1) {
+    if (line.text[index] !== '"' || isEscaped(line.text, index)) continue;
+    openingQuote = openingQuote < 0 ? index : -1;
+  }
+  return openingQuote < 0 ? null : line.from + openingQuote;
+}
+
+export function isTypstPathCompletionContextAt(doc: Text, cursorPosition: number): boolean {
+  const quote = quotedValueStart(doc, cursorPosition);
+  if (quote === null) return false;
+  const line = doc.lineAt(quote);
+  const beforeQuote = line.text.slice(0, quote - line.from);
+  if (/#(?:import|include)\s*$/u.test(beforeQuote)) return true;
+
+  const argumentStart = innermostTypstFunctionArgumentStart(doc, quote);
+  if (argumentStart === null || innermostTypstFunctionName(doc, quote) !== "image") return false;
+  return /^\s*$/u.test(doc.sliceString(argumentStart + 1, quote));
+}
+
+export function typstPathCompletionRequestPosition(
+  doc: Text,
+  cursorPosition: number
+): number | null {
+  return isTypstPathCompletionContextAt(doc, cursorPosition) ? cursorPosition : null;
+}
+
+export function shouldTriggerQuotedValueCompletion(doc: Text, cursorPosition: number): boolean {
+  return isInsideQuotedValue(doc, cursorPosition)
+    && (isStaticTypstCompletionContextAt(doc, cursorPosition)
+      || isInsideTypstFunctionArgumentsAt(doc, cursorPosition));
+}
+
 /**
  * Normalizes a completion that fills a quoted Typst value, so the result is a
  * properly closed string no matter how the server shapes its insert.
@@ -861,6 +897,31 @@ export function quotedValueCompletionEdit(
   to: number,
   insertion: string
 ): { from: number; to: number; insert: string } {
+  // Path completion ranges often start after a directory separator, because
+  // `/` is not part of the identifier the language server replaces. Widen the
+  // edit to the complete quoted value so an inserted full path cannot leave
+  // the user's typed prefix (or separator) stranded before it.
+  const line = doc.lineAt(from);
+  const lineFrom = line.from;
+  const localFrom = from - lineFrom;
+  let openQuote = -1;
+  for (let index = 0; index < localFrom; index += 1) {
+    if (line.text[index] === '"' && !isEscaped(line.text, index)) {
+      openQuote = openQuote < 0 ? index : -1;
+    }
+  }
+  if (openQuote >= 0) {
+    let closeQuote = -1;
+    for (let index = Math.max(localFrom, to - lineFrom); index < line.text.length; index += 1) {
+      if (line.text[index] === '"' && !isEscaped(line.text, index)) {
+        closeQuote = index;
+        break;
+      }
+    }
+    from = lineFrom + openQuote + (insertion.startsWith('"') ? 0 : 1);
+    if (closeQuote >= 0) to = lineFrom + closeQuote + 1;
+  }
+
   // Keep any closing brackets aside so the string can be closed first.
   const brackets = /[)\]}]*$/u.exec(insertion)![0];
   let start = from;
@@ -1315,6 +1376,21 @@ export function createTypstAutocomplete(
           context.state.doc,
           context.pos
         );
+        const quotedPathValueStart = isTypstPathCompletionContextAt(context.state.doc, context.pos)
+          ? quotedValueStart(context.state.doc, context.pos)
+          : null;
+        const quotedPathRequestPosition = typstPathCompletionRequestPosition(
+          context.state.doc,
+          context.pos
+        );
+        const quotedPathCompletionText = quotedPathValueStart === null
+          ? null
+          : context.state.doc.sliceString(quotedPathValueStart + 1, context.pos);
+        if (quotedPathValueStart !== null) {
+          // Let CodeMirror cancel an outdated async path query when the user
+          // types again, while keeping the existing completion tooltip open.
+          context.addEventListener("abort", () => undefined, { onDocChange: true });
+        }
         const isRuleTarget = isTypstRuleTargetAt(
           activeLine.text,
           context.pos - activeLine.from
@@ -1333,7 +1409,8 @@ export function createTypstAutocomplete(
         try {
           let response: LspCompletionResponse;
           if (client && uri) {
-            const requestPosition = quotedArgumentValueStart
+            const requestPosition = quotedPathRequestPosition
+              ?? quotedArgumentValueStart
               ?? typstCompletionRequestPosition(doc, context.pos, isFunctionArgumentStart);
             const position = client.lspPositionFromEditorPosition(doc, requestPosition);
             // Force flush any pending LSP document changes so the server completes
@@ -1407,6 +1484,7 @@ export function createTypstAutocomplete(
           // string always closes, whatever the server's insert looks like. This
           // covers package paths in `#import "…"` as well as argument values.
           const isQuotedValue = fontValueFrom !== null
+            || quotedPathValueStart !== null
             || quotedArgumentValueStart !== null
             || isInsideQuotedValue(context.state.doc, context.pos);
           const variantsByFamily = new Map<string, Set<TypstCompletionSyntaxVariant>>();
@@ -1634,15 +1712,21 @@ export function createTypstAutocomplete(
           const result = {
             from: quotedArgumentValueStart !== null
               ? quotedArgumentValueStart + 1
-              : fontValueFrom ?? word?.from ?? context.pos,
+              : quotedPathValueStart !== null
+                ? quotedPathValueStart + 1
+                : fontValueFrom ?? word?.from ?? context.pos,
             options,
-            validFor: fontValueFrom !== null || quotedArgumentValueStart !== null
+            validFor: fontValueFrom !== null
+              || quotedArgumentValueStart !== null
               ? /^[^"\r\n]*$/
+              : quotedPathCompletionText !== null
+                ? (text: string) => text === quotedPathCompletionText
               : isMemberAccess
                 ? typstMemberCompletionValidFor
                 : isFunctionArgumentStart
                   ? typstArgumentCompletionValidFor
-                  : typstCompletionValidFor
+                  : typstCompletionValidFor,
+            filter: quotedPathValueStart === null ? undefined : false
           };
           if (traceRelevant) {
             onTypstCompletionTrace?.(

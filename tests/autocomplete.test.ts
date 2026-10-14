@@ -21,6 +21,7 @@ import {
   isTypstMemberAccessAt,
   isTypstFunctionArgumentContextAt,
   isInsideQuotedValue,
+  shouldTriggerQuotedValueCompletion,
   isTypstRuleTargetAt,
   languageCompletionRange,
   quotedValueCompletionEdit,
@@ -31,13 +32,16 @@ import {
   preferContextualArgumentCompletions,
   preferContextualArgumentValueCompletions,
   isTypstFunctionArgumentValueContextAt,
+  isTypstPathCompletionContextAt,
   quotedTypstArgumentValueStart,
+  quotedValueStart,
   quotedCompletionEditOffsets,
   readTypstCompletionPreferences,
   recordTypstCompletionPreference,
   typstArgumentDefaultSnippet,
   typstCompletionPreferenceBoost,
   typstCompletionRequestPosition,
+  typstPathCompletionRequestPosition,
   typstCompletionSyntax,
   typstCompletionVariantsByFamily,
   typstArgumentCompletionValidFor,
@@ -567,6 +571,37 @@ describe("LSP autocomplete edits", () => {
     expect(isInsideQuotedValue(Text.of(['#let a = \\"hi']), 13)).toBe(false);
   });
 
+  test("triggers completion immediately after an opening quote in Typst code", () => {
+    const importPath = Text.of(['#import "']);
+    const imagePath = Text.of(['#image("']);
+    const proseQuote = Text.of(['A quoted phrase "']);
+
+    expect(shouldTriggerQuotedValueCompletion(importPath, importPath.length)).toBe(true);
+    expect(shouldTriggerQuotedValueCompletion(imagePath, imagePath.length)).toBe(true);
+    expect(shouldTriggerQuotedValueCompletion(proseQuote, proseQuote.length)).toBe(false);
+  });
+
+  test("keeps path completion scoped to the full import or image path", () => {
+    const image = Text.of(['#image("/assets/contents/c']);
+    const imagePrefix = Text.of(['#image("a']);
+    const imageDirectory = Text.of(['#image("assets/']);
+    const importPath = Text.of(['#import "/assets/contents/c']);
+    const prose = Text.of(['#set text(font: "/assets/contents/c']);
+
+    expect(isTypstPathCompletionContextAt(image, image.length)).toBe(true);
+    expect(isTypstPathCompletionContextAt(imagePrefix, imagePrefix.length)).toBe(true);
+    expect(isTypstPathCompletionContextAt(imageDirectory, imageDirectory.length)).toBe(true);
+    expect(isTypstPathCompletionContextAt(importPath, importPath.length)).toBe(true);
+    expect(isTypstPathCompletionContextAt(prose, prose.length)).toBe(false);
+    expect(quotedValueStart(image, image.length)).toBe('#image('.length);
+    expect(typstPathCompletionRequestPosition(image, image.length)).toBe(image.length);
+    expect(typstPathCompletionRequestPosition(imagePrefix, imagePrefix.length)).toBe(imagePrefix.length);
+    expect(typstPathCompletionRequestPosition(imageDirectory, imageDirectory.length)).toBe(imageDirectory.length);
+    expect(typstPathCompletionRequestPosition(importPath, importPath.length)).toBe(importPath.length);
+    expect(typstPathCompletionRequestPosition(prose, prose.length)).toBeNull();
+    expect(image.sliceString(quotedValueStart(image, image.length)! + 1)).toBe('/assets/contents/c');
+  });
+
   test("completes a package path inside quotes", () => {
     const accept = (line: string, cursor: number, insertion: string): string => {
       const doc = Text.of([line]);
@@ -597,6 +632,37 @@ describe("LSP autocomplete edits", () => {
       expect(accept('#import "', 9, insertion)).toBe(expected);
     }
     expect(accept('#include "q', 11, '"file.typ"')).toBe('#include "file.typ"');
+  });
+
+  test("replaces the entire quoted path when a completion starts after a slash", () => {
+    const accept = (line: string, typed: string, insertion: string, cursor = line.length): string => {
+      const doc = Text.of([line]);
+      const typedFrom = line.lastIndexOf(typed);
+      const range = contextualCompletionEditOffsets(
+        doc,
+        cursor,
+        insertion,
+        undefined,
+        (_text, character) => character,
+        typedFrom,
+        cursor,
+        false
+      );
+      const edit = quotedValueCompletionEdit(doc, range.from, range.to, insertion);
+      return doc.sliceString(0, edit.from) + edit.insert + doc.sliceString(edit.to);
+    };
+
+    expect(accept('#import "/tem', "tem", '/template.typ"'))
+      .toBe('#import "/template.typ"');
+    expect(accept('#image("/assets/', "", '/assets/content/image110.png'))
+      .toBe('#image("/assets/content/image110.png"');
+    const closedImage = '#image("/assets/")';
+    expect(accept(
+      closedImage,
+      "",
+      '/assets/content/image110.png',
+      closedImage.indexOf('")')
+    )).toBe('#image("/assets/content/image110.png")');
   });
 
   test("keeps an escaped quote as content instead of the value terminator", () => {
@@ -858,9 +924,17 @@ describe("LSP autocomplete edits", () => {
   test("explicitly starts completion when typing into a fresh argument slot", async () => {
     const source = await Bun.file(new URL("../src/editor/extensions.ts", import.meta.url)).text();
     expect(source).toContain("const functionArgumentCompletionTrigger = EditorView.updateListener.of");
-    expect(source).toContain("if (/[,\\s]$/u.test(inserted.toString())) enteredArgumentSlot = true");
+    expect(source).toContain("if (/[,\\s]$/u.test(text)) enteredArgumentSlot = true");
+    expect(source).toContain("if (text.endsWith('\"')) typedQuote = true");
+    expect(source).toContain("shouldTriggerQuotedValueCompletion(update.state.doc, head)");
+    expect(source).toContain("if (stillInQuotedValue) {");
+    expect(source).toContain("startCompletion(update.view);");
     expect(source).toContain("if (completionStatus(update.view.state) === null) startCompletion(update.view)");
     expect(source).toContain("functionArgumentCompletionTrigger,");
+
+    const autocomplete = await Bun.file(new URL("../src/editor/autocomplete.ts", import.meta.url)).text();
+    expect(autocomplete).toContain('context.addEventListener("abort", () => undefined, { onDocChange: true })');
+    expect(autocomplete).toContain("(text: string) => text === quotedPathCompletionText");
   });
 
   test("queries before trailing whitespace when an argument slot touches the closing parenthesis", () => {
