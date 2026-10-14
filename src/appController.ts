@@ -2446,8 +2446,7 @@ export class TypsastraWorkspaceController {
     }
     dockButton?.classList.add("hidden");
 
-    const logConsole = document.getElementById("log-console");
-    if (logConsole) logConsole.style.height = "";
+    this.layoutController.resetLogConsoleHeight();
     this.logConsoleController.setVisible(false);
 
     this.updateWorkspaceViewportVisibility();

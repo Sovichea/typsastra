@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { clampEditorPreviewSplitPct } from "../src/layout/layoutController";
+import {
+  clampEditorPreviewSplitPct,
+  LOG_CONSOLE_HEIGHT_STORAGE_KEY,
+  normalizeLogConsoleHeight,
+  resizeBodyClass,
+} from "../src/layout/layoutController";
 
 describe("preview dock layout", () => {
   test("keeps the docked split separate from the temporary undocked width", async () => {
@@ -51,6 +56,23 @@ describe("preview dock layout", () => {
     expect(layout).toContain("public reconcileDockedPaneWidths(): void");
     expect(layout).toContain("this.minimumPreviewToolbarWidth()");
     expect(app).toContain("this.layoutController.reconcileDockedPaneWidths()");
+  });
+
+  test("resizing the log console does not activate the preview-hiding resize overlay", () => {
+    expect(resizeBodyClass("log-console-resizer")).toBe("typsastra-log-console-resizing");
+    expect(resizeBodyClass("editor-preview-resizer")).toBe("typsastra-resizing");
+  });
+
+  test("uses one app-wide log console size and clamps it to the current window", async () => {
+    expect(LOG_CONSOLE_HEIGHT_STORAGE_KEY).toBe("typsastra-log-console-height");
+    expect(normalizeLogConsoleHeight(400, 1000)).toBe(400);
+    expect(normalizeLogConsoleHeight(900, 1000)).toBe(800);
+    expect(normalizeLogConsoleHeight(20, 1000)).toBe(100);
+
+    const workspaceState = await Bun.file(
+      new URL("../src/workspace/workspaceStateStore.ts", import.meta.url),
+    ).text();
+    expect(workspaceState).not.toContain("logConsoleHeight");
   });
 
   test("transfers the active PDF viewport between docked and undocked frames", async () => {

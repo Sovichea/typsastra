@@ -13,6 +13,23 @@ export function clampEditorPreviewSplitPct(
   return Math.max(10, Math.min(requestedInputPct, maximumInputPct));
 }
 
+export function resizeBodyClass(resizerId: string): "typsastra-resizing" | "typsastra-log-console-resizing" {
+  return resizerId === "log-console-resizer"
+    ? "typsastra-log-console-resizing"
+    : "typsastra-resizing";
+}
+
+export const LOG_CONSOLE_HEIGHT_STORAGE_KEY = "typsastra-log-console-height";
+const defaultLogConsoleHeightPx = 168;
+
+export function normalizeLogConsoleHeight(height: number, viewportHeight: number): number {
+  const finiteHeight = Number.isFinite(height) ? height : defaultLogConsoleHeightPx;
+  const finiteViewportHeight = Number.isFinite(viewportHeight) && viewportHeight > 0
+    ? viewportHeight
+    : defaultLogConsoleHeightPx;
+  return Math.max(100, Math.min(finiteHeight, finiteViewportHeight * 0.8));
+}
+
 export class LayoutController {
   private static readonly dragThresholdPx = 4;
   private readonly interruptResizeCallbacks = new Set<() => void>();
@@ -35,7 +52,8 @@ export class LayoutController {
   }
 
   public recoverInterruptedResize(): boolean {
-    const wasResizing = document.body.classList.contains("typsastra-resizing");
+    const wasResizing = document.body.classList.contains("typsastra-resizing")
+      || document.body.classList.contains("typsastra-log-console-resizing");
     for (const interrupt of this.interruptResizeCallbacks) interrupt();
     document.querySelectorAll<HTMLElement>(".resizer.resizing, .horizontal-resizer.resizing")
       .forEach(resizer => resizer.classList.remove("resizing"));
@@ -240,12 +258,47 @@ export class LayoutController {
     const logResizer = document.getElementById("log-console-resizer");
     const logConsole = document.getElementById("log-console");
     if (logResizer && logConsole) {
+      const storedHeight = this.readLogConsoleHeight();
+      if (storedHeight !== null) logConsole.style.height = `${storedHeight}px`;
       this.installDragResize(logResizer, "row-resize", event => {
         const statusBarHeight = document.getElementById("status-bar")?.offsetHeight || 26;
         const height = window.innerHeight - event.clientY - statusBarHeight;
-        logConsole.style.height = `${Math.max(100, Math.min(height, window.innerHeight * 0.8))}px`;
+        logConsole.style.height = `${normalizeLogConsoleHeight(height, window.innerHeight)}px`;
+      }, () => {
+        const height = normalizeLogConsoleHeight(
+          Number.parseFloat(logConsole.style.height) || defaultLogConsoleHeightPx,
+          window.innerHeight,
+        );
+        try {
+          window.localStorage.setItem(LOG_CONSOLE_HEIGHT_STORAGE_KEY, String(height));
+        } catch {
+          // Keep the resized value for this app session if storage is unavailable.
+        }
       });
       logResizer.addEventListener("dblclick", this.onHideLogConsole);
+    }
+  }
+
+  public resetLogConsoleHeight(): void {
+    const logConsole = document.getElementById("log-console");
+    if (logConsole) logConsole.style.height = "";
+    try {
+      window.localStorage.removeItem(LOG_CONSOLE_HEIGHT_STORAGE_KEY);
+    } catch {
+      // The stylesheet's default height still applies for this session.
+    }
+  }
+
+  private readLogConsoleHeight(): number | null {
+    try {
+      const stored = window.localStorage.getItem(LOG_CONSOLE_HEIGHT_STORAGE_KEY);
+      if (stored === null) return null;
+      const height = Number(stored);
+      return Number.isFinite(height) && height > 0
+        ? normalizeLogConsoleHeight(height, window.innerHeight)
+        : null;
+    } catch {
+      return null;
     }
   }
 
@@ -297,14 +350,14 @@ export class LayoutController {
 
   private beginResize(resizer: HTMLElement, cursor: string): void {
     resizer.classList.add("resizing");
-    document.body.classList.add("typsastra-resizing");
+    document.body.classList.add(resizeBodyClass(resizer.id));
     document.body.style.cursor = cursor;
     document.body.style.userSelect = "none";
   }
 
   private endResize(resizer: HTMLElement): void {
     resizer.classList.remove("resizing");
-    document.body.classList.remove("typsastra-resizing");
+    document.body.classList.remove(resizeBodyClass(resizer.id));
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
   }
