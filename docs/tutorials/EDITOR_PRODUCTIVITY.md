@@ -35,6 +35,10 @@ mouse.
 - Per-tab undo history is restored when switching between open documents.
 - **Show ZWS** makes zero-width spaces visible while editing script-sensitive
   text; it changes presentation, not the underlying Typst source.
+- Tinymist references can mark `#let` functions and variables that have no other
+  references in the current workspace. The dotted underline is a hint, not an
+  error; a symbol may still be part of an API used by a project outside the
+  current workspace.
 - Drag images from Explorer into a Typst document, or paste an image from the
   clipboard. Typsastra saves a collision-safe project asset and inserts a
   relative Typst image reference.

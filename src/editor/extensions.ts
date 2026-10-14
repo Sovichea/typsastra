@@ -43,6 +43,7 @@ import {
 import { bracketMatching } from "@codemirror/language";
 import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
+import { unusedBindingsExtension } from "./unusedBindings";
 import type { TinymistLspClient } from "../compiler/lsp";
 import {
   EXPLORER_IMAGE_DRAG_TYPE,
@@ -956,6 +957,7 @@ export function getEditorExtensions(
     activeLineCompartment.of([highlightActiveLineGutter(), highlightActiveLine()]),
     drawSelection(), selectionStateClass, dropCursor(), history(),
     languageCompartment.of(typstLanguage),
+    unusedBindingsExtension(getClient, getUri, flushLspSync),
     baseEditorLayoutTheme,
     scrollPastDocumentEnd(),
     wrappedLineIndentation,

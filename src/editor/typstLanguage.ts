@@ -48,7 +48,8 @@ const hashKeywordWords = /^(?:let|set|show|import|include|if|else|for|in|while|b
 const atomWords = /^(?:none|auto|true|false)$/;
 
 // Code mode keyword pattern
-const codeKeywordRegex = /^(?:let|set|show|import|include|if|else|for|in|while|break|continue|return|context|as)\b/;
+const codeKeywordRegex = /^(?:let|set|show|import|include|if|else|for|in|while|break|continue|return|context|as)(?![\p{L}\p{N}_-])/u;
+const codeAtomRegex = /^(?:none|auto|true|false)(?![\p{L}\p{N}_-])/u;
 
 function classifyHashToken(rest: string): string {
   const nextWordMatch = rest.match(identifierRegex);
@@ -599,7 +600,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
       if (stream.match(codeKeywordRegex)) return "keyword";
 
       // Atoms / Bools
-      if (stream.match(/^(?:none|auto|true|false)\b/)) return "atom";
+      if (stream.match(codeAtomRegex)) return "atom";
 
       // Numbers (with unit support)
       if (stream.match(/0x[0-9a-fA-F]+\b/) ||

@@ -126,6 +126,21 @@ describe("Typst stream language", () => {
     expect(tokenName(tokens, "1.2e-3")).toBe("number");
   });
 
+  test("does not color keyword prefixes inside declared identifiers as keywords", () => {
+    const tokens = parseTokens([
+      "#let set-chapter(kicker) = kicker",
+      "#let context-note(value) = value",
+      "#let true-value = 1",
+      "#let none_more = 2",
+    ].join("\n"));
+
+    expect(tokenName(tokens, "set-chapter")).toBe("function");
+    expect(tokenName(tokens, "context-note")).toBe("function");
+    expect(tokens.filter(token => token.name === "keyword").map(token => token.text))
+      .toEqual(["let", "let", "let", "let"]);
+    expect(tokens.filter(token => token.name === "atom").map(token => token.text)).toEqual([]);
+  });
+
   test("separates a variable receiver from a called method", () => {
     const tokens = parseTokens("#values.at(0)");
 

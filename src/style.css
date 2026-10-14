@@ -4512,6 +4512,13 @@ body.table-tools-active #code-render-pane {
   background: color-mix(in srgb, var(--ui-accent-color) 8%, transparent);
 }
 
+.cm-unused-binding {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--ui-warning-color);
+  text-underline-offset: 3px;
+}
+
 .cm-editor .cm-selectionMatch,
 .cm-editor .cm-searchMatch {
   background: var(--ui-search-match-background);
