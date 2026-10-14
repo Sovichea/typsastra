@@ -47,6 +47,11 @@ export type PreviewSyncDependencies = {
 };
 
 const PDF_SOURCE_MAP_READY_TIMEOUT_MS = 60_000;
+// Large documents may take several seconds to resolve a source-map click,
+// particularly after a failed compilation. Do not discard a valid response
+// simply because it arrived more than 1.5 seconds after the click.
+const PDF_INVERSE_RESPONSE_TIMEOUT_MS = 60_000;
+const PDF_INVERSE_DOCUMENT_READY_TIMEOUT_MS = 8_000;
 
 export class PreviewSyncController {
   private forwardTimer: number | null = null;
@@ -72,8 +77,14 @@ export class PreviewSyncController {
     this.pendingPreviewClick = { ...point, timestamp: Date.now() };
   }
 
-  public hasRecentPreviewClick(maxAgeMs = 1500): boolean {
+  public hasRecentPreviewClick(maxAgeMs = PDF_INVERSE_RESPONSE_TIMEOUT_MS): boolean {
     return this.pendingPreviewClick !== null && Date.now() - this.pendingPreviewClick.timestamp <= maxAgeMs;
+  }
+
+  public consumePreviewClick(): boolean {
+    const pending = this.hasRecentPreviewClick();
+    this.pendingPreviewClick = null;
+    return pending;
   }
 
   public schedule(delayMs: number): void {
@@ -340,7 +351,7 @@ export class PreviewSyncController {
       this.log("inverse sync", "warning", `Skipped PDF inverse sync: position=${!!position}, client=${!!client}, root=${context.rootPath ?? "n/a"}, task=${context.taskId ?? "n/a"}, lspReady=${this.dependencies.isReady()}.`);
       return false;
     }
-    const session = await sourceMap.ensureSession(
+    let session = await sourceMap.ensureSession(
       client,
       nativeFilePath(context.rootPath),
       context.taskId,
@@ -351,9 +362,31 @@ export class PreviewSyncController {
       this.log("inverse sync", "warning", "Skipped PDF inverse sync: source-map socket unavailable.");
       return false;
     }
-    if (!await sourceMap.waitForDocument(session.socket, PDF_SOURCE_MAP_READY_TIMEOUT_MS)) {
-      this.log("inverse sync", "warning", "Skipped PDF inverse sync: source-map document did not become ready.");
-      return false;
+    if (!await sourceMap.waitForDocument(session.socket, PDF_INVERSE_DOCUMENT_READY_TIMEOUT_MS)) {
+      session = await sourceMap.recoverUnreadySession(
+        client, nativeFilePath(context.rootPath), context.taskId, context.refreshStyle, "inverse sync",
+      );
+      if (!session) {
+        this.log("inverse sync", "warning", "Skipped PDF inverse sync: source-map task could not be restarted.");
+        return false;
+      }
+      const activePath = this.dependencies.getActiveFilePath();
+      const editor = this.dependencies.getEditor();
+      const target = activePath && editor
+        ? await this.dependencies.mapPdfForwardTarget?.(activePath, editor.state.selection.main.head)
+        : null;
+      if (target) {
+        await sourceMap.ensureWarm(session.socket, () => client.scrollPreview(session!.taskId, {
+          event: "panelScrollTo",
+          filepath: nativeFilePath(target.filepath),
+          line: target.line,
+          character: target.character,
+        }), PDF_INVERSE_DOCUMENT_READY_TIMEOUT_MS);
+      }
+      if (!await sourceMap.waitForDocument(session.socket, PDF_INVERSE_DOCUMENT_READY_TIMEOUT_MS)) {
+        this.log("inverse sync", "warning", "Skipped PDF inverse sync: restarted source-map task still has no ready document.");
+        return false;
+      }
     }
     this.recordPreviewClick(point);
     this.log("inverse sync", "info", `Sending compiler inverse position: page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}, root=${context.rootPath}.`);

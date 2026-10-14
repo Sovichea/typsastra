@@ -90,7 +90,7 @@ export class PreviewSourceNavigationController {
       "inverse sync",
       `Compiler source response: uri=${uri ?? "n/a"}, line=${position.line}, character=${position.character ?? 0}.`,
     );
-    if (!this.deps.previewSync.hasRecentPreviewClick()) {
+    if (!this.deps.previewSync.consumePreviewClick()) {
       this.deps.log(
         "warning",
         "inverse sync",

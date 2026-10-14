@@ -40,6 +40,7 @@ export class SourceMapSessionController {
   private resolveDocumentReady: ((ready: boolean) => void) | null = null;
   private warmupSocket: WebSocket | null = null;
   private warmup: Promise<boolean> | null = null;
+  private recovery: Promise<SourceMapSession | null> | null = null;
 
   constructor(private readonly dependencies: SourceMapSessionDependencies) {}
 
@@ -159,6 +160,29 @@ export class SourceMapSessionController {
     this.reset();
     if (taskId && client) await client.stopPreview(taskId);
     return taskId;
+  }
+
+  /** Restart a connected task that never published a source-map document. */
+  public recoverUnreadySession(
+    client: TinymistLspClient,
+    rootPath: string,
+    taskId: string,
+    refreshStyle: PreviewRefreshStyle,
+    source: SourceMapLogSource,
+  ): Promise<SourceMapSession | null> {
+    if (this.recovery) return this.recovery;
+    const recovery = (async () => {
+      this.dependencies.log(source, "warning", "Source-map task connected without a ready document; restarting the hidden task.");
+      await this.retire(client);
+      return this.ensureSession(client, rootPath, taskId, refreshStyle, source);
+    })();
+    this.recovery = recovery;
+    void recovery.then(() => {
+      if (this.recovery === recovery) this.recovery = null;
+    }, () => {
+      if (this.recovery === recovery) this.recovery = null;
+    });
+    return recovery;
   }
 
   private async startSession(

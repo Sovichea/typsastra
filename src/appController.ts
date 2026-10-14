@@ -1854,6 +1854,7 @@ export class TypsastraWorkspaceController {
     updateManualForwardSyncAction: () => this.updateManualForwardSyncAction(),
     setLspStatus: status => this.setLspStatus(status),
     scheduleSourceMapWarmup: generation => this.schedulePdfSourceMapWarmup(generation),
+    retireRecoveredSourceMap: () => this.retirePdfSourceMapSession("successful PDF recovery after a failed compile"),
     recoverTinymistPreviewAfterUnexpectedStop: (contents, generation) =>
       this.recoverTinymistPreviewAfterUnexpectedStop(contents, generation),
     isRenderCachePath: path => this.isRenderCachePath(path),

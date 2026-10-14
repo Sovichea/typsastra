@@ -97,6 +97,7 @@ export interface PdfPreviewRenderDependencies {
   updateManualForwardSyncAction(): void;
   setLspStatus(status: LspStatus): void;
   scheduleSourceMapWarmup(generation: number): void;
+  retireRecoveredSourceMap(): Promise<void>;
   recoverTinymistPreviewAfterUnexpectedStop(contents: string, failedGeneration: number): Promise<boolean>;
   isRenderCachePath(path: string): boolean;
   mapToOriginalPath(path: string): string;
@@ -600,6 +601,12 @@ export class PdfPreviewRenderController {
       this.deps.log("info", "preview scheduler", `Render generation ${generation}: PDF presentation complete.`);
       renderSucceeded = true;
       this.deps.onRenderSucceeded();
+      if (!lowMemoryMode && this.previewFailureAt !== null) {
+        // A failed compile can leave Tinymist's hidden source-map task on the
+        // last valid snapshot. Re-register it for this recovered PDF without
+        // restarting the entire language server.
+        await this.deps.retireRecoveredSourceMap();
+      }
       this.deps.scheduleSourceMapWarmup(generation);
       await this.deps.performance.logMemoryDiagnostics(`render ${generation}: after PDF presentation`);
       window.setTimeout(() => {
