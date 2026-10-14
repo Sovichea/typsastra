@@ -11,6 +11,12 @@ on:
         required: false
         type: string
 
+# Every matrix leg updates the same draft release and updater metadata. Keep
+# rebuilds for a tag from racing one another, especially after a tag is moved.
+concurrency:
+  group: release-${{ github.event.inputs.release_tag || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   release:
     name: Build Release (${{ matrix.name }})
@@ -18,6 +24,9 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
+      # tauri-action replaces existing release assets, so concurrent matrix
+      # legs can race while deleting/uploading release assets and signatures.
+      max-parallel: 1
       matrix:
         include:
           - name: Windows x64

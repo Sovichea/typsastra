@@ -905,15 +905,22 @@ mod tests {
 
     #[test]
     fn rejects_images_outside_the_workspace() {
-        let workspace = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
+        let parent = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir_in(parent.path()).unwrap();
+        let outside = tempfile::tempdir_in(parent.path()).unwrap();
         let image = outside.path().join("private.png");
         let mut png = vec![0u8; 24];
         png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
         png[16..20].copy_from_slice(&400u32.to_be_bytes());
         png[20..24].copy_from_slice(&300u32.to_be_bytes());
         fs::write(&image, png).unwrap();
-        let source = format!("#image(\"{}\")", image.to_string_lossy().replace('\\', "/"));
+        let relative_outside = Path::new("..")
+            .join(outside.path().file_name().unwrap())
+            .join("private.png");
+        let source = format!(
+            "#image(\"{}\")",
+            relative_outside.to_string_lossy().replace('\\', "/")
+        );
         let prepared = prepare_draft_images(
             workspace.path(),
             &workspace.path().join("main.typ"),
