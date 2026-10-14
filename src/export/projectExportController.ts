@@ -182,6 +182,7 @@ export class ProjectExportController {
         operationId,
         sourceCode: targetContent,
         filePath: targetFilePath,
+        workspaceRootPath,
       });
       this.throwIfPdfExportCancelled();
       this.activePdfOperationId = null;

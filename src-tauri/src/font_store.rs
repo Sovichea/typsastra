@@ -399,6 +399,62 @@ pub fn list_system_fonts(private_directories: &[PathBuf]) -> SystemFontCatalog {
     }
 }
 
+/// Typst CLI font paths are directories, so expand a selected private folder to
+/// the directories that actually contain loadable fonts. The UI's fontdb scan
+/// is recursive already; compiler launches must use the same set of fonts.
+pub fn compiler_private_font_directories(selected: &[PathBuf]) -> Vec<PathBuf> {
+    let mut discovered = Vec::new();
+    let mut seen = BTreeSet::new();
+    for root in selected {
+        let mut pending = vec![root.clone()];
+        while let Some(dir) = pending.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            let mut contains_font = false;
+            let mut entries = entries.flatten().collect::<Vec<_>>();
+            entries.sort_by_key(|entry| entry.path());
+            let mut children = Vec::new();
+            for entry in entries {
+                let path = entry.path();
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                if file_type.is_symlink() {
+                    continue;
+                }
+                if file_type.is_dir() {
+                    children.push(path);
+                } else if file_type.is_file()
+                    && path
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| {
+                            matches!(
+                                extension.to_ascii_lowercase().as_str(),
+                                "ttf" | "otf" | "ttc" | "otc"
+                            )
+                        })
+                    && std::fs::File::open(&path).ok().is_some_and(|mut file| {
+                        let mut signature = [0; 4];
+                        file.read_exact(&mut signature).is_ok() && valid_font(&signature)
+                    })
+                {
+                    contains_font = true;
+                }
+            }
+            pending.extend(children.into_iter().rev());
+            if contains_font {
+                let path = dunce::canonicalize(&dir).unwrap_or(dir);
+                if seen.insert(path.clone()) {
+                    discovered.push(path);
+                }
+            }
+        }
+    }
+    discovered
+}
+
 pub fn inspect_private_font_directory(
     path: &Path,
     configured_private_directories: &[PathBuf],
@@ -689,6 +745,31 @@ mod tests {
             .document_all
             .iter()
             .any(|family| family == "Fira Mono"));
+    }
+
+    #[test]
+    fn discovers_valid_fonts_nested_under_a_selected_private_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("typefaces/khmer");
+        let empty = root.path().join("typefaces/empty");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::create_dir_all(&empty).unwrap();
+        let fira = BASE_FONTS
+            .iter()
+            .find(|font| font.file_name.contains("FiraMono-Regular"))
+            .unwrap();
+        std::fs::write(nested.join("FiraMono.ttf"), fira.bytes).unwrap();
+        std::fs::write(empty.join("broken.ttf"), b"not a font").unwrap();
+
+        let inspection = inspect_private_font_directory(root.path(), &[]).unwrap();
+        assert!(inspection
+            .families
+            .iter()
+            .any(|family| family == "Fira Mono"));
+        assert_eq!(
+            compiler_private_font_directories(&[root.path().to_path_buf()]),
+            vec![dunce::canonicalize(nested).unwrap()],
+        );
     }
 
     #[test]

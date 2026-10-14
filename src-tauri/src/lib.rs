@@ -145,7 +145,9 @@ fn compiler_font_directories(
     start: &Path,
 ) -> Vec<PathBuf> {
     let mut paths = workspace_font_directories(app_local_data_dir, start);
-    for private_path in private_font_directories(app_handle, start) {
+    for private_path in
+        font_store::compiler_private_font_directories(&private_font_directories(app_handle, start))
+    {
         if !paths.iter().any(|path| path == &private_path) {
             paths.push(private_path);
         }
@@ -4921,6 +4923,23 @@ async fn inspect_pdf_export_compiler(
     Ok(provenance)
 }
 
+fn pdf_export_font_lookup_root(
+    workspace_root_path: Option<&str>,
+    input_parent: &Path,
+) -> Result<PathBuf, String> {
+    match workspace_root_path {
+        Some(root) => {
+            let path = dunce::canonicalize(root)
+                .map_err(|error| format!("Unable to resolve PDF export workspace root: {error}"))?;
+            if !path.is_dir() {
+                return Err("PDF export workspace root is not a directory.".into());
+            }
+            Ok(path)
+        }
+        None => Ok(input_parent.to_path_buf()),
+    }
+}
+
 #[tauri::command]
 async fn compile_typst_document(
     app_handle: tauri::AppHandle,
@@ -4928,6 +4947,7 @@ async fn compile_typst_document(
     operation_id: String,
     source_code: String,
     file_path: String,
+    workspace_root_path: Option<String>,
 ) -> Result<String, String> {
     use tauri::Manager;
     if !state.operations.lock().unwrap().contains(&operation_id) {
@@ -4935,6 +4955,7 @@ async fn compile_typst_document(
     }
     let path = std::path::Path::new(&file_path);
     let parent = path.parent().unwrap_or(std::path::Path::new(""));
+    let font_lookup_root = pdf_export_font_lookup_root(workspace_root_path.as_deref(), parent)?;
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
@@ -4969,7 +4990,7 @@ async fn compile_typst_document(
 
     let mut command = std::process::Command::new(&compiler_cmd);
     command.current_dir(parent);
-    apply_workspace_font_paths(&mut command, &app_handle, &data_dir, parent);
+    apply_workspace_font_paths(&mut command, &app_handle, &data_dir, &font_lookup_root);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
 
@@ -5039,10 +5060,37 @@ fn warning_only_pdf_result(output_path: &Path, stderr: &str) -> bool {
 mod export_compile_tests {
     use super::{
         commit_pdf_export_at, commit_pdf_export_at_with_replace, parse_typst_compiler_version,
-        terminate_pdf_export_process, validate_staged_pdf, warning_only_pdf_result,
-        PdfExportCompilerKind, PdfExportCompilerSelection, PdfExportOperations,
-        PdfExportProvenance,
+        pdf_export_font_lookup_root, terminate_pdf_export_process, validate_staged_pdf,
+        warning_only_pdf_result, workspace_private_font_directories, PdfExportCompilerKind,
+        PdfExportCompilerSelection, PdfExportOperations, PdfExportProvenance,
     };
+
+    #[test]
+    fn export_discovers_workspace_private_fonts_outside_the_render_cache() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("project");
+        let fonts = root.join("fonts/private");
+        let mirror = directory.path().join("cache/render");
+        std::fs::create_dir_all(&fonts).unwrap();
+        std::fs::create_dir_all(root.join(".typsastra")).unwrap();
+        std::fs::create_dir_all(&mirror).unwrap();
+        std::fs::write(
+            root.join(".typsastra/local.json"),
+            r#"{"privateFontDirectories":["fonts/private"]}"#,
+        )
+        .unwrap();
+
+        let lookup_root = pdf_export_font_lookup_root(root.to_str(), &mirror).unwrap();
+        assert_eq!(
+            workspace_private_font_directories(&lookup_root),
+            vec![fonts]
+        );
+        assert_eq!(
+            pdf_export_font_lookup_root(None, &mirror).unwrap(),
+            mirror,
+            "standalone exports keep their source-directory fallback"
+        );
+    }
 
     #[test]
     fn accepts_only_warning_output_that_produced_a_fresh_pdf() {
@@ -6982,7 +7030,11 @@ async fn start_tinymist_lsp(
         .map(|workspace_root| {
             compiler_font_directories(&app_handle, &data_dir, Path::new(workspace_root))
         })
-        .unwrap_or_else(|| configured_private_font_directories(&app_handle));
+        .unwrap_or_else(|| {
+            font_store::compiler_private_font_directories(&configured_private_font_directories(
+                &app_handle,
+            ))
+        });
     if !font_paths.is_empty() {
         if let Ok(value) = std::env::join_paths(font_paths) {
             command.env("TYPST_FONT_PATHS", value);

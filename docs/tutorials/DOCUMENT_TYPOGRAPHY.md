@@ -89,8 +89,10 @@ into `.typsastra` or included in project exports.
 
 If a font must remain private or should not be installed into the operating
 system, open **Settings → Editor → Private local font directories** and add the
-folder containing it. Typsastra validates the folder before saving it and
-rejects family names that collide with an existing system or private font.
+folder containing it. Typsastra scans child folders for supported fonts and
+passes their directories to the compiler for preview and export. It validates
+the folder before saving it and rejects family names that collide with an
+existing system or private font.
 
 Document Typography lists families in this order:
 
