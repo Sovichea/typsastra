@@ -24,9 +24,6 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
-      # tauri-action replaces existing release assets, so concurrent matrix
-      # legs can race while deleting/uploading release assets and signatures.
-      max-parallel: 1
       matrix:
         include:
           - name: Windows x64
