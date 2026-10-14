@@ -66,6 +66,17 @@ describe("image tool crop", () => {
     expect(source).toContain("const next = preferredNext ?? lookup(this.committed?.path);");
   });
 
+  test("refreshes a stale project image index when reopening Image Tools", async () => {
+    const source = await Bun.file(
+      new URL("../src/components/imageTools.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("private indexStale = true;");
+    expect(source).toContain("this.indexStale = true;");
+    expect(source).toContain("this.indexStale = false;");
+    expect(source).toContain("if (this.workspaceRoot && (!this.loaded || this.indexStale)) void this.refresh();");
+  });
+
   test("sends crop parameters to the native preview pipeline", async () => {
     const native = await Bun.file(new URL("../src-tauri/src/lib.rs", import.meta.url)).text();
 

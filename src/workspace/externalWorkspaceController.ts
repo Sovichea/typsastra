@@ -19,6 +19,7 @@ export interface ExternalWorkspaceControllerPort {
   lspClient(): TinymistLspClient | undefined;
   lspReady(): boolean;
   loadExplorer(rootPath: string): Promise<void>;
+  markImageToolsStale(): void;
   refreshImageTools(): void;
   /** Rescans the workspace for //@table:<id> anchors after an external write. */
   refreshTableDirectives(): void;
@@ -89,6 +90,7 @@ export class ExternalWorkspaceController {
       await this.port.loadExplorer(workspaceRoot);
       return;
     }
+    this.port.markImageToolsStale();
     this.port.log("info", `Accepted workspace ${change.kind}: ${acceptedPaths.join(", ")}`);
 
     // Diagnostics describe the previous workspace snapshot. An external edit can

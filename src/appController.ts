@@ -1387,6 +1387,7 @@ export class TypsastraWorkspaceController {
     lspClient: () => this.lspClient,
     lspReady: () => this.lspReady,
     loadExplorer: rootPath => this.explorer.loadWorkspace(rootPath),
+    markImageToolsStale: () => this.imageToolsController.markIndexStale(),
     refreshImageTools: () => { void this.imageToolsController.refresh(); },
     refreshTableDirectives: () => { void this.refreshTableDirectiveIndex(true); },
     imageToolsActive: () => this.sidebarController.activeTool === "images",

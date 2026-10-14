@@ -115,6 +115,7 @@ export class ImageToolsController {
   private filter: ImageToolFilter = "all";
   private query = "";
   private loaded = false;
+  private indexStale = true;
   private generation = 0;
   private generatedPreview: ImageToolPreviewResult | null = null;
   private originalProxy: ImageToolPreviewResult | null = null;
@@ -155,6 +156,7 @@ export class ImageToolsController {
     this.originalProxy = null;
     this.query = "";
     this.loaded = false;
+    this.indexStale = true;
     this.pendingPreferredImagePath = null;
     this.imageExpandedPaths = [];
     this.imageKnownDirectoryPaths = [];
@@ -195,6 +197,7 @@ export class ImageToolsController {
     this.images = index.images;
     this.scannedTypstFiles = index.scannedTypstFiles;
     this.loaded = true;
+    this.indexStale = false;
 
     // A concurrent refresh may win the generation race; honor a preferred
     // image recorded by the save/replace flow so the panel still switches.
@@ -235,7 +238,7 @@ export class ImageToolsController {
     this.sidebar.classList.remove("hidden");
     this.inspector.classList.remove("hidden");
     this.comparison.classList.add("hidden");
-    if (this.workspaceRoot && !this.loaded) void this.refresh();
+    if (this.workspaceRoot && (!this.loaded || this.indexStale)) void this.refresh();
     if (!this.committed) {
       this.renderEmptyInspector();
     } else {
@@ -289,6 +292,11 @@ export class ImageToolsController {
     if (!image) return false;
     await this.commit(image);
     return true;
+  }
+
+  /** Mark the project index stale so a hidden Images pane refreshes when reopened. */
+  public markIndexStale(): void {
+    this.indexStale = true;
   }
 
   public async setFilter(filter: ImageToolFilter, query = ""): Promise<void> {

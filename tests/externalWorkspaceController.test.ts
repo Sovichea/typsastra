@@ -16,6 +16,7 @@ describe("external workspace diagnostics", () => {
       lspClient: () => undefined,
       lspReady: () => false,
       loadExplorer: async () => { events.push("explorer"); },
+      markImageToolsStale: () => {},
       refreshImageTools: () => {},
       refreshTableDirectives: () => { events.push("table-directives"); },
       imageToolsActive: () => false,
@@ -57,6 +58,7 @@ describe("external workspace diagnostics", () => {
       lspClient: () => client,
       lspReady: () => true,
       loadExplorer: async () => {},
+      markImageToolsStale: () => {},
       refreshImageTools: () => {},
       refreshTableDirectives: () => {},
       imageToolsActive: () => false,
@@ -100,6 +102,7 @@ describe("external workspace diagnostics", () => {
       lspClient: () => client,
       lspReady: () => true,
       loadExplorer: async () => {},
+      markImageToolsStale: () => {},
       refreshImageTools: () => {},
       refreshTableDirectives: () => {},
       imageToolsActive: () => false,
@@ -138,6 +141,7 @@ describe("external workspace diagnostics", () => {
       lspClient: () => client,
       lspReady: () => true,
       loadExplorer: async () => { events.push("explorer"); },
+      markImageToolsStale: () => {},
       refreshImageTools: () => {},
       refreshTableDirectives: () => {},
       imageToolsActive: () => false,
@@ -163,5 +167,43 @@ describe("external workspace diagnostics", () => {
       "preview:true",
       "settled",
     ]);
+  });
+
+  test("invalidates the image index for external asset changes while Image Tools is hidden", async () => {
+    let imageIndexStale = false;
+    let refreshCount = 0;
+    const controller = new ExternalWorkspaceController({
+      workspaceRoot: () => "C:\\Project",
+      pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
+      openTabPaths: () => [],
+      conflictPaths: () => new Set(),
+      managedPathKeys: () => new Set(),
+      previewRecoveryPending: () => false,
+      reloadOpenFiles: async () => false,
+      pathsExist: async paths => paths.map(() => true),
+      lspClient: () => undefined,
+      lspReady: () => false,
+      loadExplorer: async () => {},
+      markImageToolsStale: () => { imageIndexStale = true; },
+      refreshImageTools: () => { refreshCount += 1; },
+      refreshTableDirectives: () => {},
+      imageToolsActive: () => false,
+      clearDiagnostics: () => {},
+      retireSourceMap: async () => {},
+      refreshPreview: async () => {},
+      waitForPreviewRefresh: async () => {},
+      setRefreshPending: () => {},
+      updateForwardSyncAction: () => {},
+      log: () => {},
+    });
+
+    await controller.handleChange({
+      rootPath: "C:\\Project",
+      kind: "create",
+      paths: ["C:\\Project\\images\\new-cover.png"],
+    });
+
+    expect(imageIndexStale).toBeTrue();
+    expect(refreshCount).toBe(0);
   });
 });

@@ -97,10 +97,9 @@ pub fn prepare_draft_images(
             continue;
         }
 
-        let unresolved_image_path = source_path
-            .parent()
-            .unwrap_or_else(|| Path::new(""))
-            .join(&raw_path);
+        let source_parent = source_path.parent().unwrap_or_else(|| Path::new(""));
+        let unresolved_image_path =
+            crate::resolve_typst_dependency(raw_path, source_parent, project_root);
         let Some(image_io_path) = canonical_io_path(&unresolved_image_path) else {
             result.diagnostics.push(DraftImageDiagnostic {
                 source_path: source_path.to_path_buf(),

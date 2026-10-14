@@ -1910,9 +1910,9 @@ mod tests {
     fn draft_manifest_excludes_images_from_unrelated_typst_files() {
         let workspace = tempfile::tempdir().unwrap();
         let main = workspace.path().join("main.typ");
-        let chapter = workspace.path().join("chapter.typ");
+        let chapter = workspace.path().join("chapters/chapter.typ");
         let unrelated = workspace.path().join("unrelated.typ");
-        let included_image = workspace.path().join("included.png");
+        let included_image = workspace.path().join("assets/content/included.png");
         let unrelated_image = workspace.path().join("unrelated.png");
         let cache_root = workspace.path().join(".typsastra/cache");
         let png = |width: u32| {
@@ -1922,8 +1922,10 @@ mod tests {
             bytes[20..24].copy_from_slice(&600u32.to_be_bytes());
             bytes
         };
-        fs::write(&main, "#include \"chapter.typ\"").unwrap();
-        fs::write(&chapter, "#image(\"included.png\")").unwrap();
+        fs::create_dir_all(included_image.parent().unwrap()).unwrap();
+        fs::create_dir_all(chapter.parent().unwrap()).unwrap();
+        fs::write(&main, "#include \"chapters/chapter.typ\"").unwrap();
+        fs::write(&chapter, "#image(\"/assets/content/included.png\")").unwrap();
         fs::write(&unrelated, "#image(\"unrelated.png\")").unwrap();
         fs::write(&included_image, png(800)).unwrap();
         fs::write(&unrelated_image, png(1200)).unwrap();
@@ -1950,6 +1952,15 @@ mod tests {
                 canonical_or_original(&main)
             ]
         );
+        let prepared_chapter = fs::read_to_string(
+            options
+                .cache_root
+                .join("render")
+                .join("chapters/chapter.typ"),
+        )
+        .unwrap();
+        assert!(prepared_chapter.contains("https://draft-preview.typsastra.invalid/"));
+        assert!(!prepared_chapter.contains("#image(\"/assets/content/included.png\""));
         assert!(
             fs::read_to_string(options.cache_root.join("render").join("unrelated.typ"))
                 .unwrap()

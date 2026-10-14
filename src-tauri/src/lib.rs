@@ -2946,7 +2946,11 @@ struct StaticTypstImageReference {
     to_utf16: usize,
 }
 
-fn local_typst_images(contents: &str, parent: &std::path::Path) -> Vec<StaticTypstImageReference> {
+fn local_typst_images(
+    contents: &str,
+    parent: &std::path::Path,
+    project_root: &std::path::Path,
+) -> Vec<StaticTypstImageReference> {
     let bytes = contents.as_bytes();
     let mut images = Vec::new();
     let mut index = 0;
@@ -3052,7 +3056,7 @@ fn local_typst_images(contents: &str, parent: &std::path::Path) -> Vec<StaticTyp
                 let raw = &contents[start..cursor];
                 if !raw.starts_with('@') && !raw.contains("://") && !raw.contains('\\') {
                     images.push(StaticTypstImageReference {
-                        path: normalized_existing_path(&parent.join(raw)),
+                        path: resolve_typst_dependency(raw, parent, project_root),
                         from_byte: call_start,
                         path_from_byte: start,
                         path_to_byte: cursor,
@@ -3333,7 +3337,7 @@ fn project_image_index_blocking(
             continue;
         };
         let parent = source_path.parent().unwrap_or(std::path::Path::new(""));
-        for image_reference in local_typst_images(&contents, parent) {
+        for image_reference in local_typst_images(&contents, parent, &root) {
             if !image_reference.path.starts_with(&root) {
                 continue;
             }
@@ -3792,7 +3796,7 @@ fn image_tool_update_references(
                 replacement.display()
             )
         })?;
-        let mut ranges = local_typst_images(&contents, parent)
+        let mut ranges = local_typst_images(&contents, parent, &root)
             .into_iter()
             .filter(|reference| reference.path == original)
             .map(|reference| (reference.path_from_byte, reference.path_to_byte))
@@ -3857,6 +3861,45 @@ mod image_tool_tests {
             .unwrap();
         assert!(!unused.referenced_by_current_document);
         assert_eq!(unused.references.len(), 1);
+    }
+
+    #[test]
+    fn resolves_project_root_image_references_from_included_typst_files() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let root = workspace.path();
+        let chapters = root.join("chapters");
+        let image_dir = root.join("assets/content");
+        std::fs::create_dir_all(&chapters).unwrap();
+        std::fs::create_dir_all(&image_dir).unwrap();
+        let main_path = root.join("main.typ");
+        let chapter_path = chapters.join("media.typ");
+        let image_path = image_dir.join("image140.png");
+        write_png(&image_path, 40, 30);
+        std::fs::write(&main_path, r#"#include "chapters/media.typ""#).unwrap();
+        std::fs::write(
+            &chapter_path,
+            r#"#align(center)[#image("/assets/content/image140.png", width: 60%)]"#,
+        )
+        .unwrap();
+
+        let index = project_image_index_blocking(
+            root.to_string_lossy().to_string(),
+            Some(main_path.to_string_lossy().to_string()),
+        )
+        .expect("index root-relative image in included file");
+
+        assert_eq!(index.images.len(), 1);
+        let image = &index.images[0];
+        assert_eq!(
+            image.path,
+            super::normalized_existing_path(&image_path).to_string_lossy()
+        );
+        assert!(image.referenced_by_current_document);
+        assert_eq!(image.references.len(), 1);
+        assert_eq!(
+            image.references[0].source_path,
+            chapter_path.to_string_lossy()
+        );
     }
 
     #[test]
@@ -4064,7 +4107,8 @@ fn collect_preview_image_profile_with_override(
             parent,
             root_path.parent().unwrap_or(parent),
         ));
-        for image_reference in local_typst_images(&contents, parent) {
+        let project_root = root_path.parent().unwrap_or(parent);
+        for image_reference in local_typst_images(&contents, parent, project_root) {
             let source_prefix = &contents[..image_reference.from_byte];
             let line_start = source_prefix.rfind('\n').map_or(0, |index| index + 1);
             let reference = PreviewImageReference {
@@ -5600,6 +5644,7 @@ mod preview_main_tests {
         let parent = std::path::Path::new("/workspace");
         let paths = local_typst_images(
             "#image(\"hero.png\")\n// #image(\"ignored.png\")\n#let sample = \"image(\\\"also-ignored.png\\\")\"\n",
+            parent,
             parent,
         );
         assert_eq!(paths.len(), 1);
