@@ -6,6 +6,9 @@ export const EDITOR_DELIMITER_PAIRS = {
   "(": ")",
   "[": "]",
   "{": "}",
+  "*": "*",
+  "_": "_",
+  "`": "`",
 } as const;
 
 export type EditorOpeningDelimiter = keyof typeof EDITOR_DELIMITER_PAIRS;
@@ -17,12 +20,19 @@ export type PairedSelection = {
 };
 
 export function pairedSelection(selected: string): PairedSelection | null {
-  if (selected.length < 2) return null;
-  const opening = selected[0] as EditorOpeningDelimiter;
-  const closing = EDITOR_DELIMITER_PAIRS[opening];
-  return closing !== undefined && selected.endsWith(closing)
-    ? { opening, closing, content: selected.slice(1, -1) }
-    : null;
+  for (const opening of Object.keys(EDITOR_DELIMITER_PAIRS) as EditorOpeningDelimiter[]) {
+    const closing = EDITOR_DELIMITER_PAIRS[opening];
+    const prefix = opening;
+    if (selected.length < prefix.length + closing.length) continue;
+    if (selected.startsWith(prefix) && selected.endsWith(closing)) {
+      return {
+        opening,
+        closing,
+        content: selected.slice(prefix.length, selected.length - closing.length),
+      };
+    }
+  }
+  return null;
 }
 
 export function pairedSelectionContent(selected: string): string | null {
@@ -39,13 +49,14 @@ export function replaceSelectedDelimiters(
   opening: EditorOpeningDelimiter,
 ): boolean {
   if (view.state.readOnly || view.state.selection.ranges.some(range => range.empty)) return false;
-  const closing = EDITOR_DELIMITER_PAIRS[opening];
+  const closing: string = EDITOR_DELIMITER_PAIRS[opening];
   const transaction = view.state.changeByRange(range => {
     const selected = view.state.doc.sliceString(range.from, range.to);
     const existing = pairedSelection(selected);
+    const prefix = opening;
     const insert = existing?.opening === opening
       ? existing.content
-      : `${opening}${existing?.content ?? selected}${closing}`;
+      : `${prefix}${existing?.content ?? selected}${closing}`;
     const selectionFrom = range.from;
     const selectionTo = selectionFrom + insert.length;
     return {

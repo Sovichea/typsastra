@@ -19,8 +19,21 @@ describe("Surround With options", () => {
 
   test("finds functions by name and purpose", () => {
     expect(filterSurroundWithOptions("emph").map(option => option.id)).toContain("emph");
-    expect(filterSurroundWithOptions("caption").map(option => option.id)).toEqual(["figure"]);
+    expect(filterSurroundWithOptions("caption").map(option => option.id)).toContain("figure");
+    expect(filterSurroundWithOptions("caption").map(option => option.id)).toContain("figure-caption");
     expect(filterSurroundWithOptions("strk").map(option => option.id)).toContain("strike");
+    expect(filterSurroundWithOptions("align center")[0]?.id).toBe("align-center");
+    expect(filterSurroundWithOptions("par justify")[0]?.id).toBe("par-justify");
+  });
+
+  test("offers common argument presets for content wrappers", () => {
+    const center = SURROUND_WITH_OPTIONS.find(option => option.id === "align-center");
+    const justify = SURROUND_WITH_OPTIONS.find(option => option.id === "par-justify");
+    const figure = SURROUND_WITH_OPTIONS.find(option => option.id === "figure-caption");
+
+    expect(center?.prefix).toBe("#align(center)[");
+    expect(justify?.prefix).toBe("#par(justify: true)[");
+    expect(figure?.prefix).toBe("#figure(caption: [Caption])[");
   });
 
   test("ranks exact and prefix function names above metadata and loose fuzzy matches", () => {

@@ -40,6 +40,23 @@ describe("selection pair editing", () => {
     expect(state.sliceDoc(state.selection.main.from, state.selection.main.to)).toBe("[Hello]");
   });
 
+  test("toggles selected Typst strong, emphasis, and raw-text wrappers", () => {
+    const cases: Array<[EditorOpeningDelimiter, string]> = [
+      ["*", "*Hello* world"],
+      ["_", "_Hello_ world"],
+      ["`", "`Hello` world"],
+    ];
+    for (const [opening, wrapped] of cases) {
+      const first = replace("Hello world", 0, 5, opening);
+      expect(first.doc.toString()).toBe(wrapped);
+      expect(first.sliceDoc(first.selection.main.from, first.selection.main.to)).toBe(wrapped.slice(0, wrapped.indexOf(" world")));
+
+      const second = replace(wrapped, 0, wrapped.indexOf(" world"), opening);
+      expect(second.doc.toString()).toBe("Hello world");
+      expect(second.sliceDoc(second.selection.main.from, second.selection.main.to)).toBe("Hello");
+    }
+  });
+
   test("removes an existing pair when the same opening delimiter is typed", () => {
     const state = replace("[Hello] world", 0, 7, "[");
     expect(state.doc.toString()).toBe("Hello world");

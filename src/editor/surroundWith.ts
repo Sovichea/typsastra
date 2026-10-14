@@ -37,8 +37,16 @@ export const SURROUND_WITH_OPTIONS: readonly SurroundWithOption[] = [
   { id: "heading", label: "#heading[…]", description: "Heading", prefix: "#heading[", suffix: "]", searchTerms: ["title", "section"] },
   { id: "quote", label: "#quote[…]", description: "Quotation", prefix: "#quote[", suffix: "]", searchTerms: ["quotation", "citation"] },
   { id: "align", label: "#align[…]", description: "Aligned content", prefix: "#align[", suffix: "]", searchTerms: ["alignment", "layout"] },
+  { id: "align-center", label: "#align(center)[…]", description: "Center content", prefix: "#align(center)[", suffix: "]", searchTerms: ["align", "center", "centre", "horizontal"] },
+  { id: "align-left", label: "#align(left)[…]", description: "Align content to the left", prefix: "#align(left)[", suffix: "]", searchTerms: ["align", "left", "horizontal"] },
+  { id: "align-right", label: "#align(right)[…]", description: "Align content to the right", prefix: "#align(right)[", suffix: "]", searchTerms: ["align", "right", "horizontal"] },
+  { id: "par-justify", label: "#par(justify: true)[…]", description: "Justify a paragraph", prefix: "#par(justify: true)[", suffix: "]", searchTerms: ["paragraph", "justify", "alignment"] },
+  { id: "block-full-width", label: "#block(width: 100%)[…]", description: "Place content in a full-width block", prefix: "#block(width: 100%)[", suffix: "]", searchTerms: ["block", "width", "full", "layout"] },
   { id: "figure", label: "#figure[…]", description: "Figure body", prefix: "#figure[", suffix: "]", searchTerms: ["caption", "float"] },
+  { id: "figure-caption", label: "#figure(caption: [Caption])[…]", description: "Figure with an editable caption placeholder", prefix: "#figure(caption: [Caption])[", suffix: "]", searchTerms: ["figure", "caption", "label"] },
   { id: "text", label: "#text[…]", description: "Styled text", prefix: "#text[", suffix: "]", searchTerms: ["font", "style"] },
+  { id: "text-size-12pt", label: "#text(size: 12pt)[…]", description: "Set text size to 12 pt", prefix: "#text(size: 12pt)[", suffix: "]", searchTerms: ["text", "size", "12pt", "font"] },
+  { id: "text-fill-blue", label: "#text(fill: blue)[…]", description: "Set text color to blue", prefix: "#text(fill: blue)[", suffix: "]", searchTerms: ["text", "fill", "color", "colour", "blue"] },
   { id: "hide", label: "#hide[…]", description: "Hidden content", prefix: "#hide[", suffix: "]", searchTerms: ["invisible"] },
 ];
 
