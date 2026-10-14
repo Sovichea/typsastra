@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.9.4": {
+    version: "0.9.4",
+    title: "Contextual completion and workspace reliability",
+    highlights: [
+      "Quoted import and image paths autocomplete as you type, refresh suggestions for each path component, and keep the completion panel open while results update.",
+      "Typst editing adds unused-binding feedback, selection delimiter toggles, and common Surround With presets.",
+      "Workspace image and included-draft refreshes, preview recovery, and nested private-font scanning are more reliable.",
+      "Completion requests avoid unnecessary unused-binding LSP work."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.9.4"
+  },
   "0.9.3": {
     version: "0.9.3",
     title: "Standalone files and more reliable preview recovery",

@@ -1,7 +1,7 @@
 # Typsastra examples
 
 This workspace is a writable learning copy installed in a versioned folder in
-your Documents directory, such as `Typsastra Examples v0.9.3`. Open
+your Documents directory, such as `Typsastra Examples v0.9.4`. Open
 `START-HERE.typ` for the recommended order.
 
 Each application release creates and opens its own examples folder. A newer
