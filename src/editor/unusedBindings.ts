@@ -80,7 +80,17 @@ const unusedBindingDecorations = StateField.define<DecorationSet>({
 
 const UNUSED_BINDING_TITLE = "No references found in this workspace. This symbol may still be used by an external project.";
 const MAX_BINDINGS_TO_CHECK = 128;
-const REFERENCE_CONCURRENCY = 8;
+const REFERENCE_CONCURRENCY = 2;
+const UNUSED_ANALYSIS_DELAY_MS = 1_500;
+
+export function identifierOccurrenceCount(source: string, name: string): number {
+  const identifier = /[\p{L}_][\p{L}\p{N}_-]*/gu;
+  let count = 0;
+  for (const match of source.matchAll(identifier)) {
+    if (match[0] === name) count += 1;
+  }
+  return count;
+}
 
 function buildDecorations(
   declarations: readonly LetBindingDeclaration[],
@@ -125,7 +135,7 @@ export function unusedBindingsExtension(
       this.timer = null;
     }
 
-    private schedule(delay = 700): void {
+    private schedule(delay = UNUSED_ANALYSIS_DELAY_MS): void {
       this.generation += 1;
       const generation = this.generation;
       if (this.timer !== null) window.clearTimeout(this.timer);
@@ -162,7 +172,10 @@ export function unusedBindingsExtension(
       }
       if (generation !== this.generation || this.view.state.doc !== doc || getUri() !== uri) return;
 
-      const candidates = declarations;
+      const source = doc.toString();
+      const candidates = declarations.filter(declaration =>
+        identifierOccurrenceCount(source, declaration.name) === 1
+      );
       if (candidates.length > MAX_BINDINGS_TO_CHECK) return;
       const unused = new Set<LetBindingDeclaration>();
       for (let offset = 0; offset < candidates.length; offset += REFERENCE_CONCURRENCY) {

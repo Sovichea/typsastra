@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { EditorState } from "@codemirror/state";
 import { typstLanguage } from "../src/editor/typstLanguage";
-import { findLetBindingDeclarations, hasOtherWorkspaceReferences } from "../src/editor/unusedBindings";
+import {
+  findLetBindingDeclarations,
+  hasOtherWorkspaceReferences,
+  identifierOccurrenceCount,
+} from "../src/editor/unusedBindings";
 
 describe("unused Typst bindings", () => {
   test("finds local function and variable declarations without keyword-prefix false matches", () => {
@@ -31,5 +35,10 @@ describe("unused Typst bindings", () => {
       { uri: "file:///C:/project/chapter.typ", range: { start: { line: 9, character: 12 } } },
     ], "file:///C:/project/main.typ", declaration)).toBe(true);
     expect(hasOtherWorkspaceReferences([], "file:///C:/project/main.typ", declaration)).toBeNull();
+  });
+
+  test("counts complete hyphenated identifiers before requesting workspace references", () => {
+    expect(identifierOccurrenceCount("#let set-chapter(x) = x\n#set-chapter(1)", "set-chapter")).toBe(2);
+    expect(identifierOccurrenceCount("#let chapter(x) = x\n#chapter-extra(1)", "chapter")).toBe(1);
   });
 });
