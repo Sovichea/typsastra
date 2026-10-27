@@ -4941,6 +4941,7 @@ button.welcome-item:disabled {
 }
 
 .welcome-item-icon {
+  flex-shrink: 0;
   width: 20px;
   font-size: 14px;
   margin-right: 12px;
@@ -4951,11 +4952,18 @@ button.welcome-item:disabled {
 
 .welcome-item-text {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 14px;
   color: var(--ui-header-text);
 }
 
 .welcome-item-hotkey {
+  flex-shrink: 0;
+  margin-left: 12px;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--ui-text);
   opacity: 0.5;
