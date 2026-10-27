@@ -32,6 +32,7 @@ export interface EditorTabActivationDependencies {
   classifyUnknownTextPath(path: string): Promise<boolean>;
   largeFileNoticeForTab(tab: EditorTab): Promise<LargeFileOpeningNotice | null>;
   persistActiveTabState(): void;
+  capturePreviewViewport(): void;
   showLargeFileConfirmation(tab: EditorTab, notice: LargeFileOpeningNotice): void;
   loadEditorTabContent(tab: EditorTab): Promise<void>;
   clearGuardrailAlignment(): void;
@@ -137,6 +138,7 @@ export class EditorTabActivationController {
       return;
     }
 
+    if (!sameActivePath) deps.capturePreviewViewport();
     if (persistCurrent && !sameActivePath) deps.persistActiveTabState();
     if (!sameActivePath) deps.cancelManualForwardSync();
 

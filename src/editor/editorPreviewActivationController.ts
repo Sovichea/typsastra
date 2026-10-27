@@ -98,13 +98,13 @@ export class EditorPreviewActivationController {
     if (existingMainSession) {
       this.deps.previewSession.applySessionToTab(tab, existingMainSession);
       if (existingMainSession.previewSessionKey) {
-        presentationReused = this.deps.previewFrame().activateSession(existingMainSession.previewSessionKey);
+        presentationReused = this.deps.previewFrame().activateSession(existingMainSession.previewSessionKey, true);
       }
       if (presentationReused) return { target, guarded, presentationReused };
     } else {
       this.deps.previewSession.applyTargetToTab(tab, target);
       if (tab.previewSessionKey) {
-        presentationReused = this.deps.previewFrame().activateSession(tab.previewSessionKey);
+        presentationReused = this.deps.previewFrame().activateSession(tab.previewSessionKey, true);
       }
       if (presentationReused) return { target, guarded, presentationReused };
     }

@@ -167,6 +167,6 @@ describe("cross-platform scrollbar design", () => {
     expect(source).toContain("this.mountedSessionKey !== sessionKey");
     expect(source).toContain("this.clearMessageHost();");
     expect(presentation).toContain("this.deps.previewFrame().setMessageOverlay(");
-    expect(activation).toContain("presentationReused = this.deps.previewFrame().activateSession(tab.previewSessionKey)");
+    expect(activation).toContain("presentationReused = this.deps.previewFrame().activateSession(tab.previewSessionKey, true)");
   });
 });

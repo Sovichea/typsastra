@@ -3230,9 +3230,16 @@ export class PreviewFrame {
     this.reportInteractionStatus({ kind: "debug", url: this.mountedUrl, reason: `Inverse sync: ${reason}` });
   }
 
-  public activateSession(sessionKey: string): boolean {
+  public activateSession(sessionKey: string, preserveLiveViewport = false): boolean {
     if (!this.pdfDoc || this.mountedSessionKey !== sessionKey) return false;
     this.clearMessageHost();
+    if (preserveLiveViewport) {
+      // Main and include tabs share this mounted PDF. A queued offset from
+      // another activation must never override the viewport the user scrolled.
+      this.pendingRestoredViewportAnchor = null;
+      this.pendingRestoredScrollTop = null;
+      return true;
+    }
     if (this.pendingRestoredViewportAnchor) {
       const anchor = this.pendingRestoredViewportAnchor;
       this.pendingRestoredViewportAnchor = null;

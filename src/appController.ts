@@ -2088,6 +2088,13 @@ export class TypsastraWorkspaceController {
     updatePreviewActionsToolbar: path => this.updatePreviewActionsToolbar(path),
     applyPreviewSessionToTab: (tab, session) => this.applyPreviewSessionToTab(tab, session),
     activatePreviewSession: sessionKey => this.previewFrame.activateSession(sessionKey),
+    capturePreviewViewport: () => {
+      if (this.lastPdfSurface !== "live" || !this.previewFrame.currentSessionKey) return;
+      const scrollTop = this.previewFrame.currentScrollTop;
+      const anchor = this.previewFrame.currentViewportAnchor;
+      this.pdfPreviewRenderController.rememberLiveViewport(anchor, scrollTop);
+      this.recordPreviewScrollPosition(scrollTop);
+    },
     previewScrollTopForTab: tab => isTypstDocumentPath(tab.path)
       ? this.previewScrollTop
       : tab.previewScrollTop,
