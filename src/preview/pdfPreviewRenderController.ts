@@ -1,3 +1,4 @@
+import { publishPdfUpdate, retainPreviewGeneration, releasePreviewGeneration } from "./previewGenerationLease";
 import { invoke } from "@tauri-apps/api/core";
 import type { TinymistLspClient, LspStatus } from "../compiler/lsp";
 import { isTinymistStoppedRequestError } from "../compiler/lsp";
@@ -41,6 +42,7 @@ const PDF_TRANSPORT_MODE = (
   : "range";
 
 export type PdfUpdatePayload = {
+  generationLease?: number | null;
   path: string;
   identity: string;
   sessionKey: string;
@@ -577,12 +579,10 @@ export class PdfPreviewRenderController {
         this.lastPresentedLivePdfHash = pdfHash;
       }
       if (lowMemoryMode && stagedPdfPath) {
+        const indexLease = await retainPreviewGeneration(stagedPdfPath);
         void this.deps.buildLowMemorySyncIndex(
-          previewPath,
-          generation,
-          stagedPdfPath,
-          lowMemorySourceSignature,
-        );
+          previewPath, generation, stagedPdfPath, lowMemorySourceSignature,
+        ).finally(() => releasePreviewGeneration(indexLease));
       }
       await this.deps.draftPreview.presentGeneration({
         generation,
@@ -625,28 +625,26 @@ export class PdfPreviewRenderController {
       }
       const publishedPdfPath = stagedPdfPath ?? this.lastPdfPathValue;
       if (publishedPdfPath) {
-        import("@tauri-apps/api/event").then(({ emit }) => {
-          emit("pdf-update", {
-            path: publishedPdfPath,
-            identity: previewPath,
-            sessionKey,
-            surface: "live",
-            scrollTop,
-            viewportAnchor,
-            previewColorMode: this.deps.previewFrame.colorMode,
-            contentMode: generationContentMode,
-            draftAssets: generationContentMode === "draft"
-              ? [...this.deps.draftPreview.assets.values()]
-              : [],
-            draftAssetRootPath: generationContentMode === "draft"
-              ? this.deps.draftPreview.assetRootPath ?? undefined
-              : undefined,
-            draftThumbnailGeneration: generationContentMode === "draft"
-              ? this.deps.draftPreview.thumbnailGeneration
-              : undefined,
-            reuseMounted: keepMountedPreview,
-          } satisfies PdfUpdatePayload);
-        }).catch(err => console.error("Error emitting pdf-update", err));
+        await publishPdfUpdate({
+          path: publishedPdfPath,
+          identity: previewPath,
+          sessionKey,
+          surface: "live",
+          scrollTop,
+          viewportAnchor,
+          previewColorMode: this.deps.previewFrame.colorMode,
+          contentMode: generationContentMode,
+          draftAssets: generationContentMode === "draft"
+            ? [...this.deps.draftPreview.assets.values()]
+            : [],
+          draftAssetRootPath: generationContentMode === "draft"
+            ? this.deps.draftPreview.assetRootPath ?? undefined
+            : undefined,
+          draftThumbnailGeneration: generationContentMode === "draft"
+            ? this.deps.draftPreview.thumbnailGeneration
+            : undefined,
+          reuseMounted: keepMountedPreview,
+        } satisfies PdfUpdatePayload).catch(err => console.error("Error emitting pdf-update", err));
       }
     } catch (error) {
       if (this.deps.typography.fontUpdateInProgress) {
@@ -872,7 +870,13 @@ export class PdfPreviewRenderController {
     await this.deps.performance.logMemoryDiagnostics("PDF full-buffer before IPC read", {
       transport: PDF_TRANSPORT_MODE,
     });
-    const response = await invoke<ArrayBuffer | Uint8Array | number[]>("read_binary_file", { path });
+    const readLease = await retainPreviewGeneration(path);
+    let response: ArrayBuffer | Uint8Array | number[];
+    try {
+      response = await invoke<ArrayBuffer | Uint8Array | number[]>("read_binary_file", { path });
+    } finally {
+      await releasePreviewGeneration(readLease);
+    }
     await this.deps.performance.logMemoryDiagnostics("PDF full-buffer after IPC read", {
       transport: PDF_TRANSPORT_MODE,
     });

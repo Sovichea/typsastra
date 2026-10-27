@@ -1,3 +1,4 @@
+import { initializePreviewGenerationSession } from "./preview/previewGenerationLease";
 import { installPreviewZoomGestures, zoomPreviewElementAtPoint, GestureZoomSteps, buttonZoomPercent, snapGestureZoom, type PreviewZoomGesture } from "./preview/previewZoomGestures";
 import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
@@ -2071,7 +2072,7 @@ export class TypsastraWorkspaceController {
       // Different root, so the cached table anchor index no longer applies.
       void this.refreshTableDirectiveIndex();
     },
-    loadPdfPath: (path, identity, sessionKey, surface) => { void this.loadPdfPath(path, identity, sessionKey, surface); },
+    loadPdfPath: (path, identity, sessionKey, surface) => this.loadPdfPath(path, identity, sessionKey, surface),
   });
   private readonly editorTabActivationController = new EditorTabActivationController({
     explorer: {
@@ -2219,6 +2220,7 @@ export class TypsastraWorkspaceController {
       await this.bootstrapPreviewWindow();
       return;
     }
+    await initializePreviewGenerationSession();
     document.documentElement.classList.remove("preview-only-mode");
     document.body.classList.remove("preview-only-mode");
 

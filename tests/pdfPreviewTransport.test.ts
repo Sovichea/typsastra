@@ -105,7 +105,7 @@ describe("compiled PDF transport", () => {
       new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
     ).text();
     const staging = source.indexOf('stagedPdfPath = await invoke<string>("stage_pdf_preview_generation"');
-    const update = source.indexOf('emit("pdf-update"', staging);
+    const update = source.indexOf("publishPdfUpdate({", staging);
     const updateEnd = source.indexOf("satisfies PdfUpdatePayload", update);
     const payload = source.slice(update, updateEnd);
 

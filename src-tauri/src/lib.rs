@@ -1138,66 +1138,101 @@ fn is_preview_generation_path(path: &Path, cache_root: &Path) -> bool {
         && preview.parent() == Some(cache_root.as_path())
 }
 
-const MAX_RETAINED_PREVIEW_GENERATIONS: usize = 3;
-const MAX_RETAINED_PREVIEW_GENERATION_BYTES: u64 = 512 * 1024 * 1024;
+// Immutable generations are retained by actual consumers, not by age/count.
+#[derive(Default)]
+struct PreviewGenerationReaders {
+    next_id: u64,
+    leases: HashMap<u64, (PathBuf, String)>,
+    current: HashMap<PathBuf, PathBuf>,
+    ready_windows: std::collections::HashSet<String>,
+}
+static PREVIEW_GENERATION_READERS: std::sync::LazyLock<Mutex<PreviewGenerationReaders>> =
+    std::sync::LazyLock::new(|| Mutex::new(PreviewGenerationReaders::default()));
 
-fn prune_preview_generation_cache(
-    generations: &Path,
-    protected: Option<&Path>,
-) -> Result<(), String> {
+fn prune_preview_generation_cache(generations: &Path, protected: Option<&Path>) -> Result<(), String> {
+    // Startup may supply an ordinary Windows path while staged files use the
+    // canonical extended-length spelling. Reader identity must be identical.
+    let canonical = match std::fs::canonicalize(generations) {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.to_string()),
+    };
+    let generations = canonical.as_path();
+    let protected = protected.map(|path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()));
+    let mut readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
+    if let Some(path) = protected {
+        readers.current.insert(generations.to_path_buf(), path);
+    }
     let entries = match std::fs::read_dir(generations) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(format!(
-                "Failed to inspect preview generation cache: {error}"
-            ));
-        }
+        Err(error) => return Err(error.to_string()),
     };
-    let mut files = entries
-        .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            let metadata = entry.metadata().ok()?;
-            if !metadata.is_file()
-                || path.extension().and_then(|extension| extension.to_str()) != Some("pdf")
-            {
-                return None;
-            }
-            let modified = metadata
-                .modified()
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-            Some((path, modified, metadata.len()))
-        })
-        .collect::<Vec<_>>();
-    files.sort_by(|left, right| right.1.cmp(&left.1));
-
-    let protected_length = protected.and_then(|protected| {
-        files
-            .iter()
-            .find(|(path, _, _)| path == protected)
-            .map(|(_, _, length)| *length)
-    });
-    let mut retained_count = usize::from(protected_length.is_some());
-    let mut retained_bytes = protected_length.unwrap_or(0);
-    for (path, _, length) in files {
-        let is_protected = protected.is_some_and(|protected| path == protected);
-        if is_protected {
-            continue;
-        }
-        let within_count = retained_count < MAX_RETAINED_PREVIEW_GENERATIONS;
-        let within_bytes = retained_count == 0
-            || retained_bytes.saturating_add(length) <= MAX_RETAINED_PREVIEW_GENERATION_BYTES;
-        if within_count && within_bytes {
-            retained_count += 1;
-            retained_bytes = retained_bytes.saturating_add(length);
-            continue;
-        }
-        // An older generation may still be open briefly in PDF.js. Failure is
-        // harmless and will be retried on the next stage or workspace open.
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("pdf") { continue; }
+        if readers.current.get(generations) == Some(&path)
+            || readers.leases.values().any(|(leased, _)| leased == &path) { continue; }
+        // Windows may still be closing a file handle; retry on the next cleanup.
         let _ = std::fs::remove_file(path);
     }
     Ok(())
+}
+
+#[tauri::command]
+fn reset_preview_generation_readers(window: tauri::WebviewWindow) {
+    release_preview_window_generations(window.label());
+}
+
+#[tauri::command]
+fn ready_preview_generation_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?
+        .ready_windows.insert(window.label().to_string());
+    Ok(())
+}
+
+#[tauri::command]
+fn retain_preview_generation(
+    app: tauri::AppHandle, window: tauri::WebviewWindow, path: String,
+    handoff: Option<bool>,
+) -> Result<Option<u64>, String> {
+    let path = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
+    let local = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("workspace-cache");
+    let local = std::fs::canonicalize(local).unwrap_or_default();
+    let cache = path.parent().and_then(Path::parent).and_then(Path::parent);
+    if local.as_os_str().is_empty() || !path.starts_with(&local)
+        || !cache.is_some_and(|cache| is_preview_generation_path(&path, cache)) {
+        return Ok(None);
+    }
+    let owner = if handoff.unwrap_or(false) {
+        if app.get_webview_window("preview").is_none() { return Ok(None); }
+        "preview".to_string()
+    } else { window.label().to_string() };
+    let mut readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
+    if handoff.unwrap_or(false) && !readers.ready_windows.contains(&owner) { return Ok(None); }
+    if !path.is_file() { return Err("The preview generation is no longer available.".into()); }
+    readers.next_id += 1;
+    let id = readers.next_id;
+    readers.leases.insert(id, (path, owner));
+    Ok(Some(id))
+}
+
+#[tauri::command]
+fn release_preview_generation(lease_id: u64) -> Result<(), String> {
+    let lease = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?.leases.remove(&lease_id);
+    if let Some((path, _)) = lease {
+        if let Some(parent) = path.parent() { prune_preview_generation_cache(parent, None)?; }
+    }
+    Ok(())
+}
+
+fn release_preview_window_generations(label: &str) {
+    let ids: Vec<_> = PREVIEW_GENERATION_READERS.lock().map(|mut readers| {
+        readers.ready_windows.remove(label);
+        readers.leases.iter().filter(|(_, (_, owner))| owner == label)
+            .map(|(id, _)| *id).collect()
+    }).unwrap_or_default();
+    for id in ids { let _ = release_preview_generation(id); }
 }
 
 fn stage_pdf_preview_generation_at(
@@ -1233,9 +1268,15 @@ fn stage_pdf_preview_generation_at(
         "{stem}-{}-{generation}-{timestamp}.pdf",
         std::process::id()
     ));
-    std::fs::rename(&source, &target)
-        .map_err(|error| format!("Failed to stage compiled PDF preview: {error}"))?;
-    let _ = prune_preview_generation_cache(&generations, Some(&target));
+    {
+        // Publish under the same lock used by cleanup, so releasing another
+        // reader cannot delete the newly renamed file before it is protected.
+        let mut readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
+        std::fs::rename(&source, &target)
+            .map_err(|error| format!("Failed to stage compiled PDF preview: {error}"))?;
+        readers.current.insert(generations.clone(), target.clone());
+    }
+    let _ = prune_preview_generation_cache(&generations, None);
     Ok(target.to_string_lossy().to_string())
 }
 
@@ -1305,6 +1346,9 @@ fn remove_preview_generation_file_at(path: String, cache_root_path: String) -> R
     if !is_preview_generation_path(&path, &cache_root) {
         return Err("Only staged PDF preview generations can be removed.".to_string());
     }
+    let readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
+    if readers.current.values().any(|current| current == &path)
+        || readers.leases.values().any(|(leased, _)| leased == &path) { return Ok(()); }
     match std::fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -1322,7 +1366,7 @@ mod pdf_preview_generation_tests {
     use super::{
         discard_generated_preview_pdf_at, hash_preview_file_at, is_preview_generation_path,
         prune_preview_generation_cache, remove_preview_generation_file_at,
-        stage_pdf_preview_generation_at, MAX_RETAINED_PREVIEW_GENERATIONS,
+        stage_pdf_preview_generation_at,
     };
 
     #[test]
@@ -1363,7 +1407,7 @@ mod pdf_preview_generation_tests {
     }
 
     #[test]
-    fn stages_and_removes_compiled_pdf_inside_preview_cache() {
+    fn stages_and_protects_current_compiled_pdf_inside_preview_cache() {
         let workspace = tempfile::tempdir().unwrap();
         let cache_root = workspace.path().join("workspace-cache/example");
         let preview = cache_root.join("preview");
@@ -1392,7 +1436,8 @@ mod pdf_preview_generation_tests {
             cache_root.to_string_lossy().into_owned(),
         )
         .expect("remove staged preview");
-        assert!(!staged.exists());
+        // The current generation remains available for late window readers.
+        assert!(staged.exists());
     }
 
     #[test]
@@ -1417,12 +1462,90 @@ mod pdf_preview_generation_tests {
     }
 
     #[test]
-    fn bounds_orphaned_preview_generations() {
+    fn retains_readers_until_release_instead_of_three_recent_versions() {
+        let workspace = tempfile::tempdir().unwrap();
+        let generations = workspace.path().join("preview/generations");
+        std::fs::create_dir_all(&generations).unwrap();
+        let generations = std::fs::canonicalize(&generations).unwrap();
+        let old = generations.join("old.pdf");
+        let current = generations.join("current.pdf");
+        std::fs::write(&old, b"%PDF-old").unwrap();
+        std::fs::write(&current, b"%PDF-current").unwrap();
+        let mut ids = Vec::new();
+        {
+            let mut readers = super::PREVIEW_GENERATION_READERS.lock().unwrap();
+            for owner in ["main", "index", "handoff", "undocked"] {
+                readers.next_id += 1;
+                let id = readers.next_id;
+                readers.leases.insert(id, (old.clone(), owner.into()));
+                ids.push(id);
+            }
+        }
+        prune_preview_generation_cache(dunce::simplified(&generations), Some(&current)).unwrap();
+        for id in &ids[..3] {
+            super::release_preview_generation(*id).unwrap();
+            assert!(old.exists(), "another reader still needs the old PDF");
+        }
+        super::release_preview_generation(ids[3]).unwrap();
+        assert!(!old.exists());
+        assert!(current.exists());
+    }
+
+    #[test]
+    fn does_not_evict_live_generations_to_meet_a_count_limit() {
+        let workspace = tempfile::tempdir().unwrap();
+        let generations = workspace.path().join("preview/generations");
+        std::fs::create_dir_all(&generations).unwrap();
+        let generations = std::fs::canonicalize(&generations).unwrap();
+        let mut leased = Vec::new();
+        for index in 0..5 {
+            let path = generations.join(format!("reader-{index}.pdf"));
+            std::fs::write(&path, b"%PDF").unwrap();
+            let mut readers = super::PREVIEW_GENERATION_READERS.lock().unwrap();
+            readers.next_id += 1;
+            let id = readers.next_id;
+            readers.leases.insert(id, (path.clone(), "busy-reader".into()));
+            leased.push((id, path));
+        }
+        prune_preview_generation_cache(&generations, None).unwrap();
+        assert!(leased.iter().all(|(_, path)| path.exists()));
+        for (id, path) in leased {
+            super::release_preview_generation(id).unwrap();
+            assert!(!path.exists());
+        }
+    }
+
+    #[test]
+    fn closing_a_window_releases_its_pending_handoffs() {
+        let workspace = tempfile::tempdir().unwrap();
+        let generations = workspace.path().join("preview/generations");
+        std::fs::create_dir_all(&generations).unwrap();
+        let generations = std::fs::canonicalize(&generations).unwrap();
+        let old = generations.join("pending.pdf");
+        let current = generations.join("current.pdf");
+        std::fs::write(&old, b"%PDF-old").unwrap();
+        std::fs::write(&current, b"%PDF-current").unwrap();
+        let owner = workspace.path().to_string_lossy().into_owned();
+        {
+            let mut readers = super::PREVIEW_GENERATION_READERS.lock().unwrap();
+            readers.next_id += 1;
+            let id = readers.next_id;
+            readers.leases.insert(id, (old.clone(), owner.clone()));
+        }
+        prune_preview_generation_cache(&generations, Some(&current)).unwrap();
+        super::release_preview_window_generations(&owner);
+        assert!(!old.exists());
+        assert!(current.exists());
+    }
+
+    #[test]
+    fn removes_orphaned_preview_generations() {
         let workspace = tempfile::tempdir().unwrap();
         let generations = workspace
             .path()
             .join("workspace-cache/example/preview/generations");
         std::fs::create_dir_all(&generations).unwrap();
+        let generations = std::fs::canonicalize(&generations).unwrap();
         for index in 0..12 {
             std::fs::write(
                 generations.join(format!("main-1-{index}-{index}.pdf")),
@@ -1440,7 +1563,7 @@ mod pdf_preview_generation_tests {
                 entry.path().extension().and_then(|value| value.to_str()) == Some("pdf")
             })
             .count();
-        assert_eq!(retained, MAX_RETAINED_PREVIEW_GENERATIONS);
+        assert_eq!(retained, 0);
     }
 }
 
@@ -8047,6 +8170,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                release_preview_window_generations(window.label());
+            }
             if window.label() == "main" {
                 if let tauri::WindowEvent::Destroyed = event {
                     window.app_handle().exit(0);
@@ -8161,6 +8287,10 @@ pub fn run() {
             hash_preview_file,
             discard_generated_preview_pdf,
             remove_preview_generation_file,
+            retain_preview_generation,
+            reset_preview_generation_readers,
+            ready_preview_generation_window,
+            release_preview_generation,
             read_workspace_text_prefix,
             workspace_file_size,
             workspace_text_line_count,

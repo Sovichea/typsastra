@@ -1,3 +1,4 @@
+import { retainPreviewGeneration, releasePreviewGeneration } from "./previewGenerationLease";
 export type PreviewClickPoint = {
   pageNo?: number;
   documentPosition?: { page_no: number; x: number; y: number };
@@ -126,7 +127,7 @@ type PdfJsModule = typeof import("pdfjs-dist");
 
 type PreviewPdfSource =
   | { kind: "bytes"; source: Uint8Array | ArrayBuffer | Promise<Uint8Array | ArrayBuffer> }
-  | { kind: "range"; path: string; deleteOnClose: boolean };
+  | { kind: "range"; path: string; deleteOnClose: boolean; lease?: number | null; adopted?: boolean };
 
 type PdfRangeSourceInfo = {
   sourceId: number;
@@ -180,6 +181,7 @@ const LOCAL_PDF_RANGE_CHUNK_SIZE = 1024 * 1024;
 const FIT_PADDING_PX = 56;
 
 export class PreviewFrame {
+  private generationLeases = new WeakMap<object, number>();
   private iframe: HTMLIFrameElement | null = null;
   private messageHost: HTMLDivElement | null = null;
   private errorOverlay: HTMLDivElement | null = null;
@@ -715,7 +717,13 @@ export class PreviewFrame {
     surface: PreviewSurface = "live",
     deleteOnClose = false,
   ): Promise<number> {
-    return this.loadPdfSource({ kind: "range", path, deleteOnClose }, identity, sessionKey, surface);
+    const lease = await retainPreviewGeneration(path);
+    const source = { kind: "range" as const, path, deleteOnClose: lease == null && deleteOnClose, lease, adopted: false };
+    try {
+      return await this.loadPdfSource(source, identity, sessionKey, surface);
+    } finally {
+      if (!source.adopted) await releasePreviewGeneration(lease);
+    }
   }
 
   private async loadPdfSource(
@@ -970,6 +978,10 @@ export class PreviewFrame {
       this.cancelAllPageRenders();
       nextPdfDoc = null;
       this.pdfDoc = pdfDoc;
+      if (source.kind === "range" && source.lease != null) {
+        this.generationLeases.set(pdfDoc, source.lease);
+        source.adopted = true;
+      }
       this.pdfLoadingTask = nextLoadingTask;
       nextLoadingTask = null;
       this.pendingPdfLoadingTask = null;
@@ -2123,6 +2135,15 @@ export class PreviewFrame {
     this.onPerformance?.({ name, detail });
   }
 
+  private async cleanupPdfDocumentGeneration(pdfDoc: any, loadingTask: { destroy(): Promise<void> } | null): Promise<void> {
+    await cleanupPdfResources(pdfDoc, loadingTask);
+    if (pdfDoc) {
+      const lease = this.generationLeases.get(pdfDoc);
+      this.generationLeases.delete(pdfDoc);
+      await releasePreviewGeneration(lease);
+    }
+  }
+
   private async disposePdfDocument(): Promise<void> {
     this.resetStandalonePdfSearch();
     this.observer?.disconnect();
@@ -2134,7 +2155,7 @@ export class PreviewFrame {
     this.pdfLoadingTask = null;
     this.pendingPdfLoadingTask = null;
     this.pdfDoc = null;
-    await cleanupPdfResources(pdfDoc, loadingTask);
+    await this.cleanupPdfDocumentGeneration(pdfDoc, loadingTask);
     if (pendingLoadingTask && pendingLoadingTask !== loadingTask) {
       try { await pendingLoadingTask.destroy(); } catch {}
     }
@@ -2210,7 +2231,7 @@ export class PreviewFrame {
       .then(async () => {
         await waitForUiIdle();
         while (this.resizeLayoutSuspended) await delay(32);
-        await cleanupPdfResources(pdfDoc, loadingTask);
+        await this.cleanupPdfDocumentGeneration(pdfDoc, loadingTask);
       });
   }
 

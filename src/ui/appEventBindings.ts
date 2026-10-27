@@ -1,3 +1,4 @@
+import { publishPdfUpdate } from "../preview/previewGenerationLease";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -323,10 +324,10 @@ export function bindAppEvents(actions: AppEventActions): void {
     }
   });
 
-  import("@tauri-apps/api/event").then(({ listen: listenEvent, emit: emitEvent }) => {
+  import("@tauri-apps/api/event").then(({ listen: listenEvent }) => {
     void listenEvent("preview-window-ready", () => {
       const update = actions.previewWindowUpdate();
-      if (update) void emitEvent("pdf-update", update);
+      if (update) void publishPdfUpdate(update).catch(console.error);
     });
     void listenEvent<PreviewScrollPositionPayload>("preview-scroll-position-changed", event => {
       actions.restoreUndockedPreviewScrollPosition(event.payload);

@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { initializePreviewGenerationSession, releasePreviewGeneration } from "./previewGenerationLease";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyUIThemeVariables } from "../editor/extensions";
 import type { PreviewColorMode, ThemeName } from "../settings";
@@ -28,7 +30,7 @@ export interface PreviewWindowDependencies {
   sourceMapRootPath(): string | null;
   previewRootPath(): string | null;
   setWorkspaceRootPath(path: string | null): void;
-  loadPdfPath(path: string, identity: string, sessionKey: string, surface: PdfUpdatePayload["surface"]): void;
+  loadPdfPath(path: string, identity: string, sessionKey: string, surface: PdfUpdatePayload["surface"]): Promise<unknown>;
 }
 
 export class PreviewWindowController {
@@ -40,6 +42,7 @@ export class PreviewWindowController {
 
   async bootstrap(): Promise<void> {
     const deps = this.deps;
+    await initializePreviewGenerationSession();
     document.documentElement.classList.add("preview-only-mode");
     document.body.classList.add("preview-only-mode");
 
@@ -97,31 +100,35 @@ export class PreviewWindowController {
       deps.previewFrame.setColorMode(event.payload);
     });
 
-    await listen<string | PdfUpdatePayload>("pdf-update", event => {
+    await listen<string | PdfUpdatePayload>("pdf-update", async event => {
       const fallbackIdentity = deps.sourceMapRootPath() ?? deps.previewRootPath() ?? "preview";
       const update = typeof event.payload === "string"
         ? { path: event.payload, identity: fallbackIdentity, sessionKey: fallbackIdentity, surface: "live" as const }
         : event.payload;
-      if (update.previewColorMode) {
-        deps.setPreviewColorMode(update.previewColorMode);
-        deps.previewFrame.setColorMode(update.previewColorMode);
-      }
-      deps.draftPreview.installPresentedState({
-        mode: update.contentMode ?? "normal",
-        assets: update.draftAssets ?? [],
-        assetRootPath: update.draftAssetRootPath ?? null,
-        generation: update.draftThumbnailGeneration ?? 0,
-      });
-      deps.setWorkspaceRootPath(update.draftAssetRootPath ?? null);
-      if (update.viewportAnchor) {
-        deps.previewFrame.queueViewportAnchor(update.viewportAnchor);
-      } else if (typeof update.scrollTop === "number" && Number.isFinite(update.scrollTop)) {
-        deps.previewFrame.queueTabScrollPosition(update.scrollTop);
-      }
-      const toggle = document.getElementById("preview-content-mode-toggle") as HTMLButtonElement | null;
-      toggle?.classList.remove("hidden");
-      if (!update.reuseMounted || !deps.previewFrame.retainMountedLivePreview(update.identity, update.sessionKey)) {
-        deps.loadPdfPath(update.path, update.identity, update.sessionKey, update.surface);
+      try {
+        if (update.previewColorMode) {
+          deps.setPreviewColorMode(update.previewColorMode);
+          deps.previewFrame.setColorMode(update.previewColorMode);
+        }
+        deps.draftPreview.installPresentedState({
+          mode: update.contentMode ?? "normal",
+          assets: update.draftAssets ?? [],
+          assetRootPath: update.draftAssetRootPath ?? null,
+          generation: update.draftThumbnailGeneration ?? 0,
+        });
+        deps.setWorkspaceRootPath(update.draftAssetRootPath ?? null);
+        if (update.viewportAnchor) {
+          deps.previewFrame.queueViewportAnchor(update.viewportAnchor);
+        } else if (typeof update.scrollTop === "number" && Number.isFinite(update.scrollTop)) {
+          deps.previewFrame.queueTabScrollPosition(update.scrollTop);
+        }
+        const toggle = document.getElementById("preview-content-mode-toggle") as HTMLButtonElement | null;
+        toggle?.classList.remove("hidden");
+        if (!update.reuseMounted || !deps.previewFrame.retainMountedLivePreview(update.identity, update.sessionKey)) {
+          await deps.loadPdfPath(update.path, update.identity, update.sessionKey, update.surface);
+        }
+      } finally {
+        await releasePreviewGeneration(update.generationLease);
       }
     });
 
@@ -129,6 +136,8 @@ export class PreviewWindowController {
       void deps.previewFrame.revealDocumentPosition(event.payload);
     });
 
+    // Do not allocate handoff readers before this window has an update listener.
+    await invoke("ready_preview_generation_window");
     void emit("preview-window-ready");
   }
 
