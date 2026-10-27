@@ -13,6 +13,7 @@ export interface EditorFileContentDependencies {
 export class EditorFileContentController {
   private readonly detectedPlainTextPaths = new Set<string>();
   private readonly classifiedUnknownPaths = new Set<string>();
+  private readonly pendingLoads = new WeakMap<EditorTab, Promise<void>>();
   private readonly loadRequests = new LatestRequestGuard<string>();
 
   constructor(private readonly deps: EditorFileContentDependencies) {}
@@ -38,7 +39,17 @@ export class EditorFileContentController {
     this.loadRequests.invalidate(filePathKey(path));
   }
 
-  async loadTabContent(tab: EditorTab): Promise<void> {
+  loadTabContent(tab: EditorTab): Promise<void> {
+    const pending = this.pendingLoads.get(tab);
+    if (pending) return pending;
+    const operation = this.readTabContent(tab).finally(() => {
+      if (this.pendingLoads.get(tab) === operation) this.pendingLoads.delete(tab);
+    });
+    this.pendingLoads.set(tab, operation);
+    return operation;
+  }
+
+  private async readTabContent(tab: EditorTab): Promise<void> {
     const path = tab.path;
     const pathKey = filePathKey(path);
     while (!tab.contentLoaded && filePathKey(tab.path) === pathKey) {

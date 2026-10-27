@@ -149,6 +149,22 @@ describe("external source monitoring", () => {
     expect(f.changed).toEqual(["external"]);
   });
 
+  test("routine polling leaves an unloaded tab's in-flight load and metadata intact", async () => {
+    let invalidations = 0;
+    const f = fixture({ invalidateLazyLoad: () => { invalidations++; } });
+    f.source.contentLoaded = false;
+    f.source.sizeBytes = 40000;
+    f.source.lineCount = 600;
+    await f.controller.reloadOpenFiles();
+    await f.controller.reloadOpenFiles();
+    expect(invalidations).toBe(0);
+    expect(f.source.sizeBytes).toBe(40000);
+    expect(f.source.lineCount).toBe(600);
+    await f.controller.reloadOpenFiles([f.source.path]);
+    expect(invalidations).toBe(1);
+    expect(f.source.sizeBytes).toBeUndefined();
+  });
+
   test("polling does not repeatedly reopen PDF assets", async () => {
     let loads = 0;
     const f = fixture({ loadPdfPath: () => { loads++; } });

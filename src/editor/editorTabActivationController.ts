@@ -82,22 +82,45 @@ export interface EditorTabActivationDependencies {
 }
 
 export class EditorTabActivationController {
+  private activationGeneration = 0;
+  private pendingActivation: { path: string; tab: EditorTab | undefined; operation: Promise<void> } | null = null;
   constructor(private readonly deps: EditorTabActivationDependencies) {}
 
-  async activate(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}): Promise<void> {
+  activate(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}): Promise<void> {
+    const key = filePathKey(path);
+    const tab = this.deps.openTabs().find(candidate => filePathKey(candidate.path) === key);
+    if (this.pendingActivation?.path === key && this.pendingActivation.tab === tab
+      && !options.largeFileConfirmed && !options.preservePreviewSession && !options.skipPreviewActivation) {
+      return this.pendingActivation.operation;
+    }
+    const operation = this.activateRequested(path, persistCurrent, options).finally(() => {
+      if (this.pendingActivation?.operation === operation) this.pendingActivation = null;
+    });
+    this.pendingActivation = { path: key, tab, operation };
+    return operation;
+  }
+
+  private async activateRequested(path: string, persistCurrent: boolean, options: ActivateEditorTabOptions): Promise<void> {
+    const generation = ++this.activationGeneration;
     const deps = this.deps;
     deps.explorer.setActiveFile(path);
     if (deps.workspaceRootPath()) void deps.explorer.revealPath(path);
 
     const tab = deps.openTabs().find(candidate => filePathKey(candidate.path) === filePathKey(path));
-    const activeFilePath = deps.activeFilePath();
-    const sameActivePath = activeFilePath !== null && filePathKey(activeFilePath) === filePathKey(path);
-    deps.logPreview(`Tab activation started: path=${path}; sameActive=${sameActivePath}; confirmed=${options.largeFileConfirmed === true}; lowMemory=${deps.isLowMemoryMode()}.`);
-    if (tab && !isSupportedInAppPath(tab.path) && await deps.classifyUnknownTextPath(tab.path)) {
-      if (!tab.content && !tab.savedContent) tab.contentLoaded = false;
+    const isCurrent = () => generation === this.activationGeneration && (!tab || deps.openTabs().includes(tab));
+    let activeFilePath = deps.activeFilePath();
+    let sameActivePath = activeFilePath !== null && filePathKey(activeFilePath) === filePathKey(path);
+    deps.logPreview(`Tab activation started: path=${path}; sameActive=${sameActivePath}; found=${Boolean(tab)}; loaded=${tab?.contentLoaded}; confirmed=${options.largeFileConfirmed === true}; lowMemory=${deps.isLowMemoryMode()}.`);
+    if (tab && !isSupportedInAppPath(tab.path)) {
+      const supported = await deps.classifyUnknownTextPath(tab.path);
+      if (!isCurrent()) return;
+      if (supported && !tab.content && !tab.savedContent) tab.contentLoaded = false;
     }
     if (tab && !tab.contentLoaded) {
+      deps.logPreview(`Tab file inspection started: path=${path}.`);
       const notice = await deps.largeFileNoticeForTab(tab);
+      if (!isCurrent()) return;
+      deps.logPreview(`Tab file inspection finished: path=${path}; guarded=${Boolean(notice)}.`);
       if (notice && !options.largeFileConfirmed) {
         deps.logPreview(`Tab activation blocked by large-file guard: tab=${path}; kind=${notice.kind}; previewRoot=${notice.previewRootPath ?? "none"}.`);
         if (persistCurrent && !sameActivePath) deps.persistActiveTabState();
@@ -107,8 +130,16 @@ export class EditorTabActivationController {
       if (isBinaryImagePath(tab.path)) {
         deps.presentation.showImageLoading(tab.path);
       }
+      deps.logPreview(`Tab content loading started: path=${path}.`);
       await deps.loadEditorTabContent(tab);
+      if (!isCurrent()) return;
+      deps.logPreview(`Tab content loading finished: path=${path}; loaded=${tab.contentLoaded}.`);
     }
+    if (!isCurrent()) return;
+    // Loading may have yielded while another tab was displayed. Persist the
+    // editor actually on screen, rather than the tab active when IO began.
+    activeFilePath = deps.activeFilePath();
+    sameActivePath = activeFilePath !== null && filePathKey(activeFilePath) === filePathKey(path);
     deps.clearGuardrailAlignment();
     const activeEditorMatchesTab = tab !== undefined && (
       !deps.isInternallySupportedPath(tab.path)
@@ -205,12 +236,16 @@ export class EditorTabActivationController {
     deps.draftPreview.publishWarnings();
     deps.renderEditorTabs();
     await deps.restoreEditorTabViewport(tab, path);
+    if (!isCurrent()) return;
     deps.presentation.finishTextPresentation(path);
     const activeTypography = await deps.typography.effective(path, tab.content);
+    if (!isCurrent()) return;
     if (activeTypography) deps.toolbar.synchronizeDocumentTypography(activeTypography);
 
     if (path.toLowerCase().endsWith(".typ")) deps.setDiagnosticWaitStartedAt(performance.now());
-    const previewActivation = await deps.previewActivation.prepare(tab, path, isTypstDocument, options);
+    const previewOptions = { ...options, isCurrent };
+    const previewActivation = await deps.previewActivation.prepare(tab, path, isTypstDocument, previewOptions);
+    if (!isCurrent()) return;
     // Included files share the main document's preview session. Resolve that
     // relationship before restoring the offset so a newly opened include
     // cannot reset the mounted PDF to its own stale or empty tab position.
@@ -230,6 +265,7 @@ export class EditorTabActivationController {
     if (deps.isLowMemoryMode()) {
       deps.logPreview(`Tab activation resumes deferred low-memory services: tab=${path}; root=${tab.previewMainPath ?? tab.previewRootPath ?? "none"}.`);
       await deps.resumeDeferredWorkspaceServices();
+      if (!isCurrent()) return;
     } else {
       void deps.resumeDeferredWorkspaceServices();
     }
@@ -246,7 +282,8 @@ export class EditorTabActivationController {
       deps.clearOutline();
     }
 
-    await deps.previewActivation.finish(tab, path, isTypstDocument, previewActivation, options);
+    await deps.previewActivation.finish(tab, path, isTypstDocument, previewActivation, previewOptions);
+    if (!isCurrent()) return;
 
     if (deps.activeMode() === "WYSIWYM") deps.mapMarkupToWysiwym(tab.content);
 

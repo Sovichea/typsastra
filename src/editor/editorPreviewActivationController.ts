@@ -7,6 +7,7 @@ import { previewLspMainPath, type PreviewTarget } from "../preview/previewPolicy
 
 export interface EditorPreviewActivationOptions {
   skipPreviewActivation?: boolean;
+  isCurrent?: () => boolean;
   preservePreviewSession?: PreviewSessionState;
 }
 
@@ -73,6 +74,7 @@ export class EditorPreviewActivationController {
       fileContents: tab.content,
       pinnedMainPath: this.deps.pinnedMainFilePath(),
     });
+    if (options.isCurrent?.() === false) return { target, guarded, presentationReused };
     target = resolvedTarget;
     this.deps.logPreview(`Tab preview target resolved: tab=${path}; root=${resolvedTarget.rootPath ?? "none"}; main=${resolvedTarget.mainPath ?? "none"}; imported=${resolvedTarget.imported}; disabled=${resolvedTarget.disabled}.`);
     if (resolvedTarget.disabled) {
@@ -82,7 +84,9 @@ export class EditorPreviewActivationController {
     }
 
     target = await this.deps.previewSession.prepareTemplateAware(resolvedTarget, path, tab.content);
+    if (options.isCurrent?.() === false) return { target, guarded, presentationReused };
     const approved = await this.deps.ensureLargePreviewApproved(target.rootPath);
+    if (options.isCurrent?.() === false) return { target, guarded, presentationReused };
     guarded = !approved;
     this.deps.logPreview(`Tab preview approval: tab=${path}; root=${target.rootPath ?? "none"}; approved=${approved}; guarded=${guarded}; session=${this.deps.previewSession.sessionKey ?? "none"}.`);
     if (guarded) {
@@ -118,7 +122,7 @@ export class EditorPreviewActivationController {
     context: EditorPreviewActivationContext,
     options: EditorPreviewActivationOptions,
   ): Promise<void> {
-    if (options.skipPreviewActivation || !isTypstDocument) return;
+    if (options.isCurrent?.() === false || options.skipPreviewActivation || !isTypstDocument) return;
 
     // Low-memory preview deliberately compiles in one-shot processes rather
     // than through the persistent LSP. The LSP can still be momentarily
@@ -130,6 +134,7 @@ export class EditorPreviewActivationController {
       // confirmed activation path and it must not preserve the stale guarded
       // result that originally displayed the confirmation UI.
       const approved = await this.deps.ensureLargePreviewApproved(this.deps.previewSession.rootPath);
+      if (options.isCurrent?.() === false) return;
       this.deps.logPreview(`Low-memory preview finish: tab=${path}; root=${this.deps.previewSession.rootPath ?? "none"}; approved=${approved}; guarded=${context.guarded}; reused=${context.presentationReused}; disabled=${this.deps.previewSession.disabled}; preserve=${Boolean(options.preservePreviewSession)}.`);
       if (
         approved
@@ -148,6 +153,7 @@ export class EditorPreviewActivationController {
 
     if (this.deps.lspAvailable()) {
       const lspRes = await this.deps.resolveLspDocument(path, tab.content);
+      if (options.isCurrent?.() === false) return;
       if (lspRes) {
         await this.deps.lspDocuments.openIfNeeded(
           lspRes.uri,
@@ -155,6 +161,7 @@ export class EditorPreviewActivationController {
           this.deps.currentVersion(),
         );
       }
+      if (options.isCurrent?.() === false) return;
       if (!context.guarded) {
         const lspMainPath = context.target
           ? previewLspMainPath(context.target)
@@ -162,10 +169,11 @@ export class EditorPreviewActivationController {
               ? this.deps.previewSession.rootPath
               : (this.deps.previewSession.mainPath ?? this.deps.previewSession.rootPath));
         const pinChanged = await this.deps.lspDocuments.updatePinnedMain(lspMainPath);
+        if (options.isCurrent?.() === false) return;
         if (pinChanged) await this.deps.lspDocuments.recheckActiveAfterPin(tab.content);
       }
 
-      if (context.guarded || options.preservePreviewSession) return;
+      if (options.isCurrent?.() === false || context.guarded || options.preservePreviewSession) return;
       if (!this.deps.pinnedMainFilePath()) {
         this.deps.previewFrame().setMessage(this.deps.noMainFileMessage());
       } else if (context.target?.disabled) {

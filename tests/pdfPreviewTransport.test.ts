@@ -297,7 +297,7 @@ describe("compiled PDF transport", () => {
     const diagnosticsSource = await Bun.file(
       new URL("../src/diagnostics/diagnosticsController.ts", import.meta.url)
     ).text();
-    const activateStart = activationSource.indexOf("async activate(");
+    const activateStart = activationSource.indexOf("private async activateRequested(");
     const activateEnd = activationSource.indexOf("\n  }", activateStart + 10);
     const activateMethod = activationSource.slice(activateStart, activateEnd);
     const diagnosticsStart = source.indexOf("private handleLspDiagnostics");

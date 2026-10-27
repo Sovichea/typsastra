@@ -68,9 +68,13 @@ export class ExternalFileReloadController {
           continue;
         }
         if (!tab.contentLoaded) {
-          this.deps.invalidateLazyLoad(path);
-          tab.sizeBytes = undefined;
-          tab.lineCount = undefined;
+          // A routine poll is not evidence of a disk change. Invalidating here
+          // repeatedly cancels the read/inspection that opens a restored tab.
+          if (pathKeys) {
+            this.deps.invalidateLazyLoad(path);
+            tab.sizeBytes = undefined;
+            tab.lineCount = undefined;
+          }
           continue;
         }
         if (fileExtension(path) === "pdf") {
