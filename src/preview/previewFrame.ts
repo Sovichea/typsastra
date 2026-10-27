@@ -333,16 +333,20 @@ export class PreviewFrame {
       if (doc) this.setPreviewLinkModifier(doc, false);
     });
 
-    this.resizeObserver = new ResizeObserver(() => {
-      if (this.resizeLayoutSuspended) {
-        this.resizeLayoutPending = true;
-        return;
-      }
-      if (!this.isFitToWidth || !this.pdfDoc) return;
-      this.applyFitToWidth();
-    });
+    this.resizeObserver = new ResizeObserver(() => this.refreshPreviewAfterResize());
     this.resizeObserver.observe(this.pane);
   }
+
+  private refreshPreviewAfterResize(): void {
+    if (this.resizeLayoutSuspended) {
+      this.resizeLayoutPending = true;
+      return;
+    }
+    if (!this.pdfDoc) return;
+    if (this.isFitToWidth) this.applyFitToWidth();
+    else this.renderVisiblePages();
+  }
+
 
   public get element(): HTMLIFrameElement | null {
     return this.iframe;
@@ -1145,7 +1149,8 @@ export class PreviewFrame {
        body{position:relative}
        #viewer-container{position:relative;z-index:3;box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
        .pdf-retained-viewer{position:absolute;z-index:2;top:0;left:0;pointer-events:none;box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
-       :root[data-pdf-replacing="true"] #viewer-container .pdf-page-container{background:transparent;box-shadow:none}
+       :root[data-pdf-replacing="true"] .pdf-retained-viewer ~ #viewer-container{visibility:hidden}
+       :root[data-pdf-replacing="true"] #viewer-container:has(~ .pdf-retained-viewer){visibility:hidden}
       .pdf-page-container{position:relative;box-sizing:border-box;flex:none;margin:0 auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);overflow:hidden}
       .pdf-page-canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
       .pdf-page-canvas-dark{display:none}
@@ -1266,7 +1271,7 @@ export class PreviewFrame {
     doc.getElementById("viewer-container")?.removeAttribute("aria-busy");
   }
 
-  /** Hold the previous PDF underneath until every currently visible page paints. */
+  /** Keep the previous PDF until the replacement can display a visible page. */
   private trackReplacementPagePaints(doc: Document): void {
     if (!this.retainedViewer) {
       this.finishPdfReplacementSurface(doc);
@@ -1288,9 +1293,17 @@ export class PreviewFrame {
   }
 
   private markReplacementPagePainted(pageNo: number): void {
-    if (!this.retainedViewer || !this.pendingReplacementPages.has(pageNo)) return;
+    if (!this.retainedViewer) return;
+    const slot = this.pageSlots.find(slot => Number(slot.dataset.pageNo) === pageNo);
+    if (!slot) return;
+    const viewportHeight = this.iframe?.clientHeight
+      ?? this.iframe?.contentDocument?.documentElement.clientHeight ?? 0;
+    const rect = slot.getBoundingClientRect();
+    // Geometry discovery and scroll restoration can move the initially tracked
+    // pages out of view. Swap on a page visible now, without waiting for those
+    // offscreen pages to render. The old and new documents must never composite.
+    if (rect.bottom <= 0 || rect.top >= viewportHeight) return;
     this.pendingReplacementPages.delete(pageNo);
-    if (this.pendingReplacementPages.size > 0) return;
     const doc = this.iframe?.contentDocument;
     this.discardRetainedViewer();
     if (!doc) return;
@@ -1394,6 +1407,7 @@ export class PreviewFrame {
     }
     if (generation !== this.pdfGeneration || this.pdfDoc !== pdfDoc) return;
     if (widerPageFound && this.isFitToWidth) this.applyFitToWidth();
+    this.renderVisiblePages();
     this.onPerformance?.({
       name: "preview.geometry",
       milliseconds: performance.now() - startedAt,
@@ -1420,7 +1434,11 @@ export class PreviewFrame {
     this.observer?.disconnect();
     const doc = iframe.contentDocument;
     const Observer = (iframe.contentWindow as unknown as { IntersectionObserver: typeof IntersectionObserver }).IntersectionObserver;
-    if (!doc || !Observer) return;
+    if (!doc) return;
+    // Render immediately even if no intersection transition or scroll event
+    // occurs (for example after replacing a PDF at the same scroll offset).
+    this.renderVisiblePages();
+    if (!Observer) return;
     this.observer = new Observer(entries => {
       for (const entry of entries) {
         const pageNo = Number((entry.target as HTMLElement).dataset.pageNo);
@@ -1437,7 +1455,11 @@ export class PreviewFrame {
     for (const slot of doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container")) {
       const rect = slot.getBoundingClientRect();
       if (rect.bottom >= -1000 && rect.top <= viewportHeight + 1000) {
-        this.queuePageRender(Number(slot.dataset.pageNo), 2, "directional-neighbor");
+        const visible = rect.bottom > 0 && rect.top < viewportHeight;
+        this.queuePageRender(
+          Number(slot.dataset.pageNo), visible ? 0 : 2,
+          visible ? "settled-visible" : "directional-neighbor"
+        );
       }
     }
   }
@@ -1753,7 +1775,15 @@ export class PreviewFrame {
         console.error(`Failed to render PDF page ${pageNo}:`, error);
       }
     } finally {
-      if (this.activeRenders.get(pageNo) === active) this.activeRenders.delete(pageNo);
+      const ownsRender = this.activeRenders.get(pageNo) === active;
+      if (ownsRender) this.activeRenders.delete(pageNo);
+      // Startup geometry discovery can change another page's fit scale while
+      // its bitmap is rendering. A rejected bitmap needs a replacement even
+      // when the page never leaves the viewport and emits no observer event.
+      if (ownsRender && generation === this.pdfGeneration && slot.isConnected
+        && active.renderKey !== this.currentPageRenderKey(generation, pageNo)) {
+        this.queuePageRender(pageNo, 0, "settled-visible");
+      }
       if (active.page) this.pageRenderOwnership.release(active.page);
       if (active.canvas && !active.canvasCommitted) releaseCanvas(active.canvas);
     }
@@ -2341,6 +2371,9 @@ export class PreviewFrame {
         height: rect.height,
       }, view.innerWidth, view.innerHeight);
       view.scrollBy({ left: delta.left, top: delta.top, behavior: "auto" });
+      // A zero-distance restoration emits no scroll event. Queue the restored
+      // viewport explicitly; intersection callbacks may describe the old layout.
+      if (!immediately && !this.gestureZoomActive) this.renderVisiblePages();
     };
     if (immediately) {
       // Keep resizing and pointer anchoring in the same paint. A deferred

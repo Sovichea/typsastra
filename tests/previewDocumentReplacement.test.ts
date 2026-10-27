@@ -1,3 +1,4 @@
+import { PreviewFrame } from "../src/preview/previewFrame";
 import { describe, expect, test } from "bun:test";
 import {
   capturePreviewDocumentToken,
@@ -72,4 +73,124 @@ describe("standalone PDF document replacement", () => {
     expect(source).toContain("previewDocumentTokenIsCurrent(documentToken, this.pdfGeneration, this.pdfDoc)");
     expect(source.match(/if \(!isCurrent\(\)\) return;/g)?.length).toBeGreaterThanOrEqual(4);
   });
+});
+
+
+describe("replacement PDF presentation", () => {
+  function fixture() {
+    const root = { dataset: { pdfReplacing: "true" } as Record<string, string> };
+    let discarded = false;
+    let busy = true;
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      retainedViewer: {},
+      pendingReplacementPages: new Set([17, 18]),
+      pageSlots: [
+        { dataset: { pageNo: "17" }, getBoundingClientRect: () => ({ top: -900, bottom: -10 }) },
+        { dataset: { pageNo: "19" }, getBoundingClientRect: () => ({ top: 20, bottom: 700 }) },
+      ],
+      iframe: { clientHeight: 800, contentDocument: {
+        documentElement: root,
+        getElementById: () => ({ removeAttribute: () => { busy = false; } }),
+      } },
+      discardRetainedViewer() { discarded = true; this.retainedViewer = null; this.pendingReplacementPages.clear(); },
+    });
+    return { frame, root, discarded: () => discarded, busy: () => busy };
+  }
+
+  test("swaps when a newly visible page paints even if the original pending pages moved offscreen", () => {
+    const f = fixture();
+    f.frame.markReplacementPagePainted(19);
+    expect(f.discarded()).toBe(true);
+    expect(f.root.dataset.pdfReplacing).toBeUndefined();
+    expect(f.busy()).toBe(false);
+  });
+
+  test("an offscreen page does not reveal an unpainted replacement viewport", () => {
+    const f = fixture();
+    f.frame.markReplacementPagePainted(17);
+    expect(f.discarded()).toBe(false);
+    expect(f.root.dataset.pdfReplacing).toBe("true");
+  });
+
+  test("hides the replacement surface while the old PDF is retained", async () => {
+    const source = await Bun.file(new URL("../src/preview/previewFrame.ts", import.meta.url)).text();
+    expect(source).toContain('#viewer-container:has(~ .pdf-retained-viewer){visibility:hidden}');
+    expect(source).not.toContain('#viewer-container .pdf-page-container{background:transparent;box-shadow:none}');
+  });
+});
+
+
+describe("stationary preview rendering", () => {
+  test("queues the visible viewport immediately without an IntersectionObserver or scroll event", () => {
+    const queued: unknown[][] = [];
+    const slots = [
+      { dataset: { pageNo: "17" }, getBoundingClientRect: () => ({ top: 20, bottom: 700 }) },
+      { dataset: { pageNo: "18" }, getBoundingClientRect: () => ({ top: 720, bottom: 1400 }) },
+      { dataset: { pageNo: "19" }, getBoundingClientRect: () => ({ top: 1420, bottom: 2100 }) },
+      { dataset: { pageNo: "20" }, getBoundingClientRect: () => ({ top: 2120, bottom: 2800 }) },
+    ];
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      iframe: { clientHeight: 800, contentWindow: {}, contentDocument: { querySelectorAll: () => slots } },
+      queuePageRender: (...args: unknown[]) => queued.push(args),
+    });
+    frame.installPageObserver(frame.iframe);
+    expect(queued).toEqual([
+      [17, 0, "settled-visible"],
+      [18, 0, "settled-visible"],
+      [19, 2, "directional-neighbor"],
+    ]);
+  });
+});
+
+
+test("retries an initial bitmap invalidated by geometry discovery without scrolling", async () => {
+  let key = "initial";
+  let finish!: () => void;
+  const painted = new Promise<void>(resolve => { finish = resolve; });
+  const queued: unknown[][] = [];
+  const dimensions = { width: 600, height: 800 };
+  const slot = { dataset: {} as Record<string, string>, isConnected: true };
+  const pdfPage = {
+    getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
+    render: () => ({ promise: painted }),
+  };
+  const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+    pdfGeneration: 1, pdfDoc: { getPage: async () => pdfPage },
+    iframe: { contentDocument: {
+      querySelector: () => slot,
+      createElement: () => ({ width: 0, height: 0 }),
+    } },
+    activeRenders: new Map(), pageDimensions: new Map([[1, dimensions]]),
+    pageRenderOwnership: { retain() {}, release() {} },
+    currentPageRenderKey: () => key,
+    pageScale: () => 1, pageOutputScale: () => 1,
+    queuePageRender: (...args: unknown[]) => queued.push(args),
+  });
+  const rendering = frame.renderPage({ generation: 1, pageNo: 1 });
+  await Promise.resolve();
+  key = "geometry-discovered";
+  finish();
+  await rendering;
+  expect(queued).toEqual([[1, 0, "settled-visible"]]);
+  expect(frame.activeRenders.size).toBe(0);
+});
+
+
+test("revealing the first preview at saved manual zoom queues pages without scrolling", () => {
+  let renders = 0;
+  let fits = 0;
+  const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+    pdfDoc: {}, isFitToWidth: false, resizeLayoutSuspended: false,
+    renderVisiblePages() { renders++; }, applyFitToWidth() { fits++; },
+  });
+  frame.refreshPreviewAfterResize();
+  expect(renders).toBe(1);
+  expect(fits).toBe(0);
+  frame.isFitToWidth = true;
+  frame.refreshPreviewAfterResize();
+  expect(fits).toBe(1);
+  frame.resizeLayoutSuspended = true;
+  frame.refreshPreviewAfterResize();
+  expect(frame.resizeLayoutPending).toBe(true);
+  expect(fits).toBe(1);
 });
