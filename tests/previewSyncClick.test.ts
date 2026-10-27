@@ -32,7 +32,6 @@ describe("PDF inverse-sync click ownership", () => {
       getActiveFilePath: () => "C:/project/main.typ",
       getPdfContext: () => ({
         rootPath: "C:/project/main.typ", taskId: "preview", refreshStyle: "on-save",
-        externalRefreshPending: false,
       }) as never,
       isReady: () => true,
       mapPdfForwardTarget: async () => ({ filepath: "C:/project/main.typ", line: 1, character: 0 }),

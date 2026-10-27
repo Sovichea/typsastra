@@ -1,4 +1,4 @@
-import { watch, type UnwatchFn, type WatchEvent, type WatchEventKind } from "@tauri-apps/plugin-fs";
+import type { UnwatchFn, WatchEvent, WatchEventKind } from "@tauri-apps/plugin-fs";
 
 export type WorkspaceChangeKind = "create" | "modify" | "remove" | "rename";
 
@@ -57,6 +57,8 @@ export class WorkspaceWatcher {
     const generation = this.generation;
 
     try {
+      const { watch } = await import("@tauri-apps/plugin-fs");
+      if (generation !== this.generation) return;
       const unwatch = await watch(
         rootPath,
         event => this.handleEvent(event, generation, rootPath),

@@ -16,13 +16,18 @@ function createController(options: {
   dirty: boolean;
   renderMode: "on-type" | "on-save";
   formatOnSave?: boolean;
+  pendingInclude?: boolean;
 }) {
   const tab = {
     path: "C:/project/main.typ",
     content: options.content,
     savedContent: options.savedContent,
     isDirty: options.dirty,
+    externalContent: undefined as string | undefined,
+    externalPreviewPending: false,
+    previewMainPath: "C:/project/main.typ",
   };
+  const include = { ...tab, path: "C:/project/chapter.typ", externalPreviewPending: true };
   let formatCalls = 0;
   let refreshCalls = 0;
   const controller = new DocumentPersistenceController({
@@ -30,7 +35,7 @@ function createController(options: {
     activeMode: () => "CODE",
     previewRenderMode: () => options.renderMode,
     workspaceRootPath: () => "C:/project",
-    openTabs: () => [tab] as never,
+    openTabs: () => (options.pendingInclude ? [tab, include] : [tab]) as never,
     isInternallySupportedPath: () => true,
     flushEditorContentMutation: () => {},
     formatOnSave: () => options.formatOnSave ?? false,
@@ -53,7 +58,7 @@ function createController(options: {
     setLspStatus: () => {},
     log: () => {},
   });
-  return { controller, tab, get formatCalls() { return formatCalls; }, get refreshCalls() { return refreshCalls; } };
+  return { controller, tab, include, get formatCalls() { return formatCalls; }, get refreshCalls() { return refreshCalls; } };
 }
 
 describe("document persistence preview scheduling", () => {
@@ -72,6 +77,26 @@ describe("document persistence preview scheduling", () => {
     expect(fixture.formatCalls).toBe(0);
     expect(fixture.refreshCalls).toBe(0);
     expect(invocations.filter(call => call.command === "save_workspace_file")).toHaveLength(1);
+  });
+
+  test("an externally changed include compiles on manual main-file save, even if main is unchanged", async () => {
+    const fixture = createController({ content: "main", savedContent: "main", dirty: false, renderMode: "on-save", pendingInclude: true });
+    await fixture.controller.saveActiveFile("manual");
+    expect(fixture.refreshCalls).toBe(1);
+    expect(fixture.include.externalPreviewPending).toBe(false);
+  });
+
+  test("automatic saving does not consume an external revision's pending On save compilation", async () => {
+    const fixture = createController({ content: "external", savedContent: "old", dirty: true, renderMode: "on-save" });
+    fixture.tab.externalContent = "external";
+    fixture.tab.externalPreviewPending = true;
+    await fixture.controller.saveActiveFile("automatic");
+    expect(fixture.refreshCalls).toBe(0);
+    expect(fixture.tab.isDirty).toBe(false);
+    expect(fixture.tab.externalPreviewPending).toBe(true);
+    await fixture.controller.saveActiveFile("manual");
+    expect(fixture.refreshCalls).toBe(1);
+    expect(fixture.tab.externalPreviewPending).toBe(false);
   });
 
   test("a changed Typst file refreshes once on save mode, not on type mode", async () => {

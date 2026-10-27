@@ -109,6 +109,7 @@ import { ProjectTemplateController } from "./workspace/projectTemplateController
 import type { CreatedProject } from "./projectTemplates";
 import { ExternalWorkspaceController } from "./workspace/externalWorkspaceController";
 import { FileDropController } from "./workspace/fileDropController";
+import { ExternalFileMonitor } from "./workspace/externalFileMonitor";
 import { ExternalFileReloadController } from "./workspace/externalFileReloadController";
 import { WorkspacePathRenameController } from "./workspace/workspacePathRenameController";
 import { PinnedMainFileController } from "./workspace/pinnedMainFileController";
@@ -391,27 +392,30 @@ export class TypsastraWorkspaceController {
   });
   private readonly externalFileReloadController = new ExternalFileReloadController({
     presentation: this.editorTabPresentationController,
-    documentLanguage: this.documentLanguageController,
-    lspDocuments: this.lspDocumentController,
     openTabs: () => this.openTabs,
     activeFilePath: () => this.activeFilePath,
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
+    isSaving: () => this.documentPersistenceController.isSaving,
+    flushEditorContentMutation: () => this.flushEditorContentMutation(),
+    pathExists: path => invoke<boolean>("workspace_path_exists", { path }),
+    readText: path => invoke<string>("read_workspace_file", { path }),
+    readImage: path => invoke<string>("read_workspace_file_as_base64", { path }),
     closeTab: path => this.closeEditorTab(path, true),
     loadPdfPath: path => { void this.loadPdfPath(path, path); },
     renderTabs: () => this.renderEditorTabs(),
-    activeMode: () => this.activeMode,
-    mapMarkupToWysiwym: contents => { this.mapMarkupToWysiwym(contents); },
-    lspClient: () => this.documentSessionController.hasClient ? this.lspClient : undefined,
-    lspReady: () => this.lspReady,
-    resolveLspDocument: (path, contents) => this.getLspUriAndContent(path, contents),
-    pinnedMainFilePath: () => this.pinnedMainFilePath,
-    previewRenderMode: () => this.effectivePreviewRenderMode,
-    renderPdfPreview: contents => { void this.renderPdfPreview(contents); },
-    schedulePdfPreview: contents => this.schedulePdfPreview(contents),
+    sourceChanged: tab => this.handleExternalSourceChange(tab),
+    confirmReload: path => confirm(
+      `${fileNameFromPath(path)} changed outside Typsastra and also has local unsaved edits. Reload the external version and discard the local edits?`,
+      { title: "External edit conflict", kind: "warning", okLabel: "Reload external version", cancelLabel: "Keep local edits" },
+    ),
     setLspStatus: status => this.setLspStatus(status),
     appendWorkspaceWarning: message => this.appendLspLog({ kind: "warning", source: "workspace", message }),
     invalidateLazyLoad: path => this.editorFileContentController.invalidateLoad(path),
   });
+  private readonly externalFileMonitor = new ExternalFileMonitor(
+    () => this.externalFileReloadController.reloadOpenFiles(),
+    error => this.reportWorkspaceWatchError(error),
+  );
   private get activeFilePath(): string | null { return this.editorSessionController.activeFilePath; }
   private set activeFilePath(path: string | null) { this.editorSessionController.activeFilePath = path; }
   private get openTabs(): EditorTab[] { return this.editorSessionController.tabs; }
@@ -478,7 +482,6 @@ export class TypsastraWorkspaceController {
   private get lastPdfSessionKey(): string { return this.pdfPreviewRenderController.lastPdfSessionKey; }
   private get lastPdfSurface(): PreviewSurface { return this.pdfPreviewRenderController.lastPdfSurface; }
   private get externalConflictPaths(): Set<string> { return this.externalFileReloadController.conflictPaths; }
-  private externalPreviewRefreshPending = false;
   private get managedPreviewPdfPathKeys(): ReadonlySet<string> { return this.pdfPreviewRenderController.managedPdfPathKeys; }
   private readonly managedImageToolPathKeys = new Set<string>();
   private lastBroadcastPreviewColorMode: PreviewColorMode | null = null;
@@ -566,6 +569,7 @@ export class TypsastraWorkspaceController {
   private readonly settingsRuntimeController = new SettingsRuntimeController({
     projectTerminology: () => this.workspaceMetadata?.project.terminology ?? [],
     configureAutoSave: (enabled, intervalSeconds) => this.configureAutoSave(enabled, intervalSeconds),
+    configureExternalFileMonitor: seconds => this.externalFileMonitor.configure(seconds),
     editorFontManager: this.editorFontManager,
     spellcheck: this.spellcheckController,
     syncPreviewTheme: () => this.previewFrame.syncTheme(),
@@ -1140,7 +1144,6 @@ export class TypsastraWorkspaceController {
       previewGeneration: this.pdfPreviewGeneration,
       refreshStyle: previewRefreshStyle(this.effectivePreviewRenderMode),
       timeoutMs: this.settingsController.value.preview.forwardSyncTimeoutMs,
-      externalRefreshPending: this.externalPreviewRefreshPending,
       previewRunning: this.pdfPreviewRunning,
       previewDisabled: this.previewDisabled,
       interactionBlocked: this.workspaceResumeController.interactionBlocked,
@@ -1345,7 +1348,7 @@ export class TypsastraWorkspaceController {
     sortPinnedMainFirst: path => this.editorSessionController.sortPinnedMainFirst(path),
     renderTabs: () => this.renderEditorTabs(),
     saveWorkspaceState: () => this.saveWorkspaceState(),
-    reloadOpenFilesFromDisk: force => this.reloadOpenFilesFromDisk(force),
+    reloadOpenFilesFromDisk: () => this.reloadOpenFilesFromDisk(),
     handleImageToolFilesWritten: (paths, phase) => this.handleImageToolFilesWritten(paths, phase),
     prepareRenderProjectIfNeeded: () => this.prepareRenderProjectIfNeeded(),
     refreshActivePreviewRoot: force => this.refreshActivePreviewRoot(force),
@@ -1375,28 +1378,21 @@ export class TypsastraWorkspaceController {
   private readonly externalWorkspaceController = new ExternalWorkspaceController({
     workspaceRoot: () => this.workspaceRootPath,
     pathKey: filePathKey,
-    openTabPaths: () => this.openTabs.map(tab => tab.path),
     conflictPaths: () => this.externalConflictPaths,
     managedPathKeys: () => new Set([
       ...this.managedPreviewPdfPathKeys,
       ...this.managedImageToolPathKeys,
     ]),
-    previewRecoveryPending: () => this.previewDiagnosticsRecoveryController.needsExternalPreviewRecovery(),
-    reloadOpenFiles: refreshPreview => this.reloadOpenFilesFromDisk(refreshPreview),
-    pathsExist: paths => invoke<boolean[]>("workspace_paths_exist", { paths: [...paths] }),
-    lspClient: () => this.lspClient,
-    lspReady: () => this.lspReady,
+    reloadChangedAssets: async paths => {
+      await this.externalFileReloadController.reloadOpenFiles(
+        paths.filter(path => isBinaryImagePath(path) || fileExtension(path) === "pdf"),
+      );
+    },
     loadExplorer: rootPath => this.explorer.loadWorkspace(rootPath),
     markImageToolsStale: () => this.imageToolsController.markIndexStale(),
     refreshImageTools: () => { void this.imageToolsController.refresh(); },
     refreshTableDirectives: () => { void this.refreshTableDirectiveIndex(true); },
     imageToolsActive: () => this.sidebarController.activeTool === "images",
-    clearDiagnostics: () => this.clearDiagnostics(),
-    retireSourceMap: reason => this.retirePdfSourceMapSession(reason),
-    refreshPreview: force => this.refreshActivePreviewRoot(force),
-    waitForPreviewRefresh: () => this.waitForExternalPreviewRefresh(),
-    setRefreshPending: pending => { this.externalPreviewRefreshPending = pending; },
-    updateForwardSyncAction: () => this.updateManualForwardSyncAction(),
     log: (kind, message) => this.appendDeveloperLog({ kind, source: "workspace", message }),
   });
   private readonly typographyController: TypographyController = new TypographyController({
@@ -1749,7 +1745,7 @@ export class TypsastraWorkspaceController {
       await this.lspClient.notifyTextSave(lspRes.uri, lspRes.content);
     },
     logMemoryDiagnostics: reason => this.performanceController.logMemoryDiagnostics(reason),
-    clearExternalConflict: path => this.externalConflictPaths.delete(filePathKey(path)),
+    clearExternalConflict: path => this.externalFileReloadController.clearConflict(path),
     renderEditorTabs: () => this.renderEditorTabs(),
     refreshPreviewAfterManualSave: async () => {
       // Resolve the effective preview root at save time instead of relying on
@@ -2406,7 +2402,7 @@ export class TypsastraWorkspaceController {
     }, phase === "before" ? 10000 : 3000);
     if (phase === "before") return;
 
-    const openFilesChanged = await this.reloadOpenFilesFromDisk(false);
+    const openFilesChanged = await this.reloadOpenFilesFromDisk();
     if (this.workspaceRootPath) await this.explorer.loadWorkspace(this.workspaceRootPath);
     if (openFilesChanged && this.activeFilePath && isTypstDocumentPath(this.activeFilePath)) {
       await this.refreshActivePreviewRoot(true);
@@ -3553,36 +3549,24 @@ export class TypsastraWorkspaceController {
     });
   }
 
-  private async waitForExternalPreviewRefresh(timeoutMs = 60000): Promise<void> {
-    const startedAt = performance.now();
-    let stableFrames = 0;
-    let observedGeneration = this.pdfPreviewGeneration;
-    while (performance.now() - startedAt < timeoutMs) {
-      await new Promise<void>(resolve => window.setTimeout(resolve, 16));
-      const generationChanged = observedGeneration !== this.pdfPreviewGeneration;
-      observedGeneration = this.pdfPreviewGeneration;
-      if (
-        generationChanged
-        || this.pdfPreviewRunning
-        || this.pdfPreviewRenderController.queued
-      ) {
-        stableFrames = 0;
-        continue;
-      }
-      stableFrames += 1;
-      if (stableFrames >= 3) return;
+  private reloadOpenFilesFromDisk(): Promise<boolean> {
+    return this.externalFileReloadController.reloadOpenFiles();
+  }
+
+  private handleExternalSourceChange(tab: EditorTab): void {
+    if (this.activeFilePath && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
+      this.handleContentMutation(tab.content);
+      if (this.activeMode === "WYSIWYM") this.mapMarkupToWysiwym(tab.content);
+      return;
     }
-    this.appendDeveloperLog({
-      kind: "warning",
-      source: "workspace",
-      message: "External preview refresh did not settle within 60000ms; cursor synchronization remains available for the last presented PDF."
-    });
+    // An inactive include still changes the same project compilation. Use the
+    // normal mutation policy without switching tabs or refreshing the PDF here.
+    if (!activeFileCanRenderPreview(tab.path, this.pinnedMainFilePath, tab.previewImported, tab.previewDisabled)) return;
+    this.pdfPreviewRenderController.noteContentMutation(true);
+    if (this.effectivePreviewRenderMode === "on-type" && isTypstDocumentPath(this.activeFilePath ?? "")) {
+      this.schedulePdfPreview(this.editorInstance.state.doc.toString());
+    }
   }
-
-  private reloadOpenFilesFromDisk(refreshPreview = true): Promise<boolean> {
-    return this.externalFileReloadController.reloadOpenFiles(refreshPreview);
-  }
-
 
   private noMainFileMessage(): string {
     return this.previewContentController.noMainFileMessage();
@@ -4012,6 +3996,7 @@ export class TypsastraWorkspaceController {
         if (this.sourceMapSessionController.registeredTaskId && this.lspClient) {
           void this.lspClient.stopPreview(this.sourceMapSessionController.registeredTaskId).catch(() => {});
         }
+        this.externalFileMonitor.stop();
         this.workspaceController.stopWatching();
         void this.saveWorkspaceState();
         this.discardStandaloneCache();

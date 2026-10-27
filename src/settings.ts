@@ -65,6 +65,7 @@ export type AppSettings = {
     formatOnSave: boolean;
     autoSave: boolean;
     autoSaveIntervalSeconds: number;
+    externalEditIntervalSeconds: number;
   };
   preview: {
     renderMode: PreviewRenderMode;
@@ -129,6 +130,7 @@ export const defaultAppSettings: AppSettings = {
     scopedIgnoredWords: [],
     formatOnSave: false,
     autoSave: true,
+    externalEditIntervalSeconds: 1,
     autoSaveIntervalSeconds: 30
   },
   preview: {
@@ -312,6 +314,12 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       scopedIgnoredWords: scopedIgnoredEntries(editor.scopedIgnoredWords),
       formatOnSave: booleanValue(editor.formatOnSave, defaultAppSettings.editor.formatOnSave),
       autoSave: booleanValue(editor.autoSave, defaultAppSettings.editor.autoSave),
+      externalEditIntervalSeconds: boundedNumber(
+        editor.externalEditIntervalSeconds,
+        defaultAppSettings.editor.externalEditIntervalSeconds,
+        0.1,
+        60,
+      ),
       autoSaveIntervalSeconds: Math.round(boundedNumber(
         editor.autoSaveIntervalSeconds,
         defaultAppSettings.editor.autoSaveIntervalSeconds,

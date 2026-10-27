@@ -12,7 +12,6 @@ export type PdfSyncContext = {
   previewGeneration: number;
   refreshStyle: PreviewRefreshStyle;
   timeoutMs: number;
-  externalRefreshPending: boolean;
   previewRunning: boolean;
   previewDisabled: boolean;
   interactionBlocked: boolean;
@@ -205,7 +204,6 @@ export class PreviewSyncController {
       && this.dependencies.isReady()
       && context?.previewUrl
       && !context.previewRunning
-      && !context.externalRefreshPending
       && !context.previewDisabled
     );
   }
@@ -240,14 +238,13 @@ export class PreviewSyncController {
     const deadline = startedAt + context.timeoutMs;
     const generation = requestedGeneration ?? ++this.pdfForwardGeneration;
     if (
-      context.externalRefreshPending
-      || !client
+      !client
       || !context.rootPath
       || !context.taskId
       || !this.dependencies.isReady()
       || !context.previewUrl
     ) {
-      this.log("forward sync", "info", `Skipped forward sync: externalRefresh=${context.externalRefreshPending}, client=${!!client}, root=${context.rootPath ?? "n/a"}, task=${context.taskId ?? "n/a"}, lspReady=${this.dependencies.isReady()}, preview=${context.previewUrl || "n/a"}.`);
+      this.log("forward sync", "info", `Skipped forward sync: client=${!!client}, root=${context.rootPath ?? "n/a"}, task=${context.taskId ?? "n/a"}, lspReady=${this.dependencies.isReady()}, preview=${context.previewUrl || "n/a"}.`);
       return false;
     }
     if (!this.isEligible(path, cursor)) {
@@ -343,10 +340,6 @@ export class PreviewSyncController {
     const sourceMap = this.dependencies.sourceMap;
     const client = this.dependencies.getClient();
     if (!context || !sourceMap) return false;
-    if (context.externalRefreshPending) {
-      this.log("inverse sync", "info", "Skipped inverse sync while an externally changed preview revision is being prepared.");
-      return false;
-    }
     if (!position || !client || !context.rootPath || !context.taskId || !this.dependencies.isReady()) {
       this.log("inverse sync", "warning", `Skipped PDF inverse sync: position=${!!position}, client=${!!client}, root=${context.rootPath ?? "n/a"}, task=${context.taskId ?? "n/a"}, lspReady=${this.dependencies.isReady()}.`);
       return false;

@@ -7,6 +7,16 @@ const settingsController = readFileSync(new URL("../src/settingsController.ts", 
 const settingsStyles = readFileSync(new URL("../src/style.css", import.meta.url), "utf8");
 
 describe("application settings", () => {
+  test("defaults external source monitoring to one second and bounds the interval", () => {
+    expect(normalizeAppSettings({}).editor.externalEditIntervalSeconds).toBe(1);
+    expect(normalizeAppSettings({ editor: { externalEditIntervalSeconds: 0 } }).editor.externalEditIntervalSeconds).toBe(0.1);
+    expect(normalizeAppSettings({ editor: { externalEditIntervalSeconds: 120 } }).editor.externalEditIntervalSeconds).toBe(60);
+    expect(normalizeAppSettings({ editor: { externalEditIntervalSeconds: NaN } }).editor.externalEditIntervalSeconds).toBe(1);
+    expect(normalizeAppSettings({ editor: { externalEditIntervalSeconds: 1.5 } }).editor.externalEditIntervalSeconds).toBe(1.5);
+    expect(settingsHtml).toContain('id="settings-external-edit-interval"');
+    expect(settingsController).toContain('settings.editor.externalEditIntervalSeconds = Number(control.value)');
+  });
+
   test("fills missing values from defaults", () => {
     const settings = normalizeAppSettings({ appearance: { theme: "nord" } });
 

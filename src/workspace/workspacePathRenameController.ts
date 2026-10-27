@@ -31,7 +31,7 @@ export interface WorkspacePathRenameDependencies {
   sortPinnedMainFirst(path: string | null): void;
   renderTabs(): void;
   saveWorkspaceState(): Promise<void>;
-  reloadOpenFilesFromDisk(force: boolean): Promise<boolean>;
+  reloadOpenFilesFromDisk(): Promise<boolean>;
   handleImageToolFilesWritten(paths: string[], phase: "before" | "after"): Promise<void>;
   prepareRenderProjectIfNeeded(): Promise<void>;
   refreshActivePreviewRoot(force: boolean): Promise<void>;
@@ -66,7 +66,7 @@ export class WorkspacePathRenameController {
           // Keep open source tabs synchronized before preparing the next
           // preview generation, otherwise it can briefly compile the stale
           // image path that existed before the rename.
-          await this.deps.reloadOpenFilesFromDisk(false);
+          await this.deps.reloadOpenFilesFromDisk();
         } catch (error) {
           this.deps.appendLog({
             kind: "error",

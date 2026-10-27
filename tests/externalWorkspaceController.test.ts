@@ -1,209 +1,53 @@
 import { describe, expect, test } from "bun:test";
-import { ExternalWorkspaceController } from "../src/workspace/externalWorkspaceController";
+import { ExternalWorkspaceController, type ExternalWorkspaceControllerPort } from "../src/workspace/externalWorkspaceController";
 
-describe("external workspace diagnostics", () => {
-  test("invalidates the previous diagnostic snapshot before refreshing an accepted change", async () => {
-    const events: string[] = [];
-    const controller = new ExternalWorkspaceController({
-      workspaceRoot: () => "C:\\Project",
-      pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
-      openTabPaths: () => [],
-      conflictPaths: () => new Set(),
-      managedPathKeys: () => new Set(),
-      previewRecoveryPending: () => false,
-      reloadOpenFiles: async () => false,
-      pathsExist: async paths => paths.map(() => true),
-      lspClient: () => undefined,
-      lspReady: () => false,
-      loadExplorer: async () => { events.push("explorer"); },
-      markImageToolsStale: () => {},
-      refreshImageTools: () => {},
-      refreshTableDirectives: () => { events.push("table-directives"); },
-      imageToolsActive: () => false,
-      clearDiagnostics: () => { events.push("diagnostics"); },
-      retireSourceMap: async () => { events.push("source-map"); },
-      refreshPreview: async () => { events.push("preview"); },
-      waitForPreviewRefresh: async () => { events.push("settled"); },
-      setRefreshPending: () => {},
-      updateForwardSyncAction: () => {},
-      log: () => {},
-    });
+function fixture(overrides: Partial<ExternalWorkspaceControllerPort> = {}) {
+  const events: string[] = [];
+  const controller = new ExternalWorkspaceController({
+    workspaceRoot: () => "C:/Project",
+    pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
+    conflictPaths: () => new Set(),
+    managedPathKeys: () => new Set(),
+    reloadChangedAssets: async paths => { events.push(`assets:${paths.join(",")}`); },
+    loadExplorer: async () => { events.push("explorer"); },
+    markImageToolsStale: () => { events.push("image-index"); },
+    refreshImageTools: () => { events.push("images"); },
+    refreshTableDirectives: () => { events.push("tables"); },
+    imageToolsActive: () => false,
+    log: () => {},
+    ...overrides,
+  });
+  return { controller, events };
+}
 
-    await controller.handleChange({
-      rootPath: "C:\\Project",
-      kind: "modify",
-      paths: ["C:\\Project\\main.typ"],
-    });
-
-    expect(events).toEqual(["diagnostics", "source-map", "explorer", "table-directives", "preview", "settled"]);
+describe("external workspace tools", () => {
+  test("refreshes tools without coupling file events to PDF compilation or LSP saves", async () => {
+    const { controller, events } = fixture();
+    await controller.handleChange({ rootPath: "C:/Project", kind: "modify", paths: ["C:/Project/main.typ"] });
+    expect(events).toEqual(["image-index", "assets:C:/Project/main.typ", "explorer", "tables"]);
   });
 
-  test("reports an atomic replacement as changed when the watcher labels it removed", async () => {
-    const notifiedTypes: number[] = [];
-    const warnings: string[] = [];
-    const client = {
-      notifyWorkspaceFilesChanged: async (changes: Array<{ uri: string; type: 1 | 2 | 3 }>) => {
-        notifiedTypes.push(...changes.map(change => change.type));
-      },
-    } as unknown as import("../src/compiler/lsp").TinymistLspClient;
-    const controller = new ExternalWorkspaceController({
-      workspaceRoot: () => "C:\\Project",
-      pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
-      openTabPaths: () => [],
-      conflictPaths: () => new Set(),
-      managedPathKeys: () => new Set(),
-      previewRecoveryPending: () => false,
-      reloadOpenFiles: async () => false,
-      pathsExist: async paths => paths.map(path => path.endsWith("main.typ")),
-      lspClient: () => client,
-      lspReady: () => true,
-      loadExplorer: async () => {},
-      markImageToolsStale: () => {},
-      refreshImageTools: () => {},
-      refreshTableDirectives: () => {},
-      imageToolsActive: () => false,
-      clearDiagnostics: () => {},
-      retireSourceMap: async () => {},
-      refreshPreview: async () => {},
-      waitForPreviewRefresh: async () => {},
-      setRefreshPending: () => {},
-      updateForwardSyncAction: () => {},
-      log: (kind, message) => {
-        if (kind === "warning") warnings.push(message);
-      },
-    });
-
-    await controller.handleChange({
-      rootPath: "C:\\Project",
-      kind: "remove",
-      paths: ["C:\\Project\\main.typ"],
-    });
-
-    expect(notifiedTypes).toEqual([2]);
-    expect(warnings[0]).toContain("Watcher reported removal for a path that exists");
+  test("ignores other workspaces and private cache writes", async () => {
+    const { controller, events } = fixture();
+    await controller.handleChange({ rootPath: "C:/Other", kind: "modify", paths: ["C:/Other/main.typ"] });
+    await controller.handleChange({ rootPath: "C:/Project", kind: "modify", paths: ["C:/Project/.typsastra/cache/main.typ"] });
+    expect(events).toEqual([]);
   });
 
-  test("maps a rename pair from current disk state instead of event ordering", async () => {
-    const notifiedTypes: number[] = [];
-    const client = {
-      notifyWorkspaceFilesChanged: async (changes: Array<{ uri: string; type: 1 | 2 | 3 }>) => {
-        notifiedTypes.push(...changes.map(change => change.type));
-      },
-    } as unknown as import("../src/compiler/lsp").TinymistLspClient;
-    const controller = new ExternalWorkspaceController({
-      workspaceRoot: () => "C:\\Project",
-      pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
-      openTabPaths: () => [],
-      conflictPaths: () => new Set(),
-      managedPathKeys: () => new Set(),
-      previewRecoveryPending: () => false,
-      reloadOpenFiles: async () => false,
-      pathsExist: async paths => paths.map(path => path.endsWith("new.typ")),
-      lspClient: () => client,
-      lspReady: () => true,
-      loadExplorer: async () => {},
-      markImageToolsStale: () => {},
-      refreshImageTools: () => {},
-      refreshTableDirectives: () => {},
-      imageToolsActive: () => false,
-      clearDiagnostics: () => {},
-      retireSourceMap: async () => {},
-      refreshPreview: async () => {},
-      waitForPreviewRefresh: async () => {},
-      setRefreshPending: () => {},
-      updateForwardSyncAction: () => {},
-      log: () => {},
+  test("excludes application-managed PDFs and conflicted paths", async () => {
+    const { controller, events } = fixture({
+      managedPathKeys: () => new Set(["c:/project/main.pdf"]),
+      conflictPaths: () => new Set(["c:/project/main.typ"]),
     });
-
-    await controller.handleChange({
-      rootPath: "C:\\Project",
-      kind: "rename",
-      paths: ["C:\\Project\\old.typ", "C:\\Project\\new.typ"],
-    });
-
-    expect(notifiedTypes).toEqual([3, 1]);
+    await controller.handleChange({ rootPath: "C:/Project", kind: "modify", paths: ["C:/Project/main.pdf"] });
+    expect(events).toEqual([]);
+    await controller.handleChange({ rootPath: "C:/Project", kind: "modify", paths: ["C:/Project/main.typ"] });
+    expect(events).toEqual(["explorer"]);
   });
 
-  test("refreshes an unchanged open document after a recoverable LSP error", async () => {
-    const events: string[] = [];
-    const client = {
-      notifyWorkspaceFilesChanged: async () => { events.push("lsp-change"); },
-    } as unknown as import("../src/compiler/lsp").TinymistLspClient;
-    const controller = new ExternalWorkspaceController({
-      workspaceRoot: () => "C:\\Project",
-      pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
-      openTabPaths: () => ["C:\\Project\\main.typ"],
-      conflictPaths: () => new Set(),
-      managedPathKeys: () => new Set(),
-      previewRecoveryPending: () => true,
-      reloadOpenFiles: async () => false,
-      pathsExist: async paths => paths.map(() => true),
-      lspClient: () => client,
-      lspReady: () => true,
-      loadExplorer: async () => { events.push("explorer"); },
-      markImageToolsStale: () => {},
-      refreshImageTools: () => {},
-      refreshTableDirectives: () => {},
-      imageToolsActive: () => false,
-      clearDiagnostics: () => { events.push("clear-diagnostics"); },
-      retireSourceMap: async () => {},
-      refreshPreview: async force => { events.push(`preview:${force}`); },
-      waitForPreviewRefresh: async () => { events.push("settled"); },
-      setRefreshPending: () => {},
-      updateForwardSyncAction: () => {},
-      log: () => {},
-    });
-
-    await controller.handleChange({
-      rootPath: "C:\\Project",
-      kind: "modify",
-      paths: ["C:\\Project\\main.typ"],
-    });
-
-    expect(events).toEqual([
-      "clear-diagnostics",
-      "lsp-change",
-      "explorer",
-      "preview:true",
-      "settled",
-    ]);
-  });
-
-  test("invalidates the image index for external asset changes while Image Tools is hidden", async () => {
-    let imageIndexStale = false;
-    let refreshCount = 0;
-    const controller = new ExternalWorkspaceController({
-      workspaceRoot: () => "C:\\Project",
-      pathKey: path => path.replace(/\\/g, "/").toLowerCase(),
-      openTabPaths: () => [],
-      conflictPaths: () => new Set(),
-      managedPathKeys: () => new Set(),
-      previewRecoveryPending: () => false,
-      reloadOpenFiles: async () => false,
-      pathsExist: async paths => paths.map(() => true),
-      lspClient: () => undefined,
-      lspReady: () => false,
-      loadExplorer: async () => {},
-      markImageToolsStale: () => { imageIndexStale = true; },
-      refreshImageTools: () => { refreshCount += 1; },
-      refreshTableDirectives: () => {},
-      imageToolsActive: () => false,
-      clearDiagnostics: () => {},
-      retireSourceMap: async () => {},
-      refreshPreview: async () => {},
-      waitForPreviewRefresh: async () => {},
-      setRefreshPending: () => {},
-      updateForwardSyncAction: () => {},
-      log: () => {},
-    });
-
-    await controller.handleChange({
-      rootPath: "C:\\Project",
-      kind: "create",
-      paths: ["C:\\Project\\images\\new-cover.png"],
-    });
-
-    expect(imageIndexStale).toBeTrue();
-    expect(refreshCount).toBe(0);
+  test("refreshes visible image tools after external asset edits", async () => {
+    const { controller, events } = fixture({ imageToolsActive: () => true });
+    await controller.handleChange({ rootPath: "C:/Project", kind: "create", paths: ["C:/Project/cover.png"] });
+    expect(events).toEqual(["image-index", "assets:C:/Project/cover.png", "explorer", "images", "tables"]);
   });
 });

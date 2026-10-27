@@ -45,6 +45,8 @@ export class DocumentPersistenceController {
 
   constructor(private readonly deps: DocumentPersistenceDependencies) {}
 
+  get isSaving(): boolean { return this.saveInProgress !== null; }
+
   async saveActiveFile(intent: SaveIntent = "manual"): Promise<void> {
     if (this.saveInProgress) {
       const inProgressIntent = this.saveInProgressIntent;
@@ -151,6 +153,7 @@ export class DocumentPersistenceController {
         if (tab.content !== content) continue;
         tab.savedContent = content;
         tab.isDirty = false;
+        tab.externalContent = undefined;
         this.deps.clearExternalConflict(tab.path);
         savedCount += 1;
       }
@@ -180,7 +183,7 @@ export class DocumentPersistenceController {
       const activeTab = this.deps.openTabs().find(tab => filePathKey(tab.path) === filePathKey(activeFilePath)) ?? null;
       const contentBeforeSave = this.currentContent();
       const savedContentBeforeSave = activeTab?.savedContent ?? contentBeforeSave;
-      const hasUnsavedContent = contentBeforeSave !== savedContentBeforeSave;
+      const hasUnsavedContent = activeTab?.isDirty || contentBeforeSave !== savedContentBeforeSave;
       // Do not let Format on Save mutate an already-clean document. Formatter
       // edits are document changes and would otherwise trigger render-on-type
       // even though the user only asked to save an unchanged file.
@@ -191,7 +194,12 @@ export class DocumentPersistenceController {
       }
 
       const content = this.currentContent();
-      const contentChanged = content !== savedContentBeforeSave;
+      const previewOwner = activeTab?.previewMainPath ?? activeTab?.previewRootPath ?? activeFilePath;
+      const pendingExternalTabs = this.deps.openTabs().filter(tab => tab.externalPreviewPending && (
+        filePathKey(tab.previewMainPath ?? tab.previewRootPath ?? tab.path) === filePathKey(previewOwner)
+      ));
+      const pendingExternalContents = pendingExternalTabs.map(tab => ({ tab, content: tab.content }));
+      const contentChanged = pendingExternalTabs.length > 0 || activeTab?.externalContent !== undefined || content !== savedContentBeforeSave;
       await invoke("save_workspace_file", { path: activeFilePath, contents: content });
       await this.deps.logMemoryDiagnostics(`save ${saveDiagnosticId}: after workspace write`);
 
@@ -205,6 +213,7 @@ export class DocumentPersistenceController {
         activeTab.content = content;
         activeTab.savedContent = content;
         activeTab.isDirty = false;
+        activeTab.externalContent = undefined;
         this.deps.clearExternalConflict(activeTab.path);
         this.deps.renderEditorTabs();
       }
@@ -214,7 +223,11 @@ export class DocumentPersistenceController {
         // Saving has already succeeded. Start preview refresh separately so a
         // compiler/indexing failure is reported by the preview without
         // incorrectly presenting the successful file write as a save failure.
-        void this.deps.refreshPreviewAfterManualSave(activeFilePath, content).catch(error => {
+        void this.deps.refreshPreviewAfterManualSave(activeFilePath, content).then(() => {
+          for (const pending of pendingExternalContents) {
+            if (pending.tab.content === pending.content) pending.tab.externalPreviewPending = false;
+          }
+        }).catch(error => {
           this.deps.log("error", "preview scheduler", `Preview refresh after save failed: ${String(error)}`);
         });
       }

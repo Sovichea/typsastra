@@ -9,6 +9,10 @@ export type EditorTab = {
   savedContent: string;
   contentLoaded: boolean;
   isDirty: boolean;
+  /** Last disk revision adopted externally; remains unsaved until an app save. */
+  externalContent?: string;
+  /** External revision still awaiting an explicit On save preview compilation. */
+  externalPreviewPending?: boolean;
   previewRootPath: string | null;
   previewMainPath: string | null;
   previewTaskId: string | null;

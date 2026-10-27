@@ -8,6 +8,7 @@ import type { PreviewRefreshStyle } from "./preview/previewPolicy";
 
 export interface SettingsRuntimeDependencies {
   projectTerminology(): AppSettings["editor"]["globalTerminology"];
+  configureExternalFileMonitor(intervalSeconds: number): void;
   configureAutoSave(enabled: boolean, intervalSeconds: number): void;
   editorFontManager: EditorFontManager;
   spellcheck: SpellcheckController;
@@ -44,6 +45,9 @@ export class SettingsRuntimeController {
     );
     this._forwardSyncDebounceMs = preview.syncDebounceMs;
     this.deps.configureAutoSave(editor.autoSave, editor.autoSaveIntervalSeconds);
+    if (!this.deps.isPreviewOnlyWindow()) {
+      this.deps.configureExternalFileMonitor(editor.externalEditIntervalSeconds);
+    }
     this.deps.editorFontManager.configure(editor.codeFont, editor.unicodeFont, editor.unicodeFonts);
     this.deps.spellcheck.setEnabled(editor.spellcheck);
     this.deps.spellcheck.setUserDictionary(editor.userDictionary);

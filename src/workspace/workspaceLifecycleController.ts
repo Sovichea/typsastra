@@ -59,7 +59,6 @@ export interface WorkspaceLifecycleSessionState {
   previewImported: boolean;
   previewStandalone: boolean;
   previewDisabled: boolean;
-  externalPreviewRefreshPending: boolean;
   lastPreviewRenderMode: PreviewRenderMode | undefined;
   isLoadingFile: boolean;
   editorExtensions: Extension;
@@ -733,7 +732,6 @@ export class WorkspaceLifecycleController {
     app.previewDisabled = false;
     app.managedImageToolPathKeys.clear();
     app.sourceMapSessionController.reset();
-    app.externalPreviewRefreshPending = false;
     app.imagePreviewController.clear();
     app.updatePreviewActionsToolbar(null);
     app.lspDocumentController.resetSessionState();
