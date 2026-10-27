@@ -83,12 +83,9 @@ export class EditorTabStateController {
       this.deps.logSyntax(`Tab viewport restored from snapshot: path=${path}; ${snapshot()}.`);
       return;
     }
-    if (tab.scrollTop === undefined && tab.scrollLeft === undefined) {
-      await this.waitForViewportMeasure(editor);
-      this.deps.logSyntax(`Tab viewport measured without a saved offset: path=${path}; ${snapshot()}.`);
-      return;
-    }
-
+    // CodeMirror reuses its scroll element across documents. Without an
+    // explicit reset, a new tab inherits the outgoing tab's offset, clamped
+    // to the bottom when the new document is shorter.
     const targetScrollTop = tab.scrollTop ?? 0;
     const targetScrollLeft = tab.scrollLeft ?? 0;
     const restoreKey = { restoredPath: path };
