@@ -17,6 +17,15 @@ describe("application settings", () => {
     expect(settingsController).toContain('settings.editor.externalEditIntervalSeconds = Number(control.value)');
   });
 
+  test("defaults landscape scale to 30 percent and bounds custom values", () => {
+    expect(normalizeAppSettings({}).preview.landscapeScalePercent).toBe(30);
+    expect(normalizeAppSettings({ preview: { landscapeScalePercent: 50 } }).preview.landscapeScalePercent).toBe(50);
+    expect(normalizeAppSettings({ preview: { landscapeScalePercent: -10 } }).preview.landscapeScalePercent).toBe(0);
+    expect(normalizeAppSettings({ preview: { landscapeScalePercent: 150 } }).preview.landscapeScalePercent).toBe(100);
+    expect(normalizeAppSettings({ preview: { landscapeScalePercent: NaN } }).preview.landscapeScalePercent).toBe(30);
+    expect(settingsHtml).toContain('id="settings-landscape-scale"');
+  });
+
   test("fills missing values from defaults", () => {
     const settings = normalizeAppSettings({ appearance: { theme: "nord" } });
 

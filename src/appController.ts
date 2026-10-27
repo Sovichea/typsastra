@@ -573,6 +573,14 @@ export class TypsastraWorkspaceController {
     editorFontManager: this.editorFontManager,
     spellcheck: this.spellcheckController,
     syncPreviewTheme: () => this.previewFrame.syncTheme(),
+    setLandscapeScalePercent: percent => {
+      this.previewFrame.setLandscapeScalePercent(percent);
+      if (!this.previewWindowController.isPreviewOnlyWindow()) {
+        import("@tauri-apps/api/event").then(({ emit }) => {
+          void emit("preview-landscape-scale-update", percent);
+        }).catch(() => {});
+      }
+    },
     isPreviewOnlyWindow: () => this.previewWindowController.isPreviewOnlyWindow(),
     effectivePreviewRenderMode: () => this.effectivePreviewRenderMode,
     cancelOnTypeSchedule: () => this.pdfPreviewRenderController.cancelOnTypeSchedule(),

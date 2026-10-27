@@ -88,6 +88,10 @@ export class PreviewWindowController {
       void applyUIThemeVariables(event.payload).then(() => deps.previewFrame.syncTheme());
     });
 
+    await listen<number>("preview-landscape-scale-update", event => {
+      deps.previewFrame.setLandscapeScalePercent(event.payload);
+    });
+
     await listen<PreviewColorMode>("preview-color-mode-update", event => {
       deps.setPreviewColorMode(event.payload);
       deps.previewFrame.setColorMode(event.payload);

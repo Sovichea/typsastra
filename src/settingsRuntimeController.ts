@@ -13,6 +13,7 @@ export interface SettingsRuntimeDependencies {
   editorFontManager: EditorFontManager;
   spellcheck: SpellcheckController;
   syncPreviewTheme(): void;
+  setLandscapeScalePercent(percent: number): void;
   isPreviewOnlyWindow(): boolean;
   effectivePreviewRenderMode(): PreviewRefreshStyle;
   cancelOnTypeSchedule(): void;
@@ -27,6 +28,7 @@ export interface SettingsRuntimeDependencies {
 export class SettingsRuntimeController {
   private _forwardSyncDebounceMs = 120;
   private _lastPreviewRenderMode: PreviewRefreshStyle | undefined;
+  private lastLandscapeScalePercent: number | undefined;
   private _lastLowMemoryMode: boolean | undefined;
 
   constructor(private readonly deps: SettingsRuntimeDependencies) {}
@@ -44,6 +46,10 @@ export class SettingsRuntimeController {
       `${appearance.editorFontSize * appearance.editorLineHeight}px`,
     );
     this._forwardSyncDebounceMs = preview.syncDebounceMs;
+    if (this.lastLandscapeScalePercent !== preview.landscapeScalePercent) {
+      this.lastLandscapeScalePercent = preview.landscapeScalePercent;
+      this.deps.setLandscapeScalePercent(preview.landscapeScalePercent);
+    }
     this.deps.configureAutoSave(editor.autoSave, editor.autoSaveIntervalSeconds);
     if (!this.deps.isPreviewOnlyWindow()) {
       this.deps.configureExternalFileMonitor(editor.externalEditIntervalSeconds);

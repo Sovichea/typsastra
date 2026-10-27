@@ -100,6 +100,11 @@ is restored independently for each workspace. The global `renderMode` value in
 saved selection. Both modes compile from a private mirror in Typsastra's
 machine-local application-data cache, so live preview never creates `main.pdf`
 beside the source.
+**Landscape scale increase** controls how much wider landscape pages appear
+than portrait pages in **Fit to width** mode. It defaults to **30%** and accepts
+0?100%; 0% gives all pages the same displayed width. The widest page stays
+within the preview, and manual zoom preserves physical page proportions.
+
 Use on-save for long or resource-intensive documents.
 
 `lowMemoryMode` is an experimental option for memory-constrained systems such

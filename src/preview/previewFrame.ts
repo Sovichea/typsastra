@@ -68,6 +68,7 @@ import {
   previewLinkTarget,
   type PreviewLinkTarget,
 } from "./previewLinks";
+import { previewPageScale } from "./previewPageScale";
 import { pageDimensionsChanged, pagesToEvict, visiblePageIndexes } from "./virtualization";
 import { PreviewMotionController } from "./previewMotion";
 import {
@@ -199,6 +200,8 @@ export class PreviewFrame {
   private pdfDoc: any = null;
   private observer: IntersectionObserver | null = null;
   private pageDimensions = new Map<number, PageDimensions>();
+  private landscapePages = new Set<number>();
+  private landscapeScalePercent = 30;
   private pageSlots: HTMLElement[] = [];
   /** Previous rendered surface retained underneath a replacement until its visible pages paint. */
   private retainedViewer: HTMLElement | null = null;
@@ -534,10 +537,14 @@ export class PreviewFrame {
 
   public zoomIn(): number {
     const anchor = this.captureScrollAnchor();
+    const currentPercent = this.isFitToWidth
+      ? this.pageScale(this.visiblePageNumber()) * 100
+      : this.previewZoomPercent;
     this.isFitToWidth = false;
     return this.setZoom(
-      ZOOM_LEVELS.find(level => level > this.previewZoomPercent) ?? this.previewZoomPercent,
+      ZOOM_LEVELS.find(level => level > currentPercent) ?? currentPercent,
       anchor,
+      true,
     );
   }
 
@@ -565,11 +572,25 @@ export class PreviewFrame {
 
   public zoomOut(): number {
     const anchor = this.captureScrollAnchor();
+    const currentPercent = this.isFitToWidth
+      ? this.pageScale(this.visiblePageNumber()) * 100
+      : this.previewZoomPercent;
     this.isFitToWidth = false;
     return this.setZoom(
-      [...ZOOM_LEVELS].reverse().find(level => level < this.previewZoomPercent) ?? this.previewZoomPercent,
+      [...ZOOM_LEVELS].reverse().find(level => level < currentPercent) ?? currentPercent,
       anchor,
+      true,
     );
+  }
+
+  public setLandscapeScalePercent(percent: number): void {
+    const next = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 30;
+    if (next === this.landscapeScalePercent) return;
+    const anchor = this.captureScrollAnchor();
+    this.landscapeScalePercent = next;
+    if (this.pdfDoc && this.isFitToWidth && this.landscapePages.size > 0) {
+      this.applyFitToWidth(anchor);
+    }
   }
 
   public zoomToFit(): void {
@@ -593,16 +614,12 @@ export class PreviewFrame {
 
   private applyFitToWidth(anchor?: PreviewViewportAnchor | null): void {
     const percent = this.computeFitToWidthPercent();
-    if (percent === this.previewZoomPercent) {
-      if (anchor) this.restoreScrollAnchor(anchor, true);
-      return;
-    }
-    this.setZoom(percent, anchor);
+    this.setZoom(percent, anchor, true);
   }
 
-  private setZoom(percent: number, preservedAnchor?: PreviewViewportAnchor | null): number {
+  private setZoom(percent: number, preservedAnchor?: PreviewViewportAnchor | null, forceLayout = false): number {
     this.hideDraftImagePopover();
-    if (percent === this.previewZoomPercent) return percent;
+    if (percent === this.previewZoomPercent && !forceLayout) return percent;
     this.zoomStartedAt = performance.now();
     const anchor = preservedAnchor ?? this.captureScrollAnchor();
     this.updateHorizontalOverflow();
@@ -918,6 +935,9 @@ export class PreviewFrame {
       nextLoadingTask = null;
       this.pendingPdfLoadingTask = null;
       this.pageDimensions = nextDimensions;
+      this.landscapePages = new Set([...nextDimensions]
+        .filter(([, dimensions]) => dimensions.width > dimensions.height)
+        .map(([pageNo]) => pageNo));
       // PDF.js transfers this buffer to its worker, detaching it after load.
       this.currentPdfBytes = pdfByteLength;
       this.currentPdfBytesRead = transportStats.bytesRead;
@@ -991,6 +1011,7 @@ export class PreviewFrame {
       this.pdfDoc = null;
       this.pdfLoadingTask = null;
       this.pageDimensions.clear();
+      this.landscapePages.clear();
       this.observer?.disconnect();
       this.observer = null;
       this.discardRetainedViewer();
@@ -1215,7 +1236,7 @@ export class PreviewFrame {
     }
     const viewportHeight = this.iframe?.clientHeight ?? doc.documentElement.clientHeight;
     for (const slot of this.pageSlots) {
-      if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration)) continue;
+      if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration, Number(slot.dataset.pageNo))) continue;
       const rect = slot.getBoundingClientRect();
       if (rect.bottom > 0 && rect.top < viewportHeight) {
         const pageNo = Number(slot.dataset.pageNo);
@@ -1278,11 +1299,12 @@ export class PreviewFrame {
   private layoutPageSlots(options: { preserveExistingPages?: boolean } = {}): void {
     const doc = this.iframe?.contentDocument;
     if (!doc) return;
-    const zoom = this.previewZoomPercent / 100;
+    const availableWidth = this.pane.clientWidth - FIT_PADDING_PX;
     for (const slot of doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container")) {
       const pageNo = Number(slot.dataset.pageNo);
       const dimensions = this.pageDimensions.get(pageNo);
       if (!dimensions) continue;
+      const zoom = this.pageScale(pageNo, availableWidth);
       slot.style.width = `${dimensions.width * zoom}px`;
       slot.style.height = `${dimensions.height * zoom}px`;
       if (!options.preserveExistingPages) {
@@ -1297,7 +1319,7 @@ export class PreviewFrame {
     if (isPdfiumDocument(pdfDoc)) {
       for (let index = 0; index < pdfDoc.pageDimensions.length; index += 1) {
         const dimensions = pdfDoc.pageDimensions[index];
-        this.pageDimensions.set(index + 1, dimensions);
+        this.setPageDimensions(index + 1, dimensions);
         this.updatePageSlotDimensions(index + 1, dimensions);
       }
       this.onPerformance?.({
@@ -1322,7 +1344,7 @@ export class PreviewFrame {
       const dimensions = { width: viewport.width, height: viewport.height };
       const previous = this.pageDimensions.get(pageNo);
       if (pageDimensionsChanged(previous, dimensions)) {
-        this.pageDimensions.set(pageNo, dimensions);
+        this.setPageDimensions(pageNo, dimensions);
         this.updatePageSlotDimensions(pageNo, dimensions);
         widerPageFound ||= dimensions.width > initialMaxWidth;
       }
@@ -1351,7 +1373,7 @@ export class PreviewFrame {
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
     if (!slot) return;
-    const zoom = this.previewZoomPercent / 100;
+    const zoom = this.pageScale(pageNo);
     slot.style.width = `${dimensions.width * zoom}px`;
     slot.style.height = `${dimensions.height * zoom}px`;
   }
@@ -1391,7 +1413,7 @@ export class PreviewFrame {
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
     if (!slot) return;
-    if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration)) return;
+    if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration, pageNo)) return;
     if (this.activeRenders.has(pageNo) && reason !== "settled-visible") return;
     const result = this.renderScheduler.enqueue({
       generation: this.pdfGeneration,
@@ -1496,7 +1518,7 @@ export class PreviewFrame {
       }
       const destinationAlreadyFinal = this.iframe?.contentDocument
         ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${this.motionDestinationPage}"]`)
-        ?.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration);
+        ?.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration, this.motionDestinationPage);
       this.finalDecisionAt = destinationAlreadyFinal ? null : settledAt;
       this.queueViewportFinalRenders("first-stable");
       this.retargetDraftHoverAtPointer();
@@ -1578,7 +1600,7 @@ export class PreviewFrame {
     const doc = this.iframe?.contentDocument;
     const slot = doc?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
     if (!doc || !slot) return;
-    const renderKey = this.currentPageRenderKey(generation);
+    let renderKey = this.currentPageRenderKey(generation, pageNo);
     if (slot.dataset.renderKey === renderKey) return;
 
     const active: ActivePageRender = {
@@ -1595,9 +1617,20 @@ export class PreviewFrame {
       const page = await this.pdfDoc.getPage(pageNo);
       active.page = page;
       this.pageRenderOwnership.retain(page);
-      if (!this.renderIsCurrent(pageNo, active, slot)) return;
+      if (generation !== this.pdfGeneration || this.activeRenders.get(pageNo) !== active || !slot.isConnected) return;
+      // Initial slots may still use page one's geometry. Resolve this page's
+      // actual size before choosing its raster and overlay scale.
+      const naturalViewport = page.getViewport({ scale: 1 });
+      const dimensions = { width: naturalViewport.width, height: naturalViewport.height };
+      if (pageDimensionsChanged(this.pageDimensions.get(pageNo), dimensions)) {
+        this.setPageDimensions(pageNo, dimensions);
+        this.updatePageSlotDimensions(pageNo, dimensions);
+      }
+      if (this.activeRenders.get(pageNo) !== active) return;
+      renderKey = this.currentPageRenderKey(generation, pageNo);
+      active.renderKey = renderKey;
 
-      const cssScale = this.previewZoomPercent / 100;
+      const cssScale = this.pageScale(pageNo);
       const cssViewport = page.getViewport({ scale: cssScale });
       const outputScale = this.pageOutputScale();
       const renderViewport = page.getViewport({ scale: cssScale * outputScale });
@@ -1890,14 +1923,36 @@ export class PreviewFrame {
 
   private renderIsCurrent(pageNo: number, active: ActivePageRender, slot: HTMLElement): boolean {
     return active.generation === this.pdfGeneration
-      && active.renderKey === this.currentPageRenderKey(active.generation)
+      && active.renderKey === this.currentPageRenderKey(active.generation, pageNo)
       && this.activeRenders.get(pageNo) === active
       && slot.isConnected;
   }
 
-  private currentPageRenderKey(generation: number): string {
+  private setPageDimensions(pageNo: number, dimensions: PageDimensions): void {
+    const hadLandscape = this.landscapePages.size > 0;
+    this.pageDimensions.set(pageNo, dimensions);
+    if (dimensions.width > dimensions.height) this.landscapePages.add(pageNo);
+    else this.landscapePages.delete(pageNo);
+    if (this.isFitToWidth && hadLandscape !== (this.landscapePages.size > 0)) {
+      this.applyFitToWidth();
+    }
+  }
+
+  private pageScale(pageNo: number, availableWidth = this.pane.clientWidth - FIT_PADDING_PX): number {
+    return previewPageScale(
+      this.pageDimensions.get(pageNo)?.width,
+      availableWidth,
+      this.isFitToWidth,
+      this.previewZoomPercent,
+      this.pageDimensions.get(pageNo)?.height,
+      this.landscapePages.size > 0,
+      this.landscapeScalePercent,
+    );
+  }
+
+  private currentPageRenderKey(generation: number, pageNo: number): string {
     const outputScale = this.pageOutputScale();
-    return `${generation}:${this.previewZoomPercent}:${outputScale}`;
+    return `${generation}:${this.pageScale(pageNo)}:${outputScale}`;
   }
 
   private pageOutputScale(): number {
@@ -2010,6 +2065,7 @@ export class PreviewFrame {
       try { await pendingLoadingTask.destroy(); } catch {}
     }
     this.pageDimensions.clear();
+    this.landscapePages.clear();
     this.pageSlots = [];
     this.pdfOutlineDestinations = [];
   }
@@ -2091,7 +2147,7 @@ export class PreviewFrame {
     const view = this.iframe?.contentWindow;
     if (!view) return false;
 
-    const zoom = this.previewZoomPercent / 100;
+    const zoom = this.pageScale(position.page_no);
     const targetY = slot.offsetTop + (position.y * zoom) - (view.innerHeight * 0.45);
     this.jumpToPreviewOffset(Math.max(0, targetY), position.page_no);
     if (options.ripple) {
@@ -2110,7 +2166,7 @@ export class PreviewFrame {
     const slot = doc.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
     if (generation !== this.forwardRippleGeneration || !slot) return false;
 
-    const zoom = this.previewZoomPercent / 100;
+    const zoom = this.pageScale(position.page_no);
     const slotRect = slot.getBoundingClientRect();
     const x = slotRect.left + (position.x * zoom);
     const y = slotRect.top + (position.y * zoom);
@@ -3219,7 +3275,7 @@ export class PreviewFrame {
     const slotRect = slot.getBoundingClientRect();
     const x = event.clientX - slotRect.left;
     const y = event.clientY - slotRect.top;
-    const zoom = this.previewZoomPercent / 100;
+    const zoom = this.pageScale(pageNo);
     return {
       pageNo,
       documentPosition: { page_no: pageNo, x: x / zoom, y: y / zoom }
