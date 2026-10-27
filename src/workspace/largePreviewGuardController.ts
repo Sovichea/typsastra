@@ -7,6 +7,7 @@ import type { PreviewSessionController } from "../preview/previewSessionControll
 import type { PreviewTarget } from "../preview/previewPolicy";
 import {
   largeFileOpeningNotice,
+  completeSourcePrefix,
   largeMainPreviewOpeningNotice,
   type LargeFileOpeningNotice,
 } from "./largeFileOpening";
@@ -53,7 +54,20 @@ export class LargePreviewGuardController {
   async noticeForTab(tab: EditorTab): Promise<LargeFileOpeningNotice | null> {
     if (tab.sizeBytes === undefined) {
       try {
-        tab.sizeBytes = await invoke<number>("workspace_file_size", { path: tab.path });
+        const canReadText = this.deps.isInternallySupportedPath(tab.path)
+          && !isBinaryImagePath(tab.path) && fileExtension(tab.path) !== "pdf";
+        const [sizeBytes, prefix] = await Promise.all([
+          invoke<number>("workspace_file_size", { path: tab.path }),
+          canReadText
+            ? invoke<string>("read_workspace_text_prefix", { path: tab.path, maxBytes: 256 * 1024 }).catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        tab.sizeBytes = sizeBytes;
+        const source = prefix === null ? null : completeSourcePrefix(prefix, sizeBytes);
+        if (source) {
+          tab.prefetchedContent = source.content;
+          tab.lineCount = source.lineCount;
+        }
       } catch {
         return null;
       }
@@ -82,6 +96,8 @@ export class LargePreviewGuardController {
     // session. Once the user accepts the cost for one project source, opening
     // another main/include file must not interrupt them with the same warning.
     if (this.hasWorkspaceApproval()) return null;
+    const pinnedMain = this.deps.pinnedMainFilePath();
+    if (pinnedMain && this.activeCompilerPreviewMatchesRoot(pinnedMain)) return textNotice;
 
     // A Typst include is opened as part of its effective main preview, not as
     // an independent compiler session. Resolve that relationship before

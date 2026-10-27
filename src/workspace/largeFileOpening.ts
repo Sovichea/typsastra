@@ -48,3 +48,14 @@ export function formatFileSize(sizeBytes: number): string {
   if (mib >= 1) return `${mib.toFixed(1)} MB`;
   return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
 }
+
+/** Only reuse a bounded prefix when it contains the complete UTF-8 file. */
+export function completeSourcePrefix(prefix: string, sizeBytes: number): { content: string; lineCount: number } | null {
+  if (new TextEncoder().encode(prefix).length !== sizeBytes) return null;
+  let lineCount = 0;
+  for (let index = 0; index < prefix.length; index++) {
+    if (prefix.charCodeAt(index) === 10) lineCount++;
+  }
+  if (prefix.length > 0 && !prefix.endsWith("\n")) lineCount++;
+  return { content: prefix, lineCount };
+}

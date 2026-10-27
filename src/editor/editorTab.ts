@@ -8,6 +8,8 @@ export type EditorTab = {
   content: string;
   savedContent: string;
   contentLoaded: boolean;
+  /** Bounded source read retained between size inspection and first activation. */
+  prefetchedContent?: string;
   isDirty: boolean;
   /** Last disk revision adopted externally; remains unsaved until an app save. */
   externalContent?: string;

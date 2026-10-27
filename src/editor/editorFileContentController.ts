@@ -54,7 +54,11 @@ export class EditorFileContentController {
     const pathKey = filePathKey(path);
     while (!tab.contentLoaded && filePathKey(tab.path) === pathKey) {
       const request = this.loadRequests.begin(pathKey);
-      const contents = fileExtension(path) === "pdf"
+      const prefetched = tab.prefetchedContent;
+      tab.prefetchedContent = undefined;
+      const contents = prefetched !== undefined
+        ? normalizeEditorText(prefetched)
+        : fileExtension(path) === "pdf"
         ? ""
         : isBinaryImagePath(path)
           ? await invoke<string>("read_workspace_file_as_base64", { path })

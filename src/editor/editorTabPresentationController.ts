@@ -239,6 +239,18 @@ export class EditorTabPresentationController {
       );
       return;
     }
+    const editor = this.deps.editor();
+    const visibleTo = editor.visibleRanges.reduce((maximum, range) => Math.max(maximum, range.to), 0);
+    // Restoring a retained state often already painted this viewport. Avoid
+    // hiding it for another measure and several animation frames.
+    if (editor.visibleRanges.length > 0 && syntaxTreeAvailable(editor.state, visibleTo)
+      && prepareVisibleBracketColors(editor)) {
+      this.pendingSyntaxPath = null;
+      editor.dom.classList.remove("editor-syntax-preparing");
+      this.deps.logSyntax(`Visible syntax reused immediately: path=${path}; visibleTo=${visibleTo}.`);
+      this.scheduleSyntaxPrewarm(editor, this.syntaxPresentationGeneration, visibleTo);
+      return;
+    }
     this.seedColdSyntaxAtDistantViewport(path);
     this.revealAfterVisibleSyntaxIsReady(
       this.deps.editor(),
@@ -345,7 +357,7 @@ export class EditorTabPresentationController {
       );
       const visibleTo = editor.visibleRanges.reduce(
         (maximum, range) => Math.max(maximum, range.to),
-        editor.state.selection.main.head,
+        0,
       );
       const viewport = `${visibleFrom}:${visibleTo}`;
       if (viewport !== lastViewport) {
@@ -402,7 +414,7 @@ export class EditorTabPresentationController {
           ),
           to: editor.visibleRanges.reduce(
             (maximum, range) => Math.max(maximum, range.to),
-            editor.state.selection.main.head,
+            0,
           ),
         }),
         write: measured => {

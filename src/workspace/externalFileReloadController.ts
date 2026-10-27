@@ -72,6 +72,7 @@ export class ExternalFileReloadController {
           // repeatedly cancels the read/inspection that opens a restored tab.
           if (pathKeys) {
             this.deps.invalidateLazyLoad(path);
+            tab.prefetchedContent = undefined;
             tab.sizeBytes = undefined;
             tab.lineCount = undefined;
           }
