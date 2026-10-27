@@ -13,24 +13,25 @@ describe("auto save", () => {
     expect(settingsUi).toContain('max="300"');
   });
 
-  test("automatic persistence does not notify Tinymist or render preview", () => {
+  test("automatic persistence requests one preview refresh only in On save mode", () => {
     const start = persistence.indexOf("private async performAutoSave");
     const end = persistence.indexOf("private async performSaveActiveFile", start);
     const method = persistence.slice(start, end);
 
     expect(method).toContain('invoke("save_workspace_file"');
     expect(method).not.toContain("notifyTextSave");
-    expect(method).not.toContain("renderPdfPreview");
+    expect(method).toContain('this.deps.previewRenderMode() === "on-save"');
+    expect(method).toContain("this.deps.refreshPreviewAfterSave(activeTab.path, this.currentContent())");
   });
 
-  test("manual save renders even when auto-save already cleared the dirty state", () => {
+  test("save refreshes the effective preview root for pending source changes", () => {
     const start = persistence.indexOf("private async performSaveActiveFile");
     const end = persistence.indexOf("private canPersistPath", start);
     const method = persistence.slice(start, end);
 
     expect(method).toContain('intent === "manual"');
     expect(method).toContain("isTypstDocumentPath(activeFilePath)");
-    expect(method).toContain("this.deps.refreshPreviewAfterManualSave(activeFilePath, content)");
+    expect(method).toContain("this.deps.refreshPreviewAfterSave(activeFilePath, content)");
     expect(controller).toContain("previewContentController.refreshActivePreviewRoot(true)");
     expect(method).not.toContain("savedChangedRevision &&");
   });

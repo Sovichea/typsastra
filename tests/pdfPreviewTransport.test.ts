@@ -218,7 +218,7 @@ describe("compiled PDF transport", () => {
     expect(source).not.toContain("cachedPreviewCompilerPath");
     expect(diagnosticsSource).toContain("const fromRenderCache = this.port.isRenderCachePath(rawPath)");
     expect(diagnosticsSource).toContain("if (fromRenderCache && diagnostics.length > 0)");
-    expect(saveMethod).toContain("this.deps.refreshPreviewAfterManualSave(activeFilePath, content)");
+    expect(saveMethod).toContain("this.deps.refreshPreviewAfterSave(activeFilePath, content)");
     expect(saveMethod).not.toContain('effectivePreviewRenderMode === "on-save"');
   });
 

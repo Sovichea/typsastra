@@ -23,6 +23,8 @@ function createController(options: {
     content: options.content,
     savedContent: options.savedContent,
     isDirty: options.dirty,
+    contentLoaded: true,
+    previewDisabled: false,
     externalContent: undefined as string | undefined,
     externalPreviewPending: false,
     previewMainPath: "C:/project/main.typ",
@@ -54,11 +56,13 @@ function createController(options: {
     logMemoryDiagnostics: async () => {},
     clearExternalConflict: () => {},
     renderEditorTabs: () => {},
-    refreshPreviewAfterManualSave: async () => { refreshCalls += 1; },
+    refreshPreviewAfterSave: async () => { refreshCalls += 1; },
     setLspStatus: () => {},
     log: () => {},
   });
-  return { controller, tab, include, get formatCalls() { return formatCalls; }, get refreshCalls() { return refreshCalls; } };
+  return { controller, tab, include,
+    runAutoSave: () => (controller as unknown as { runAutoSaveCycle(): Promise<void> }).runAutoSaveCycle(),
+    get formatCalls() { return formatCalls; }, get refreshCalls() { return refreshCalls; } };
 }
 
 describe("document persistence preview scheduling", () => {
@@ -86,17 +90,58 @@ describe("document persistence preview scheduling", () => {
     expect(fixture.include.externalPreviewPending).toBe(false);
   });
 
-  test("automatic saving does not consume an external revision's pending On save compilation", async () => {
+  test("automatic saving compiles an external revision in On save mode", async () => {
     const fixture = createController({ content: "external", savedContent: "old", dirty: true, renderMode: "on-save" });
     fixture.tab.externalContent = "external";
     fixture.tab.externalPreviewPending = true;
     await fixture.controller.saveActiveFile("automatic");
-    expect(fixture.refreshCalls).toBe(0);
+    expect(fixture.refreshCalls).toBe(1);
     expect(fixture.tab.isDirty).toBe(false);
-    expect(fixture.tab.externalPreviewPending).toBe(true);
+    expect(fixture.tab.externalPreviewPending).toBe(false);
     await fixture.controller.saveActiveFile("manual");
     expect(fixture.refreshCalls).toBe(1);
     expect(fixture.tab.externalPreviewPending).toBe(false);
+  });
+
+  test("a timer cycle compiles a batch of dirty source files once in On save mode", async () => {
+    const fixture = createController({ content: "changed main", savedContent: "old main", dirty: true, renderMode: "on-save", pendingInclude: true });
+    fixture.include.content = "changed include";
+    fixture.include.isDirty = true;
+    await fixture.runAutoSave();
+    expect(fixture.refreshCalls).toBe(1);
+    expect(fixture.tab.isDirty).toBe(false);
+    expect(fixture.include.isDirty).toBe(false);
+    expect(fixture.include.externalPreviewPending).toBe(false);
+  });
+
+  test("auto-saving an inactive include refreshes an unchanged active main file", async () => {
+    const fixture = createController({ content: "main", savedContent: "main", dirty: false, renderMode: "on-save", pendingInclude: true });
+    fixture.include.content = "changed include";
+    fixture.include.isDirty = true;
+    await fixture.runAutoSave();
+    expect(fixture.refreshCalls).toBe(1);
+  });
+
+  test("auto-save does not request extra compilation in On type mode", async () => {
+    const fixture = createController({ content: "changed", savedContent: "old", dirty: true, renderMode: "on-type" });
+    await fixture.runAutoSave();
+    expect(fixture.tab.isDirty).toBe(false);
+    expect(fixture.refreshCalls).toBe(0);
+  });
+
+  test("an auto-save check without dirty files does not compile", async () => {
+    const fixture = createController({ content: "same", savedContent: "same", dirty: false, renderMode: "on-save" });
+    await fixture.runAutoSave();
+    expect(fixture.refreshCalls).toBe(0);
+  });
+
+  test("auto-saving a non-source file does not compile the document", async () => {
+    const fixture = createController({ content: "changed", savedContent: "old", dirty: true, renderMode: "on-save", pendingInclude: true });
+    fixture.include.path = "C:/project/notes.md";
+    fixture.tab.isDirty = false;
+    fixture.include.isDirty = true;
+    await fixture.runAutoSave();
+    expect(fixture.refreshCalls).toBe(0);
   });
 
   test("a changed Typst file refreshes once on save mode, not on type mode", async () => {

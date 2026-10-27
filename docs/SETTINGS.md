@@ -55,13 +55,14 @@ Invalid or missing fields fall back to bounded defaults. Existing theme and word
 
 **Auto save** writes dirty open files at the configured interval, which accepts
 5–300 seconds and defaults to 30 seconds. Automatic saves persist the current
-editor contents without running Format on save, sending a Tinymist save
-notification, or requesting an **On save** preview compilation.
+editor contents without running Format on save or sending a Tinymist save
+notification. In **On save** mode, each batch of saved source changes requests
+one preview compilation, including changes in inactive include tabs. In
+**On type** mode, auto-save does not request an additional compilation.
 
 **Save** and `Ctrl+S` remain explicit author actions. They run Format on save
 when enabled, notify Tinymist, and request preview compilation for the active
-preview document. This remains true when auto-save has already written the
-latest revision and the tab is no longer marked dirty.
+preview document in **On save** mode when source changes are pending.
 
 ## Project-local workspace state
 

@@ -32,7 +32,7 @@ type DocumentPersistenceDependencies = {
   logMemoryDiagnostics: (reason: string) => Promise<void>;
   clearExternalConflict: (path: string) => void;
   renderEditorTabs: () => void;
-  refreshPreviewAfterManualSave: (path: string, content: string) => Promise<void>;
+  refreshPreviewAfterSave: (path: string, content: string) => Promise<void>;
   setLspStatus: (status: LspStatus) => void;
   log: (kind: "info" | "error", source: string, message: string) => void;
 };
@@ -145,7 +145,7 @@ export class DocumentPersistenceController {
   }
 
   private async performAutoSave(tabs: EditorTab[]): Promise<void> {
-    let savedCount = 0;
+    const savedTabs: EditorTab[] = [];
     try {
       for (const tab of tabs) {
         const content = tab.content;
@@ -155,20 +155,39 @@ export class DocumentPersistenceController {
         tab.isDirty = false;
         tab.externalContent = undefined;
         this.deps.clearExternalConflict(tab.path);
-        savedCount += 1;
+        savedTabs.push(tab);
       }
     } catch (error) {
       const message = `Auto-save failed: ${String(error)}`;
       console.error(message);
       this.deps.setLspStatus({ kind: "error", message });
     } finally {
-      if (savedCount > 0) {
+      if (savedTabs.length > 0) {
         this.deps.renderEditorTabs();
         this.deps.log(
           "info",
           "workspace",
-          `Auto-saved ${savedCount} file${savedCount === 1 ? "" : "s"} without requesting preview compilation.`,
+          `Auto-saved ${savedTabs.length} file${savedTabs.length === 1 ? "" : "s"}.`,
         );
+        const activePath = this.deps.activeFilePath();
+        const activeTab = this.deps.openTabs().find(tab => activePath && filePathKey(tab.path) === filePathKey(activePath));
+        if (activeTab && isTypstDocumentPath(activeTab.path) && this.deps.previewRenderMode() === "on-save") {
+          const ownerKey = filePathKey(activeTab.previewMainPath ?? activeTab.previewRootPath ?? activeTab.path);
+          const savedSources = savedTabs.filter(tab => isTypstDocumentPath(tab.path)
+            && !tab.previewDisabled
+            && filePathKey(tab.previewMainPath ?? tab.previewRootPath ?? tab.path) === ownerKey);
+          if (savedSources.length > 0) {
+            // Compile once after the entire batch, including inactive includes.
+            const savedContents = savedSources.map(tab => ({ tab, content: tab.content }));
+            void this.deps.refreshPreviewAfterSave(activeTab.path, this.currentContent()).then(() => {
+              for (const saved of savedContents) {
+                if (saved.tab.content === saved.content) saved.tab.externalPreviewPending = false;
+              }
+            }).catch(error => {
+              this.deps.log("error", "preview scheduler", `Preview refresh after auto-save failed: ${String(error)}`);
+            });
+          }
+        }
       }
     }
   }
@@ -218,12 +237,12 @@ export class DocumentPersistenceController {
         this.deps.renderEditorTabs();
       }
       this.deps.setLspStatus({ kind: "preview-ready", message: "File saved" });
-      if (intent === "manual" && contentChanged && isTypstDocumentPath(activeFilePath)
+      if (contentChanged && isTypstDocumentPath(activeFilePath)
         && this.deps.previewRenderMode() === "on-save") {
         // Saving has already succeeded. Start preview refresh separately so a
         // compiler/indexing failure is reported by the preview without
         // incorrectly presenting the successful file write as a save failure.
-        void this.deps.refreshPreviewAfterManualSave(activeFilePath, content).then(() => {
+        void this.deps.refreshPreviewAfterSave(activeFilePath, content).then(() => {
           for (const pending of pendingExternalContents) {
             if (pending.tab.content === pending.content) pending.tab.externalPreviewPending = false;
           }

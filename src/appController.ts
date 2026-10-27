@@ -1747,7 +1747,7 @@ export class TypsastraWorkspaceController {
     logMemoryDiagnostics: reason => this.performanceController.logMemoryDiagnostics(reason),
     clearExternalConflict: path => this.externalFileReloadController.clearConflict(path),
     renderEditorTabs: () => this.renderEditorTabs(),
-    refreshPreviewAfterManualSave: async () => {
+    refreshPreviewAfterSave: async () => {
       // Resolve the effective preview root at save time instead of relying on
       // the tab's previous imported/standalone flags. Includes can become the
       // active editor tab before their session state has been restored.
