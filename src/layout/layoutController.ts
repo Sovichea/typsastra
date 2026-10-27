@@ -323,6 +323,7 @@ export class LayoutController {
         const win = new WebviewWindow("preview", {
           url: "index.html?mode=preview",
           title: "Typsastra - Live Preview",
+          zoomHotkeysEnabled: true,
           width: 800,
           height: 600
         });

@@ -48,8 +48,26 @@ function applyWithin(root: ParentNode): void {
   root.querySelectorAll(TEXT_INPUT_SELECTOR).forEach(applyDesktopInputAttributes);
 }
 
+const zoomGuardDocuments = new WeakSet<Document>();
+
+function preventBrowserPageZoom(doc: Document): void {
+  if (zoomGuardDocuments.has(doc)) return;
+  zoomGuardDocuments.add(doc);
+  // Enable native pinch delivery, but reserve scale changes for preview
+  // gesture handlers rather than magnifying the entire application's UI.
+  doc.addEventListener("wheel", event => {
+    if (event.ctrlKey || event.metaKey) event.preventDefault();
+  }, { passive: false });
+  doc.addEventListener("keydown", event => {
+    if ((event.ctrlKey || event.metaKey) && ["Equal", "Minus", "Digit0", "NumpadAdd", "NumpadSubtract", "Numpad0"].includes(event.code)) {
+      event.preventDefault();
+    }
+  });
+}
+
 export function initializeDesktopInputPolicy(doc: Document = document): MutationObserver {
   applyWithin(doc);
+  preventBrowserPageZoom(doc);
   const observer = new MutationObserver(records => {
     for (const record of records) {
       record.addedNodes.forEach(node => {
@@ -64,4 +82,5 @@ export function initializeDesktopInputPolicy(doc: Document = document): Mutation
 /** Apply the input policy to a static secondary document such as the PDF iframe. */
 export function applyDesktopInputPolicy(doc: Document): void {
   applyWithin(doc);
+  preventBrowserPageZoom(doc);
 }

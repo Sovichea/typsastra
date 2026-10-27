@@ -52,7 +52,7 @@ export class PreviewUiController {
       label.textContent = tableIsFit ? "Fit" : `${pct}%`;
     } else {
       const pct = zoomPercent ?? this.deps.previewFrame.currentZoomPercent;
-      label.textContent = this.deps.previewFrame.isFitMode ? "Fit" : `${pct}%`;
+      label.textContent = this.deps.previewFrame.isFitMode ? "Fit" : `${Math.round(pct)}%`;
     }
   }
 

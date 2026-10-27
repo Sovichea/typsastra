@@ -100,6 +100,16 @@ is restored independently for each workspace. The global `renderMode` value in
 saved selection. Both modes compile from a private mirror in Typsastra's
 machine-local application-data cache, so live preview never creates `main.pdf`
 beside the source.
+
+Preview panes support two-finger touchscreen pinch and Ctrl/Cmd + mouse wheel
+zoom. Touchpad pinch is currently unsupported; use Ctrl/Cmd + mouse wheel or
+the +/- buttons instead. Gestures use 5% increments; the +/- buttons use 25%
+increments. Zoom percentages are displayed as whole numbers. Zoom follows the
+gesture position and applies to live previews, standalone PDFs, images (including
+Image Tools), SVG and Markdown previews, and Table Tools. Ordinary PDF and table
+scrolling stays unchanged; image previews retain their existing wheel-to-zoom
+behavior.
+
 **Landscape scale increase** controls how much wider landscape pages appear
 than portrait pages in **Fit to width** mode. It defaults to **30%** and accepts
 0?100%; 0% gives all pages the same displayed width. The widest page stays

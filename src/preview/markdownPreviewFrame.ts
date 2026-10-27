@@ -1,3 +1,4 @@
+import { installPreviewZoomGestures, zoomPreviewElementAtPoint, GestureZoomSteps } from "./previewZoomGestures";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
@@ -8,6 +9,7 @@ export type MarkdownResource = {
 
 export type MarkdownPreviewDependencies = {
   resolveImage: (documentPath: string, source: string) => Promise<MarkdownResource | null>;
+  logGestureInput?: (message: string) => void;
   openLink: (documentPath: string, href: string) => void | Promise<void>;
 };
 
@@ -41,6 +43,7 @@ export class MarkdownPreviewFrame {
   private renderTimer: number | null = null;
   private renderGeneration = 0;
   private activePath: string | null = null;
+  private scale = 1;
 
   public constructor(
     private readonly hostParent: HTMLElement,
@@ -53,6 +56,14 @@ export class MarkdownPreviewFrame {
     this.article.className = "markdown-preview-document";
     this.host.appendChild(this.article);
     this.hostParent.appendChild(this.host);
+    const steps = new GestureZoomSteps(25, 500);
+    installPreviewZoomGestures(this.host, gesture => {
+      const scale = steps.next(this.scale * 100, gesture.factor, gesture.deltaPercent, gesture.ensureStep) / 100;
+      zoomPreviewElementAtPoint(this.host, this.article, this.scale, scale, gesture, () => {
+        this.scale = scale;
+        this.article.style.setProperty("zoom", String(scale));
+      });
+    }, { enabled: () => this.isActive, onStart: () => steps.reset(), onEnd: () => steps.reset(), onInput: message => this.dependencies.logGestureInput?.(message) });
 
     this.host.addEventListener("scroll", () => {
       if (this.activePath) this.scrollPositions.set(this.activePath, this.host.scrollTop);

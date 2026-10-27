@@ -55,6 +55,7 @@ export class PreviewController {
       items => port.onStandalonePdfOutlineChanged(items),
     );
     this.markdown = new MarkdownPreviewFrame(pane, {
+      logGestureInput: message => port.onDebug(`Markdown gesture input: ${message}`),
       resolveImage: (documentPath, source) => port.resolveMarkdownImage(documentPath, source),
       openLink: (documentPath, href) => port.openMarkdownLink(documentPath, href),
     });

@@ -68,6 +68,7 @@ import {
   previewLinkTarget,
   type PreviewLinkTarget,
 } from "./previewLinks";
+import { installPreviewZoomGestures, zoomPreviewElementAtPoint, GestureZoomSteps, buttonZoomPercent, snapGestureZoom, type PreviewZoomGesture } from "./previewZoomGestures";
 import { previewPageScale } from "./previewPageScale";
 import { pageDimensionsChanged, pagesToEvict, visiblePageIndexes } from "./virtualization";
 import { PreviewMotionController } from "./previewMotion";
@@ -167,7 +168,6 @@ type ActivePageRender = {
   canvasCommitted: boolean;
 };
 
-const ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
 const FALLBACK_ZOOM_PERCENT = 90;
 const MAX_OUTPUT_SCALE = 2;
 const MIN_PDFIUM_OUTPUT_SCALE = 2;
@@ -202,6 +202,12 @@ export class PreviewFrame {
   private pageDimensions = new Map<number, PageDimensions>();
   private landscapePages = new Set<number>();
   private landscapeScalePercent = 30;
+  private gestureZoomActive = false;
+  private gestureLayoutScales: { referencePercent: number; pages: Map<number, number> } | null = null;
+  private readonly gestureZoomSteps = new GestureZoomSteps(10, 500);
+  private messageZoom: { percent(): number; adjust(direction: 1 | -1): number; fit(): void; isFit(): boolean } | null = null;
+  private messageZoomGestureCleanup: (() => void) | null = null;
+  private iframeZoomGestureCleanup: (() => void) | null = null;
   private pageSlots: HTMLElement[] = [];
   /** Previous rendered surface retained underneath a replacement until its visible pages paint. */
   private retainedViewer: HTMLElement | null = null;
@@ -282,16 +288,10 @@ export class PreviewFrame {
       items: readonly PdfiumOutlineItem[] | null,
     ) => void,
   ) {
-    this.pane.addEventListener("wheel", event => {
-      if (event.ctrlKey) {
-        event.preventDefault();
-        if (event.deltaY < 0) {
-          this.zoomIn();
-        } else {
-          this.zoomOut();
-        }
-      }
-    }, { passive: false });
+    installPreviewZoomGestures(this.pane, gesture => {
+      const rect = this.iframe?.getBoundingClientRect();
+      if (rect) this.zoomByGesture({ ...gesture, clientX: gesture.clientX - rect.left, clientY: gesture.clientY - rect.top });
+    }, { enabled: () => Boolean(this.pdfDoc && !this.messageHost && !this.pane.querySelector(".markdown-preview-host:not(.hidden)")), onEnd: () => this.finishGestureZoom(), onInput: message => this.onDebug?.(`Preview gesture input: ${message}`) });
     window.addEventListener("pointerdown", event => {
       if (event.target === this.iframe) {
         this.standalonePdfKeyboardActive = true;
@@ -361,11 +361,11 @@ export class PreviewFrame {
   }
 
   public get currentZoomPercent(): number {
-    return this.previewZoomPercent;
+    return this.messageZoom?.percent() ?? this.previewZoomPercent;
   }
 
   public get isFitMode(): boolean {
-    return this.isFitToWidth;
+    return this.messageZoom?.isFit() ?? this.isFitToWidth;
   }
 
   public get currentScrollTop(): number {
@@ -536,13 +536,14 @@ export class PreviewFrame {
   }
 
   public zoomIn(): number {
+    if (this.messageZoom) return this.messageZoom.adjust(1);
     const anchor = this.captureScrollAnchor();
     const currentPercent = this.isFitToWidth
       ? this.pageScale(this.visiblePageNumber()) * 100
       : this.previewZoomPercent;
     this.isFitToWidth = false;
     return this.setZoom(
-      ZOOM_LEVELS.find(level => level > currentPercent) ?? currentPercent,
+      buttonZoomPercent(currentPercent, 1, 10, 500),
       anchor,
       true,
     );
@@ -571,16 +572,47 @@ export class PreviewFrame {
   }
 
   public zoomOut(): number {
+    if (this.messageZoom) return this.messageZoom.adjust(-1);
     const anchor = this.captureScrollAnchor();
     const currentPercent = this.isFitToWidth
       ? this.pageScale(this.visiblePageNumber()) * 100
       : this.previewZoomPercent;
     this.isFitToWidth = false;
     return this.setZoom(
-      [...ZOOM_LEVELS].reverse().find(level => level < currentPercent) ?? currentPercent,
+      buttonZoomPercent(currentPercent, -1, 10, 500),
       anchor,
       true,
     );
+  }
+
+  private zoomByGesture(gesture: PreviewZoomGesture): void {
+    const view = this.iframe?.contentWindow;
+    if (!this.pdfDoc || !view) return;
+    const anchor = capturePreviewViewportAnchor(this.pageSlots.map(slot => {
+      const rect = slot.getBoundingClientRect();
+      return { pageNo: Number(slot.dataset.pageNo), left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    }), view.innerWidth, view.innerHeight, { x: gesture.clientX, y: gesture.clientY });
+    const currentPercent = this.isFitToWidth
+      ? this.pageScale(anchor?.pageNo ?? this.visiblePageNumber()) * 100
+      : this.previewZoomPercent;
+    if (this.isFitToWidth) {
+      this.gestureLayoutScales = {
+        referencePercent: currentPercent,
+        pages: new Map([...this.pageDimensions.keys()].map(pageNo => [pageNo, this.pageScale(pageNo)])),
+      };
+    }
+    const percent = this.gestureZoomSteps.next(currentPercent, gesture.factor, gesture.deltaPercent, gesture.ensureStep);
+    if (!this.isFitToWidth && percent === this.previewZoomPercent) return;
+    this.isFitToWidth = false;
+    this.gestureZoomActive = true;
+    this.setZoom(percent, anchor, true, true);
+  }
+
+  private finishGestureZoom(): void {
+    this.gestureZoomSteps.reset();
+    if (!this.gestureZoomActive) return;
+    this.gestureZoomActive = false;
+    this.renderVisiblePages();
   }
 
   public setLandscapeScalePercent(percent: number): void {
@@ -594,8 +626,10 @@ export class PreviewFrame {
   }
 
   public zoomToFit(): void {
+    if (this.messageZoom) { this.messageZoom.fit(); return; }
     const anchor = this.captureScrollAnchor();
     this.isFitToWidth = true;
+    this.gestureLayoutScales = null;
     this.updateHorizontalOverflow();
     this.applyFitToWidth(anchor);
   }
@@ -617,8 +651,9 @@ export class PreviewFrame {
     this.setZoom(percent, anchor, true);
   }
 
-  private setZoom(percent: number, preservedAnchor?: PreviewViewportAnchor | null, forceLayout = false): number {
+  private setZoom(percent: number, preservedAnchor?: PreviewViewportAnchor | null, forceLayout = false, deferRender = false): number {
     this.hideDraftImagePopover();
+    if (!this.isFitToWidth) percent = snapGestureZoom(percent, 10, 500);
     if (percent === this.previewZoomPercent && !forceLayout) return percent;
     this.zoomStartedAt = performance.now();
     const anchor = preservedAnchor ?? this.captureScrollAnchor();
@@ -628,8 +663,8 @@ export class PreviewFrame {
     this.cancelAllPageRenders();
     this.invalidateZoomSensitiveOverlays();
     this.layoutPageSlots({ preserveExistingPages: true });
-    this.restoreScrollAnchor(anchor);
-    requestAnimationFrame(() => this.renderVisiblePages());
+    this.restoreScrollAnchor(anchor, false, deferRender);
+    if (!deferRender) requestAnimationFrame(() => this.renderVisiblePages());
     return percent;
   }
 
@@ -934,6 +969,7 @@ export class PreviewFrame {
       this.pdfLoadingTask = nextLoadingTask;
       nextLoadingTask = null;
       this.pendingPdfLoadingTask = null;
+      this.gestureLayoutScales = null;
       this.pageDimensions = nextDimensions;
       this.landscapePages = new Set([...nextDimensions]
         .filter(([, dimensions]) => dimensions.width > dimensions.height)
@@ -1087,6 +1123,8 @@ export class PreviewFrame {
     if (this.iframe) {
       this.discardRetainedViewer();
       releaseCanvasResources(this.iframe.contentDocument?.documentElement ?? null);
+      this.iframeZoomGestureCleanup?.();
+      this.iframeZoomGestureCleanup = null;
       this.iframe.remove();
       this.pageSlots = [];
     }
@@ -1409,6 +1447,7 @@ export class PreviewFrame {
     priority = 2,
     reason: PreviewRenderReason = "directional-neighbor"
   ): void {
+    if (this.gestureZoomActive) return;
     if (!Number.isFinite(pageNo) || pageNo < 1 || pageNo > Number(this.pdfDoc?.numPages ?? 0)) return;
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
@@ -1939,6 +1978,11 @@ export class PreviewFrame {
   }
 
   private pageScale(pageNo: number, availableWidth = this.pane.clientWidth - FIT_PADDING_PX): number {
+    const baseline = this.gestureLayoutScales;
+    const pageScale = baseline?.pages.get(pageNo);
+    if (!this.isFitToWidth && baseline && pageScale !== undefined) {
+      return pageScale * this.previewZoomPercent / baseline.referencePercent;
+    }
     return previewPageScale(
       this.pageDimensions.get(pageNo)?.width,
       availableWidth,
@@ -2281,7 +2325,7 @@ export class PreviewFrame {
     });
   }
 
-  private restoreScrollAnchor(anchor: PreviewViewportAnchor | null, afterLayout = false): void {
+  private restoreScrollAnchor(anchor: PreviewViewportAnchor | null, afterLayout = false, immediately = false): void {
     if (!anchor) return;
     const restore = () => {
       const slot = this.iframe?.contentDocument
@@ -2298,10 +2342,16 @@ export class PreviewFrame {
       }, view.innerWidth, view.innerHeight);
       view.scrollBy({ left: delta.left, top: delta.top, behavior: "auto" });
     };
-    requestAnimationFrame(() => {
-      if (afterLayout) requestAnimationFrame(restore);
-      else restore();
-    });
+    if (immediately) {
+      // Keep resizing and pointer anchoring in the same paint. A deferred
+      // scroll correction visibly jumps once per wheel/pinch update.
+      restore();
+    } else {
+      requestAnimationFrame(() => {
+        if (afterLayout) requestAnimationFrame(restore);
+        else restore();
+      });
+    }
   }
 
   private isStandalonePdfSurface(): boolean {
@@ -3015,6 +3065,7 @@ export class PreviewFrame {
       this.copyStandalonePdfSelection();
     }, true);
     doc.addEventListener("pointerdown", event => {
+      if (event.pointerType === "touch") return;
       this.standalonePdfKeyboardActive = true;
       if ((event.target as Element | null)?.closest("#preview-go-first")) return;
       this.beginStandalonePdfSelection(event);
@@ -3168,21 +3219,18 @@ export class PreviewFrame {
       this.onPreviewClick(point);
     }, true);
 
+    this.iframeZoomGestureCleanup?.();
+    this.iframeZoomGestureCleanup = installPreviewZoomGestures(doc, gesture => this.zoomByGesture(gesture), {
+      enabled: () => Boolean(this.pdfDoc), onEnd: () => this.finishGestureZoom(),
+      onInput: message => this.onDebug?.(`Preview gesture input: ${message}`),
+      onCancel: () => { this.gestureZoomActive = false; this.gestureZoomSteps.reset(); },
+    });
     doc.addEventListener("wheel", event => {
       this.previewPointerInside = true;
       this.rememberDraftPointer(event);
       this.setPreviewLinkModifier(doc, this.previewLinkModifierHeld);
-      if (event.ctrlKey) {
-        event.preventDefault();
-        if (event.deltaY < 0) {
-          this.zoomIn();
-        } else {
-          this.zoomOut();
-        }
-      } else {
-        this.scheduleDraftHoverRetarget();
-      }
-    }, { passive: false });
+      if (!event.ctrlKey && !event.metaKey) this.scheduleDraftHoverRetarget();
+    }, { passive: true });
     this.iframe?.contentWindow?.addEventListener(
       "scroll",
       () => {
@@ -3314,6 +3362,8 @@ export class PreviewFrame {
     ++this.pdfGeneration;
     this.discardRetainedViewer();
     releaseCanvasResources(this.iframe?.contentDocument?.documentElement ?? null);
+    this.iframeZoomGestureCleanup?.();
+    this.iframeZoomGestureCleanup = null;
     this.iframe?.remove();
     this.iframe = null;
     this.mountedUrl = "";
@@ -3521,6 +3571,8 @@ export class PreviewFrame {
     ++this.pdfGeneration;
     this.discardRetainedViewer();
     releaseCanvasResources(this.iframe?.contentDocument?.documentElement ?? null);
+    this.iframeZoomGestureCleanup?.();
+    this.iframeZoomGestureCleanup = null;
     this.iframe?.remove();
     this.iframe = null;
     this.mountedUrl = "";
@@ -3595,6 +3647,39 @@ export class PreviewFrame {
     host.innerHTML = html;
     this.pane.appendChild(host);
     this.messageHost = host;
+    const svg = host.querySelector("svg");
+    if (svg) {
+      const container = svg.parentElement ?? host;
+      let scale = 1;
+      let fit = false;
+      const steps = new GestureZoomSteps(10, 2000);
+      const apply = (next: number, point?: { clientX: number; clientY: number }) => {
+        const rect = container.getBoundingClientRect();
+        const anchor = point ?? { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+        zoomPreviewElementAtPoint(container, svg, scale, next, anchor, () => {
+          scale = next;
+          svg.style.setProperty("zoom", String(scale));
+        });
+        this.onZoomChanged?.(Math.round(scale * 100));
+      };
+      this.messageZoom = {
+        percent: () => Math.round(scale * 100), isFit: () => fit,
+        adjust: direction => { fit = false; apply(buttonZoomPercent(scale * 100, direction, 10, 2000) / 100); return Math.round(scale * 100); },
+        fit: () => {
+          const rect = svg.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+          fit = true;
+          apply(Math.max(0.1, Math.min(20, container.clientWidth / (rect.width / scale), container.clientHeight / (rect.height / scale))));
+        },
+      };
+      this.onZoomChanged?.(100);
+      this.messageZoomGestureCleanup = installPreviewZoomGestures(container, gesture => {
+        fit = false;
+        apply(steps.next(scale * 100, gesture.factor, gesture.deltaPercent, gesture.ensureStep) / 100, gesture);
+      }, { enabled: () => container.isConnected, onStart: () => steps.reset(), onEnd: () => steps.reset(),
+        onInput: message => this.onDebug?.(`SVG gesture input: ${message}`),
+      });
+    }
   }
 
   public setLoading(message: string, preservePreview = true): void {
@@ -3723,6 +3808,9 @@ export class PreviewFrame {
   }
 
   private clearMessageHost(): void {
+    this.messageZoomGestureCleanup?.();
+    this.messageZoomGestureCleanup = null;
+    this.messageZoom = null;
     this.messageHost?.remove();
     this.messageHost = null;
   }

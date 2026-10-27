@@ -31,10 +31,11 @@ export function capturePreviewViewportAnchor(
   pages: readonly PreviewPageViewportRect[],
   viewportWidth: number,
   viewportHeight: number,
+  point?: { x: number; y: number },
 ): PreviewViewportAnchor | null {
   if (pages.length === 0 || viewportWidth <= 0 || viewportHeight <= 0) return null;
-  const viewportXRatio = 0.5;
-  const viewportYRatio = 0.5;
+  const viewportXRatio = point ? clampUnit(point.x / viewportWidth) : 0.5;
+  const viewportYRatio = point ? clampUnit(point.y / viewportHeight) : 0.5;
   const referenceX = viewportWidth * viewportXRatio;
   const referenceY = viewportHeight * viewportYRatio;
   const page = pages

@@ -1,8 +1,10 @@
+import { installPreviewZoomGestures, GestureZoomSteps, buttonZoomPercent, snapGestureZoom } from "./previewZoomGestures";
 export interface ImagePreviewControllerPort {
   setMessage(html: string): void;
   setError(title: string, detail: string): void;
   updateToolbar(path: string): void;
   updateZoomLabel(scale: number): void;
+  logGestureInput?(message: string): void;
 }
 
 export type ImageCropRect = {
@@ -40,6 +42,7 @@ export class ImagePreviewController {
   private zoomPercentAction: (() => number) | null = null;
   private fitStateAction: (() => boolean) | null = null;
   private cleanupAction: (() => void) | null = null;
+  private cancelCropDragAction: (() => void) | null = null;
   private cropOverlayCleanup: (() => void) | null = null;
 
   constructor(private readonly port: ImagePreviewControllerPort) {}
@@ -58,6 +61,7 @@ export class ImagePreviewController {
   public clearCropOverlay(): void {
     this.cropOverlayCleanup?.();
     this.cropOverlayCleanup = null;
+    this.cancelCropDragAction = null;
     document.getElementById("interactive-image-crop-overlay")?.remove();
   }
 
@@ -141,6 +145,14 @@ export class ImagePreviewController {
       start: ImageCropRect;
     } | null = null;
 
+    let cropBeforeDrag: ImageCropRect | null = null;
+    this.cancelCropDragAction = () => {
+      if (!drag || !cropBeforeDrag) return;
+      current = cropBeforeDrag;
+      cropBeforeDrag = null;
+      drag = null;
+      report();
+    };
     const resize = (direction: CropHandleDirection, start: ImageCropRect, dx: number, dy: number): ImageCropRect => {
       let { x, y, width, height } = start;
       if (direction.includes("w")) {
@@ -159,7 +171,8 @@ export class ImagePreviewController {
     };
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!interactive || event.button !== 0) return;
+      if (!interactive || event.button !== 0 || (event.pointerType === "touch" && !event.isPrimary)) return;
+      cropBeforeDrag = { ...current };
       const target = event.target as HTMLElement | null;
       const handleDirection = target?.dataset.cropHandle as CropHandleDirection | undefined;
       const insideFrame = target === frame || Boolean(target?.closest(".image-crop-frame"));
@@ -329,13 +342,13 @@ export class ImagePreviewController {
     };
 
     this.zoomInAction = () => {
-      scale = Math.min(scale * 1.2, 20);
+      scale = buttonZoomPercent(scale * 100, 1) / 100;
       fit = false;
       updateTransform();
       updateZoom();
     };
     this.zoomOutAction = () => {
-      scale = Math.max(scale / 1.2, 0.05);
+      scale = buttonZoomPercent(scale * 100, -1) / 100;
       fit = false;
       updateTransform();
       updateZoom();
@@ -365,20 +378,32 @@ export class ImagePreviewController {
     };
     image.src = src;
 
-    const handleWheel = (event: WheelEvent) => {
-      event.preventDefault();
+    const zoomAt = (factor: number, clientX: number, clientY: number) => {
       const rect = container.getBoundingClientRect();
-      const mouseX = event.clientX - rect.left - rect.width / 2;
-      const mouseY = event.clientY - rect.top - rect.height / 2;
+      const pointX = clientX - rect.left - rect.width / 2;
+      const pointY = clientY - rect.top - rect.height / 2;
       const previousScale = scale;
-      scale = event.deltaY < 0
-        ? Math.min(scale * 1.1, 20)
-        : Math.max(scale / 1.1, 0.05);
-      x = mouseX - (mouseX - x) * (scale / previousScale);
-      y = mouseY - (mouseY - y) * (scale / previousScale);
+      scale = snapGestureZoom(scale * factor * 100) / 100;
+      x = pointX - (pointX - x) * (scale / previousScale);
+      y = pointY - (pointY - y) * (scale / previousScale);
       fit = false;
       updateTransform();
       updateZoom();
+    };
+    const gestureSteps = new GestureZoomSteps();
+    const cleanupGestures = installPreviewZoomGestures(container, gesture => {
+      const nextScale = gestureSteps.next(scale * 100, gesture.factor, gesture.deltaPercent, gesture.ensureStep) / 100;
+      zoomAt(nextScale / scale, gesture.clientX, gesture.clientY);
+    }, {
+      onStart: () => { gestureSteps.reset(); this.cancelCropDragAction?.(); },
+      onEnd: () => gestureSteps.reset(),
+      onInput: message => this.port.logGestureInput?.(message),
+    });
+    const handleWheel = (event: WheelEvent) => {
+      if (event.defaultPrevented || event.deltaY === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      zoomAt(snapGestureZoom(scale * 100 + (event.deltaY < 0 ? 5 : -5)) / 100 / scale, event.clientX, event.clientY);
     };
 
     const handleMouseDown = (event: MouseEvent) => {
@@ -408,6 +433,7 @@ export class ImagePreviewController {
     const resizeObserver = new ResizeObserver(refitAfterResize);
     resizeObserver.observe(container);
     this.cleanupAction = () => {
+      cleanupGestures();
       resizeObserver.disconnect();
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
       container.removeEventListener("wheel", handleWheel);

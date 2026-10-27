@@ -1,3 +1,4 @@
+import { installPreviewZoomGestures, zoomPreviewElementAtPoint, GestureZoomSteps, buttonZoomPercent, snapGestureZoom, type PreviewZoomGesture } from "./preview/previewZoomGestures";
 import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
@@ -1000,11 +1001,12 @@ export class TypsastraWorkspaceController {
 
   private lastTablePreviewPages: string | null = null;
   private tablePreviewScale = 1;
+  private tablePreviewGestureCleanup: (() => void) | null = null;
   private tablePreviewFit = true;
   private tablePreviewResizeObserver: ResizeObserver | null = null;
   private readonly tablePreviewZoom: TablePreviewZoom = {
-    zoomIn: () => this.zoomTablePreview(1.2),
-    zoomOut: () => this.zoomTablePreview(1 / 1.2),
+    zoomIn: () => this.zoomTablePreview(buttonZoomPercent(this.tablePreviewScale * 100, 1, 25, 800) / 100 / this.tablePreviewScale),
+    zoomOut: () => this.zoomTablePreview(buttonZoomPercent(this.tablePreviewScale * 100, -1, 25, 800) / 100 / this.tablePreviewScale),
     zoomToFit: () => this.fitTablePreview(),
     zoomPercent: () => (this.tableZoomElement() ? this.tablePreviewScale : null),
     isFit: () => (this.tableZoomElement() ? this.tablePreviewFit : null),
@@ -1366,6 +1368,7 @@ export class TypsastraWorkspaceController {
     this.createWorkspaceLifecycleDependencies(),
   );
   private readonly imagePreviewController = new ImagePreviewController({
+    logGestureInput: message => this.appendDeveloperLog({ kind: "info", source: "preview gesture", message }),
     setMessage: html => this.previewFrame.setMessage(html),
     setError: (title, detail) => this.previewFrame.setError(title, detail),
     updateToolbar: path => this.updatePreviewActionsToolbar(path),
@@ -3658,6 +3661,7 @@ export class TypsastraWorkspaceController {
     const container = this.previewPane.querySelector<HTMLElement>(".table-tool-preview");
     const wrapper = this.tableZoomElement();
     if (!container || !wrapper) return;
+    this.tablePreviewGestureCleanup?.();
     this.tablePreviewScale = 1;
     this.tablePreviewFit = true;
     wrapper.style.setProperty("zoom", "1");
@@ -3675,11 +3679,13 @@ export class TypsastraWorkspaceController {
       });
       this.tablePreviewResizeObserver.observe(container);
     }
-    container.addEventListener("wheel", event => {
-      if (!event.ctrlKey && !event.metaKey) return;
-      event.preventDefault();
-      this.zoomTablePreview(event.deltaY < 0 ? 1.1 : 1 / 1.1);
-    }, { passive: false });
+    const steps = new GestureZoomSteps(25, 800);
+    this.tablePreviewGestureCleanup = installPreviewZoomGestures(container, gesture => {
+      const next = steps.next(this.tablePreviewScale * 100, gesture.factor, gesture.deltaPercent, gesture.ensureStep) / 100;
+      this.zoomTablePreview(next / this.tablePreviewScale, gesture);
+    }, { enabled: () => container.isConnected, onStart: () => steps.reset(), onEnd: () => steps.reset(),
+      onInput: message => this.appendDeveloperLog({ kind: "info", source: "preview gesture", message }),
+    });
   }
 
   private computeTableFitScale(container: HTMLElement, wrapper: HTMLElement): number | null {
@@ -3715,10 +3721,16 @@ export class TypsastraWorkspaceController {
     this.updatePreviewZoomLabel(scale);
   }
 
-  private zoomTablePreview(factor: number): boolean {
-    if (!this.tableZoomElement()) return false;
-    const scale = Math.min(Math.max(this.tablePreviewScale * factor, 0.25), 8);
-    this.setTablePreviewScale(scale, false);
+  private zoomTablePreview(factor: number, point?: PreviewZoomGesture): boolean {
+    const element = this.tableZoomElement();
+    if (!element) return false;
+    const scale = snapGestureZoom(this.tablePreviewScale * factor * 100, 25, 800) / 100;
+    const container = element.closest<HTMLElement>(".table-tool-preview");
+    if (point && container) {
+      zoomPreviewElementAtPoint(container, element, this.tablePreviewScale, scale, point, () => this.setTablePreviewScale(scale, false));
+    } else {
+      this.setTablePreviewScale(scale, false);
+    }
     return true;
   }
 
