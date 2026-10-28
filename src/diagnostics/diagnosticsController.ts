@@ -81,7 +81,11 @@ export class DiagnosticsController {
       return;
     }
 
-    if (isActive && !this.shouldAcceptLspDiagnostics(originalPath, version)) return;
+    // Empty publications clear stale errors and cannot introduce new invalid
+    // content. Tinymist may publish them with a lagging version or while the
+    // latest edit is still queued, so only guard publications that carry
+    // diagnostics against the current document revision.
+    if (isActive && diagnostics.length > 0 && !this.shouldAcceptLspDiagnostics(originalPath, version)) return;
 
     if (fromRenderCache) {
       this.port.logDeveloper(
@@ -95,7 +99,7 @@ export class DiagnosticsController {
       !diagnostic.message.includes("cannot export multiple images without a page number template")
     );
     this.lspDiagnosticsByFile.set(this.port.pathKey(originalPath), cacheableDiagnostics);
-    this.port.lspErrorsChanged?.([...this.lspDiagnosticsByFile.values()].some(entries => entries.some(entry => entry.severity === 1)));
+    this.publishLspErrors();
 
     const filteredDiagnostics = cacheableDiagnostics.filter(diagnostic => {
       if (!isActive || !/label.*does not exist|unknown label/i.test(diagnostic.message)) return true;
@@ -126,7 +130,10 @@ export class DiagnosticsController {
         });
       }
 
-      if (!this.shouldAcceptLspDiagnostics(originalPath, version)) return;
+      if (
+        filteredDiagnostics.length > 0
+        && !this.shouldAcceptLspDiagnostics(originalPath, version)
+      ) return;
       editorDiagnostics.push(...this.compilerRelatedEditorDiagnostics(originalPath));
       this.editor()!.dispatch({ effects: setEditorDiagnosticsEffect.of(editorDiagnostics) });
       this.logConsole.setDiagnostics(
@@ -215,6 +222,30 @@ export class DiagnosticsController {
     this.compilerRelatedByFile.clear();
     this.logConsole.clearDiagnostics();
     this.clearEditorDiagnostics();
+  }
+
+  /**
+   * Tinymist does not reliably publish an empty diagnostic set after a
+   * corrected document is opened or changed. Drop the previous revision's
+   * diagnostics as soon as the source revision changes; a new publication will
+   * re-add errors if the revised source is still invalid.
+   */
+  clearForPath(path: string): void {
+    const key = this.port.pathKey(path);
+    const hadCachedDiagnostics = this.lspDiagnosticsByFile.delete(key);
+    const hadCompilerDiagnostics = this.compilerRelatedByFile.delete(key);
+    if (!hadCachedDiagnostics && !hadCompilerDiagnostics) return;
+    this.logConsole.clearDiagnosticsFor(path);
+    if (this.port.pathKey(this.port.activeFilePath() ?? "") === key) {
+      this.clearEditorDiagnostics();
+    }
+    this.publishLspErrors();
+  }
+
+  private publishLspErrors(): void {
+    this.port.lspErrorsChanged?.([...this.lspDiagnosticsByFile.values()].some(entries =>
+      entries.some(entry => entry.severity === 1)
+    ));
   }
 
   clearEditorDiagnostics(): void {

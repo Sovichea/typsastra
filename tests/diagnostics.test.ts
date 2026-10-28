@@ -128,6 +128,90 @@ describe("diagnostic navigation", () => {
   });
 });
 
+describe("LSP diagnostic freshness", () => {
+  test("clears cached errors when a lagging empty publication arrives after a correction", async () => {
+    const path = String.raw`C:\project\main.typ`;
+    const uri = "file:///C:/project/main.typ";
+    let latestVersion = 5;
+    let pendingSync = false;
+    let state = EditorState.create({ doc: "#let value = (" });
+    const errorStates: boolean[] = [];
+    const logged: Array<{ path: string; diagnostics: unknown[] }> = [];
+    const accepted: unknown[] = [];
+    const editor = {
+      get state() { return state; },
+      dispatch(spec: Parameters<EditorView["dispatch"]>[0]) {
+        state = state.update(spec).state;
+      },
+    } as unknown as EditorView;
+    const logConsole = {
+      setDiagnostics(filePath: string, diagnostics: unknown[]) {
+        logged.push({ path: filePath, diagnostics });
+      },
+      clearDiagnosticsFor(filePath: string) {
+        logged.push({ path: filePath, diagnostics: [] });
+      },
+    } as unknown as LogConsoleController;
+    const controller = new DiagnosticsController(logConsole, {
+      editor: () => editor,
+      client: () => undefined,
+      activeFilePath: () => path,
+      pathKey: value => value.replace(/\\/g, "/").toLowerCase(),
+      mapToOriginalPath: value => value,
+      isRenderCachePath: () => false,
+      previewImported: () => true,
+      previewStandalone: () => false,
+      latestDocumentVersion: () => latestVersion,
+      hasPendingSync: () => pendingSync,
+      spellcheck: () => ({}) as never,
+      recordFirstDiagnostics: () => {},
+      logDeveloper: () => {},
+      acceptedDiagnosticsChanged: diagnostics => accepted.push(diagnostics),
+      lspErrorsChanged: hasErrors => errorStates.push(hasErrors),
+      openDiagnosticFile: async () => {},
+      activeTabContentLoaded: () => true,
+      editorPositionFromSourceLocation: () => 0,
+    });
+    const error = {
+      severity: 1,
+      message: "unclosed delimiter",
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 1 },
+      },
+    };
+
+    await controller.handleLspDiagnostics(uri, [error], latestVersion);
+    expect(errorStates.at(-1)).toBe(true);
+    expect(logged.at(-1)?.diagnostics).toHaveLength(1);
+
+    // The edit that fixes the error is newer than the empty publication, and
+    // its LSP sync is still queued. The empty set must still clear the old
+    // error and re-enable recompilation.
+    latestVersion += 1;
+    pendingSync = true;
+    await controller.handleLspDiagnostics(uri, [], latestVersion - 2);
+    expect(errorStates.at(-1)).toBe(false);
+    expect(logged.at(-1)).toEqual({ path: "C:/project/main.typ", diagnostics: [] });
+    expect(accepted.at(-1)).toEqual([]);
+
+    // Non-empty stale publications remain rejected.
+    const calls = errorStates.length;
+    await controller.handleLspDiagnostics(uri, [error], latestVersion - 1);
+    expect(errorStates).toHaveLength(calls);
+
+    // A corrected editor revision clears the previous revision's problems
+    // immediately, even when Tinymist never publishes an empty set.
+    latestVersion += 1;
+    pendingSync = false;
+    await controller.handleLspDiagnostics(uri, [error], latestVersion);
+    expect(errorStates.at(-1)).toBe(true);
+    controller.clearForPath(path);
+    expect(errorStates.at(-1)).toBe(false);
+    expect(logged.at(-1)).toEqual({ path, diagnostics: [] });
+  });
+});
+
 describe("private render mirror diagnostics", () => {
   test("accepts an empty mirror publication to clear a corrected workspace error", async () => {
     const originalPath = String.raw`C:\project\lib.typ`;

@@ -1,6 +1,6 @@
 import type { TinymistLspClient } from "../compiler/lsp";
 import type { EditorTab } from "../editor/editorTab";
-import { fileNameFromPath, filePathKey, filePathToUri } from "../platform/paths";
+import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri } from "../platform/paths";
 
 export type LspDocumentResolution = { uri: string; content: string } | null;
 
@@ -11,6 +11,7 @@ export interface LspDocumentDependencies {
   activeTab(): EditorTab | null;
   resolveDocument(path: string, text: string): Promise<LspDocumentResolution>;
   clearDiagnostics(): void;
+  clearDiagnosticsFor(path: string): void;
   log(kind: "info" | "warning", source: string, message: string): void;
 }
 
@@ -62,6 +63,9 @@ export class LspDocumentController {
     if (!client) return;
     await client.openTextDocument(uri, text, version);
     this.openedUris.add(uri);
+    // The server can publish diagnostics for stale on-disk content before the
+    // opened document is analyzed. Discard that revision's cached problems.
+    this.deps.clearDiagnosticsFor(filePathFromUri(uri));
   }
 
   async closeIfOpened(path: string): Promise<void> {
@@ -119,6 +123,7 @@ export class LspDocumentController {
       }
       await client.openTextDocument(lspUri, lspContent, openVersion);
       this.openedUris.add(lspUri);
+      this.deps.clearDiagnosticsFor(activePath);
       this.deps.log(
         "info",
         "lsp lifecycle",
@@ -134,6 +139,7 @@ export class LspDocumentController {
       activeTab.latestVersion = changeVersion;
     }
     await client.notifyTextChange(lspUri, lspContent, changeVersion);
+    this.deps.clearDiagnosticsFor(activePath);
     this.deps.log(
       "info",
       "lsp lifecycle",

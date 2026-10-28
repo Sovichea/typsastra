@@ -175,7 +175,7 @@ export class LogConsoleController {
     }
 
     const mappedEntries = uniqueEntries.map(entry => this.createEntry({ ...entry, channel: "lsp" }));
-    const fileKey = filePath.toLowerCase();
+    const fileKey = filePathKey(filePath);
     if (mappedEntries.length > 0) {
       this.diagnosticsByFile.set(fileKey, mappedEntries);
     } else {
@@ -218,6 +218,12 @@ export class LogConsoleController {
   public clearDiagnostics(): void {
     this.diagnosticsByFile.clear();
     this.diagnostics = [];
+    this.requestRender();
+  }
+
+  public clearDiagnosticsFor(filePath: string): void {
+    if (!this.diagnosticsByFile.delete(filePathKey(filePath))) return;
+    this.diagnostics = Array.from(this.diagnosticsByFile.values()).flat();
     this.requestRender();
   }
 

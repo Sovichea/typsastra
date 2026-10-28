@@ -271,6 +271,7 @@ export class TypsastraWorkspaceController {
     activeTab: () => this.getActiveTab(),
     resolveDocument: (path, text) => this.getLspUriAndContent(path, text),
     clearDiagnostics: () => this.clearDiagnostics(),
+    clearDiagnosticsFor: path => this.diagnosticsController.clearForPath(path),
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
   private readonly documentLanguageController = new DocumentLanguageController({
@@ -3411,6 +3412,12 @@ export class TypsastraWorkspaceController {
       }
     }
 
+    if (!this.isLoadingFile && this.activeFilePath && isTypstDocumentPath(this.activeFilePath)) {
+      // Tinymist may not publish an empty set after this revision becomes
+      // valid. Remove the previous revision's problems immediately; a later
+      // publication restores them if the source still has errors.
+      this.diagnosticsController.clearForPath(this.activeFilePath);
+    }
     this.lspSyncController.queueContentMutation(rawText);
     if (
       !this.isLoadingFile
@@ -3696,11 +3703,13 @@ export class TypsastraWorkspaceController {
     }
     // Refresh source editors independently. External multi-file writes are
     // incomplete transactions until the user explicitly recompiles the project.
-    this.pdfPreviewRenderController.noteExternalSourceChange(tab.path);
+    this.diagnosticsController.clearForPath(tab.path);
     if (this.activeFilePath && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
       this.scheduleDocumentOutlineUpdate(tab.path);
+      this.lspSyncController.queueContentMutation(tab.content);
       if (this.activeMode === "WYSIWYM") this.mapMarkupToWysiwym(tab.content);
     }
+    this.pdfPreviewRenderController.noteExternalSourceChange(tab.path);
   }
 
   private noMainFileMessage(): string {
