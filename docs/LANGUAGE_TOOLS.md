@@ -100,6 +100,8 @@ The catalog uses verified raw dictionary paths from the LibreOffice dictionaries
 - Write downloads utilizing atomic named temporary files inside the target locale directory to prevent corrupted files from partial downloads.
 - Create a self-contained `metadata.json` storing display name, language tag, size, license, version, and type metadata to keep capabilities visible offline without network access.
 
+Regional, script, and orthographic spelling variants remain separate catalog entries and provider IDs. For example, German exposes `de_DE`, `de_AT`, and `de_CH`; English exposes `en_GB`, `en_AU`, `en_CA`, and `en_ZA`; Spanish exposes every regional dictionary published by LibreOffice; and Portuguese exposes `pt_BR` and `pt_PT`. Serbian Cyrillic (`sr-Cyrl`) and Serbian Latin (`sr-Latn`), Catalan and Valencian, Norwegian Bokmål and Nynorsk, and Swedish Sweden/Finland are also distinct choices. Typsastra never substitutes one region, script, or variant for another. Hyphenation (`hyph_*.dic`) and thesaurus files are excluded because they are not Hunspell spelling dictionaries.
+
 To clean up downloaded dictionaries, the frontend exposes a red "Remove" button that cleanly deletes the locale directory and calls `reload_installed` in the backend provider registry to dynamically unregister the provider.
 
 ### Robust Affix Preprocessing
