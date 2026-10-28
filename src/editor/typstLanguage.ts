@@ -202,7 +202,9 @@ const typstParser: StreamParser<TypstParserState> = {
   languageData: {
     commentTokens: { line: "//", block: { open: "/*", close: "*/" } },
     indentOnInput: /^\s*[\}\]]$/,
-    closeBrackets: { brackets: ["(", "[", "{", '"', "'", "*", "_", "$"] }
+    // Only structural brackets auto-close. Markup delimiters such as `*`, `_`,
+    // and `$` should insert one character and let the user finish the pair.
+    closeBrackets: { brackets: ["(", "[", "{"] }
   },
 
   indent(state: TypstParserState, textAfter: string, cx: IndentContext) {

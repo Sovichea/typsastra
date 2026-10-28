@@ -667,7 +667,7 @@ function typstFoldMarkerDOM(open: boolean): HTMLElement {
 }
 
 const preventEscapedBracketAutoClose = EditorView.inputHandler.of((view, from, to, text) => {
-  const bracketsToPrevent = ["$", "(", "[", "{", "'", "*", "_"];
+  const bracketsToPrevent = ["(", "[", "{"];
   if (bracketsToPrevent.includes(text)) {
     if (from > 0 && view.state.doc.sliceString(from - 1, from) === "\\") {
       view.dispatch({

@@ -63,16 +63,18 @@ describe("selection pair editing", () => {
     expect(state.sliceDoc(state.selection.main.from, state.selection.main.to)).toBe("Hello");
   });
 
-  test("replaces an existing pair when a different opening delimiter is typed", () => {
-    const cases: Array<[EditorOpeningDelimiter, string]> = [
-      ['"', '"Hello"'],
-      ["(", "(Hello)"],
-      ["[", "[Hello]"],
-      ["{", "{Hello}"],
+  test("wraps the complete selected pair when a different opening delimiter is typed", () => {
+    const pairs: Array<[EditorOpeningDelimiter, string]> = [
+      ['"', '"'],
+      ["(", ")"],
+      ["[", "]"],
+      ["{", "}"],
+      ["*", "*"],
     ];
     for (const source of ['"Hello"', "[Hello]", "(Hello)", "{Hello}"]) {
-      for (const [opening, expected] of cases) {
+      for (const [opening, closing] of pairs) {
         if (source.startsWith(opening)) continue;
+        const expected = `${opening}${source}${closing}`;
         const state = replace(source, 0, source.length, opening);
         expect(state.doc.toString()).toBe(expected);
         expect(state.sliceDoc(state.selection.main.from, state.selection.main.to)).toBe(expected);
@@ -80,11 +82,26 @@ describe("selection pair editing", () => {
     }
   });
 
+  test("wraps a selected parenthesized text instead of replacing the parentheses", () => {
+    const state = replace("(test) world", 0, 6, "*");
+    expect(state.doc.toString()).toBe("*(test)* world");
+    expect(state.sliceDoc(state.selection.main.from, state.selection.main.to)).toBe("*(test)*");
+  });
+
+  test("unwraps parentheses first so a different delimiter can then wrap the content", () => {
+    const unwrapped = replace("(test) world", 0, 6, "(");
+    expect(unwrapped.doc.toString()).toBe("test world");
+    expect(unwrapped.sliceDoc(unwrapped.selection.main.from, unwrapped.selection.main.to)).toBe("test");
+
+    const wrapped = replace("test world", 0, 4, "*");
+    expect(wrapped.doc.toString()).toBe("*test* world");
+  });
+
   test("preserves a backward selection", () => {
     const state = replace('"Hello" world', 7, 0, "{");
-    expect(state.doc.toString()).toBe("{Hello} world");
-    expect(state.selection.main.anchor).toBe(7);
+    expect(state.doc.toString()).toBe('{"Hello"} world');
+    expect(state.selection.main.anchor).toBe(9);
     expect(state.selection.main.head).toBe(0);
-    expect(state.sliceDoc(state.selection.main.from, state.selection.main.to)).toBe("{Hello}");
+    expect(state.sliceDoc(state.selection.main.from, state.selection.main.to)).toBe('{"Hello"}');
   });
 });

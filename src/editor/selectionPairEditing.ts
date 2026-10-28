@@ -40,9 +40,11 @@ export function pairedSelectionContent(selected: string): string | null {
 }
 
 /**
- * Wraps bare selections, removes an existing matching pair, or replaces a
- * different existing pair. The complete result remains selected so repeated
- * delimiter keys can toggle or switch pairs without selecting the text again.
+ * Wraps selections, removes an existing matching pair, or wraps an existing
+ * pair in a different delimiter. A different delimiter must preserve the
+ * selected text as-is, so `(test)` becomes `*(test)*`; only the same delimiter
+ * unwraps it. The complete result remains selected so repeated delimiter keys
+ * can toggle or add another wrapper without selecting the text again.
  */
 export function replaceSelectedDelimiters(
   view: EditorView,
@@ -53,10 +55,9 @@ export function replaceSelectedDelimiters(
   const transaction = view.state.changeByRange(range => {
     const selected = view.state.doc.sliceString(range.from, range.to);
     const existing = pairedSelection(selected);
-    const prefix = opening;
     const insert = existing?.opening === opening
       ? existing.content
-      : `${prefix}${existing?.content ?? selected}${closing}`;
+      : `${opening}${selected}${closing}`;
     const selectionFrom = range.from;
     const selectionTo = selectionFrom + insert.length;
     return {

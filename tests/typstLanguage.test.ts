@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { insertBracket } from "@codemirror/autocomplete";
 import { getIndentation, indentUnit, syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { typstLanguage } from "../src/editor/typstLanguage";
@@ -35,6 +36,21 @@ function indentationAt(doc: string, position: number): number | null {
 }
 
 describe("Typst stream language", () => {
+  test("auto-closes structural brackets but not markup or string delimiters", () => {
+    const state = EditorState.create({ doc: "", extensions: [typstLanguage] });
+    expect(state.languageDataAt<{ brackets: string[] }>("closeBrackets", 0)[0]?.brackets).toEqual([
+      "(",
+      "[",
+      "{",
+    ]);
+    for (const bracket of ["(", "[", "{"]) {
+      expect(insertBracket(state, bracket)).not.toBeNull();
+    }
+    for (const bracket of ['"', "'", "*", "_", "$"]) {
+      expect(insertBracket(state, bracket)).toBeNull();
+    }
+  });
+
   test("counts a closure body inside a function call as one indentation level", () => {
     const doc = "#let x = items.map(it => {\n\n})";
     const blankLine = doc.indexOf("\n") + 1;
