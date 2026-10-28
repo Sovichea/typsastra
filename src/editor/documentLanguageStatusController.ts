@@ -46,6 +46,7 @@ export class DocumentLanguageStatusController {
     });
     document.getElementById("document-language-manage")?.addEventListener("click", () => {
       const languageTag = this.missingProviderLanguageTag();
+      this.applySelections();
       this.close(false);
       document.dispatchEvent(new CustomEvent("typsastra:open-settings", {
         detail: {
@@ -209,6 +210,12 @@ export class DocumentLanguageStatusController {
   }
 
   private apply(): void {
+    this.applySelections();
+    this.close();
+    this.update();
+  }
+
+  private applySelections(): void {
     const selects = [...document.querySelectorAll<HTMLSelectElement>("#document-language-assignments [data-script-language]")];
     const visibleScripts = new Set(selects.map(select => select.dataset.scriptLanguage!.toLowerCase()));
     const assignments = [
@@ -218,8 +225,6 @@ export class DocumentLanguageStatusController {
         : []),
     ];
     this.deps.applyAssignments(assignments);
-    this.close();
-    this.update();
   }
 
   private overlay(): HTMLElement | null {

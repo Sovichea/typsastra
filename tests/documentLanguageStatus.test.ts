@@ -69,6 +69,8 @@ describe("document language status", () => {
     expect(controller).toContain("pendingProviderLanguageTag");
     expect(controller).toContain('item.dataset.noProvider = "true"');
     expect(controller).toContain("private missingProviderLanguageTag(): string | null");
+    expect(controller).toContain("this.applySelections();");
+    expect(controller).toContain("private applySelections(): void");
     expect(controller).toContain("revealLanguageProviders: true");
     expect(controller).toContain("languageTag: languageTag ?? undefined");
   });
