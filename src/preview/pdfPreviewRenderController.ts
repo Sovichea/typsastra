@@ -129,6 +129,7 @@ export class PdfPreviewRenderController {
   private lastPdfIdentityValue = "";
   private lastPdfSessionKeyValue = "";
   private lastPdfSurfaceValue: PreviewSurface = "live";
+  private liveSnapshot: { path: string; identity: string; sourceRoot: string | null; sessionKey: string; mode: PreviewContentMode; lease: number | null } | null = null;
   private lastPresentedLivePdfHash: string | null = null;
   private liveViewportAnchorValue: PreviewViewportAnchor | null = null;
   private liveScrollTopValue = 0;
@@ -195,6 +196,8 @@ export class PdfPreviewRenderController {
    * projections on the root application controller.
    */
   public resetForWorkspaceClose(): void {
+    void releasePreviewGeneration(this.liveSnapshot?.lease).catch(() => {});
+    this.liveSnapshot = null;
     this.deps.freshness?.reset();
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
@@ -287,6 +290,24 @@ export class PdfPreviewRenderController {
         "preview scheduler",
         `Render skipped: ${this.deps.getActiveFilePath() ?? "no active file"} does not participate in the configured main preview.`,
       );
+      return;
+    }
+    const snapshot = this.liveSnapshot;
+    if (!force && !this.runningValue && this.deps.freshness?.state.status === "current"
+      && snapshot && snapshot.sourceRoot === this.deps.getPreviewRootPath()
+      && snapshot.sessionKey === this.deps.getPreviewSessionKey()
+      && snapshot.mode === this.deps.draftPreview.mode
+      && !this.deps.typography.fontUpdateInProgress) {
+      const mounted = this.lastPdfSurfaceValue === "live"
+        && this.lastPdfPathValue === snapshot.path
+        && this.deps.previewFrame.retainMountedLivePreview(snapshot.identity, snapshot.sessionKey);
+      if (!mounted) {
+        if (this.hasLiveViewportValue) {
+          this.deps.previewFrame.preserveViewportForNextLoad(this.liveViewportAnchorValue, this.liveScrollTopValue);
+        }
+        await this.loadPdfPath(snapshot.path, snapshot.identity, snapshot.sessionKey, "live");
+      }
+      this.deps.log("info", "preview scheduler", "Reused current live preview without compilation.");
       return;
     }
     if (!await this.deps.ensureLargePreviewApproved(this.deps.getPreviewRootPath())) {
@@ -887,6 +908,7 @@ export class PdfPreviewRenderController {
         this.lastPdfIdentityValue = identity;
         this.lastPdfSessionKeyValue = sessionKey;
         this.lastPdfSurfaceValue = surface;
+        if (surface === "live") await this.rememberLiveSnapshot(path, identity, sessionKey, requestGeneration);
       }
       return byteLength;
     }
@@ -925,7 +947,26 @@ export class PdfPreviewRenderController {
       this.lastPdfIdentityValue = identity;
       this.lastPdfSessionKeyValue = sessionKey;
       this.lastPdfSurfaceValue = surface;
+      if (surface === "live") await this.rememberLiveSnapshot(path, identity, sessionKey, requestGeneration);
     }
     return byteLength;
+  }
+
+  private async rememberLiveSnapshot(path: string, identity: string, sessionKey: string, request: number): Promise<void> {
+    if (this.liveSnapshot?.path === path) {
+      this.liveSnapshot.identity = identity;
+      this.liveSnapshot.sourceRoot = this.deps.getPreviewRootPath();
+      this.liveSnapshot.sessionKey = sessionKey;
+      this.liveSnapshot.mode = this.deps.draftPreview.mode;
+      return;
+    }
+    const lease = await retainPreviewGeneration(path);
+    if (request !== this.loadRequestGeneration) {
+      await releasePreviewGeneration(lease);
+      return;
+    }
+    const previous = this.liveSnapshot;
+    this.liveSnapshot = { path, identity, sourceRoot: this.deps.getPreviewRootPath(), sessionKey, mode: this.deps.draftPreview.mode, lease };
+    await releasePreviewGeneration(previous?.lease);
   }
 }

@@ -4,6 +4,50 @@ import { PdfPreviewRenderController } from "../src/preview/pdfPreviewRenderContr
 import { TypsastraWorkspaceController } from "../src/appController";
 
 describe("preview freshness", () => {
+  test("returning from other preview surfaces restores the current live PDF without compiling", async () => {
+    for (const mounted of [true, false]) {
+      let loads = 0;
+      let preserved = 0;
+      const controller = Object.assign(Object.create(PdfPreviewRenderController.prototype), {
+        runningValue: false,
+        lastPdfSurfaceValue: mounted ? "live" : "pdf", lastPdfPathValue: mounted ? "snapshot.pdf" : "other.pdf",
+        liveSnapshot: { path: "snapshot.pdf", identity: "cache/render/main.typ", sourceRoot: "main.typ", sessionKey: "main", mode: "normal", lease: null },
+        hasLiveViewportValue: true, liveViewportAnchorValue: null, liveScrollTopValue: 350,
+        deps: {
+          log: () => {}, isLowMemoryMode: () => false,
+          getActiveFilePath: () => "main.typ", getPinnedMainFilePath: () => "main.typ",
+          getPreviewRootPath: () => "main.typ", getPreviewSessionKey: () => "main",
+          isPreviewImported: () => false, isPreviewDisabled: () => false,
+          freshness: new PreviewFreshnessController(), draftPreview: { mode: "normal" },
+          typography: { fontUpdateInProgress: false },
+          previewFrame: {
+            retainMountedLivePreview: (identity: string) => { expect(identity).toBe("cache/render/main.typ"); return mounted; },
+            preserveViewportForNextLoad: () => { preserved++; },
+          },
+        },
+        loadPdfPath: async (path: string) => { expect(path).toBe("snapshot.pdf"); loads++; },
+      });
+      await controller.render("unchanged source");
+      expect(loads).toBe(mounted ? 0 : 1);
+      expect(preserved).toBe(mounted ? 0 : 1);
+      let compileRequests = 0;
+      controller.deps.ensureLargePreviewApproved = async () => { compileRequests++; return false; };
+      await controller.render("unchanged source", true);
+      expect(compileRequests).toBe(1);
+      controller.deps.freshness.changed("main.typ");
+      await controller.render("new source");
+      expect(compileRequests).toBe(2);
+      const token = controller.deps.freshness.begin();
+      controller.deps.freshness.finish(token, true);
+      controller.deps.draftPreview.mode = "draft";
+      await controller.render("unchanged source");
+      expect(compileRequests).toBe(3);
+      controller.deps.draftPreview.mode = "normal";
+      controller.liveSnapshot = null;
+      await controller.render("first project open");
+      expect(compileRequests).toBe(4);
+    }
+  });
   test("stays outdated across multiple external files until a current compile succeeds", () => {
     const freshness = new PreviewFreshnessController();
     freshness.changed("main.typ", true);

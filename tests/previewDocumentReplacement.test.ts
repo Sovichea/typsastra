@@ -7,6 +7,71 @@ import {
 } from "../src/preview/previewDocumentGeneration";
 
 describe("standalone PDF document replacement", () => {
+  test("late disposal of an image-replaced PDF preserves the restored live PDF geometry", async () => {
+    let finishCleanup!: () => void;
+    const cleanup = new Promise<void>(resolve => { finishCleanup = resolve; });
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      resetStandalonePdfSearch: () => {}, cancelAllPageRenders: () => {},
+      observer: null, pdfDoc: {}, pdfLoadingTask: null, pendingPdfLoadingTask: null,
+      pageDimensions: new Map([[1, { width: 100, height: 200 }]]),
+      landscapePages: new Set<number>(), pageSlots: [{}], pdfOutlineDestinations: [],
+      cleanupPdfDocumentGeneration: () => cleanup,
+    });
+    const disposed = frame.disposePdfDocument();
+    frame.pdfDoc = { name: "restored live PDF" };
+    frame.pageDimensions.set(11, { width: 800, height: 600 });
+    frame.landscapePages.add(11);
+    const restoredSlots = [{}];
+    frame.pageSlots = restoredSlots;
+    finishCleanup();
+    await disposed;
+    expect(frame.pageDimensions.get(11)).toEqual({ width: 800, height: 600 });
+    expect(frame.landscapePages.has(11)).toBe(true);
+    expect(frame.pageSlots).toBe(restoredSlots);
+  });
+  test("revealing a resident live PDF repaints without scrolling and ignores obsolete reveal work", () => {
+    const previousRaf = globalThis.requestAnimationFrame;
+    const callbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = callback => { callbacks.push(callback); return callbacks.length; };
+    try {
+      let paints = 0;
+      let resets = 0;
+      const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+        pdfGeneration: 1, pdfDoc: {}, mountedUrl: "mirror/main.typ", mountedSessionKey: "main",
+        iframe: { contentDocument: {}, contentWindow: { scrollY: 800 } },
+        clearMessageHost: () => {},
+        motion: { reset: (top: number) => { expect(top).toBe(800); resets++; } },
+        trackReplacementPagePaints: () => {}, renderVisiblePages: () => { paints++; },
+        pumpPageRenderQueue: () => {}, visiblePageNumber: () => 2, reportPageStatus: () => {},
+      });
+      expect(frame.activateSession("main", true)).toBe(true);
+      expect(paints).toBe(0);
+      while (callbacks.length) callbacks.shift()!(0);
+      expect(paints).toBe(1);
+      expect(resets).toBe(1);
+      frame.retainMountedLivePreview("mirror/main.typ", "main");
+      frame.pdfGeneration++;
+      while (callbacks.length) callbacks.shift()!(0);
+      expect(paints).toBe(1);
+    } finally {
+      globalThis.requestAnimationFrame = previousRaf;
+    }
+  });
+
+  test("an old preview cannot restore its scroll anchor into a replacement PDF", () => {
+    const previousRaf = globalThis.requestAnimationFrame;
+    const callbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = callback => { callbacks.push(callback); return callbacks.length; };
+    try {
+      const frame = Object.assign(Object.create(PreviewFrame.prototype), { pdfGeneration: 1 });
+      frame.restoreScrollAnchor({ pageNo: 2 }, true);
+      frame.restoreScrollPosition(800);
+      frame.pdfGeneration++;
+      // No iframe is accessed by obsolete callbacks.
+      while (callbacks.length) callbacks.shift()!(0);
+      expect(frame.pdfGeneration).toBe(2);
+    } finally { globalThis.requestAnimationFrame = previousRaf; }
+  });
   test("rejects asynchronous work owned by an older document generation", () => {
     const olderDocument = { name: "older" };
     const newerDocument = { name: "newer" };

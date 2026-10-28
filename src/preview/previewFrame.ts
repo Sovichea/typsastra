@@ -435,7 +435,25 @@ export class PreviewFrame {
     this.mountedUrl = identity;
     this.mountedSessionKey = sessionKey;
     this.clearMessageHost();
+    this.refreshRevealedPdf();
     return true;
+  }
+
+  private refreshRevealedPdf(): void {
+    const generation = this.pdfGeneration;
+    const pdfDoc = this.pdfDoc;
+    // The owner may still be removing the image/tool surface in this turn.
+    // Re-evaluate visibility after layout rather than waiting for user scroll.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (generation !== this.pdfGeneration || pdfDoc !== this.pdfDoc) return;
+      const doc = this.iframe?.contentDocument;
+      if (!doc) return;
+      this.motion.reset(this.iframe?.contentWindow?.scrollY ?? 0, performance.now());
+      this.trackReplacementPagePaints(doc);
+      this.renderVisiblePages();
+      void this.pumpPageRenderQueue();
+      this.reportPageStatus(this.visiblePageNumber());
+    }));
   }
 
   public syncTheme(): void {
@@ -1034,6 +1052,8 @@ export class PreviewFrame {
         if (generation !== this.pdfGeneration || this.pdfDoc !== pdfDoc) return;
         this.replacementLayoutReady = true;
         this.trackReplacementPagePaints(iframeDoc);
+        this.motion.reset(this.iframe?.contentWindow?.scrollY ?? 0, performance.now());
+        this.renderVisiblePages();
       }));
       await this.onLoadStage?.("viewer installed", {
         transport: transportStats.transport,
@@ -2207,14 +2227,16 @@ export class PreviewFrame {
     this.pdfLoadingTask = null;
     this.pendingPdfLoadingTask = null;
     this.pdfDoc = null;
-    await this.cleanupPdfDocumentGeneration(pdfDoc, loadingTask);
-    if (pendingLoadingTask && pendingLoadingTask !== loadingTask) {
-      try { await pendingLoadingTask.destroy(); } catch {}
-    }
+    // Release shared layout state before awaiting the old worker. A new PDF
+    // can be installed while cleanup is pending and must keep its geometry.
     this.pageDimensions.clear();
     this.landscapePages.clear();
     this.pageSlots = [];
     this.pdfOutlineDestinations = [];
+    await this.cleanupPdfDocumentGeneration(pdfDoc, loadingTask);
+    if (pendingLoadingTask && pendingLoadingTask !== loadingTask) {
+      try { await pendingLoadingTask.destroy(); } catch {}
+    }
   }
 
   private resetStandalonePdfSearch(): void {
@@ -2338,6 +2360,7 @@ export class PreviewFrame {
   private finishInstantPageJump(pageNo: number): void {
     const view = this.iframe?.contentWindow;
     if (!view) return;
+    const generation = this.pdfGeneration;
     this.motion.reset(view.scrollY, performance.now());
     this.motionDestinationPage = pageNo;
     this.motionStartedAt = null;
@@ -2349,6 +2372,7 @@ export class PreviewFrame {
     void this.pumpPageRenderQueue();
     this.reportPageStatus(pageNo);
     const reportScrollPosition = (phase: string) => {
+      if (generation !== this.pdfGeneration || view !== this.iframe?.contentWindow) return;
       this.onScrollPositionChanged?.(view.scrollY);
       this.onDebug?.(`Preview programmatic scroll observed: phase=${phase}; page=${pageNo}; observed=${view.scrollY.toFixed(1)}; session=${this.mountedSessionKey || "none"}.`);
     };
@@ -2418,7 +2442,9 @@ export class PreviewFrame {
 
   private restoreScrollPosition(scrollTop: number): void {
     if (!Number.isFinite(scrollTop)) return;
+    const generation = this.pdfGeneration;
     requestAnimationFrame(() => {
+      if (generation !== this.pdfGeneration) return;
       const view = this.iframe?.contentWindow;
       const doc = this.iframe?.contentDocument;
       if (!view || !doc) return;
@@ -2431,7 +2457,9 @@ export class PreviewFrame {
 
   private restoreScrollAnchor(anchor: PreviewViewportAnchor | null, afterLayout = false, immediately = false): void {
     if (!anchor) return;
+    const generation = this.pdfGeneration;
     const restore = () => {
+      if (generation !== this.pdfGeneration) return;
       const slot = this.iframe?.contentDocument
         ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${anchor.pageNo}"]`);
       const view = this.iframe?.contentWindow;
@@ -3527,6 +3555,7 @@ export class PreviewFrame {
       // another activation must never override the viewport the user scrolled.
       this.pendingRestoredViewportAnchor = null;
       this.pendingRestoredScrollTop = null;
+      this.refreshRevealedPdf();
       return true;
     }
     if (this.pendingRestoredViewportAnchor) {
@@ -3539,6 +3568,7 @@ export class PreviewFrame {
       this.pendingRestoredScrollTop = null;
       this.restoreScrollPosition(scrollTop);
     }
+    this.refreshRevealedPdf();
     return true;
   }
 

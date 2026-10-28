@@ -21,6 +21,7 @@ function fixture() {
     pendingRestoredScrollTop: 0,
     pendingRestoredViewportAnchor: { pageNo: 1 },
     clearMessageHost() {},
+    refreshRevealedPdf() {},
     restoreScrollPosition(top: number) { restored.push(top); },
     restoreScrollAnchor(anchor: object) { restored.push(anchor); },
   });

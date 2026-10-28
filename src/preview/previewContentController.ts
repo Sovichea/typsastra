@@ -13,9 +13,6 @@ import type { MarkdownPreviewFrame } from "./markdownPreviewFrame";
 import type { PreviewFrame } from "./previewFrame";
 import {
   previewLspMainPath,
-  previewRefreshStyle,
-  previewSessionIdentity,
-  researchDocumentIdentity,
   type PreviewTarget,
 } from "./previewPolicy";
 
@@ -123,7 +120,7 @@ export class PreviewContentController {
     this.deps.imagePreview.render(src, previewPath);
   }
 
-  public async refreshActivePreviewRoot(forceRender = false): Promise<void> {
+  public async refreshActivePreviewRoot(_forceRender = false): Promise<void> {
     const request = this.refreshRequests.begin("preview");
     // A tool surface owns the preview pane; the document must not reclaim it.
     if (this.deps.isImageToolActive() || this.deps.isTableToolActive()) return;
@@ -132,7 +129,6 @@ export class PreviewContentController {
     const activeTab = this.deps.getActiveTab();
     const workspaceRootPath = this.deps.getWorkspaceRootPath();
     const pinnedMainPath = this.deps.getPinnedMainFilePath();
-    const previewRenderMode = this.deps.getPreviewRenderMode();
     const isCurrent = () => (
       this.refreshRequests.isCurrent(request)
       && this.deps.getActiveFilePath() === path
@@ -217,28 +213,11 @@ export class PreviewContentController {
     }
     await this.deps.updatePinnedMain(previewLspMainPath(target));
     if (!isCurrent()) return;
-    const docIdentity = target.rootPath
-      ? researchDocumentIdentity(
-          workspaceRootPath ?? target.rootPath,
-          target.mainPath,
-          path,
-        )
-      : null;
-    const identity = target.rootPath
-      ? previewSessionIdentity(
-          target.rootPath,
-          previewRefreshStyle(previewRenderMode),
-          docIdentity ?? undefined,
-        )
-      : null;
-    const unchanged = identity?.key === this.deps.getPreviewSessionKey();
     if (!activeTab) return;
     this.deps.applyPreviewTargetToTab(activeTab, target);
     this.deps.configureDocumentLanguageTools(contents);
-    // A tool surface can temporarily replace and unmount the preview without
-    // changing the underlying document session. Only reuse an unchanged
-    // session while its preview is still mounted; otherwise restore it.
-    if (unchanged && !forceRender && this.deps.previewFrame.currentUrl) return;
+    // The render controller owns freshness and restores current live PDFs
+    // after another file or tool replaces the mounted preview surface.
 
     if (!target.rootPath) {
       this.deps.setPreviewPaneHtml(`<div style="padding: 20px; color: var(--ui-header-text); font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`);
