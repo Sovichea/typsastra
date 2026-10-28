@@ -377,7 +377,7 @@ export class TypsastraWorkspaceController {
     invalidatePreviewWork: reason => this.invalidatePreviewWork(reason),
     noMainFileMessage: () => this.noMainFileMessage(),
     disabledPreviewMessage: () => this.disabledPreviewMessage(),
-    renderPdfPreview: contents => { void this.renderPdfPreview(contents); },
+    renderPdfPreview: contents => { void this.renderPdfPreview(contents, false, true); },
     logPreview: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
   });
   private readonly largePreviewGuardController = new LargePreviewGuardController({
@@ -2021,7 +2021,7 @@ export class TypsastraWorkspaceController {
     applyPreviewTargetToTab: (tab, target) => this.applyPreviewTargetToTab(tab, target),
     configureDocumentLanguageTools: contents => this.configureDocumentLanguageTools(contents),
     invalidatePreviewWork: reason => this.invalidatePreviewWork(reason),
-    renderPdfPreview: contents => this.renderPdfPreview(contents),
+    renderPdfPreview: (contents, restoreOnly) => this.renderPdfPreview(contents, false, restoreOnly),
     loadPdfPath: (path, identity) => this.loadPdfPath(path, identity),
     setPreviewPaneHtml: html => { this.previewPane.innerHTML = html; },
   });
@@ -3092,11 +3092,12 @@ export class TypsastraWorkspaceController {
     return this.lspDocumentController.recheckActiveAfterPin(text);
   }
 
-  private renderPdfPreview(contents: string, force = false): Promise<void> {
+  private renderPdfPreview(contents: string, force = false, restoreOnly = false): Promise<void> {
     if (this.blockStandalonePreview(contents)) return Promise.resolve();
     // While the table tool owns the preview pane, the document preview must
     // not render over it; switching back restores the preview.
     if (this.sidebarController.activeTool === "tables") return Promise.resolve();
+    if (restoreOnly) return this.pdfPreviewRenderController.restore(contents);
     return this.pdfPreviewRenderController.render(contents, force);
   }
 

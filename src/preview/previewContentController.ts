@@ -46,7 +46,7 @@ export interface PreviewContentDependencies {
   applyPreviewTargetToTab(tab: EditorTab, target: PreviewTarget): void;
   configureDocumentLanguageTools(contents: string): void;
   invalidatePreviewWork(reason: string): void;
-  renderPdfPreview(contents: string): Promise<void>;
+  renderPdfPreview(contents: string, restoreOnly?: boolean): Promise<void>;
   loadPdfPath(path: string, identity: string): Promise<number>;
   setPreviewPaneHtml(html: string): void;
 }
@@ -120,7 +120,7 @@ export class PreviewContentController {
     this.deps.imagePreview.render(src, previewPath);
   }
 
-  public async refreshActivePreviewRoot(_forceRender = false): Promise<void> {
+  public async refreshActivePreviewRoot(forceRender = false): Promise<void> {
     const request = this.refreshRequests.begin("preview");
     // A tool surface owns the preview pane; the document must not reclaim it.
     if (this.deps.isImageToolActive() || this.deps.isTableToolActive()) return;
@@ -225,6 +225,6 @@ export class PreviewContentController {
     }
 
     if (!isCurrent()) return;
-    await this.deps.renderPdfPreview(contents);
+    await this.deps.renderPdfPreview(contents, !forceRender);
   }
 }

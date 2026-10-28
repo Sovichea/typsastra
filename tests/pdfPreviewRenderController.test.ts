@@ -10,7 +10,7 @@ describe("PDF preview render controller", () => {
     expect(source).toContain("private generationValue = 0");
     expect(source).toContain("private scheduleGeneration = 0");
     expect(source).toContain("private queuedContents: string | null = null");
-    expect(source).toContain("public async render(contents: string, force = false)");
+    expect(source).toContain("public async render(contents: string, force = false, restoreOnly = false)");
     expect(source).toContain("public schedule(contents: string, delayMs: number)");
     expect(source).toContain("public async loadPdfPath(");
     expect(source).toContain('surface === "pdf"');

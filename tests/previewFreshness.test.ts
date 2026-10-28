@@ -68,6 +68,16 @@ describe("preview freshness", () => {
       expect(preserved).toBe(mounted ? 0 : 1);
       let compileRequests = 0;
       controller.deps.ensureLargePreviewApproved = async () => { compileRequests++; return false; };
+      controller.deps.freshness.editorChanged("main.typ", "compiled", "unsaved edit");
+      await controller.restore("unsaved edit");
+      expect(compileRequests).toBe(0);
+      expect(controller.deps.freshness.state.status).toBe("outdated");
+      controller.deps.freshness.changed("data.json", true);
+      controller.runningValue = true;
+      await controller.restore("unsaved edit");
+      expect(compileRequests).toBe(0);
+      expect(controller.deps.freshness.state.externalFiles).toEqual(["data.json"]);
+      controller.runningValue = false;
       await controller.render("unchanged source", true);
       expect(compileRequests).toBe(1);
       controller.deps.freshness.changed("main.typ");

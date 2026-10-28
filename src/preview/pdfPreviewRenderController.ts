@@ -274,7 +274,11 @@ export class PdfPreviewRenderController {
     this.deps.log("info", "preview scheduler", `Preview work invalidated: ${reason}.`);
   }
 
-  public async render(contents: string, force = false): Promise<void> {
+  public restore(contents: string): Promise<void> {
+    return this.render(contents, false, true);
+  }
+
+  public async render(contents: string, force = false, restoreOnly = false): Promise<void> {
     this.deps.log(
       "info",
       "preview scheduler",
@@ -298,7 +302,11 @@ export class PdfPreviewRenderController {
       return;
     }
     const snapshot = this.liveSnapshot;
-    if (!force && !this.runningValue && this.deps.freshness?.state.status === "current"
+    const status = this.deps.freshness?.state.status;
+    // Manual recompile marks freshness as compiling before restarting Tinymist.
+    // That restart must compile even though it reactivates the current tab.
+    const restoreExisting = restoreOnly && (status !== "compiling" || this.runningValue);
+    if (!force && (!this.runningValue || restoreExisting) && (restoreExisting || status === "current")
       && snapshot && snapshot.sourceRoot === this.deps.getPreviewRootPath()
       && snapshot.sessionKey === this.deps.getPreviewSessionKey()
       && snapshot.mode === this.deps.draftPreview.mode
@@ -312,7 +320,7 @@ export class PdfPreviewRenderController {
         }
         await this.loadPdfPath(snapshot.path, snapshot.identity, snapshot.sessionKey, "live");
       }
-      this.deps.log("info", "preview scheduler", "Reused current live preview without compilation.");
+      this.deps.log("info", "preview scheduler", `Restored live preview without compilation; status=${this.deps.freshness?.state.status ?? "unknown"}.`);
       return;
     }
     if (!await this.deps.ensureLargePreviewApproved(this.deps.getPreviewRootPath())) {
