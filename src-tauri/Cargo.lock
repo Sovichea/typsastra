@@ -6201,6 +6201,7 @@ dependencies = [
  "arboard",
  "base64 0.22.1",
  "dunce",
+ "encoding_rs",
  "flate2",
  "fontdb",
  "futures-util",

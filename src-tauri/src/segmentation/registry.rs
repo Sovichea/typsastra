@@ -1539,7 +1539,7 @@ fn catalog_entry(data_dir: Option<&Path>, spec: &HunspellCatalogSpec) -> Hunspel
     }
 }
 
-async fn download_text(url: &str, max_bytes: usize) -> Result<String, String> {
+async fn download_bytes(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
     let response = reqwest::get(url)
         .await
         .map_err(|error| format!("Failed to download {url}: {error}"))?;
@@ -1554,7 +1554,7 @@ async fn download_text(url: &str, max_bytes: usize) -> Result<String, String> {
     if bytes.len() > max_bytes {
         return Err(format!("{url} is too large."));
     }
-    String::from_utf8(bytes.to_vec()).map_err(|error| format!("{url} is not UTF-8: {error}"))
+    Ok(bytes.to_vec())
 }
 
 fn is_english_token_char(character: char) -> bool {
@@ -1777,10 +1777,7 @@ impl SegmentationRegistry {
                 if !aff_path.exists() || !dic_path.exists() {
                     return Ok(None);
                 }
-                let aff = std::fs::read_to_string(&aff_path)
-                    .map_err(|error| format!("Failed to read {}: {error}", aff_path.display()))?;
-                let dic = std::fs::read_to_string(&dic_path)
-                    .map_err(|error| format!("Failed to read {}: {error}", dic_path.display()))?;
+                let (aff, dic) = read_hunspell_dictionary(&locale_dir)?;
                 Arc::new(GenericHunspellProvider::new(
                     spec.locale,
                     spec.display_name,
@@ -2187,9 +2184,9 @@ pub fn list_hunspell_catalog(
     Ok(entries)
 }
 
-fn verify_sha256(content: &str, expected_hash: &str) -> Result<(), String> {
+fn verify_sha256(content: &[u8], expected_hash: &str) -> Result<(), String> {
     let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
+    hasher.update(content);
     let result = hasher.finalize();
     let actual_hash = format!("{:x}", result);
     if actual_hash == expected_hash {
@@ -2202,6 +2199,66 @@ fn verify_sha256(content: &str, expected_hash: &str) -> Result<(), String> {
     }
 }
 
+fn hunspell_encoding(aff: &[u8]) -> &'static encoding_rs::Encoding {
+    let header = String::from_utf8_lossy(aff);
+    for line in header.lines() {
+        let Some(value) = line.strip_prefix("SET ") else {
+            continue;
+        };
+        let label = value.trim();
+        if let Some(encoding) = encoding_rs::Encoding::for_label(label.as_bytes()) {
+            return encoding;
+        }
+        if label.eq_ignore_ascii_case("ISO8859-1") || label.eq_ignore_ascii_case("ISO-8859-1") {
+            return encoding_rs::WINDOWS_1252;
+        }
+    }
+    encoding_rs::UTF_8
+}
+
+fn decode_hunspell_bytes(
+    bytes: &[u8],
+    encoding: &'static encoding_rs::Encoding,
+    name: &str,
+) -> Result<String, String> {
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return Ok(text.to_string());
+    }
+    let (text, _, had_errors) = encoding.decode(bytes);
+    if had_errors {
+        return Err(format!("{name} is not valid {} text.", encoding.name()));
+    }
+    Ok(text.into_owned())
+}
+
+fn decode_hunspell_dictionary(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
+    let encoding = hunspell_encoding(aff);
+    Ok((
+        decode_hunspell_bytes(aff, encoding, "The Hunspell .aff file")?,
+        decode_hunspell_bytes(dic, encoding, "The Hunspell .dic file")?,
+    ))
+}
+
+fn read_hunspell_dictionary(path: &Path) -> Result<(String, String), String> {
+    let aff_path = path.join(format!(
+        "{}.aff",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+    ));
+    let dic_path = path.join(format!(
+        "{}.dic",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+    ));
+    let aff = std::fs::read(&aff_path)
+        .map_err(|error| format!("Failed to read {}: {error}", aff_path.display()))?;
+    let dic = std::fs::read(&dic_path)
+        .map_err(|error| format!("Failed to read {}: {error}", dic_path.display()))?;
+    decode_hunspell_dictionary(&aff, &dic)
+}
+
 #[tauri::command]
 pub async fn install_hunspell_dictionary(
     app_handle: tauri::AppHandle,
@@ -2212,16 +2269,17 @@ pub async fn install_hunspell_dictionary(
         .ok_or_else(|| format!("{locale} is not in Typsastra's Hunspell catalog."))?;
     let aff_url = format!("{LIBREOFFICE_RAW_BASE}/{}", spec.aff_path);
     let dic_url = format!("{LIBREOFFICE_RAW_BASE}/{}", spec.dic_path);
-    let (aff, dic) = tokio::try_join!(
-        download_text(&aff_url, 8 * 1024 * 1024),
-        download_text(&dic_url, 32 * 1024 * 1024)
+    let (aff_bytes, dic_bytes) = tokio::try_join!(
+        download_bytes(&aff_url, 8 * 1024 * 1024),
+        download_bytes(&dic_url, 32 * 1024 * 1024)
     )?;
 
-    verify_sha256(&aff, spec.aff_hash)
+    verify_sha256(&aff_bytes, spec.aff_hash)
         .map_err(|e| format!("Verification failed for {}.aff: {}", spec.locale, e))?;
-    verify_sha256(&dic, spec.dic_hash)
+    verify_sha256(&dic_bytes, spec.dic_hash)
         .map_err(|e| format!("Verification failed for {}.dic: {}", spec.locale, e))?;
 
+    let (aff, dic) = decode_hunspell_dictionary(&aff_bytes, &dic_bytes)?;
     GenericHunspellProvider::new(
         spec.locale,
         spec.display_name,
@@ -2245,7 +2303,7 @@ pub async fn install_hunspell_dictionary(
     let mut temp_aff = tempfile::NamedTempFile::new_in(&locale_dir)
         .map_err(|error| format!("Failed to create temp aff file: {error}"))?;
     temp_aff
-        .write_all(aff.as_bytes())
+        .write_all(&aff_bytes)
         .map_err(|error| format!("Failed to write to temp aff file: {error}"))?;
     temp_aff
         .persist(&aff_path)
@@ -2255,7 +2313,7 @@ pub async fn install_hunspell_dictionary(
     let mut temp_dic = tempfile::NamedTempFile::new_in(&locale_dir)
         .map_err(|error| format!("Failed to create temp dic file: {error}"))?;
     temp_dic
-        .write_all(dic.as_bytes())
+        .write_all(&dic_bytes)
         .map_err(|error| format!("Failed to write to temp dic file: {error}"))?;
     temp_dic
         .persist(&dic_path)
@@ -2483,6 +2541,30 @@ mod tests {
         let map = utf16_to_byte_boundaries(text);
         let range = utf16_byte_range(&map, from, to, text.len()).expect("valid fixture range");
         text[range].to_string()
+    }
+
+    #[test]
+    fn decodes_hunspell_dictionaries_declared_as_iso8859_1() {
+        let aff = b"SET ISO8859-1\nTRY \xE4\xF6\xFC\n";
+        let dic = b"2\nWetter\nM\xE4dchen\n";
+        let (aff_text, dic_text) =
+            decode_hunspell_dictionary(aff, dic).expect("decode German dictionary bytes");
+        assert!(aff_text.contains("TRY äöü"));
+        assert!(dic_text.contains("Mädchen"));
+
+        let provider = GenericHunspellProvider::new(
+            "de_DE",
+            "German (Germany)",
+            "de-DE",
+            "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+            &aff_text,
+            &dic_text,
+            "test",
+            "test",
+        )
+        .expect("load decoded dictionary");
+        assert!(provider.is_known_word("Mädchen"));
+        assert!(!provider.is_known_word("Mädchn"));
     }
 
     #[test]

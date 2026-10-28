@@ -108,6 +108,8 @@ To handle quirks in upstream `.aff` files (such as counts with trailing comments
 
 The preprocessor also dynamically heals condition syntax typos in rule lines (such as a closing bracket without an opening bracket, e.g. `^য়া]া` which is automatically corrected to the valid character class `[^য়া]া`), ensuring that upstream dictionary bugs do not cause backend parsing panics.
 
+Hunspell `.aff` files may declare a legacy encoding with `SET`, such as German's `SET ISO8859-1`. Typsastra downloads and stores the original dictionary bytes so catalog checksums remain valid, then decodes the `.aff`/`.dic` pair through the declared encoding before loading `spellbook`. UTF-8 remains the default when no encoding is declared.
+
 The provider registry instantiates one provider per installed language ID, e.g. `hunspell:fr_FR`, and refreshes provider capabilities after installation without requiring an app restart.
 
 Downloaded Hunspell-compatible dictionaries are registered according to their
