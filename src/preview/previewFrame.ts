@@ -450,10 +450,30 @@ export class PreviewFrame {
       if (!doc) return;
       this.motion.reset(this.iframe?.contentWindow?.scrollY ?? 0, performance.now());
       this.trackReplacementPagePaints(doc);
-      this.renderVisiblePages();
+      this.repaintVisiblePages();
       void this.pumpPageRenderQueue();
       this.reportPageStatus(this.visiblePageNumber());
     }));
+  }
+
+  /**
+   * A hidden or covered preview surface can keep its PDF document and page
+   * slots while the WebView discards their composited canvas bitmaps. Clear
+   * the presentation marker so visible pages are painted again whenever the
+   * live preview returns.
+   */
+  public refreshAfterPresentationChange(): void {
+    this.repaintVisiblePages();
+  }
+
+  private repaintVisiblePages(): void {
+    const doc = this.iframe?.contentDocument;
+    if (!this.pdfDoc || !doc) return;
+    doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container").forEach(slot => {
+      delete slot.dataset.presentedKey;
+    });
+    if (this.isFitToWidth) this.applyFitToWidth();
+    else this.renderVisiblePages();
   }
 
   public syncTheme(): void {

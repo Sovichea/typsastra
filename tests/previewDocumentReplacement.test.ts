@@ -40,6 +40,23 @@ describe("standalone PDF document replacement", () => {
     frame.queuePageRender(25, 0, "settled-visible");
     expect(queued).toEqual([25]);
   });
+
+  test("docking clears presentation markers so hidden canvas bitmaps repaint", () => {
+    const slots = [
+      { dataset: { presentedKey: "current" as string | undefined } },
+      { dataset: { presentedKey: "current" as string | undefined } },
+    ];
+    let paints = 0;
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      pdfDoc: {},
+      isFitToWidth: false,
+      iframe: { contentDocument: { querySelectorAll: () => slots } },
+      renderVisiblePages: () => { paints++; },
+    });
+    frame.refreshAfterPresentationChange();
+    expect(paints).toBe(1);
+    expect(slots.map(slot => slot.dataset.presentedKey)).toEqual([undefined, undefined]);
+  });
   test("late disposal of an image-replaced PDF preserves the restored live PDF geometry", async () => {
     let finishCleanup!: () => void;
     const cleanup = new Promise<void>(resolve => { finishCleanup = resolve; });
@@ -71,7 +88,11 @@ describe("standalone PDF document replacement", () => {
       let resets = 0;
       const frame = Object.assign(Object.create(PreviewFrame.prototype), {
         pdfGeneration: 1, pdfDoc: {}, mountedUrl: "mirror/main.typ", mountedSessionKey: "main",
-        iframe: { contentDocument: {}, contentWindow: { scrollY: 800 } },
+        iframe: {
+          contentDocument: { querySelectorAll: () => [] },
+          contentWindow: { scrollY: 800 },
+        },
+        isFitToWidth: false,
         clearMessageHost: () => {},
         motion: { reset: (top: number) => { expect(top).toBe(800); resets++; } },
         trackReplacementPagePaints: () => {}, renderVisiblePages: () => { paints++; },
