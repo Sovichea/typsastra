@@ -1,3 +1,4 @@
+import { normalizePreviewViewportAnchor, type PreviewViewportAnchor } from "../preview/previewViewportAnchor";
 import { invoke } from "@tauri-apps/api/core";
 import type { PreviewRenderMode, TerminologyEntry } from "../settings";
 
@@ -166,6 +167,9 @@ export type StoredWorkspaceState = {
   previewContentMode: "normal" | "draft";
   previewRenderMode: PreviewRenderMode | null;
   previewScrollTop: number;
+  previewViewportAnchor?: PreviewViewportAnchor | null;
+  previewZoomPercent?: number;
+  previewFitToWidth?: boolean;
 };
 
 export type WorkspaceMetadata = {
@@ -270,6 +274,10 @@ export function normalizeWorkspaceMetadata(
       previewRenderMode: workspace.previewRenderMode === "on-type"
         ? "on-type"
         : workspace.previewRenderMode === "on-save" ? "on-save" : null,
+      previewViewportAnchor: normalizePreviewViewportAnchor(workspace.previewViewportAnchor),
+      previewZoomPercent: typeof workspace.previewZoomPercent === "number" && Number.isFinite(workspace.previewZoomPercent)
+        ? Math.max(10, Math.min(500, workspace.previewZoomPercent)) : undefined,
+      previewFitToWidth: typeof workspace.previewFitToWidth === "boolean" ? workspace.previewFitToWidth : undefined,
       previewScrollTop: Math.max(0, numberOr(workspace.previewScrollTop, 0))
     }
   };

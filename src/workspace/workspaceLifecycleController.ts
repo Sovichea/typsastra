@@ -1,3 +1,4 @@
+import type { PreviewViewportAnchor } from "../preview/previewViewportAnchor";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, message } from "@tauri-apps/plugin-dialog";
 import { filePathKey } from "../platform/paths";
@@ -37,6 +38,7 @@ function formatCacheBytes(bytes: number): string {
 /** Mutable session state currently owned by the application composition root. */
 export interface WorkspaceLifecycleSessionState {
   previewScrollTop: number;
+  previewViewportAnchor: PreviewViewportAnchor | null;
   previewScrollSaveTimer: number | null;
   pinnedMainFilePath: string | null;
   pinnedLspMainPath: string | null;
@@ -75,9 +77,10 @@ export interface WorkspaceLifecycleSessionState {
 
 /** Long-lived services used to carry out workspace lifecycle transitions. */
 export interface WorkspaceLifecycleServices {
+  captureWorkspacePreviewViewport(): void;
   previewFrame: {
     currentUrl: string | null;
-    restoreWorkspaceScrollPosition(scrollTop: number): void;
+    restoreWorkspaceScrollPosition(scrollTop: number, anchor?: PreviewViewportAnchor | null, zoomPercent?: number, fitToWidth?: boolean): void;
     clear(): void;
   };
   pdfPreviewRenderController: {
@@ -194,7 +197,10 @@ export class WorkspaceLifecycleController {
       const state = metadata.workspace;
       const project = metadata.project;
       app.previewScrollTop = state.previewScrollTop;
-      app.previewFrame.restoreWorkspaceScrollPosition(state.previewScrollTop);
+      app.previewViewportAnchor = state.previewViewportAnchor ?? null;
+      app.previewFrame.restoreWorkspaceScrollPosition(
+        state.previewScrollTop, state.previewViewportAnchor, state.previewZoomPercent, state.previewFitToWidth,
+      );
       const inputContainer = document.getElementById("input-container-wrapper");
       const previewContainerWrapper = document.getElementById("preview-container-wrapper");
       app.layoutController.setDockedInputWidthPct(state.layout.inputContainerWidthPct);
@@ -670,6 +676,7 @@ export class WorkspaceLifecycleController {
     // Retire the visible document before any asynchronous persistence or
     // compiler teardown. In particular, project replacement must never leave
     // the previous project's PDF visible while the new workspace starts.
+    app.captureWorkspacePreviewViewport();
     app.previewFrame.clear();
     await app.saveWorkspaceState();
     app.workspaceController.stopWatching();
@@ -699,6 +706,7 @@ export class WorkspaceLifecycleController {
     app.blockedLargePreviewRoot = null;
     app.draftPreviewController.reset();
     app.previewScrollTop = 0;
+    app.previewViewportAnchor = null;
     if (app.previewScrollSaveTimer !== null) window.clearTimeout(app.previewScrollSaveTimer);
     app.previewScrollSaveTimer = null;
     app.previewSyncController.cancelManual();

@@ -214,6 +214,8 @@ export class PreviewFrame {
   /** Previous rendered surface retained underneath a replacement until its visible pages paint. */
   private retainedViewer: HTMLElement | null = null;
   private pendingReplacementPages = new Set<number>();
+  private replacementLayoutReady = false;
+  private replacementCommitFrame: number | null = null;
   private activeRenders = new Map<number, ActivePageRender>();
   private readonly pageRenderOwnership = new PreviewPageRenderOwnership<CleanablePdfPage>();
   private readonly renderScheduler = new PreviewRenderScheduler();
@@ -382,7 +384,15 @@ export class PreviewFrame {
     return this.captureScrollAnchor();
   }
 
-  public restoreWorkspaceScrollPosition(scrollTop: number): void {
+  public restoreWorkspaceScrollPosition(
+    scrollTop: number, anchor?: PreviewViewportAnchor | null, zoomPercent?: number, fitToWidth?: boolean,
+  ): void {
+    this.pendingRestoredViewportAnchor = anchor ?? null;
+    if (typeof fitToWidth === "boolean") this.isFitToWidth = fitToWidth;
+    if (typeof zoomPercent === "number" && Number.isFinite(zoomPercent)) {
+      this.previewZoomPercent = Math.max(10, Math.min(500, zoomPercent));
+      this.onZoomChanged?.(this.previewZoomPercent);
+    }
     this.pendingRestoredScrollTop = Number.isFinite(scrollTop)
       ? Math.max(0, scrollTop)
       : 0;
@@ -960,7 +970,7 @@ export class PreviewFrame {
         await (pdfDoc as any).destroy();
         return 0;
       }
-      const nextDimensions = await readInitialPdfPageDimensions(pdfDoc);
+      const nextDimensions = await readInitialPdfPageDimensions(pdfDoc, restoredViewportAnchor?.pageNo);
       await this.onLoadStage?.("initial geometry ready", {
         transport: transportStats.transport,
         pdfBytes: pdfByteLength,
@@ -1012,6 +1022,13 @@ export class PreviewFrame {
       }
       this.trackReplacementPagePaints(iframeDoc);
       this.installPageObserver(iframe);
+      // Scroll-anchor restoration runs after two animation frames. Do not
+      // commit pages for the transient viewport before that restoration ends.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (generation !== this.pdfGeneration || this.pdfDoc !== pdfDoc) return;
+        this.replacementLayoutReady = true;
+        this.trackReplacementPagePaints(iframeDoc);
+      }));
       await this.onLoadStage?.("viewer installed", {
         transport: transportStats.transport,
         pdfBytes: pdfByteLength,
@@ -1160,7 +1177,7 @@ export class PreviewFrame {
       body{overflow:auto;font-family:sans-serif}
        body{position:relative}
        #viewer-container{position:relative;z-index:3;box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
-       .pdf-retained-viewer{position:absolute;z-index:2;top:0;left:0;pointer-events:none;box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
+       .pdf-retained-viewer{position:fixed;z-index:2;top:0;left:0;pointer-events:none;box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
        :root[data-pdf-replacing="true"] .pdf-retained-viewer ~ #viewer-container{visibility:hidden}
        :root[data-pdf-replacing="true"] #viewer-container:has(~ .pdf-retained-viewer){visibility:hidden}
       .pdf-page-container{position:relative;box-sizing:border-box;flex:none;margin:0 auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);overflow:hidden}
@@ -1246,6 +1263,12 @@ export class PreviewFrame {
         releaseCanvasResources(viewer);
         viewer.remove();
       } else if (this.pdfDoc && viewer.querySelector(".pdf-page-canvas")) {
+        // Freeze the completed surface in viewport coordinates. New-page
+        // geometry and restored scroll offsets must not move the old pixels.
+        const rect = viewer.getBoundingClientRect();
+        viewer.style.width = `${rect.width}px`;
+        viewer.style.left = `${rect.left}px`;
+        viewer.style.top = `${rect.top}px`;
         viewer.removeAttribute("id");
         viewer.classList.add("pdf-retained-viewer");
         viewer.setAttribute("aria-hidden", "true");
@@ -1274,6 +1297,9 @@ export class PreviewFrame {
     viewer?.setAttribute("aria-busy", "true");
     doc.documentElement.dataset.pdfReplacing = "true";
     this.pendingReplacementPages.clear();
+    this.replacementLayoutReady = false;
+    if (this.replacementCommitFrame !== null) cancelAnimationFrame(this.replacementCommitFrame);
+    this.replacementCommitFrame = null;
   }
 
   private finishPdfReplacementSurface(doc: Document | null): void {
@@ -1283,47 +1309,54 @@ export class PreviewFrame {
     doc.getElementById("viewer-container")?.removeAttribute("aria-busy");
   }
 
-  /** Keep the previous PDF until the replacement can display a visible page. */
-  private trackReplacementPagePaints(doc: Document): void {
+  /** Swap complete visible surfaces in one paint, using the current viewport. */
+  private trackReplacementPagePaints(doc: Document, commit = false): void {
     if (!this.retainedViewer) {
       this.finishPdfReplacementSurface(doc);
       return;
     }
+    if (!this.replacementLayoutReady) return;
+    this.pendingReplacementPages.clear();
     const viewportHeight = this.iframe?.clientHeight ?? doc.documentElement.clientHeight;
+    let visiblePages = 0;
     for (const slot of this.pageSlots) {
-      if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration, Number(slot.dataset.pageNo))) continue;
       const rect = slot.getBoundingClientRect();
-      if (rect.bottom > 0 && rect.top < viewportHeight) {
-        const pageNo = Number(slot.dataset.pageNo);
-        if (Number.isFinite(pageNo)) this.pendingReplacementPages.add(pageNo);
-      }
+      if (rect.bottom <= 0 || rect.top >= viewportHeight) continue;
+      visiblePages++;
+      const pageNo = Number(slot.dataset.pageNo);
+      if (slot.dataset.presentedKey === this.currentPageRenderKey(this.pdfGeneration, pageNo)) continue;
+      if (!Number.isFinite(pageNo)) continue;
+      this.pendingReplacementPages.add(pageNo);
+      this.queuePageRender(pageNo, 0, "settled-visible");
     }
-    if (this.pendingReplacementPages.size === 0 && this.pageSlots[0]) {
-      this.pendingReplacementPages.add(Number(this.pageSlots[0].dataset.pageNo) || 1);
+    if (visiblePages === 0 || this.pendingReplacementPages.size > 0) return;
+    if (!commit) {
+      if (this.replacementCommitFrame !== null) return;
+      const generation = this.pdfGeneration;
+      this.replacementCommitFrame = requestAnimationFrame(() => {
+        this.replacementCommitFrame = null;
+        if (generation === this.pdfGeneration && doc === this.iframe?.contentDocument) {
+          // Scrolling or geometry discovery can change the visible set before
+          // paint. Never expose a page that was not part of the readiness check.
+          this.trackReplacementPagePaints(doc, true);
+        }
+      });
+      return;
     }
-    if (this.pendingReplacementPages.size === 0) this.discardRetainedViewer();
+    this.discardRetainedViewer();
+    this.finishPdfReplacementSurface(doc);
   }
 
   private markReplacementPagePainted(pageNo: number): void {
     if (!this.retainedViewer) return;
-    const slot = this.pageSlots.find(slot => Number(slot.dataset.pageNo) === pageNo);
-    if (!slot) return;
-    const viewportHeight = this.iframe?.clientHeight
-      ?? this.iframe?.contentDocument?.documentElement.clientHeight ?? 0;
-    const rect = slot.getBoundingClientRect();
-    // Geometry discovery and scroll restoration can move the initially tracked
-    // pages out of view. Swap on a page visible now, without waiting for those
-    // offscreen pages to render. The old and new documents must never composite.
-    if (rect.bottom <= 0 || rect.top >= viewportHeight) return;
     this.pendingReplacementPages.delete(pageNo);
     const doc = this.iframe?.contentDocument;
-    this.discardRetainedViewer();
-    if (!doc) return;
-    delete doc.documentElement.dataset.pdfReplacing;
-    doc.getElementById("viewer-container")?.removeAttribute("aria-busy");
+    if (doc) this.trackReplacementPagePaints(doc);
   }
 
   private discardRetainedViewer(): void {
+    if (this.replacementCommitFrame !== null) cancelAnimationFrame(this.replacementCommitFrame);
+    this.replacementCommitFrame = null;
     if (this.retainedViewer) releaseCanvasResources(this.retainedViewer);
     this.retainedViewer?.remove();
     this.retainedViewer = null;
@@ -1373,6 +1406,7 @@ export class PreviewFrame {
       if (!options.preserveExistingPages) {
         replaceElementChildren(slot);
         delete slot.dataset.renderKey;
+        delete slot.dataset.presentedKey;
       }
     }
   }
@@ -1737,7 +1771,6 @@ export class PreviewFrame {
       this.commitFinalCanvas(slot, canvas);
       active.canvasCommitted = true;
       slot.dataset.renderKey = renderKey;
-      this.markReplacementPagePainted(pageNo);
       // Keep the shared loading presentation visible until PDF.js has
       // produced an actual page. Installing page slots alone would expose a
       // blank viewer while the first visible canvas is still rendering.
@@ -1764,6 +1797,8 @@ export class PreviewFrame {
       this.renderStandalonePdfSelectionMarkers(pageNo);
       if (this.previewColorMode === "dark") this.installDarkCanvas(slot, canvas);
       slot.dataset.renderKey = renderKey;
+      slot.dataset.presentedKey = renderKey;
+      this.markReplacementPagePainted(pageNo);
       if (this.motion.current().state !== "moving") {
         this.retargetDraftHoverAtPointer();
       }
@@ -2088,6 +2123,7 @@ export class PreviewFrame {
       child.remove();
     }
     delete slot.dataset.renderKey;
+    delete slot.dataset.presentedKey;
   }
 
   private renderedPageNumbers(): number[] {
@@ -3298,6 +3334,7 @@ export class PreviewFrame {
         this.updateGoToFirstPageButton();
         this.onScrollPositionChanged?.(this.iframe?.contentWindow?.scrollY ?? 0);
         this.deferPageRenderingDuringScroll();
+        if (this.retainedViewer) this.trackReplacementPagePaints(doc);
       },
       { passive: true }
     );
@@ -3912,7 +3949,7 @@ function pdfiumRunsToSelectionItems(runs: readonly PdfiumTextRun[]): StandaloneP
   }));
 }
 
-async function readInitialPdfPageDimensions(pdfDoc: any): Promise<Map<number, PageDimensions>> {
+export async function readInitialPdfPageDimensions(pdfDoc: any, anchorPageNo?: number): Promise<Map<number, PageDimensions>> {
   const dimensions = new Map<number, PageDimensions>();
   if (pdfDoc.numPages < 1) return dimensions;
   if (isPdfiumDocument(pdfDoc)) {
@@ -3928,6 +3965,16 @@ async function readInitialPdfPageDimensions(pdfDoc: any): Promise<Map<number, Pa
     dimensions.set(pageNo, first);
   }
   page.cleanup();
+  // The viewport must be restored against its actual page geometry. Using the
+  // first page's portrait placeholder for a landscape anchor changes the
+  // horizontal ratio before later geometry discovery can preserve it.
+  if (anchorPageNo !== undefined && Number.isInteger(anchorPageNo)
+    && anchorPageNo > 1 && anchorPageNo <= pdfDoc.numPages) {
+    const anchorPage = await pdfDoc.getPage(anchorPageNo);
+    const anchorViewport = anchorPage.getViewport({ scale: 1 });
+    dimensions.set(anchorPageNo, { width: anchorViewport.width, height: anchorViewport.height });
+    anchorPage.cleanup();
+  }
   return dimensions;
 }
 

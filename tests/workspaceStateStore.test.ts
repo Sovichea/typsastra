@@ -62,6 +62,9 @@ describe("workspace state store", () => {
         selectedToolchain: null,
         previewContentMode: "normal",
         previewRenderMode: null,
+        previewViewportAnchor: null,
+        previewZoomPercent: undefined,
+        previewFitToWidth: undefined,
         previewScrollTop: 0
       }
     });
@@ -213,4 +216,21 @@ describe("workspace state store", () => {
     store.removeLegacy("C:/work");
     expect(store.loadLegacy("C:/work")).toBeNull();
   });
+});
+
+
+test("round-trips page anchors and zoom for preview reopen instead of only pixel offsets", () => {
+  const anchor = { pageNo: 18, pageXRatio: 0.3, pageYRatio: 0.4, viewportXRatio: 0.5, viewportYRatio: 0.5 };
+  const saved = normalizeWorkspaceMetadata({ workspace: {
+    previewScrollTop: 24000, previewViewportAnchor: anchor, previewZoomPercent: 215, previewFitToWidth: false,
+  } });
+  const reopened = normalizeWorkspaceMetadata(JSON.parse(JSON.stringify(saved)));
+  expect(reopened.workspace.previewViewportAnchor).toEqual(anchor);
+  expect(reopened.workspace.previewZoomPercent).toBe(215);
+  expect(reopened.workspace.previewFitToWidth).toBe(false);
+  expect(reopened.workspace.previewScrollTop).toBe(24000);
+  const invalid = normalizeWorkspaceMetadata({ workspace: { previewViewportAnchor: { ...anchor, pageNo: -1 }, previewZoomPercent: NaN } });
+  expect(invalid.workspace.previewViewportAnchor).toBeNull();
+  expect(invalid.workspace.previewZoomPercent).toBeUndefined();
+  expect(normalizeWorkspaceMetadata({}).workspace.previewViewportAnchor).toBeNull();
 });

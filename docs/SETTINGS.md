@@ -101,6 +101,11 @@ saved selection. Both modes compile from a private mirror in Typsastra's
 machine-local application-data cache, so live preview never creates `main.pdf`
 beside the source.
 
+Workspace sessions save the preview's page-relative viewport anchor, zoom level,
+and Fit mode, so reopening restores the same document location across mixed
+portrait/landscape pages. Older sessions containing only a pixel offset retain
+that offset as a fallback until the next save.
+
 Compiled preview PDFs use immutable generation files. The current generation
 remains available for reopening or undocking the preview. Older generations are
 removed after their preview documents, pending undocked-window updates, and

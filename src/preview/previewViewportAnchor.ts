@@ -69,3 +69,16 @@ export function previewViewportAnchorDelta(
       - (viewportHeight * anchor.viewportYRatio),
   };
 }
+
+
+export function normalizePreviewViewportAnchor(value: unknown): PreviewViewportAnchor | null {
+  if (!value || typeof value !== "object") return null;
+  const anchor = value as Record<string, unknown>;
+  if (!Number.isInteger(anchor.pageNo) || (anchor.pageNo as number) < 1) return null;
+  const ratios = ["pageXRatio", "pageYRatio", "viewportXRatio", "viewportYRatio"] as const;
+  if (ratios.some(key => typeof anchor[key] !== "number" || !Number.isFinite(anchor[key])
+    || (anchor[key] as number) < 0 || (anchor[key] as number) > 1)) return null;
+  return { pageNo: anchor.pageNo as number,
+    pageXRatio: anchor.pageXRatio as number, pageYRatio: anchor.pageYRatio as number,
+    viewportXRatio: anchor.viewportXRatio as number, viewportYRatio: anchor.viewportYRatio as number };
+}

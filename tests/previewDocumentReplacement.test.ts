@@ -1,4 +1,5 @@
-import { PreviewFrame } from "../src/preview/previewFrame";
+import { TypsastraWorkspaceController } from "../src/appController";
+import { PreviewFrame, readInitialPdfPageDimensions } from "../src/preview/previewFrame";
 import { describe, expect, test } from "bun:test";
 import {
   capturePreviewDocumentToken,
@@ -78,38 +79,89 @@ describe("standalone PDF document replacement", () => {
 
 describe("replacement PDF presentation", () => {
   function fixture() {
+    const originalRequest = globalThis.requestAnimationFrame;
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = callback => { frames.push(callback); return frames.length; };
     const root = { dataset: { pdfReplacing: "true" } as Record<string, string> };
     let discarded = false;
     let busy = true;
+    const slots = [
+      { dataset: { pageNo: "17" } as Record<string, string>, getBoundingClientRect: () => ({ top: -900, bottom: -10 }) },
+      { dataset: { pageNo: "19" } as Record<string, string>, getBoundingClientRect: () => ({ top: 20, bottom: 400 }) },
+      { dataset: { pageNo: "20" } as Record<string, string>, getBoundingClientRect: () => ({ top: 420, bottom: 900 }) },
+    ];
+    const queued: number[] = [];
     const frame = Object.assign(Object.create(PreviewFrame.prototype), {
-      retainedViewer: {},
-      pendingReplacementPages: new Set([17, 18]),
-      pageSlots: [
-        { dataset: { pageNo: "17" }, getBoundingClientRect: () => ({ top: -900, bottom: -10 }) },
-        { dataset: { pageNo: "19" }, getBoundingClientRect: () => ({ top: 20, bottom: 700 }) },
-      ],
+      retainedViewer: {}, replacementLayoutReady: true, replacementCommitFrame: null, pdfGeneration: 1,
+      currentPageRenderKey: (_generation: number, pageNo: number) => `ready-${pageNo}`,
+      queuePageRender: (pageNo: number) => queued.push(pageNo),
+      pendingReplacementPages: new Set([17, 18]), pageSlots: slots,
       iframe: { clientHeight: 800, contentDocument: {
         documentElement: root,
         getElementById: () => ({ removeAttribute: () => { busy = false; } }),
       } },
       discardRetainedViewer() { discarded = true; this.retainedViewer = null; this.pendingReplacementPages.clear(); },
     });
-    return { frame, root, discarded: () => discarded, busy: () => busy };
+    return {
+      frame, root, slots, queued, discarded: () => discarded, busy: () => busy,
+      paint(pageNo: number) {
+        slots.find(slot => Number(slot.dataset.pageNo) === pageNo)!.dataset.presentedKey = `ready-${pageNo}`;
+        frame.markReplacementPagePainted(pageNo);
+      },
+      flush() { const callbacks = frames.splice(0); callbacks.forEach(callback => callback(0)); },
+      cleanup() { globalThis.requestAnimationFrame = originalRequest; },
+    };
   }
 
-  test("swaps when a newly visible page paints even if the original pending pages moved offscreen", () => {
+  test("keeps the old viewport until every currently visible page is ready", () => {
     const f = fixture();
-    f.frame.markReplacementPagePainted(19);
-    expect(f.discarded()).toBe(true);
-    expect(f.root.dataset.pdfReplacing).toBeUndefined();
-    expect(f.busy()).toBe(false);
+    try {
+      f.paint(19);
+      f.flush();
+      expect(f.discarded()).toBe(false);
+      expect(f.queued).toContain(20);
+      f.paint(20);
+      expect(f.discarded()).toBe(false); // swap is deferred to one paint
+      f.flush();
+      expect(f.discarded()).toBe(true);
+      expect(f.root.dataset.pdfReplacing).toBeUndefined();
+      expect(f.busy()).toBe(false);
+    } finally { f.cleanup(); }
   });
 
-  test("an offscreen page does not reveal an unpainted replacement viewport", () => {
+  test("offscreen pages from the original viewport do not block the swap", () => {
     const f = fixture();
-    f.frame.markReplacementPagePainted(17);
-    expect(f.discarded()).toBe(false);
-    expect(f.root.dataset.pdfReplacing).toBe("true");
+    try {
+      f.paint(19); f.paint(20); f.flush();
+      expect(f.discarded()).toBe(true);
+    } finally { f.cleanup(); }
+  });
+
+  test("rechecks the viewport before painting if the user scrolls while pages finish", () => {
+    const f = fixture();
+    try {
+      f.paint(19); f.paint(20);
+      f.slots.push({ dataset: { pageNo: "21" }, getBoundingClientRect: () => ({ top: 700, bottom: 1000 }) });
+      f.flush();
+      expect(f.discarded()).toBe(false);
+      expect(f.queued).toContain(21);
+      f.paint(21); f.flush();
+      expect(f.discarded()).toBe(true);
+    } finally { f.cleanup(); }
+  });
+
+  test("waits for scroll restoration and rejects superseded commits", () => {
+    const f = fixture();
+    try {
+      f.frame.replacementLayoutReady = false;
+      f.paint(19); f.paint(20); f.flush();
+      expect(f.discarded()).toBe(false);
+      f.frame.replacementLayoutReady = true;
+      f.frame.trackReplacementPagePaints(f.frame.iframe.contentDocument);
+      f.frame.pdfGeneration++;
+      f.flush();
+      expect(f.discarded()).toBe(false);
+    } finally { f.cleanup(); }
   });
 
   test("hides the replacement surface while the old PDF is retained", async () => {
@@ -224,4 +276,60 @@ test("late landscape geometry preserves horizontal panning on a visible portrait
   frame.updatePageSlotDimensions(17, { width: 600, height: 800 });
   expect(scrollX).toBe(180);
   expect(frame.currentViewportAnchor).toEqual(before);
+});
+
+
+test("restores a landscape anchor using its real size rather than the first portrait page placeholder", async () => {
+  const requested: number[] = [];
+  const cleaned: number[] = [];
+  const dimensions = await readInitialPdfPageDimensions({
+    numPages: 24,
+    getPage: async (pageNo: number) => {
+      requested.push(pageNo);
+      return {
+        getViewport: () => pageNo === 18 ? { width: 842, height: 595 } : { width: 595, height: 842 },
+        cleanup: () => cleaned.push(pageNo),
+      };
+    },
+  }, 18);
+  expect(dimensions.get(18)).toEqual({ width: 842, height: 595 });
+  expect(dimensions.get(1)).toEqual({ width: 595, height: 842 });
+  expect(dimensions.get(17)).toEqual({ width: 595, height: 842 });
+  expect(requested).toEqual([1, 18]);
+  expect(cleaned).toEqual([1, 18]);
+});
+
+
+test("queues the saved page anchor and zoom before the reopened preview loads", () => {
+  const anchor = { pageNo: 18, pageXRatio: 0.3, pageYRatio: 0.4, viewportXRatio: 0.5, viewportYRatio: 0.5 };
+  const frame = Object.assign(Object.create(PreviewFrame.prototype), {});
+  frame.restoreWorkspaceScrollPosition(24000, anchor, 215, false);
+  // Activating the restored include tab may also queue its legacy pixel offset.
+  frame.queueTabScrollPosition(24000);
+  expect(frame.pendingRestoredViewportAnchor).toEqual(anchor);
+  expect(frame.pendingRestoredScrollTop).toBe(24000);
+  expect(frame.currentZoomPercent).toBe(215);
+  expect(frame.isFitMode).toBe(false);
+});
+
+
+test("captures the latest live anchor before workspace close clears the preview", () => {
+  const actualAnchor = { pageNo: 18, pageXRatio: 0.3, pageYRatio: 0.4, viewportXRatio: 0.5, viewportYRatio: 0.5 };
+  const cachedAnchor = { ...actualAnchor, pageNo: 17 };
+  let savedTop = 0;
+  const app = Object.assign(Object.create(TypsastraWorkspaceController.prototype), {
+    previewViewportAnchor: cachedAnchor,
+    pdfPreviewRenderController: { lastPdfSurface: "live" },
+    layoutController: { isPreviewUndocked: () => false },
+    previewController: { pdf: { currentSessionKey: "main", currentViewportAnchor: actualAnchor, currentScrollTop: 29643.5 } },
+    recordPreviewScrollPosition: (top: number) => { savedTop = top; },
+  });
+  app.captureWorkspacePreviewViewport();
+  app.previewFrame.currentViewportAnchor = null; // teardown removes the live frame
+  expect(app.previewViewportAnchor).toEqual(actualAnchor);
+  expect(savedTop).toBe(29643.5);
+  app.layoutController.isPreviewUndocked = () => true;
+  app.previewFrame.currentViewportAnchor = cachedAnchor;
+  app.captureWorkspacePreviewViewport();
+  expect(app.previewViewportAnchor).toEqual(actualAnchor);
 });

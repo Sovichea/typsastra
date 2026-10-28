@@ -96,9 +96,9 @@ describe("cross-platform scrollbar design", () => {
     const lifecycle = await Bun.file(
       new URL("../src/workspace/workspaceLifecycleController.ts", import.meta.url),
     ).text();
-    expect(source).toContain("restoreWorkspaceScrollPosition(scrollTop: number)");
+    expect(source).toContain("public restoreWorkspaceScrollPosition(");
     expect(source).toContain("this.pendingRestoredScrollTop");
-    expect(lifecycle).toContain("app.previewFrame.restoreWorkspaceScrollPosition(state.previewScrollTop)");
+    expect(lifecycle).toContain("state.previewScrollTop, state.previewViewportAnchor, state.previewZoomPercent, state.previewFitToWidth");
     expect(controller).toContain("previewScrollTop: this.previewScrollTop");
   });
 

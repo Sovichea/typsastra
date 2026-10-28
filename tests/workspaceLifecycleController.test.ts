@@ -195,6 +195,7 @@ describe("WorkspaceLifecycleController behavior", () => {
       inspectedPreviewRoots: new Set(),
       managedImageToolPathKeys: new Set(),
       externalConflictPaths: new Set(),
+      captureWorkspacePreviewViewport: () => calls.push("capture-preview"),
       previewFrame: { currentUrl: null, restoreWorkspaceScrollPosition: () => {}, clear: () => calls.push("clear-preview") },
       pdfPreviewRenderController: { sourceMapTaskId: null, resetForWorkspaceClose: () => {} },
       pdfPreviewPreparationController: { clearGeneratedFiles: () => {} },
@@ -255,7 +256,8 @@ describe("WorkspaceLifecycleController behavior", () => {
       expect(app.workspaceRootPath).toBeNull();
       expect(app.pinnedMainFilePath).toBeNull();
       expect(app.previewRootPath).toBeNull();
-      expect(calls.slice(0, 4)).toEqual([
+      expect(calls.slice(0, 5)).toEqual([
+        "capture-preview",
         "clear-preview",
         "save-workspace",
         "stop-watching",

@@ -1,3 +1,4 @@
+import type { PreviewViewportAnchor } from "../preview/previewViewportAnchor";
 import { join } from "@tauri-apps/api/path";
 import type { PreviewRenderMode } from "../settings";
 import type { EditorFoldRange } from "../editor/folding";
@@ -39,6 +40,9 @@ export interface WorkspacePersistenceSnapshot {
   previewContentMode: "normal" | "draft";
   previewRenderMode: PreviewRenderMode;
   previewScrollTop: number;
+  previewViewportAnchor?: PreviewViewportAnchor | null;
+  previewZoomPercent?: number;
+  previewFitToWidth?: boolean;
 }
 
 export interface WorkspaceViewportInput {
@@ -130,6 +134,9 @@ export class WorkspaceController {
         previewContentMode: current.previewContentMode,
         previewRenderMode: current.previewRenderMode,
         previewScrollTop: current.previewScrollTop,
+        previewViewportAnchor: current.previewViewportAnchor,
+        previewZoomPercent: current.previewZoomPercent,
+        previewFitToWidth: current.previewFitToWidth,
       },
     };
     this.port.setWorkspaceMetadata(metadata);

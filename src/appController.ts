@@ -1329,6 +1329,10 @@ export class TypsastraWorkspaceController {
       previewContentMode: this.draftPreviewController.mode,
       previewRenderMode: this.effectivePreviewRenderMode,
       previewScrollTop: this.previewScrollTop,
+      previewViewportAnchor: this.lastPdfSurface === "live"
+        ? this.previewFrame.currentViewportAnchor ?? this.previewViewportAnchor : this.previewViewportAnchor,
+      previewZoomPercent: this.previewFrame.currentZoomPercent,
+      previewFitToWidth: this.previewFrame.isFitMode,
     }),
     setWorkspaceMetadata: metadata => {
       this.workspaceMetadata = metadata;
@@ -3182,8 +3186,10 @@ export class TypsastraWorkspaceController {
       return;
     }
     if (this.lastPdfSurface === "live") {
+      const anchor = this.previewFrame.currentViewportAnchor;
+      if (anchor) this.previewViewportAnchor = anchor;
       this.pdfPreviewRenderController.rememberLiveViewport(
-        this.previewFrame.currentViewportAnchor,
+        anchor,
         scrollTop,
       );
       this.recordPreviewScrollPosition(scrollTop);
@@ -3247,6 +3253,14 @@ export class TypsastraWorkspaceController {
     if (mountedSessionKey === position.sessionKey) {
       this.previewFrame.activateSession(position.sessionKey);
     }
+  }
+
+  public captureWorkspacePreviewViewport(): void {
+    // The undocked window publishes its own anchor; the hidden docked frame
+    // must not replace it with an older location during workspace teardown.
+    if (this.lastPdfSurface !== "live" || this.layoutController.isPreviewUndocked()
+      || !this.previewFrame.currentSessionKey) return;
+    this.captureDockedPreviewViewport();
   }
 
   private captureDockedPreviewViewport(): void {
