@@ -11,6 +11,7 @@ import type { PerformanceMetric } from "../performance/diagnostics";
 import { editorDiagnosticsStateField } from "./diagnostics";
 import { editorMatchQuery, editorSelectionMatchRangeAllowed } from "./extensions";
 import { ImageOptimizationMarker, imageOptimizationWarningField } from "./imageWarnings";
+import { unusedBindingMarkerField } from "./unusedBindings";
 import { cursorRowColumn } from "./verticalCursor";
 import { TYPSASTRA_GREEN } from "../ui/brandColors";
 import { isAltGraphKeyboardEvent } from "../ui/keyboardModifiers";
@@ -413,6 +414,15 @@ export class EditorController {
       if (marker instanceof ImageOptimizationMarker && marker.severity === "info") return;
       const line = doc.lineAt(Math.max(0, Math.min(from, doc.length))).number;
       addMarker({ line, severity: "warning", from, to: Math.max(from, to) });
+    });
+    editor.state.field(unusedBindingMarkerField, false)?.between(0, doc.length, from => {
+      const position = Math.max(0, Math.min(from, doc.length));
+      addMarker({
+        line: doc.lineAt(position).number,
+        severity: "warning",
+        from: position,
+        to: position,
+      });
     });
 
     for (const target of lineMarkers.values()) {

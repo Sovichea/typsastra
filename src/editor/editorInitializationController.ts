@@ -5,6 +5,7 @@ import { completionStatus } from "@codemirror/autocomplete";
 import { editorMatchQuery, getEditorExtensions } from "./extensions";
 import { setEditorDiagnosticsEffect } from "./diagnostics";
 import { setImageOptimizationWarningsEffect } from "./imageWarnings";
+import { setUnusedBindingPresentationEffect } from "./unusedBindings";
 import { createTabEditorState } from "./tabHistory";
 import type { SpellcheckController } from "./spellcheck";
 import type { EditorController } from "./editorController";
@@ -122,7 +123,9 @@ export class EditorInitializationController {
         }
         const diagnosticsChanged = update.transactions.some(transaction =>
           transaction.effects.some(effect =>
-            effect.is(setEditorDiagnosticsEffect) || effect.is(setImageOptimizationWarningsEffect)
+            effect.is(setEditorDiagnosticsEffect)
+            || effect.is(setImageOptimizationWarningsEffect)
+            || effect.is(setUnusedBindingPresentationEffect)
           )
         );
         const currentMatchQuery = editorMatchQuery(update.state);

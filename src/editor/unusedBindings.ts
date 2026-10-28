@@ -1,9 +1,10 @@
-import { RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import type { Extension, EditorState } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
-import { Decoration, EditorView, ViewPlugin } from "@codemirror/view";
+import { Decoration, EditorView, GutterMarker, ViewPlugin } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import type { LspLocation, TinymistLspClient } from "../compiler/lsp";
+import { createAppIcon } from "../ui/icons";
 
 export type LetBindingDeclaration = {
   name: string;
@@ -62,21 +63,63 @@ export function hasOtherWorkspaceReferences(
   return locations.some(location => !isDeclarationLocation(location));
 }
 
-const setUnusedBindingDecorations = StateEffect.define<DecorationSet>({
-  map: (decorations, changes) => decorations.map(changes),
-});
-
 const unusedBindingDecorations = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(value, transaction) {
     let decorations = transaction.docChanged ? Decoration.none : value.map(transaction.changes);
     for (const effect of transaction.effects) {
-      if (effect.is(setUnusedBindingDecorations)) decorations = effect.value;
+      if (effect.is(setUnusedBindingPresentationEffect)) decorations = effect.value.decorations;
     }
     return decorations;
   },
   provide: field => EditorView.decorations.from(field),
 });
+
+export class UnusedBindingMarker extends GutterMarker {
+  constructor(readonly message: string, readonly name: string) {
+    super();
+  }
+
+  eq(other: GutterMarker): boolean {
+    return other instanceof UnusedBindingMarker
+      && other.message === this.message
+      && other.name === this.name;
+  }
+
+  toDOM(): HTMLElement {
+    const marker = document.createElement("span");
+    marker.className = "cm-unused-binding-marker";
+    marker.appendChild(createAppIcon("triangleAlert", { size: 17 }));
+    marker.title = this.message;
+    marker.setAttribute("aria-label", this.message);
+    return marker;
+  }
+}
+
+export type UnusedBindingPresentation = {
+  decorations: DecorationSet;
+  markers: RangeSet<GutterMarker>;
+};
+
+export const setUnusedBindingPresentationEffect = StateEffect.define<UnusedBindingPresentation>({
+  map: (presentation, changes) => ({
+    decorations: presentation.decorations.map(changes),
+    markers: presentation.markers.map(changes),
+  }),
+});
+
+const unusedBindingMarkerField = StateField.define<RangeSet<GutterMarker>>({
+  create: () => RangeSet.empty,
+  update(value, transaction) {
+    let markers = transaction.docChanged ? value.map(transaction.changes) : value;
+    for (const effect of transaction.effects) {
+      if (effect.is(setUnusedBindingPresentationEffect)) markers = effect.value.markers;
+    }
+    return markers;
+  },
+});
+
+export { unusedBindingMarkerField };
 
 const UNUSED_BINDING_TITLE = "No references found in this workspace. This symbol may still be used by an external project.";
 const MAX_BINDINGS_TO_CHECK = 128;
@@ -92,31 +135,42 @@ export function identifierOccurrenceCount(source: string, name: string): number 
   return count;
 }
 
-function buildDecorations(
+export function buildUnusedBindingPresentation(
   declarations: readonly LetBindingDeclaration[],
   unused: ReadonlySet<LetBindingDeclaration>,
   docLength: number,
-): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
+): UnusedBindingPresentation {
+  const decorationBuilder = new RangeSetBuilder<Decoration>();
+  const markerBuilder = new RangeSetBuilder<GutterMarker>();
   const sorted = declarations
     .filter(declaration => unused.has(declaration))
     .sort((left, right) => left.from - right.from);
   for (const declaration of sorted) {
     if (declaration.from < 0 || declaration.to > docLength || declaration.to <= declaration.from) continue;
-    builder.add(declaration.from, declaration.to, Decoration.mark({
+    const message = `${declaration.name} (${declaration.kind}) is not used in this workspace. ${UNUSED_BINDING_TITLE}`;
+    decorationBuilder.add(declaration.from, declaration.to, Decoration.mark({
       class: "cm-unused-binding",
       attributes: { title: UNUSED_BINDING_TITLE },
     }));
+    markerBuilder.add(declaration.from, declaration.from, new UnusedBindingMarker(message, declaration.name));
   }
-  return builder.finish();
+  return {
+    decorations: decorationBuilder.finish(),
+    markers: markerBuilder.finish(),
+  };
 }
+
+const emptyUnusedBindingPresentation: UnusedBindingPresentation = {
+  decorations: Decoration.none,
+  markers: RangeSet.empty,
+};
 
 export function unusedBindingsExtension(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
   flushLspSync: () => void | Promise<void>,
 ): Extension {
-  return [unusedBindingDecorations, ViewPlugin.fromClass(class {
+  return [unusedBindingDecorations, unusedBindingMarkerField, ViewPlugin.fromClass(class {
     private timer: number | null = null;
     private generation = 0;
     private clientRetries = 0;
@@ -156,12 +210,12 @@ export function unusedBindingsExtension(
       const doc = state.doc;
       const uri = getUri();
       if (!uri.toLowerCase().endsWith(".typ")) {
-        this.view.dispatch({ effects: setUnusedBindingDecorations.of(Decoration.none) });
+        this.view.dispatch({ effects: setUnusedBindingPresentationEffect.of(emptyUnusedBindingPresentation) });
         return;
       }
       const declarations = findLetBindingDeclarations(state);
       if (declarations.length === 0 || !uri) {
-        this.view.dispatch({ effects: setUnusedBindingDecorations.of(Decoration.none) });
+        this.view.dispatch({ effects: setUnusedBindingPresentationEffect.of(emptyUnusedBindingPresentation) });
         return;
       }
 
@@ -193,7 +247,11 @@ export function unusedBindingsExtension(
         }
       }
       if (generation !== this.generation || this.view.state.doc !== doc || getUri() !== uri) return;
-      this.view.dispatch({ effects: setUnusedBindingDecorations.of(buildDecorations(declarations, unused, doc.length)) });
+      this.view.dispatch({
+        effects: setUnusedBindingPresentationEffect.of(
+          buildUnusedBindingPresentation(declarations, unused, doc.length),
+        ),
+      });
     }
   })];
 }

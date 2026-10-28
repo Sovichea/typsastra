@@ -4713,6 +4713,14 @@ body.table-tools-active #code-render-pane {
   text-underline-offset: 3px;
 }
 
+.cm-unused-binding-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ui-warning-icon-color);
+  cursor: default;
+}
+
 .cm-editor .cm-selectionMatch,
 .cm-editor .cm-searchMatch {
   background: var(--ui-search-match-background);

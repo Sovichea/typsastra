@@ -4,6 +4,7 @@ import { GutterMarker, gutter } from "@codemirror/view";
 import { createAppIcon } from "../ui/icons";
 import { editorDiagnosticsStateField } from "./diagnostics";
 import { isStandaloneDocument } from "./standaloneDocument";
+import { UnusedBindingMarker, unusedBindingMarkerField } from "./unusedBindings";
 
 export type ImageOptimizationWarning = {
   from: number;
@@ -186,10 +187,11 @@ const sharedWarningGutter = gutter({
     const diagnostics = view.state.field(editorDiagnosticsStateField, false) ?? [];
 
     const byLine = new Map<number, {
-      severity: "error" | "related" | "image";
+      severity: "error" | "related" | "image" | "unused";
       message: string;
       imagePath?: string;
       imageSeverity?: "warning" | "info";
+      unusedMarker?: UnusedBindingMarker;
     }>();
 
     // Image optimization is a project tool; keep LSP errors but drop the
@@ -218,13 +220,29 @@ const sharedWarningGutter = gutter({
         if (!existing.message.includes(diagnostic.message)) {
           existing.message += `\n\n${diagnostic.message}`;
         }
-      } else if (diagnostic.severity === "error" || !existing || existing.severity === "image") {
+      } else if (diagnostic.severity === "error" || !existing || existing.severity === "image" || existing.severity === "unused") {
         byLine.set(line.from, {
           severity: diagnostic.severity,
           message: diagnostic.message
         });
       }
     }
+
+    view.state.field(unusedBindingMarkerField, false)?.between(
+      0,
+      view.state.doc.length,
+      (from, _to, marker) => {
+        if (!(marker instanceof UnusedBindingMarker)) return;
+        const lineFrom = view.state.doc.lineAt(from).from;
+        const existing = byLine.get(lineFrom);
+        if (existing?.severity === "error" || existing?.severity === "related") return;
+        byLine.set(lineFrom, {
+          severity: "unused",
+          message: marker.message,
+          unusedMarker: marker,
+        });
+      },
+    );
 
     const builder = new RangeSetBuilder<GutterMarker>();
 
@@ -236,7 +254,9 @@ const sharedWarningGutter = gutter({
           ? new LspErrorMarker(marker.message)
           : marker.severity === "related"
             ? new RelatedErrorMarker(marker.message)
-            : new ImageOptimizationMarker(marker.message, marker.imagePath, marker.imageSeverity)
+            : marker.severity === "unused" && marker.unusedMarker
+              ? marker.unusedMarker
+              : new ImageOptimizationMarker(marker.message, marker.imagePath, marker.imageSeverity)
       );
     }
 
