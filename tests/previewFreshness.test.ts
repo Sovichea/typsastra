@@ -60,6 +60,34 @@ describe("preview freshness", () => {
     frame.setCompilerErrorPanelEnabled(true);
     expect(presented).toBe(1);
   });
+  test("hides freshness status for Typst files that do not participate in the preview", () => {
+    const previousDocument = globalThis.document;
+    const attributes = new Map<string, string>();
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        getElementById: (id: string) => id === "preview-container-wrapper"
+          ? { setAttribute: (name: string, value: string) => attributes.set(name, value) }
+          : null,
+      },
+    });
+    try {
+      const app = Object.assign(Object.create(TypsastraWorkspaceController.prototype), {
+        previewFreshness: new PreviewFreshnessController(),
+        previewUiController: { updateActionsToolbar: () => {} },
+        previewSessionController: { disabled: true },
+      });
+      app.updatePreviewActionsToolbar("C:/project/copied.typ");
+      expect(attributes.get("data-preview-status-enabled")).toBe("false");
+
+      app.previewSessionController.disabled = false;
+      app.updatePreviewActionsToolbar("C:/project/included.typ");
+      expect(attributes.get("data-preview-status-enabled")).toBe("true");
+    } finally {
+      Object.defineProperty(globalThis, "document", { configurable: true, value: previousDocument });
+    }
+  });
+
   test("undo clears source changed only when every edited file matches the preview", () => {
     const freshness = new PreviewFreshnessController();
     freshness.editorChanged("main.typ", "main", "edited main");

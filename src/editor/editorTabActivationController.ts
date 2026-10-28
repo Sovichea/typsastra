@@ -284,6 +284,7 @@ export class EditorTabActivationController {
 
     await deps.previewActivation.finish(tab, path, isTypstDocument, previewActivation, previewOptions);
     if (!isCurrent()) return;
+    deps.updatePreviewActionsToolbar(path);
 
     if (deps.activeMode() === "WYSIWYM") deps.mapMarkupToWysiwym(tab.content);
 

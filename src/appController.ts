@@ -3505,7 +3505,8 @@ export class TypsastraWorkspaceController {
 
   private updatePreviewActionsToolbar(path: string | null): void {
     document.getElementById("preview-container-wrapper")?.setAttribute(
-      "data-preview-status-enabled", String(!!path && isTypstDocumentPath(path)),
+      "data-preview-status-enabled",
+      String(!!path && isTypstDocumentPath(path) && !this.previewDisabled),
     );
     renderPreviewFreshnessBanner(this.previewFreshness.state);
     this.previewUiController.updateActionsToolbar(path);

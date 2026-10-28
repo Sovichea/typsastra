@@ -199,6 +199,7 @@ export class PreviewContentController {
         this.deps.configureDocumentLanguageTools(contents);
       }
       this.deps.invalidatePreviewWork(`${path} does not participate in the configured main preview`);
+      this.deps.updateActionsToolbar(path);
       this.deps.previewFrame.setMessage(this.disabledPreviewMessage());
       return;
     }
