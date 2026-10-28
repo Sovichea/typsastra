@@ -7,6 +7,39 @@ import {
 } from "../src/preview/previewDocumentGeneration";
 
 describe("standalone PDF document replacement", () => {
+  test("a late offscreen page completion cannot evict the visible viewport", () => {
+    const evicted: number[] = [];
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      renderedPageNumbers: () => [1, 2, 3, 4, 5, 6, 7, 25],
+      viewportPageNumbers: () => [25], visiblePageNumber: () => 25,
+      releaseFinalPage: (pageNo: number) => evicted.push(pageNo),
+    });
+    frame.trimResidentPages();
+    expect(evicted).toEqual([1]);
+    frame.viewportPageNumbers = () => [1, 25];
+    frame.trimResidentPages();
+    expect(evicted).toEqual([1]);
+  });
+
+  test("a canvas without completed presentation is queued again instead of leaving a stale replacement", () => {
+    const slot = { dataset: { renderKey: "current", presentedKey: undefined as string | undefined } };
+    const queued: number[] = [];
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      gestureZoomActive: false, pdfDoc: { numPages: 25 }, pdfGeneration: 2,
+      iframe: { contentDocument: { querySelector: (selector: string) => {
+        expect(selector).toContain("#viewer-container >");
+        return slot;
+      } } },
+      currentPageRenderKey: () => "current", activeRenders: new Map(),
+      renderScheduler: { enqueue: ({ pageNo }: { pageNo: number }) => { queued.push(pageNo); return "queued"; } },
+      motion: { current: () => ({ state: "idle" }) }, pumpPageRenderQueue: () => {},
+    });
+    frame.queuePageRender(25, 0, "settled-visible");
+    expect(queued).toEqual([25]);
+    slot.dataset.presentedKey = "current";
+    frame.queuePageRender(25, 0, "settled-visible");
+    expect(queued).toEqual([25]);
+  });
   test("late disposal of an image-replaced PDF preserves the restored live PDF geometry", async () => {
     let finishCleanup!: () => void;
     const cleanup = new Promise<void>(resolve => { finishCleanup = resolve; });

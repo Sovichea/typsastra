@@ -1496,7 +1496,7 @@ export class PreviewFrame {
 
   private updatePageSlotDimensions(pageNo: number, dimensions: PageDimensions): void {
     const slot = this.iframe?.contentDocument
-      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
+      ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${pageNo}"]`);
     if (!slot) return;
     // Discovering a wider page recenters every narrower page in the shared
     // viewer. Preserve the visible document point through that geometry change,
@@ -1550,9 +1550,9 @@ export class PreviewFrame {
     if (this.gestureZoomActive) return;
     if (!Number.isFinite(pageNo) || pageNo < 1 || pageNo > Number(this.pdfDoc?.numPages ?? 0)) return;
     const slot = this.iframe?.contentDocument
-      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
+      ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${pageNo}"]`);
     if (!slot) return;
-    if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration, pageNo)) return;
+    if (slot.dataset.presentedKey === this.currentPageRenderKey(this.pdfGeneration, pageNo)) return;
     if (this.activeRenders.has(pageNo) && reason !== "settled-visible") return;
     const result = this.renderScheduler.enqueue({
       generation: this.pdfGeneration,
@@ -1656,8 +1656,8 @@ export class PreviewFrame {
         });
       }
       const destinationAlreadyFinal = this.iframe?.contentDocument
-        ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${this.motionDestinationPage}"]`)
-        ?.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration, this.motionDestinationPage);
+        ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${this.motionDestinationPage}"]`)
+        ?.dataset.presentedKey === this.currentPageRenderKey(this.pdfGeneration, this.motionDestinationPage);
       this.finalDecisionAt = destinationAlreadyFinal ? null : settledAt;
       this.queueViewportFinalRenders("first-stable");
       this.retargetDraftHoverAtPointer();
@@ -1737,10 +1737,10 @@ export class PreviewFrame {
     const { pageNo, generation } = request;
     if (!this.pdfDoc || generation !== this.pdfGeneration || this.activeRenders.has(pageNo)) return;
     const doc = this.iframe?.contentDocument;
-    const slot = doc?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
+    const slot = doc?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${pageNo}"]`);
     if (!doc || !slot) return;
     let renderKey = this.currentPageRenderKey(generation, pageNo);
-    if (slot.dataset.renderKey === renderKey) return;
+    if (slot.dataset.presentedKey === renderKey) return;
 
     const active: ActivePageRender = {
       generation,
@@ -1829,7 +1829,7 @@ export class PreviewFrame {
       if (this.motion.current().state !== "moving") {
         this.retargetDraftHoverAtPointer();
       }
-      this.trimResidentPages(pageNo);
+      this.trimResidentPages();
       if (pageNo === this.motionDestinationPage && this.finalDecisionAt !== null) {
         this.recordMetric("preview.destination-final-commit", performance.now() - this.finalDecisionAt, { pageNo });
         this.finalDecisionAt = null;
@@ -2143,7 +2143,7 @@ export class PreviewFrame {
       this.activeRenders.delete(pageNo);
     }
     const slot = this.iframe?.contentDocument
-      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`)
+      ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${pageNo}"]`)
     if (!slot) return;
     this.standalonePdfTextLayers.delete(pageNo);
     if (!this.standalonePdfSelectionOwnsCompleteDocument) {
@@ -2165,10 +2165,14 @@ export class PreviewFrame {
       .filter(Number.isFinite);
   }
 
-  private trimResidentPages(focusPage: number): void {
+  private trimResidentPages(): void {
     const rendered = this.renderedPageNumbers();
     if (rendered.length <= PERFORMANCE_BUDGETS.maxResidentPdfPages) return;
-    pagesToEvict(rendered, focusPage, PERFORMANCE_BUDGETS.maxResidentPdfPages)
+    // A slow offscreen render can finish after a scrollbar jump. Its page
+    // must not become the eviction focus and blank the user's viewport.
+    const visible = new Set(this.viewportPageNumbers());
+    pagesToEvict(rendered, this.visiblePageNumber(), PERFORMANCE_BUDGETS.maxResidentPdfPages)
+      .filter(pageNo => !visible.has(pageNo))
       .forEach(pageNo => this.releaseFinalPage(pageNo));
   }
 
@@ -2267,7 +2271,7 @@ export class PreviewFrame {
     if (pageCount < 1 || !Number.isFinite(pageNo)) return;
     const normalizedPage = Math.max(1, Math.min(Math.round(pageNo), pageCount));
     const slot = this.iframe?.contentDocument
-      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${normalizedPage}"]`);
+      ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${normalizedPage}"]`);
     if (!slot) return;
     this.jumpToPreviewOffset(slot.offsetTop, normalizedPage);
   }
@@ -2312,7 +2316,7 @@ export class PreviewFrame {
 
   public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<boolean> {
     const slot = this.iframe?.contentDocument
-      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
+      ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${position.page_no}"]`);
     if (!slot) return false;
     const view = this.iframe?.contentWindow;
     if (!view) return false;
@@ -2333,7 +2337,7 @@ export class PreviewFrame {
     if (!view || !doc) return false;
 
     await waitForPreviewScrollToSettle(view, 100, 100);
-    const slot = doc.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${position.page_no}"]`);
+    const slot = doc.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${position.page_no}"]`);
     if (generation !== this.forwardRippleGeneration || !slot) return false;
 
     const zoom = this.pageScale(position.page_no);
@@ -2461,7 +2465,7 @@ export class PreviewFrame {
     const restore = () => {
       if (generation !== this.pdfGeneration) return;
       const slot = this.iframe?.contentDocument
-        ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${anchor.pageNo}"]`);
+        ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${anchor.pageNo}"]`);
       const view = this.iframe?.contentWindow;
       if (!slot || !view) return;
       const rect = slot.getBoundingClientRect();
@@ -2686,7 +2690,7 @@ export class PreviewFrame {
     if (!match) return;
     this.pendingSearchRevealIndex = null;
     const slot = this.iframe?.contentDocument
-      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${match.pageNo}"]`);
+      ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${match.pageNo}"]`);
     if (!slot) return;
     const marker = slot.querySelector<HTMLElement>(
       `.pdf-search-marker[data-match-index="${this.standalonePdfSearchIndex}"]`,
@@ -3509,7 +3513,7 @@ export class PreviewFrame {
       if (!Number.isInteger(pageIndex)) return;
       const pageNo = pageIndex + 1;
       const slot = this.iframe?.contentDocument
-        ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
+        ?.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${pageNo}"]`);
       if (!slot) return;
 
       const destinationKind = typeof resolved[1] === "object" && resolved[1] !== null
