@@ -62,4 +62,14 @@ describe("document language status", () => {
     expect(controller).toContain("select.value = assigned");
     expect(controller).toContain("!visibleScripts.has(entry.script.toLowerCase())");
   });
+
+  test("opens Settings filtered to a language that has no provider", async () => {
+    const controller = await Bun.file(new URL("../src/editor/documentLanguageStatusController.ts", import.meta.url)).text();
+
+    expect(controller).toContain("pendingProviderLanguageTag");
+    expect(controller).toContain('item.dataset.noProvider = "true"');
+    expect(controller).toContain("private missingProviderLanguageTag(): string | null");
+    expect(controller).toContain("revealLanguageProviders: true");
+    expect(controller).toContain("languageTag: languageTag ?? undefined");
+  });
 });

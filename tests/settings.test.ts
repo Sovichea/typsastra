@@ -304,9 +304,20 @@ describe("editor settings presentation", () => {
     expect(catalogMarkup).not.toContain("hidden");
     expect(settingsHtml).toContain('aria-expanded="true"');
     expect(settingsController).toContain('if (name === "editor") void this.ensureLanguageCatalogPopulated();');
-    expect(ensureMethod).toContain("await this.populateLanguageCatalog();");
+    expect(ensureMethod).toContain("this.languageCatalogLoad = this.populateLanguageCatalog();");
     expect(ensureMethod).not.toContain(".focus()");
     expect(settingsController).toContain('button.textContent = visible ? "Hide languages" : "Show languages"');
+  });
+
+  test("reveals and filters the language provider catalog on request", () => {
+    expect(settingsHtml).toContain('id="settings-language-providers"');
+    expect(settingsController).toContain("private async revealLanguageProviders(languageTag?: string)");
+    expect(settingsController).toContain("this.setLanguageCatalogVisibility(catalog, true)");
+    expect(settingsController).toContain('this.languageCatalogQuery = languageTag ?? ""');
+    expect(settingsController).toContain('search.dispatchEvent(new Event("input"))');
+    expect(settingsController).toContain('scrollIntoView({ block: "center", behavior: "smooth" })');
+    expect(settingsController).toContain("revealLanguageProviders?: boolean");
+    expect(settingsController).toContain("languageTag?: string");
   });
 
   test("gives the provider catalog wider, consistently inset rows", () => {

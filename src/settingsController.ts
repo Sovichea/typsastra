@@ -103,6 +103,7 @@ export class SettingsController {
   private rendererCompatibilityError: string | null = null;
   private languageCatalogQuery = "";
   private languageCatalogInitialized = false;
+  private languageCatalogLoad: Promise<void> | null = null;
   private languageProviderOperationInProgress = false;
   private updateProjectTerminology: (entries: TerminologyEntry[]) => void = () => {};
   private workspacePreviewRenderMode: PreviewRenderMode | null = null;
@@ -256,7 +257,17 @@ export class SettingsController {
       }
     });
     document.addEventListener("typsastra:open-settings", event => {
-      openSettings((event as CustomEvent<{ panel?: string }>).detail?.panel);
+      const detail = (event as CustomEvent<{
+        panel?: string;
+        revealLanguageProviders?: boolean;
+        languageTag?: string;
+      }>).detail;
+      openSettings(detail?.panel);
+      if (detail?.revealLanguageProviders) {
+        void this.revealLanguageProviders(detail.languageTag).catch(error => {
+          console.warn("Failed to reveal the language provider catalog.", error);
+        });
+      }
     });
     document.addEventListener("typsastra:system-fonts-changed", () => void this.refreshSystemFonts());
     document.addEventListener("typsastra:language-providers-changed", () => {
@@ -1354,11 +1365,29 @@ export class SettingsController {
   }
 
   private async ensureLanguageCatalogPopulated(): Promise<void> {
-    if (this.languageCatalogInitialized) return;
-    this.languageCatalogInitialized = true;
+    if (!this.languageCatalogInitialized) {
+      this.languageCatalogInitialized = true;
+      const catalog = document.getElementById("settings-language-catalog");
+      if (catalog) catalog.textContent = "Loading language catalog...";
+      this.languageCatalogLoad = this.populateLanguageCatalog();
+    }
+    await this.languageCatalogLoad;
+  }
+
+  private async revealLanguageProviders(languageTag?: string): Promise<void> {
     const catalog = document.getElementById("settings-language-catalog");
-    if (catalog) catalog.textContent = "Loading language catalog...";
-    await this.populateLanguageCatalog();
+    if (!catalog) return;
+    this.setLanguageCatalogVisibility(catalog, true);
+    this.languageCatalogQuery = languageTag ?? "";
+    await this.ensureLanguageCatalogPopulated();
+    const search = catalog.querySelector<HTMLInputElement>(".settings-language-catalog-search");
+    if (search) {
+      search.value = this.languageCatalogQuery;
+      search.dispatchEvent(new Event("input"));
+    }
+    const field = document.getElementById("settings-language-providers");
+    (field ?? catalog).scrollIntoView({ block: "center", behavior: "smooth" });
+    search?.focus({ preventScroll: true });
   }
 
   public get isLanguageProviderOperationInProgress(): boolean {
