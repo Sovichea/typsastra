@@ -40,7 +40,7 @@ export interface EditorTabPresentationDependencies {
   logSyntax(message: string): void;
   updatePreviewActionsToolbar(path: string): void;
   renderNonTextPlaceholder(path: string, unsupported: boolean, source?: string): void;
-  renderInteractiveImageViewer(source: string): void;
+  renderInteractiveImageViewer(source: string, previewPath: string): void;
   loadPdfPath(path: string): void;
   applyFoldRanges(ranges: { from: number; to: number }[]): void;
   clearPreviewPane(): void;
@@ -91,7 +91,7 @@ export class EditorTabPresentationController {
     if (!skipPreviewActivation) {
       this.deps.updatePreviewActionsToolbar(path);
       if (isBinaryImagePath(path)) {
-        this.deps.renderInteractiveImageViewer(tab.content);
+        this.deps.renderInteractiveImageViewer(tab.content, path);
       } else if (isPdf) {
         this.deps.loadPdfPath(path);
       } else {

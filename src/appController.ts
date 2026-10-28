@@ -325,7 +325,7 @@ export class TypsastraWorkspaceController {
     }),
     updatePreviewActionsToolbar: path => this.updatePreviewActionsToolbar(path),
     renderNonTextPlaceholder: (path, unsupported, source) => this.renderNonTextEditorPlaceholder(path, unsupported, source),
-    renderInteractiveImageViewer: source => this.renderInteractiveImageViewer(source),
+    renderInteractiveImageViewer: (source, previewPath) => this.renderInteractiveImageViewer(source, previewPath),
     loadPdfPath: path => { void this.loadPdfPath(path, path); },
     applyFoldRanges: ranges => this.applyFoldRanges(ranges),
     clearPreviewPane: () => { this.previewPane.innerHTML = ""; },
@@ -3814,7 +3814,7 @@ export class TypsastraWorkspaceController {
 
   private renderInteractiveImageViewer(
     src: string,
-    previewPath = this.activeFilePath ?? "preview.png",
+    previewPath: string,
   ): void {
     this.previewContentController.renderInteractiveImageViewer(src, previewPath);
   }

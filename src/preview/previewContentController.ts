@@ -110,12 +110,12 @@ export class PreviewContentController {
       );
       return;
     }
-    this.renderInteractiveImageViewer(source, imagePath);
+    this.renderInteractiveImageViewer(source, imagePath ?? "image-tools.png");
   }
 
   public renderInteractiveImageViewer(
     src: string,
-    previewPath = this.deps.getActiveFilePath() ?? "preview.png",
+    previewPath: string,
   ): void {
     this.deps.imagePreview.render(src, previewPath);
   }
@@ -145,7 +145,7 @@ export class PreviewContentController {
     if (unsupportedFile || isBinaryImagePath(path) || isPdf) {
       if (!activeTab) return;
       if (isBinaryImagePath(path)) {
-        this.renderInteractiveImageViewer(activeTab.content);
+        this.renderInteractiveImageViewer(activeTab.content, path);
       } else if (isPdf) {
         void this.deps.loadPdfPath(path, path);
       } else {
