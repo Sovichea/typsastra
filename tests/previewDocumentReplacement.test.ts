@@ -194,3 +194,34 @@ test("revealing the first preview at saved manual zoom queues pages without scro
   expect(frame.resizeLayoutPending).toBe(true);
   expect(fits).toBe(1);
 });
+
+
+test("late landscape geometry preserves horizontal panning on a visible portrait page", () => {
+  let scrollX = 180;
+  const wider = { style: { width: "600px", height: "800px" } };
+  const visible = {
+    dataset: { pageNo: "8" },
+    getBoundingClientRect: () => ({
+      left: 20 + (Number.parseFloat(wider.style.width) - 600) / 2 - scrollX,
+      top: -200, width: 600, height: 800,
+    }),
+  };
+  const view = {
+    innerWidth: 400, innerHeight: 500,
+    scrollBy: ({ left }: { left: number }) => { scrollX += left; },
+  };
+  const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+    iframe: { contentWindow: view, contentDocument: {
+      querySelector: (selector: string) => selector.includes('"8"') ? visible : wider,
+      querySelectorAll: () => [visible],
+    } },
+    pageScale: () => 1,
+  });
+  const before = frame.currentViewportAnchor;
+  frame.updatePageSlotDimensions(17, { width: 1000, height: 700 });
+  expect(scrollX).toBe(380);
+  expect(frame.currentViewportAnchor).toEqual(before);
+  frame.updatePageSlotDimensions(17, { width: 600, height: 800 });
+  expect(scrollX).toBe(180);
+  expect(frame.currentViewportAnchor).toEqual(before);
+});

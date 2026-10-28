@@ -1437,9 +1437,14 @@ export class PreviewFrame {
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
     if (!slot) return;
+    // Discovering a wider page recenters every narrower page in the shared
+    // viewer. Preserve the visible document point through that geometry change,
+    // including horizontal panning at manual zoom levels.
+    const anchor = this.captureScrollAnchor();
     const zoom = this.pageScale(pageNo);
     slot.style.width = `${dimensions.width * zoom}px`;
     slot.style.height = `${dimensions.height * zoom}px`;
+    this.restoreScrollAnchor(anchor, false, true);
   }
 
   private installPageObserver(iframe: HTMLIFrameElement): void {
