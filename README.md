@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.9.4.
+Typsastra is currently beta software. The latest release is v0.9.5.
 
 Windows users can also install through
 [Windows Package Manager](https://learn.microsoft.com/windows/package-manager/winget/)
@@ -46,6 +46,15 @@ The name combines Typst, the typesetting system at the center of the project, wi
 It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typsastra focuses on Unicode-safe editing, script-aware interaction, responsive PDF preview, extensible language tools, and multi-file project workflows while keeping the underlying Typst source portable.
 
 Khmer is the first language with deep support, including tailored cursor and deletion behavior, spellcheck, and word completion. Khmer demonstrates the depth Typsastra aims to provide; it is not the boundary of the project. The editing-policy and language-provider architecture is designed so other languages can add their own behavior without changing or weakening Khmer support.
+
+## v0.9.5: UX and app performance
+
+Faster file opening and tab switching, reusable live previews, and more reliable
+rendering and scroll restoration make large projects smoother to navigate.
+Live-preview search, configurable zoom, clearer source-status feedback, and an
+undocked outline navigator improve everyday authoring.
+
+See the [v0.9.5 release notes](./docs/RELEASE_NOTES_V0.9.5.md) for the full update.
 
 ## v0.9.0 feature showcase
 

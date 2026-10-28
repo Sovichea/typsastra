@@ -25,12 +25,16 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,` (`Cmd + 
     "indentationGuides": true,
     "formatOnSave": false,
     "autoSave": true,
-    "autoSaveIntervalSeconds": 30
+    "autoSaveIntervalSeconds": 30,
+    "externalEditIntervalSeconds": 1
   },
   "preview": {
     "renderMode": "on-save",
     "colorMode": "document",
     "lowMemoryMode": false,
+    "showErrorPanel": false,
+    "ctrlWheelZoomStepPercent": 10,
+    "landscapeScalePercent": 30,
     "undockedOutline": true,
     "cursorSync": false,
     "syncDebounceMs": 500,
@@ -113,8 +117,15 @@ compile in either refresh mode: finish the external editing batch, then use
 **Recompile** once. The full-width banner below the preview toolbar overlays the
 document without changing its viewport size. It stays visible for **Preview
 outdated**, **Compiling**, and **Compilation failed**, and disappears only after
-a successful compilation of the current source revision. Changes arriving during
+a successful compilation of the current source revision, or when all editor
+changes are undone to match the rendered source. Changes arriving during
 a compile keep the preview outdated. Language-server health is shown separately.
+
+Switching back from images, PDFs, non-project files, or Image/Table Tools restores
+the last live preview and its viewport without compiling just for navigation.
+Unsaved edits retain the outdated banner; compilation follows On save/On type
+or an explicit Recompile action. **Open in External Viewer** opens the displayed
+PDF, including the cached PDF used by live preview.
 
 **Show preview error panel** is off by default. Enable it in **Settings →
 Preview** to overlay compiler errors on the document. With it off, the previous

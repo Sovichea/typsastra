@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.9.5": {
+    version: "0.9.5",
+    title: "Smoother workflows and faster previews",
+    highlights: [
+      "Files open and tabs switch faster. Returning from files or tools reuses the live preview without unnecessary compilation, including when source tabs have unsaved edits.",
+      "Preview rendering, scroll restoration, and PDF generation lifetimes are more reliable. External edits are monitored separately from compilation, with a persistent source-status banner and an optional error panel that defaults off.",
+      "Live-preview search highlights matches for manual source navigation. Zoom gestures, configurable Ctrl/Cmd-wheel steps and landscape scaling, and an undocked outline navigator improve PDF navigation.",
+      "Recent projects can be removed individually or cleared together. Long names, context-menu sizing, unused-binding markers, and image-warning scrollbar markers improve everyday editing."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.9.5"
+  },
   "0.9.4": {
     version: "0.9.4",
     title: "Contextual completion and workspace reliability",
