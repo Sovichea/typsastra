@@ -1,3 +1,4 @@
+import type { PreviewFreshnessController } from "./previewFreshnessController";
 import { publishPdfUpdate, retainPreviewGeneration, releasePreviewGeneration } from "./previewGenerationLease";
 import { invoke } from "@tauri-apps/api/core";
 import type { TinymistLspClient, LspStatus } from "../compiler/lsp";
@@ -43,6 +44,7 @@ const PDF_TRANSPORT_MODE = (
 
 export type PdfUpdatePayload = {
   generationLease?: number | null;
+  freshness?: import("./previewFreshnessController").PreviewFreshness;
   path: string;
   identity: string;
   sessionKey: string;
@@ -63,6 +65,7 @@ type OneShotCompileResult = {
 };
 
 export interface PdfPreviewRenderDependencies {
+  freshness?: PreviewFreshnessController;
   previewFrame: PreviewFrame;
   preparation: PdfPreviewPreparationController;
   draftPreview: DraftPreviewController;
@@ -112,6 +115,7 @@ export interface PdfPreviewRenderDependencies {
 /** Owns PDF preview render serialization, scheduling, transport, and generation state. */
 export class PdfPreviewRenderController {
   private generationValue = 0;
+  private externalRevision = 0;
   private loadRequestGeneration = 0;
   private scheduleGeneration = 0;
   private preparationRevisionValue = 0;
@@ -191,6 +195,7 @@ export class PdfPreviewRenderController {
    * projections on the root application controller.
    */
   public resetForWorkspaceClose(): void {
+    this.deps.freshness?.reset();
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
     this.scheduleGeneration += 1;
@@ -224,8 +229,18 @@ export class PdfPreviewRenderController {
     this.hasLiveViewportValue = true;
   }
 
+  public noteExternalSourceChange(path: string): void {
+    this.externalRevision++;
+    this.deps.freshness?.changed(path, true);
+    this.cancelOnTypeSchedule();
+    // A queued editor snapshot predating the external transaction must not
+    // silently start another compile after the active request finishes.
+    if (!this.queuedForced) this.queuedContents = null;
+  }
+
   public noteContentMutation(canRenderPreview: boolean): number {
     if (canRenderPreview) {
+      this.deps.freshness?.changed(this.deps.getActiveFilePath() ?? undefined);
       this.preparationRevisionValue += 1;
       if (this.deps.getPreviewRenderMode() === "on-type") {
         void invoke("cancel_render_preparation").catch(() => {});
@@ -303,7 +318,7 @@ export class PdfPreviewRenderController {
       return;
     }
     const reportRenderStatus = force || !this.deps.previewFrame.currentUrl;
-    if (force) this.deps.previewFrame.setLoading("Recompiling live preview…");
+    if (force && (!this.deps.freshness || !this.deps.previewFrame.currentUrl)) this.deps.previewFrame.setLoading("Recompiling live preview…");
     if (this.runningValue) {
       this.queuedContents = contents;
       this.queuedForced ||= force;
@@ -317,6 +332,8 @@ export class PdfPreviewRenderController {
 
     this.deps.cancelManualForwardSync();
     this.runningValue = true;
+    const freshnessRevision = this.deps.freshness?.begin();
+    const externalRevision = this.externalRevision;
     const compileStartedAt = performance.now();
     const generation = ++this.generationValue;
     const generationActivePath = this.deps.getActiveFilePath();
@@ -359,6 +376,7 @@ export class PdfPreviewRenderController {
           );
           this.deps.log("info", "preview scheduler", "Reused cached low-memory PDF and sync index for an unchanged workspace snapshot.");
           this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
+          if (freshnessRevision !== undefined) this.deps.freshness?.finish(freshnessRevision, true);
           this.deps.onRenderSucceeded();
           renderSucceeded = true;
           return;
@@ -600,6 +618,7 @@ export class PdfPreviewRenderController {
       this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready" });
       this.deps.log("info", "preview scheduler", `Render generation ${generation}: PDF presentation complete.`);
       renderSucceeded = true;
+      if (freshnessRevision !== undefined) this.deps.freshness?.finish(freshnessRevision, true);
       this.deps.onRenderSucceeded();
       if (!lowMemoryMode && this.previewFailureAt !== null) {
         // A failed compile can leave Tinymist's hidden source-map task on the
@@ -627,6 +646,7 @@ export class PdfPreviewRenderController {
       if (publishedPdfPath) {
         await publishPdfUpdate({
           path: publishedPdfPath,
+          freshness: this.deps.freshness?.state,
           identity: previewPath,
           sessionKey,
           surface: "live",
@@ -695,6 +715,7 @@ export class PdfPreviewRenderController {
       const failureMessage = packageHint
         ? `${displayedFailureMessage}\n\nPackage compatibility hint\n${packageHint.message}`
         : displayedFailureMessage;
+      if (freshnessRevision !== undefined) this.deps.freshness?.finish(freshnessRevision, false);
       this.deps.onRenderFailed(contents);
       const workspaceRootPath = this.deps.getWorkspaceRootPath();
       this.deps.previewFrame.setCompilerError("Preview Render Failed", failureMessage, {
@@ -713,6 +734,7 @@ export class PdfPreviewRenderController {
       this.deps.setLspStatus({ kind: "preview-error", message: "PDF compile failed" });
       this.previewFailureAt ??= performance.now();
     } finally {
+      this.deps.freshness?.interrupted(freshnessRevision);
       this.runningValue = false;
       let queued = this.queuedContents;
       const queuedForced = this.queuedForced;
@@ -720,6 +742,7 @@ export class PdfPreviewRenderController {
       this.queuedForced = false;
       if (
         this.deps.getPreviewRenderMode() === "on-type"
+        && externalRevision === this.externalRevision
         && generationActivePath
         && filePathKey(this.deps.getActiveFilePath() ?? "") === filePathKey(generationActivePath)
         && activeFileCanRenderPreview(

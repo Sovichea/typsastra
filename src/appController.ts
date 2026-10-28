@@ -1,3 +1,4 @@
+import { PreviewFreshnessController, renderPreviewFreshnessBanner } from "./preview/previewFreshnessController";
 import { initializePreviewGenerationSession } from "./preview/previewGenerationLease";
 import { installPreviewZoomGestures, zoomPreviewElementAtPoint, GestureZoomSteps, buttonZoomPercent, snapGestureZoom, type PreviewZoomGesture } from "./preview/previewZoomGestures";
 import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
@@ -406,6 +407,7 @@ export class TypsastraWorkspaceController {
     loadPdfPath: path => { void this.loadPdfPath(path, path); },
     renderTabs: () => this.renderEditorTabs(),
     sourceChanged: tab => this.handleExternalSourceChange(tab),
+    externalConflictDetected: path => this.pdfPreviewRenderController.noteExternalSourceChange(path),
     confirmReload: path => confirm(
       `${fileNameFromPath(path)} changed outside Typsastra and also has local unsaved edits. Reload the external version and discard the local edits?`,
       { title: "External edit conflict", kind: "warning", okLabel: "Reload external version", cancelLabel: "Keep local edits" },
@@ -1401,8 +1403,18 @@ export class TypsastraWorkspaceController {
     ]),
     reloadChangedAssets: async paths => {
       await this.externalFileReloadController.reloadOpenFiles(
-        paths.filter(path => isBinaryImagePath(path) || fileExtension(path) === "pdf"),
+        paths,
       );
+    },
+    sourcePathsChanged: paths => {
+      for (const path of paths) {
+        if (!/\.(typ|bib|json|csv|yaml|yml|png|jpe?g|svg|webp|gif|pdf)$/i.test(path)) continue;
+        const tab = this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(path));
+        // Open text files are reconciled by the source monitor, which also
+        // distinguishes our own saves from external disk changes.
+        if (tab?.contentLoaded && !isBinaryImagePath(path) && fileExtension(path) !== "pdf") continue;
+        this.pdfPreviewRenderController.noteExternalSourceChange(path);
+      }
     },
     loadExplorer: rootPath => this.explorer.loadWorkspace(rootPath),
     markImageToolsStale: () => this.imageToolsController.markIndexStale(),
@@ -1830,7 +1842,14 @@ export class TypsastraWorkspaceController {
     warmSourceMap: () => this.schedulePdfSourceMapWarmup(this.pdfPreviewGeneration),
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
+  private readonly previewFreshness = new PreviewFreshnessController(state => {
+    renderPreviewFreshnessBanner(state);
+    if (!this.previewWindowController.isPreviewOnlyWindow()) {
+      import("@tauri-apps/api/event").then(({ emit }) => emit("preview-freshness-update", state)).catch(() => {});
+    }
+  });
   private readonly pdfPreviewRenderController = new PdfPreviewRenderController({
+    freshness: this.previewFreshness,
     previewFrame: this.previewFrame,
     preparation: this.pdfPreviewPreparationController,
     draftPreview: this.draftPreviewController,
@@ -3143,8 +3162,11 @@ export class TypsastraWorkspaceController {
     const activePath = this.activeFilePath;
     if (!activePath?.toLowerCase().endsWith(".typ")) return;
     const previewSessionKey = this.previewFrame.currentSessionKey;
-    const viewportAnchor = this.previewFrame.currentViewportAnchor;
-    const scrollTop = this.previewFrame.currentScrollTop;
+    const viewportAnchor = this.layoutController.isPreviewUndocked()
+      ? this.previewViewportAnchor : this.previewFrame.currentViewportAnchor;
+    const scrollTop = this.layoutController.isPreviewUndocked()
+      ? this.previewScrollTop : this.previewFrame.currentScrollTop;
+    const freshnessToken = this.previewFreshness.begin();
     this.tinymistPreviewRecoveryController.resetAttempts();
     this.invalidatePreviewWork("manual recompile is restarting Tinymist");
     try {
@@ -3161,6 +3183,9 @@ export class TypsastraWorkspaceController {
         kind: "error",
         message: `Preview recompile failed while restarting Tinymist: ${String(error)}`,
       });
+      this.previewFreshness.finish(freshnessToken, false);
+    } finally {
+      this.previewFreshness.interrupted(freshnessToken);
     }
   }
 
@@ -3405,6 +3430,10 @@ export class TypsastraWorkspaceController {
   }
 
   private updatePreviewActionsToolbar(path: string | null): void {
+    document.getElementById("preview-container-wrapper")?.setAttribute(
+      "data-preview-status-enabled", String(!!path && isTypstDocumentPath(path)),
+    );
+    renderPreviewFreshnessBanner(this.previewFreshness.state);
     this.previewUiController.updateActionsToolbar(path);
   }
 
@@ -3581,17 +3610,21 @@ export class TypsastraWorkspaceController {
   }
 
   private handleExternalSourceChange(tab: EditorTab): void {
-    if (this.activeFilePath && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
-      this.handleContentMutation(tab.content);
-      if (this.activeMode === "WYSIWYM") this.mapMarkupToWysiwym(tab.content);
+    if (!isTypstDocumentPath(tab.path)) {
+      if (isMarkdownDocumentPath(tab.path) && this.activeFilePath
+        && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
+        this.markdownPreviewFrame.schedule(tab.path, tab.content);
+      } else if (/\.(bib|json|csv|yaml|yml)$/i.test(tab.path)) {
+        this.pdfPreviewRenderController.noteExternalSourceChange(tab.path);
+      }
       return;
     }
-    // An inactive include still changes the same project compilation. Use the
-    // normal mutation policy without switching tabs or refreshing the PDF here.
-    if (!activeFileCanRenderPreview(tab.path, this.pinnedMainFilePath, tab.previewImported, tab.previewDisabled)) return;
-    this.pdfPreviewRenderController.noteContentMutation(true);
-    if (this.effectivePreviewRenderMode === "on-type" && isTypstDocumentPath(this.activeFilePath ?? "")) {
-      this.schedulePdfPreview(this.editorInstance.state.doc.toString());
+    // Refresh source editors independently. External multi-file writes are
+    // incomplete transactions until the user explicitly recompiles the project.
+    this.pdfPreviewRenderController.noteExternalSourceChange(tab.path);
+    if (this.activeFilePath && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
+      this.scheduleDocumentOutlineUpdate(tab.path);
+      if (this.activeMode === "WYSIWYM") this.mapMarkupToWysiwym(tab.content);
     }
   }
 
@@ -3988,6 +4021,7 @@ export class TypsastraWorkspaceController {
         if (!this.lastPdfPath) return null;
         return {
           path: this.lastPdfPath,
+          freshness: this.previewFreshness.state,
           identity: this.lastPdfIdentity || this.pdfPreviewSourceMapRootPath || this.previewRootPath || "preview",
           sessionKey: this.lastPdfSessionKey || this.previewSessionKey || this.lastPdfIdentity || "preview",
           surface: this.lastPdfSurface,

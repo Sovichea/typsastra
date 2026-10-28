@@ -1979,6 +1979,10 @@
                                 </svg>
                             </button>
                         </div>
+                        <div id="preview-status-banner" role="status" aria-live="polite" hidden>
+                            <div><strong data-preview-status-label></strong><span data-preview-status-detail></span></div>
+                            <button type="button" data-preview-status-recompile>Recompile</button>
+                        </div>
                         <div id="preview-render-pane"></div>
                         <div id="image-tools-comparison" class="image-tools-comparison hidden"></div>
                     </div>
@@ -2808,7 +2812,7 @@
                                     step="0.1"
                                     inputmode="decimal"
                                 />
-                                <small>Seconds between source-file checks (default: 1). External edits update the editor and mark the tab unsaved. Preview compilation follows On type or On save.</small>
+                                <small>Seconds between source-file checks (default: 1). External edits refresh clean tabs without marking them unsaved. The preview shows an outdated banner until you choose Recompile.</small>
                             </div>
                             <label class="settings-toggle"
                                 ><input
@@ -2874,7 +2878,7 @@
                                     <option value="on-save">On save</option>
                                 </select>
                                 <small
-                                    >Stored per project. On type updates the PDF preview after typing pauses. On save minimizes background compilation.</small
+                                    >Stored per project. On type updates the PDF preview after typing pauses. On save minimizes background compilation. External disk changes require Recompile and show a preview status banner.</small
                                 >
                             </div>
                             <div class="settings-field">

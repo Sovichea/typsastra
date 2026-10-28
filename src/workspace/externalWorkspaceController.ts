@@ -9,6 +9,7 @@ export interface ExternalWorkspaceControllerPort {
   pathKey(path: string): string;
   conflictPaths(): ReadonlySet<string>;
   managedPathKeys(): ReadonlySet<string>;
+  sourcePathsChanged?(paths: readonly string[]): void;
   reloadChangedAssets(paths: readonly string[]): Promise<void>;
   loadExplorer(rootPath: string): Promise<void>;
   markImageToolsStale(): void;
@@ -51,6 +52,7 @@ export class ExternalWorkspaceController {
       return;
     }
 
+    this.port.sourcePathsChanged?.(externalPaths);
     const acceptedPaths = acceptedExternalChangePaths(
       externalPaths,
       this.port.pathKey,

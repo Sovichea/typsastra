@@ -360,8 +360,9 @@ export function bindAppEvents(actions: AppEventActions): void {
         console.error("Developer API UI action failed", error);
       });
     });
-    void listenEvent<"export-pdf" | "open-external">("preview-window-action", event => {
+    void listenEvent<"export-pdf" | "open-external" | "recompile">("preview-window-action", event => {
       if (event.payload === "export-pdf") document.getElementById("action-export-pdf")?.click();
+      else if (event.payload === "recompile") void actions.recompilePreview();
       else void actions.openLastPreviewExternally();
     });
     void listenEvent<PreviewClickPoint>("pdf-click", event => {

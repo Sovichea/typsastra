@@ -142,7 +142,7 @@ describe("Draft Preview", () => {
     expect(previewWindowController).toContain('data-preview-action="export-pdf"');
     expect(previewWindowController).toContain('data-preview-action="open-external"');
     expect(previewWindowController).toContain('data-preview-action="dock"');
-    expect(appEventBindings).toContain('listenEvent<"export-pdf" | "open-external">("preview-window-action"');
+    expect(appEventBindings).toContain('listenEvent<"export-pdf" | "open-external" | "recompile">("preview-window-action"');
   });
 
   test("starts one fixed native thumbnail queue after Draft presentation", () => {

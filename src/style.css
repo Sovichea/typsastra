@@ -6360,3 +6360,32 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   color: var(--ui-error-text, #b3261e);
   margin: 8px 0;
 }
+
+
+/* Overlay the document without changing its viewport dimensions or scroll. */
+#preview-status-banner {
+  position: absolute;
+  top: var(--editor-tab-bar-height);
+  inset-inline: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  color: var(--ui-text);
+  background: color-mix(in srgb, var(--ui-bg) 90%, #d99c24);
+  border-bottom: 2px solid #d99c24;
+  box-shadow: 0 3px 8px rgba(0,0,0,.15);
+  font-size: 12px;
+}
+#preview-status-banner[hidden] { display: none; }
+#preview-status-banner[data-status="compiling"] { border-color: #569cd6; background: color-mix(in srgb,var(--ui-bg) 90%,#569cd6); }
+#preview-status-banner[data-status="failed"] { border-color: #e57373; background: color-mix(in srgb,var(--ui-bg) 90%,#e57373); }
+#preview-status-banner strong, #preview-status-banner span { display: block; }
+#preview-status-banner span { margin-top: 3px; }
+#preview-status-banner button { flex: none; padding: 5px 10px; border: 1px solid var(--ui-border); border-radius: 4px; background: var(--ui-bg); color: var(--ui-text); cursor: pointer; }
+#preview-status-banner button:disabled { opacity: .6; cursor: default; }
+
+#preview-container-wrapper:has(#interactive-image-container, [data-table-zoom]) #preview-status-banner { display: none; }

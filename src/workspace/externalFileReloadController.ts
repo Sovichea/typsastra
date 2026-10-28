@@ -19,6 +19,7 @@ export interface ExternalFileReloadDependencies {
   loadPdfPath(path: string): void;
   renderTabs(): void;
   sourceChanged(tab: EditorTab): void;
+  externalConflictDetected?(path: string): void;
   confirmReload(path: string): Promise<boolean>;
   setLspStatus(status: LspStatus): void;
   appendWorkspaceWarning(message: string): void;
@@ -87,8 +88,8 @@ export class ExternalFileReloadController {
           : (await this.deps.readText(path)).replace(/\r\n?/g, "\n");
         this.deps.flushEditorContentMutation();
         if (!isCurrent()) continue;
-        // externalContent is the last adopted disk revision, not an app save.
-        // Repeated polls must leave its unsaved indicator intact.
+        // Adopted disk revisions are already saved. Only local divergence
+        // should require Save or conflict resolution.
         if (contents === (tab.externalContent ?? tab.savedContent)) continue;
         if (contents === tab.content) continue; // Includes our own writes.
         if (tab.isDirty && tab.content !== tab.externalContent) {
@@ -102,10 +103,10 @@ export class ExternalFileReloadController {
         this.clearConflict(path);
         tab.content = contents;
         tab.contentLoaded = true;
-        tab.externalContent = isAsset ? undefined : contents;
-        if (isAsset) tab.savedContent = contents;
-        tab.isDirty = !isAsset;
-        if (path.toLowerCase().endsWith(".typ")) tab.externalPreviewPending = true;
+        tab.externalContent = undefined;
+        tab.savedContent = contents;
+        tab.isDirty = false;
+        tab.externalPreviewPending = false;
         tab.undoHistory = undefined;
         tab.editorState = undefined;
         tab.editorStateLanguage = undefined;
@@ -139,6 +140,7 @@ export class ExternalFileReloadController {
     const pathKey = filePathKey(path);
     if (this.conflictPaths.has(pathKey)) return;
     this.conflictPaths.add(pathKey);
+    this.deps.externalConflictDetected?.(path);
     this.deps.appendWorkspaceWarning(
       `${fileNameFromPath(path)} ${reason}; unsaved editor content was preserved.`,
     );

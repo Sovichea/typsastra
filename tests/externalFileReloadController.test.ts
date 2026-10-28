@@ -33,39 +33,39 @@ function fixture(overrides: Partial<ExternalFileReloadDependencies> = {}) {
 }
 
 describe("external source monitoring", () => {
-  test("adopts disk contents as unsaved and emits one normal source mutation", async () => {
+  test("adopts disk contents as saved and emits one external source notification", async () => {
     const f = fixture();
     expect(await f.controller.reloadOpenFiles()).toBe(true);
     expect(f.source.content).toBe("external");
-    expect(f.source.savedContent).toBe("original");
-    expect(f.source.isDirty).toBe(true);
-    expect(f.source.externalPreviewPending).toBe(true);
+    expect(f.source.savedContent).toBe("external");
+    expect(f.source.isDirty).toBe(false);
+    expect(f.source.externalPreviewPending).toBe(false);
     expect(f.presented).toEqual(["external"]);
     expect(f.changed).toEqual(["external"]);
     expect(await f.controller.reloadOpenFiles()).toBe(false);
-    expect(f.source.isDirty).toBe(true);
+    expect(f.source.isDirty).toBe(false);
     expect(f.changed).toHaveLength(1);
   });
 
-  test("adopts consecutive external edits without treating its unsaved marker as a local conflict", async () => {
+  test("adopts consecutive external edits without creating a local conflict", async () => {
     const f = fixture();
     await f.controller.reloadOpenFiles();
     f.disk = "external again";
     await f.controller.reloadOpenFiles();
     expect(f.source.content).toBe("external again");
-    expect(f.source.isDirty).toBe(true);
+    expect(f.source.isDirty).toBe(false);
     expect(f.warnings).toEqual([]);
     expect(f.changed).toEqual(["external", "external again"]);
   });
 
-  test("keeps a reverted external revision unsaved until an app save", async () => {
+  test("adopts a reverted external revision as the saved baseline", async () => {
     const f = fixture();
     await f.controller.reloadOpenFiles();
     f.disk = "original";
     await f.controller.reloadOpenFiles();
     expect(f.source.content).toBe("original");
-    expect(f.source.isDirty).toBe(true);
-    expect(f.source.externalContent).toBe("original");
+    expect(f.source.isDirty).toBe(false);
+    expect(f.source.externalContent).toBeUndefined();
   });
 
   test("ignores app saves and does not emit a duplicate mutation", async () => {
@@ -106,7 +106,7 @@ describe("external source monitoring", () => {
     f.source.isDirty = true;
     await f.controller.reloadOpenFiles();
     expect(f.source.content).toBe("external");
-    expect(f.source.isDirty).toBe(true);
+    expect(f.source.isDirty).toBe(false);
     expect(f.controller.conflictPaths.size).toBe(0);
   });
 

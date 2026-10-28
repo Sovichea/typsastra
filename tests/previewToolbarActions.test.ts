@@ -51,8 +51,8 @@ describe("preview toolbar actions", () => {
       "private async recompilePreviewManually()",
       "private loadPdfPath",
     );
-    const captureAnchor = recompile.indexOf("const viewportAnchor = this.previewFrame.currentViewportAnchor");
-    const captureScroll = recompile.indexOf("const scrollTop = this.previewFrame.currentScrollTop");
+    const captureAnchor = recompile.indexOf("const viewportAnchor =");
+    const captureScroll = recompile.indexOf("const scrollTop =");
     const invalidate = recompile.indexOf('this.invalidatePreviewWork("manual recompile is restarting Tinymist")');
     const restart = recompile.indexOf('await this.restartTinymistSession("Restarting Tinymist and recompiling preview...")');
     const sessionGuard = recompile.indexOf("const samePreviewSession = filePathKey(this.activeFilePath");

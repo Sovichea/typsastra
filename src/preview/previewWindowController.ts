@@ -1,3 +1,4 @@
+import { renderPreviewFreshnessBanner, type PreviewFreshness } from "./previewFreshnessController";
 import { setCtrlWheelZoomStepPercent } from "./previewZoomGestures";
 import { invoke } from "@tauri-apps/api/core";
 import { initializePreviewGenerationSession, releasePreviewGeneration } from "./previewGenerationLease";
@@ -9,7 +10,7 @@ import type { DraftPreviewController } from "./draftPreviewController";
 import type { PreviewFrame } from "./previewFrame";
 import type { PreviewViewportAnchor } from "./previewViewportAnchor";
 
-export type UndockedPreviewAction = "export-pdf" | "open-external";
+export type UndockedPreviewAction = "export-pdf" | "open-external" | "recompile";
 
 export interface PreviewScrollPositionPayload {
   sessionKey: string;
@@ -80,6 +81,11 @@ export class PreviewWindowController {
       action => emit("preview-window-action", action),
       mode => emit("preview-color-mode-request", mode),
     );
+    document.getElementById("preview-recompile-btn")?.addEventListener("click", () => {
+      void this.publishCurrentScrollPosition()
+        .then(() => emit("preview-window-action", "recompile"))
+        .catch(error => console.error("Failed to request preview compilation", error));
+    });
 
     document.getElementById("preview-content-mode-toggle")?.addEventListener("click", () => {
       const requestedMode = deps.draftPreview.mode === "draft" ? "normal" : "draft";
@@ -111,6 +117,10 @@ export class PreviewWindowController {
         ? { path: event.payload, identity: fallbackIdentity, sessionKey: fallbackIdentity, surface: "live" as const }
         : event.payload;
       try {
+        document.getElementById("preview-container-wrapper")?.setAttribute(
+          "data-preview-status-enabled", String(update.surface === "live"),
+        );
+        if (update.freshness) renderPreviewFreshnessBanner(update.freshness);
         if (update.previewColorMode) {
           deps.setPreviewColorMode(update.previewColorMode);
           deps.previewFrame.setColorMode(update.previewColorMode);
@@ -139,6 +149,10 @@ export class PreviewWindowController {
 
     await listen<{ page_no: number; x: number; y: number }>("pdf-forward-sync", event => {
       void deps.previewFrame.revealDocumentPosition(event.payload);
+    });
+
+    await listen<PreviewFreshness>("preview-freshness-update", event => {
+      renderPreviewFreshnessBanner(event.payload);
     });
 
     // Do not allocate handoff readers before this window has an update listener.

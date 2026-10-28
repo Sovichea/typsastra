@@ -106,6 +106,15 @@ and Fit mode, so reopening restores the same document location across mixed
 portrait/landscape pages. Older sessions containing only a pixel offset retain
 that offset as a fallback until the next save.
 
+External disk edits refresh clean open tabs without marking them unsaved. Local
+unsaved edits retain conflict handling. External edits do not automatically
+compile in either refresh mode: finish the external editing batch, then use
+**Recompile** once. The full-width banner below the preview toolbar overlays the
+document without changing its viewport size. It stays visible for **Preview
+outdated**, **Compiling**, and **Compilation failed**, and disappears only after
+a successful compilation of the current source revision. Changes arriving during
+a compile keep the preview outdated. Language-server health is shown separately.
+
 Compiled preview PDFs use immutable generation files. The current generation
 remains available for reopening or undocking the preview. Older generations are
 removed after their preview documents, pending undocked-window updates, and
