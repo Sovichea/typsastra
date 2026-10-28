@@ -32,6 +32,7 @@ flate2 = "1.0"
 base64 = "0.22"
 fontdb = "0.23"
 dunce = "1.0"
+ignore = "0.4"
 ttf-parser = "0.25"
 khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-features = false }
 spellbook = "0.4.2"

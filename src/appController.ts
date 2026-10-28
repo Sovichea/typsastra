@@ -162,6 +162,7 @@ import { DocumentLanguageController } from "./editor/documentLanguageController"
 import { EditorFileGuardController } from "./editor/editorFileGuardController";
 import { EditorFileContentController } from "./editor/editorFileContentController";
 import { WorkspaceTextController } from "./workspace/workspaceTextController";
+import { ProjectTextService } from "./workspace/projectTextService";
 import { DocumentTypographyApplicationController } from "./typography/documentTypographyApplicationController";
 import { SourceLocationController } from "./navigation/sourceLocationController";
 import { OutlineNavigationController } from "./navigation/outlineNavigationController";
@@ -257,6 +258,11 @@ export class TypsastraWorkspaceController {
   });
   private readonly editorFileContentController = new EditorFileContentController({
     normalizeFoldRanges: (value, docLength) => this.normalizeFoldRanges(value, docLength),
+  });
+  private readonly projectTextService = new ProjectTextService({
+    workspaceRootPath: () => this.workspaceRootPath,
+    openTabs: () => this.openTabs,
+    markPlainTextPath: path => this.editorFileContentController.markPlainTextPath(path),
   });
   private readonly previewSessionController = new PreviewSessionController({
     workspaceRootPath: () => this.workspaceRootPath,
@@ -1428,6 +1434,9 @@ export class TypsastraWorkspaceController {
       );
     },
     sourcePathsChanged: paths => {
+      // External creates, deletes, renames, and edits all invalidate project
+      // text inventory. The next search rebuilds it from the new disk state.
+      this.projectTextService.invalidate();
       for (const path of paths) {
         if (!/\.(typ|bib|json|csv|yaml|yml|png|jpe?g|svg|webp|gif|pdf)$/i.test(path)) continue;
         const tab = this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(path));
@@ -3704,6 +3713,7 @@ export class TypsastraWorkspaceController {
     // Refresh source editors independently. External multi-file writes are
     // incomplete transactions until the user explicitly recompiles the project.
     this.diagnosticsController.clearForPath(tab.path);
+    this.projectTextService.invalidate(tab.path);
     if (this.activeFilePath && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
       this.scheduleDocumentOutlineUpdate(tab.path);
       this.lspSyncController.queueContentMutation(tab.content);

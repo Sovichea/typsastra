@@ -40,7 +40,8 @@ This file serves as a consolidated reference for the architectural decisions, pa
   - `src/compiler/lspTransport.ts`: Sole Tauri IPC transport for Tinymist JSON-RPC; `jsonRpc.ts` parses and narrows untrusted messages.
   - `src/compiler/lsp.ts`: Typed Tinymist client and JSON-RPC request router, not a browser WebSocket.
   - `src/preview/`: Virtualized PDF preview rendering and forward/inverse preview synchronization state.
-  - `src/workspace/`: Typed workspace-state persistence and recent-project rendering.
+  - `src/workspace/`: Typed workspace-state persistence, recent-project rendering, and project-text snapshots.
+  - `src/workspace/projectTextService.ts`: Shared buffer-over-disk text snapshots, workspace-relative identities, opaque revisions, inventory invalidation, and a four-file read limit for project search.
   - `src/wysiwym/adapter.ts`: WYSIWYM block parsing, DOM rendering, and Typst serialization.
   - `src/diagnostics/logConsoleController.ts`, `src/editor/fontManager.ts`, `src/editor/toolbarController.ts`, `src/layout/layoutController.ts`: Feature-local DOM/state controllers. `fontCatalog.ts` defines the selectable code and Unicode font engines; `documentTypography.ts` generates managed document font rules.
   - `src/editor/templateTypography.ts`: Pure parsing/edit helpers for local `#show: function.with(...)` templates, managed typography blocks, standalone chapter preview entries, and external-reference placeholders.
@@ -52,6 +53,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
   - `src/editor/hover.ts`: LSP hover renderer with small local markdown parser and external-link shell open.
   - `src/editor/diagnostics.ts`: CodeMirror diagnostic underline decorations via `StateEffect`/`StateField`.
   - `src-tauri/src/lib.rs`: IPC commands, filesystem operations, toolchain download, Typst check/compile, Tinymist child-process bridge.
+  - `src-tauri/src/project_text.rs`: Cancellable workspace text inventory honoring `.gitignore`, binary and 10 MiB exclusions, plus UTF-8 reads that preserve BOM and line endings.
   - `src-tauri/src/font_store.rs`: Current-user font installation, operating-system/private-local font inventory, private-directory collision validation, allowlisted MiSans downloads, and obsolete app-cache migration.
   - `src-tauri/src/examples.rs`: Installs version-tracked writable examples under the OS Documents directory without overwriting user-modified copies.
   - `src-tauri/capabilities/default.json`: Grants broad FS/plugin permissions; frontend assumes these commands are available.
@@ -99,6 +101,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - Manual document formatting sends `textDocument/formatting` to Tinymist and applies returned LSP text edits through CodeMirror. Format-on-save runs only in code mode and is opt-in.
 - Fallback diagnostics and SVG/PDF compilation use the selected Tinymist executable's embedded Typst compiler; no standalone `typst` binary is required. Live PDFs compile the disk-backed render mirror through the native mirror-root command instead of `tinymist.exportPdf`, whose LSP-global root cannot safely represent a mirrored entry outside the original workspace.
 - LSP diagnostics are ignored for stale versions, package/preview files, placeholder-managed external references, and the known multi-image page-template message.
+- Project search consumes `ProjectTextService` snapshots instead of reading files directly. Loaded editor buffers take precedence over disk, revisions are opaque tokens, and at most four disk files are read concurrently. Native inventory respects `.gitignore` by default, excludes `.git`/`.typsastra` and binary files, skips files over 10 MiB with a reported reason, and never follows directory symlinks.
 - `PreviewSyncController` owns forward/inverse navigation state. `PreviewFrame` owns direct loopback iframe sessions, retains up to five sessions by LRU, and safely hides (rather than destroys) them when rendering fallback SVG compilations for temporary tabs to avoid split-view overlapping bugs.
 - `ctrl+click` on editor text uses a CodeMirror `ViewPlugin` for underline-on-hover and triggers LSP `textDocument/definition` or `textDocument/references` requests, seamlessly navigating across documents using the LSP-provided URI and UTF-16 cursor position.
 - Imported sources currently preview through the configured main document. Independent standalone roots remain disabled; the portable Full Document/Active File replacement is deferred to a dedicated future milestone and is not part of v0.8.0. v0.5.3 supports debounced PDF-on-type for short documents and PDF-on-save for long or resource-intensive documents, with non-blocking image-pressure guidance. A bounded SVG renderer is deferred until after v1.0 and remains only a measurement-driven experiment.

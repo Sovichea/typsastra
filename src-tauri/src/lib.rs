@@ -23,6 +23,7 @@ mod font_store;
 mod formatted_clipboard;
 mod pdfium_preview;
 mod project_archive;
+mod project_text;
 mod render_prepare;
 mod scaled_fonts;
 mod segmentation;
@@ -36,6 +37,9 @@ use formatted_clipboard::write_formatted_clipboard;
 use pdfium_preview::{
     close_pdfium_document, get_pdfium_page_text, open_pdfium_document, render_pdfium_page,
     PdfiumPreviewState,
+};
+use project_text::{
+    cancel_project_text_request, project_text_inventory, project_text_read, project_text_revision,
 };
 use render_prepare::{
     cancel_draft_thumbnail_generation, cancel_render_preparation, get_draft_thumbnail_status,
@@ -8329,6 +8333,10 @@ pub fn run() {
             finish_pdf_export_operation,
             check_typst_document,
             read_workspace_file,
+            project_text_inventory,
+            project_text_read,
+            project_text_revision,
+            cancel_project_text_request,
             is_probably_plain_text_file,
             read_binary_file,
             open_pdf_range_source,
