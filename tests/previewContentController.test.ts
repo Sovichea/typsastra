@@ -51,4 +51,18 @@ describe("preview content controller", () => {
     );
     expect(imageTools).toContain("this.showImagePreview(null, image.path);");
   });
+
+  test("replaces the live PDF surface when showing SVG or unsupported previews", async () => {
+    const content = await Bun.file(
+      new URL("../src/preview/previewContentController.ts", import.meta.url),
+    ).text();
+    const presentation = await Bun.file(
+      new URL("../src/editor/editorTabPresentationController.ts", import.meta.url),
+    ).text();
+
+    expect(content).toContain("this.deps.getEditorText() +");
+    expect(content).toMatch(/false,\s*\);/);
+    expect(presentation).toContain("          tab.content +");
+    expect(presentation).toMatch(/false,\s*\);/);
+  });
 });

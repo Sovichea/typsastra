@@ -112,6 +112,20 @@ describe("standalone PDF document replacement", () => {
     }
   });
 
+  test("non-live previews replace the PDF surface instead of layering over it", () => {
+    const replaced: string[] = [];
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      setMessage: (html: string) => {
+        replaced.push(html);
+        frame.messageHost = {} as HTMLElement;
+      },
+      installMessageZoom: () => {},
+    });
+
+    frame.setMessageOverlay("<svg></svg>", false);
+    expect(replaced).toEqual(["<svg></svg>"]);
+  });
+
   test("an old preview cannot restore its scroll anchor into a replacement PDF", () => {
     const previousRaf = globalThis.requestAnimationFrame;
     const callbacks: FrameRequestCallback[] = [];

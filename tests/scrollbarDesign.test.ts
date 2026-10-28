@@ -155,7 +155,7 @@ describe("cross-platform scrollbar design", () => {
     expect(html).toContain('role="spinbutton"');
   });
 
-  test("preserves a compiled PDF behind non-Typst preview messages", async () => {
+  test("only explicitly preserved overlays keep the compiled PDF behind them", async () => {
     const source = await Bun.file(new URL("../src/preview/previewFrame.ts", import.meta.url)).text();
     const presentation = await Bun.file(
       new URL("../src/editor/editorTabPresentationController.ts", import.meta.url),
@@ -163,7 +163,8 @@ describe("cross-platform scrollbar design", () => {
     const activation = await Bun.file(
       new URL("../src/editor/editorPreviewActivationController.ts", import.meta.url),
     ).text();
-    expect(source).toContain("setMessageOverlay(html: string)");
+    expect(source).toContain("setMessageOverlay(html: string, preservePreview = true)");
+    expect(source).toContain("if (!preservePreview) {");
     expect(source).toContain("this.mountedSessionKey !== sessionKey");
     expect(source).toContain("this.clearMessageHost();");
     expect(presentation).toContain("this.deps.previewFrame().setMessageOverlay(");

@@ -164,6 +164,7 @@ export class PreviewContentController {
         `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
         this.deps.getEditorText() +
         `</div>`,
+        false,
       );
       return;
     }
@@ -173,6 +174,7 @@ export class PreviewContentController {
         `<div class="preview-disabled-title">Preview Unavailable</div>` +
         `<div class="preview-disabled-msg">Live preview is not supported for ${ext.toUpperCase() || "this"} files.</div>` +
         `</div>`,
+        false,
       );
       return;
     }

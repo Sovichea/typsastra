@@ -160,6 +160,7 @@ export class EditorTabPresentationController {
           `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
           tab.content +
           `</div>`,
+          false,
         );
       } else {
         this.deps.previewFrame().setMessageOverlay(
@@ -168,6 +169,7 @@ export class EditorTabPresentationController {
           `<div class="preview-disabled-title">Preview Unavailable</div>` +
           `<div class="preview-disabled-msg">Live preview is not supported for ${ext?.toUpperCase() || "this"} files.</div>` +
           `</div>`,
+          false,
         );
       }
     }

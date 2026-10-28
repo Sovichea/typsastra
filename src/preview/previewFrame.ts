@@ -3878,7 +3878,12 @@ export class PreviewFrame {
     host.appendChild(placeholder);
   }
 
-  public setMessageOverlay(html: string): void {
+  public setMessageOverlay(html: string, preservePreview = true): void {
+    if (!preservePreview) {
+      this.setMessage(html);
+      if (this.messageHost) this.installMessageZoom(this.messageHost);
+      return;
+    }
     this.clearErrorOverlay();
     this.clearMessageHost();
     const host = document.createElement("div");
@@ -3886,39 +3891,42 @@ export class PreviewFrame {
     host.innerHTML = html;
     this.pane.appendChild(host);
     this.messageHost = host;
+    this.installMessageZoom(host);
+  }
+
+  private installMessageZoom(host: HTMLElement): void {
     const svg = host.querySelector("svg");
-    if (svg) {
-      const container = svg.parentElement ?? host;
-      let scale = 1;
-      let fit = false;
-      const steps = new GestureZoomSteps(10, 2000);
-      const apply = (next: number, point?: { clientX: number; clientY: number }) => {
-        const rect = container.getBoundingClientRect();
-        const anchor = point ?? { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
-        zoomPreviewElementAtPoint(container, svg, scale, next, anchor, () => {
-          scale = next;
-          svg.style.setProperty("zoom", String(scale));
-        });
-        this.onZoomChanged?.(Math.round(scale * 100));
-      };
-      this.messageZoom = {
-        percent: () => Math.round(scale * 100), isFit: () => fit,
-        adjust: direction => { fit = false; apply(buttonZoomPercent(scale * 100, direction, 10, 2000) / 100); return Math.round(scale * 100); },
-        fit: () => {
-          const rect = svg.getBoundingClientRect();
-          if (rect.width <= 0 || rect.height <= 0) return;
-          fit = true;
-          apply(Math.max(0.1, Math.min(20, container.clientWidth / (rect.width / scale), container.clientHeight / (rect.height / scale))));
-        },
-      };
-      this.onZoomChanged?.(100);
-      this.messageZoomGestureCleanup = installPreviewZoomGestures(container, gesture => {
-        fit = false;
-        apply(steps.next(scale * 100, gesture.factor, gesture.deltaPercent, gesture.ensureStep) / 100, gesture);
-      }, { enabled: () => container.isConnected, onStart: () => steps.reset(), onEnd: () => steps.reset(),
-        onInput: message => this.onDebug?.(`SVG gesture input: ${message}`),
+    if (!svg) return;
+    const container = svg.parentElement ?? host;
+    let scale = 1;
+    let fit = false;
+    const steps = new GestureZoomSteps(10, 2000);
+    const apply = (next: number, point?: { clientX: number; clientY: number }) => {
+      const rect = container.getBoundingClientRect();
+      const anchor = point ?? { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+      zoomPreviewElementAtPoint(container, svg, scale, next, anchor, () => {
+        scale = next;
+        svg.style.setProperty("zoom", String(scale));
       });
-    }
+      this.onZoomChanged?.(Math.round(scale * 100));
+    };
+    this.messageZoom = {
+      percent: () => Math.round(scale * 100), isFit: () => fit,
+      adjust: direction => { fit = false; apply(buttonZoomPercent(scale * 100, direction, 10, 2000) / 100); return Math.round(scale * 100); },
+      fit: () => {
+        const rect = svg.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        fit = true;
+        apply(Math.max(0.1, Math.min(20, container.clientWidth / (rect.width / scale), container.clientHeight / (rect.height / scale))));
+      },
+    };
+    this.onZoomChanged?.(100);
+    this.messageZoomGestureCleanup = installPreviewZoomGestures(container, gesture => {
+      fit = false;
+      apply(steps.next(scale * 100, gesture.factor, gesture.deltaPercent, gesture.ensureStep) / 100, gesture);
+    }, { enabled: () => container.isConnected, onStart: () => steps.reset(), onEnd: () => steps.reset(),
+      onInput: message => this.onDebug?.(`SVG gesture input: ${message}`),
+    });
   }
 
   public setLoading(message: string, preservePreview = true): void {
