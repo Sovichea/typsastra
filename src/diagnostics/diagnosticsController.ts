@@ -35,6 +35,7 @@ export interface DiagnosticsControllerPort {
   recordFirstDiagnostics(diagnosticCount: number): void;
   logDeveloper(kind: "info" | "warning", source: string, message: string): void;
   acceptedDiagnosticsChanged(diagnostics: readonly LspDiagnostic[]): void;
+  lspErrorsChanged?(hasErrors: boolean): void;
   openDiagnosticFile(path: string): Promise<void>;
   activeTabContentLoaded(): boolean;
   editorPositionFromSourceLocation(line: number, column: number): number;
@@ -94,6 +95,7 @@ export class DiagnosticsController {
       !diagnostic.message.includes("cannot export multiple images without a page number template")
     );
     this.lspDiagnosticsByFile.set(this.port.pathKey(originalPath), cacheableDiagnostics);
+    this.port.lspErrorsChanged?.([...this.lspDiagnosticsByFile.values()].some(entries => entries.some(entry => entry.severity === 1)));
 
     const filteredDiagnostics = cacheableDiagnostics.filter(diagnostic => {
       if (!isActive || !/label.*does not exist|unknown label/i.test(diagnostic.message)) return true;
@@ -209,6 +211,7 @@ export class DiagnosticsController {
 
   clear(): void {
     this.lspDiagnosticsByFile.clear();
+    this.port.lspErrorsChanged?.(false);
     this.compilerRelatedByFile.clear();
     this.logConsole.clearDiagnostics();
     this.clearEditorDiagnostics();

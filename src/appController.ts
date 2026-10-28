@@ -577,6 +577,12 @@ export class TypsastraWorkspaceController {
     editorFontManager: this.editorFontManager,
     spellcheck: this.spellcheckController,
     syncPreviewTheme: () => this.previewFrame.syncTheme(),
+    setPreviewErrorPanelEnabled: enabled => {
+      this.previewFrame.setCompilerErrorPanelEnabled(enabled);
+      if (!this.previewWindowController.isPreviewOnlyWindow()) {
+        import("@tauri-apps/api/event").then(({ emit }) => emit("preview-error-panel-update", enabled)).catch(() => {});
+      }
+    },
     setLandscapeScalePercent: percent => {
       this.previewFrame.setLandscapeScalePercent(percent);
       if (!this.previewWindowController.isPreviewOnlyWindow()) {
@@ -1246,6 +1252,7 @@ export class TypsastraWorkspaceController {
     },
     logDeveloper: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
     acceptedDiagnosticsChanged: diagnostics => this.recoverPreviewAfterAcceptedDiagnostics(diagnostics),
+    lspErrorsChanged: hasErrors => this.previewFreshness.setLspErrors(hasErrors),
     openDiagnosticFile: async path => {
       const previewSession = this.previewRootPath ? this.capturePreviewSession() : undefined;
       await this.loadFile(path, { preservePreviewSession: previewSession });
@@ -3160,6 +3167,7 @@ export class TypsastraWorkspaceController {
   }
 
   private async recompilePreviewManually(): Promise<void> {
+    if (this.previewFreshness.state.lspErrors || this.previewFreshness.state.status === "compiling") return;
     const activePath = this.activeFilePath;
     if (!activePath?.toLowerCase().endsWith(".typ")) return;
     const previewSessionKey = this.previewFrame.currentSessionKey;

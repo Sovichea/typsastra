@@ -3934,6 +3934,20 @@ export class PreviewFrame {
     this.errorOverlay = overlay;
   }
 
+  private compilerErrorPanelEnabled = false;
+  private latestCompilerError: Parameters<PreviewFrame["setCompilerError"]> | null = null;
+
+  public setCompilerErrorPanelEnabled(enabled: boolean): void {
+    this.compilerErrorPanelEnabled = enabled;
+    const previous = this.latestCompilerError;
+    if (!enabled && previous) {
+      this.clearErrorOverlay();
+      this.latestCompilerError = previous;
+    } else if (previous && !this.errorOverlay) {
+      this.setCompilerError(...previous);
+    }
+  }
+
   public setCompilerError(
     title: string,
     message: string,
@@ -3942,6 +3956,19 @@ export class PreviewFrame {
       navigate: (location: TypstSourceLocation) => void;
     },
   ): void {
+    try {
+      this.presentCompilerError(title, message, options);
+    } finally {
+      this.latestCompilerError = [title, message, options];
+    }
+  }
+
+  private presentCompilerError(title: string, message: string, options: Parameters<PreviewFrame["setCompilerError"]>[2]): void {
+    if (!this.compilerErrorPanelEnabled) {
+      this.clearLoadingHost();
+      this.clearErrorOverlay();
+      return;
+    }
     const diagnostic = parsePreviewCompilerDiagnostic(message);
     if (!diagnostic) return this.setError(title, message);
     this.clearLoadingHost();
@@ -4018,6 +4045,7 @@ export class PreviewFrame {
   }
 
   public clearErrorOverlay(): void {
+    this.latestCompilerError = null;
     this.errorOverlay?.remove();
     this.errorOverlay = null;
   }

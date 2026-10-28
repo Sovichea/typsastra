@@ -1,6 +1,7 @@
 export type PreviewFreshness = {
   status: "current" | "outdated" | "compiling" | "failed";
   externalFiles: readonly string[];
+  lspErrors?: boolean;
 };
 
 type CompilationToken = { revision: number; id: number };
@@ -14,8 +15,14 @@ export class PreviewFreshnessController {
   private status: PreviewFreshness["status"] = "current";
   private editorChanges = new Map<string, { baseline: string; current: string }>();
   private untrackedChange = false;
+  private lspErrors = false;
   constructor(private readonly publish: (state: PreviewFreshness) => void = () => {}) {}
-  get state(): PreviewFreshness { return { status: this.status, externalFiles: [...this.externalFiles] }; }
+  get state(): PreviewFreshness { return { status: this.status, externalFiles: [...this.externalFiles], ...(this.lspErrors ? { lspErrors: true } : {}) }; }
+  setLspErrors(hasErrors: boolean): void {
+    if (this.lspErrors === hasErrors) return;
+    this.lspErrors = hasErrors;
+    this.publish(this.state);
+  }
   changed(path?: string, external = false): void {
     this.revision++;
     this.untrackedChange = true;
@@ -64,13 +71,18 @@ export class PreviewFreshnessController {
       && [...this.editorChanges.values()].every(change => change.current === change.baseline) ? "current" : "outdated";
     this.publish(this.state);
   }
-  reset(): void { this.active = null; this.revision++; this.externalFiles.clear(); this.editorChanges.clear(); this.untrackedChange = false; this.status = "current"; this.publish(this.state); }
+  reset(): void { this.active = null; this.revision++; this.externalFiles.clear(); this.editorChanges.clear(); this.untrackedChange = false; this.lspErrors = false; this.status = "current"; this.publish(this.state); }
 }
 
 export function renderPreviewFreshnessBanner(state: PreviewFreshness, root: Document = document): void {
+  const toolbarButton = root.getElementById("preview-recompile-btn") as HTMLButtonElement | null;
+  if (toolbarButton) {
+    toolbarButton.disabled = state.status === "compiling" || !!state.lspErrors;
+    toolbarButton.title = state.lspErrors ? "Fix source errors reported by the language server before recompiling." : "Recompile preview";
+  }
   const banner = root.getElementById("preview-status-banner");
   if (!banner) return;
-  banner.hidden = state.status === "current"
+  banner.hidden = (state.status === "current" && !state.lspErrors)
     || root.getElementById("preview-container-wrapper")?.dataset.previewStatusEnabled === "false";
   banner.dataset.status = state.status;
   const label = banner.querySelector<HTMLElement>("[data-preview-status-label]");
@@ -85,7 +97,10 @@ export function renderPreviewFreshnessBanner(state: PreviewFreshness, root: Docu
   }
   const button = banner.querySelector<HTMLButtonElement>("[data-preview-status-recompile]");
   if (button) {
-    button.disabled = state.status === "compiling";
-    button.onclick = () => root.getElementById("preview-recompile-btn")?.click();
+    button.disabled = state.status === "compiling" || !!state.lspErrors;
+    button.title = state.lspErrors ? "Fix source errors reported by the language server before recompiling." : "Recompile preview";
+    button.onclick = () => {
+      if (!button.disabled) root.getElementById("preview-recompile-btn")?.click();
+    };
   }
 }

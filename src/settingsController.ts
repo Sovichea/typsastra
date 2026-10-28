@@ -307,6 +307,7 @@ export class SettingsController {
       this.populatePanel();
     });
     onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
+    onChange("settings-preview-error-panel", (settings, control) => { settings.preview.showErrorPanel = (control as HTMLInputElement).checked; });
     onChange("settings-preview-color-mode", (settings, control) => {
       settings.preview.colorMode = control.value as PreviewColorMode;
     });
@@ -648,6 +649,7 @@ export class SettingsController {
     this.populatePrivateFontDirectories();
     setChecked("settings-cursor-sync", preview.cursorSync);
     setChecked("settings-low-memory-mode", preview.lowMemoryMode);
+    setChecked("settings-preview-error-panel", preview.showErrorPanel);
     const cursorSync = document.getElementById("settings-cursor-sync") as HTMLInputElement | null;
     if (cursorSync) {
       cursorSync.disabled = true;

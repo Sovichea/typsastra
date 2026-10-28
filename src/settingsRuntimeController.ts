@@ -15,6 +15,7 @@ export interface SettingsRuntimeDependencies {
   spellcheck: SpellcheckController;
   syncPreviewTheme(): void;
   setLandscapeScalePercent(percent: number): void;
+  setPreviewErrorPanelEnabled?(enabled: boolean): void;
   isPreviewOnlyWindow(): boolean;
   effectivePreviewRenderMode(): PreviewRefreshStyle;
   cancelOnTypeSchedule(): void;
@@ -41,6 +42,7 @@ export class SettingsRuntimeController {
 
   apply(settings: AppSettings): void {
     const { appearance, editor, preview } = settings;
+    this.deps.setPreviewErrorPanelEnabled?.(preview.showErrorPanel);
     document.documentElement.style.setProperty("--editor-font-size", `${appearance.editorFontSize}px`);
     document.documentElement.style.setProperty("--editor-line-height", String(appearance.editorLineHeight));
     document.documentElement.style.setProperty(

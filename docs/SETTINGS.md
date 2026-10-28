@@ -115,6 +115,14 @@ outdated**, **Compiling**, and **Compilation failed**, and disappears only after
 a successful compilation of the current source revision. Changes arriving during
 a compile keep the preview outdated. Language-server health is shown separately.
 
+**Show preview error panel** is off by default. Enable it in **Settings →
+Preview** to overlay compiler errors on the document. With it off, the previous
+preview stays visible and compiler errors remain available in Logs. The source
+status banner remains visible while the preview is outdated. **Recompile** is
+disabled in the banner, toolbar, and preview menu while the language server
+reports source errors, including errors in included files. These actions become
+available again when those errors are resolved.
+
 The preview toolbar's **Find** button and **Ctrl/Cmd + F** while the preview is
 focused search the full compiled PDF in both live and standalone views. Matches
 are highlighted; **Enter**/**Shift + Enter** or the next/previous buttons move

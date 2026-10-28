@@ -71,6 +71,7 @@ export type AppSettings = {
     renderMode: PreviewRenderMode;
     colorMode: PreviewColorMode;
     lowMemoryMode: boolean;
+    showErrorPanel: boolean;
     landscapeScalePercent: number;
     ctrlWheelZoomStepPercent: number;
     cursorSync: boolean;
@@ -139,6 +140,7 @@ export const defaultAppSettings: AppSettings = {
     renderMode: "on-save",
     colorMode: "document",
     lowMemoryMode: false,
+    showErrorPanel: false,
     landscapeScalePercent: 30,
     ctrlWheelZoomStepPercent: 10,
     // TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability
@@ -335,6 +337,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       renderMode: previewRenderMode(preview.renderMode),
       colorMode: previewColorMode(preview.colorMode),
       lowMemoryMode: booleanValue(preview.lowMemoryMode, defaultAppSettings.preview.lowMemoryMode),
+      showErrorPanel: booleanValue(preview.showErrorPanel, defaultAppSettings.preview.showErrorPanel),
       ctrlWheelZoomStepPercent: Math.round(boundedNumber(preview.ctrlWheelZoomStepPercent, 10, 5, 100) / 5) * 5,
       landscapeScalePercent: boundedNumber(preview.landscapeScalePercent, defaultAppSettings.preview.landscapeScalePercent, 0, 100),
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),

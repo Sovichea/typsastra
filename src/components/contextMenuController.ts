@@ -185,7 +185,9 @@ export class ContextMenuController {
     const typstActions = [
       available("preview-recompile-btn")
         ? '<div class="dropdown-item" id="ctx-preview-recompile">Recompile Preview</div>'
-        : ""
+        : document.getElementById("preview-recompile-btn")?.classList.contains("hidden") === false
+          ? '<div class="dropdown-item dropdown-item-disabled" aria-disabled="true">Recompile Preview</div>'
+          : ""
     ].filter(Boolean).join("");
     const typstSeparator = typstActions ? '<div class="dropdown-separator"></div>' : "";
     const exportAction = isTypstDocumentPath(this.dependencies.getActiveFile() ?? "")

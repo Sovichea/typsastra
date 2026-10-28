@@ -156,6 +156,9 @@ export class PreviewWindowController {
     await listen<PreviewFreshness>("preview-freshness-update", event => {
       renderPreviewFreshnessBanner(event.payload);
     });
+    await listen<boolean>("preview-error-panel-update", event => {
+      deps.previewFrame.setCompilerErrorPanelEnabled(event.payload);
+    });
 
     // Do not allocate handoff readers before this window has an update listener.
     await invoke("ready_preview_generation_window");

@@ -1,9 +1,65 @@
 import { describe, expect, test } from "bun:test";
-import { PreviewFreshnessController } from "../src/preview/previewFreshnessController";
+import { PreviewFreshnessController, renderPreviewFreshnessBanner } from "../src/preview/previewFreshnessController";
+import { PreviewFrame } from "../src/preview/previewFrame";
+import { normalizeAppSettings } from "../src/settings";
 import { PdfPreviewRenderController } from "../src/preview/pdfPreviewRenderController";
 import { TypsastraWorkspaceController } from "../src/appController";
 
 describe("preview freshness", () => {
+  test("source errors keep the banner visible and disable only its recompile action", () => {
+    const button = { disabled: false, title: "", onclick: () => {} };
+    const label = { textContent: "" };
+    const banner = { hidden: true, dataset: {}, querySelector: (selector: string) => selector.includes("recompile") ? button : selector.includes("label") ? label : null };
+    let clicks = 0;
+    const toolbar = { disabled: false, title: "", click: () => clicks++ };
+    const root = { getElementById: (id: string) => id === "preview-status-banner" ? banner : id === "preview-recompile-btn" ? toolbar : null } as unknown as Document;
+    const freshness = new PreviewFreshnessController();
+    freshness.editorChanged("main.typ", "valid", "invalid");
+    freshness.setLspErrors(true);
+    renderPreviewFreshnessBanner(freshness.state, root);
+    expect(banner.hidden).toBe(false);
+    expect(button.disabled).toBe(true);
+    expect(toolbar.disabled).toBe(true);
+    expect(label.textContent).toBe("Source changed - preview outdated");
+    button.onclick();
+    expect(clicks).toBe(0);
+    freshness.setLspErrors(false);
+    renderPreviewFreshnessBanner(freshness.state, root);
+    expect(button.disabled).toBe(false);
+    expect(toolbar.disabled).toBe(false);
+    button.onclick();
+    expect(clicks).toBe(1);
+  });
+  test("programmatic recompile actions cannot bypass LSP errors", async () => {
+    const freshness = new PreviewFreshnessController();
+    freshness.setLspErrors(true);
+    const app = Object.assign(Object.create(TypsastraWorkspaceController.prototype), { previewFreshness: freshness });
+    // No active document or restart dependencies are available: the shared
+    // action must reject the request before accessing them.
+    await app.recompilePreviewManually();
+    expect(freshness.state.lspErrors).toBe(true);
+    expect(freshness.state.status).toBe("current");
+  });
+  test("compiler error panel defaults off and can reveal or hide the latest error", () => {
+    expect(normalizeAppSettings({}).preview.showErrorPanel).toBe(false);
+    expect(normalizeAppSettings({ preview: { showErrorPanel: true } }).preview.showErrorPanel).toBe(true);
+    let presented = 0;
+    let loadingCleared = 0;
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      compilerErrorPanelEnabled: false, errorOverlay: null,
+      clearLoadingHost: () => loadingCleared++,
+    });
+    frame.setCompilerError("Error", "Invalid source", { displayPath: (path: string) => path, navigate: () => {} });
+    expect(loadingCleared).toBe(1);
+    frame.presentCompilerError = () => { presented++; frame.errorOverlay = { remove: () => {} }; };
+    frame.setCompilerErrorPanelEnabled(true);
+    expect(presented).toBe(1);
+    frame.setCompilerErrorPanelEnabled(false);
+    expect(frame.errorOverlay).toBeNull();
+    frame.clearErrorOverlay();
+    frame.setCompilerErrorPanelEnabled(true);
+    expect(presented).toBe(1);
+  });
   test("undo clears source changed only when every edited file matches the preview", () => {
     const freshness = new PreviewFreshnessController();
     freshness.editorChanged("main.typ", "main", "edited main");
