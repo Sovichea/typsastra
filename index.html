@@ -2915,7 +2915,12 @@
                             -->
                             <div class="settings-field">
                                 <strong>Preview zoom gestures</strong>
-                                <small>Touchscreen pinch and Ctrl/Cmd + mouse wheel are supported. Touchpad pinch is currently unsupported; use Ctrl/Cmd + mouse wheel or the +/- buttons instead. Gestures zoom by 5%; buttons zoom by 25%.</small>
+                                <small>Touchscreen pinch and Ctrl/Cmd + mouse wheel are supported. Touchpad pinch is currently unsupported; use Ctrl/Cmd + mouse wheel or the +/- buttons instead. Touchscreen pinch zooms by 5%; buttons zoom by 25%.</small>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-ctrl-wheel-zoom-step">Ctrl/Cmd + wheel zoom step (%)</label>
+                                <input id="settings-ctrl-wheel-zoom-step" type="number" min="5" max="100" step="5" inputmode="numeric" />
+                                <small>Zoom change per Ctrl/Cmd + mouse wheel event across preview panes and Table/Image Tools. Default: 10%. Choose 5-100% in steps of 5%.</small>
                             </div>
                             <div class="settings-field">
                                 <label for="settings-landscape-scale">Landscape scale increase (%)</label>

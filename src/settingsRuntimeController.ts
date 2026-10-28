@@ -1,3 +1,4 @@
+import { setCtrlWheelZoomStepPercent } from "./preview/previewZoomGestures";
 import type { EditorView } from "@codemirror/view";
 import type { StateEffect } from "@codemirror/state";
 import { applyUIThemeVariables } from "./editor/extensions";
@@ -28,6 +29,7 @@ export interface SettingsRuntimeDependencies {
 export class SettingsRuntimeController {
   private _forwardSyncDebounceMs = 120;
   private _lastPreviewRenderMode: PreviewRefreshStyle | undefined;
+  private lastCtrlWheelZoomStepPercent: number | undefined;
   private lastLandscapeScalePercent: number | undefined;
   private _lastLowMemoryMode: boolean | undefined;
 
@@ -45,6 +47,15 @@ export class SettingsRuntimeController {
       "--editor-line-height-px",
       `${appearance.editorFontSize * appearance.editorLineHeight}px`,
     );
+    if (this.lastCtrlWheelZoomStepPercent !== preview.ctrlWheelZoomStepPercent) {
+      this.lastCtrlWheelZoomStepPercent = preview.ctrlWheelZoomStepPercent;
+      setCtrlWheelZoomStepPercent(preview.ctrlWheelZoomStepPercent);
+      if (!this.deps.isPreviewOnlyWindow()) {
+        import("@tauri-apps/api/event").then(({ emit }) => {
+          void emit("preview-ctrl-wheel-zoom-step-update", preview.ctrlWheelZoomStepPercent);
+        }).catch(() => {});
+      }
+    }
     this._forwardSyncDebounceMs = preview.syncDebounceMs;
     if (this.lastLandscapeScalePercent !== preview.landscapeScalePercent) {
       this.lastLandscapeScalePercent = preview.landscapeScalePercent;

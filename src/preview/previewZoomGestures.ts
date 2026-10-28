@@ -1,3 +1,9 @@
+let ctrlWheelZoomStepPercent = 10;
+export function setCtrlWheelZoomStepPercent(percent: number): void {
+  ctrlWheelZoomStepPercent = Number.isFinite(percent)
+    ? Math.max(5, Math.min(100, Math.round(percent / 5) * 5)) : 10;
+}
+
 export type PreviewZoomGesture = { factor: number; clientX: number; clientY: number; deltaPercent?: number; ensureStep?: boolean };
 
 export function snapGestureZoom(percent: number, minimum = 5, maximum = 2000): number {
@@ -94,13 +100,8 @@ export function installPreviewZoomGestures(
     claim(event);
     // Safari may emit both gesture and wheel events for one native pinch.
     if (nativeScale !== null || distance !== null) return;
-    // Mouse-wheel notches are much larger than precision touchpad pinch deltas.
-    // Each notch should advance 5%, rather than causing a large exponential jump.
-    if (event.deltaMode !== 0 || Math.abs(event.deltaY) >= 40) {
-      enqueue(1, event.clientX, event.clientY, event.deltaY < 0 ? 5 : -5);
-    } else {
-      enqueue(wheelZoomFactor(event.deltaY, event.deltaMode), event.clientX, event.clientY, 0, true);
-    }
+    enqueue(1, event.clientX, event.clientY,
+      event.deltaY < 0 ? ctrlWheelZoomStepPercent : -ctrlWheelZoomStepPercent);
   };
   const touchGeometry = (event: TouchEvent) => {
     if (event.touches.length < 2) return null;

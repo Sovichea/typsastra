@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PreviewFrame } from "../src/preview/previewFrame";
-import { installPreviewZoomGestures, wheelZoomFactor, zoomPreviewElementAtPoint, snapGestureZoom, buttonZoomPercent, GestureZoomSteps, type PreviewZoomGesture } from "../src/preview/previewZoomGestures";
+import { setCtrlWheelZoomStepPercent, installPreviewZoomGestures, wheelZoomFactor, zoomPreviewElementAtPoint, snapGestureZoom, buttonZoomPercent, GestureZoomSteps, type PreviewZoomGesture } from "../src/preview/previewZoomGestures";
 
 function fixture() {
   const originalRequest = globalThis.requestAnimationFrame;
@@ -75,8 +75,8 @@ describe("preview zoom gestures", () => {
     expect(buttonZoomPercent(500, 1, 10, 500)).toBe(500);
   });
 
-  test("a short precision-wheel input with a one-pixel delta produces a visible 5-percent step", () => {
-    for (const [deltaY, expected] of [[-1, 105], [1, 95]]) {
+  test("a small Ctrl-wheel input uses the default 10-percent step", () => {
+    for (const [deltaY, expected] of [[-1, 110], [1, 90]]) {
       const f = fixture();
       try {
         f.send("wheel", { ...wheel, deltaY });
@@ -136,16 +136,16 @@ describe("preview zoom gestures", () => {
     expect(wheelZoomFactor(-100000)).toBe(wheelZoomFactor(-200));
   });
 
-  test("coarse Ctrl-wheel notches advance exactly 5 percent each", () => {
+  test("coarse Ctrl-wheel notches advance exactly 10 percent each", () => {
     const f = fixture();
     try {
       f.send("wheel", { ...wheel, deltaY: -100 });
       f.flush();
       const steps = new GestureZoomSteps();
-      expect(steps.next(100, f.zooms[0].factor, f.zooms[0].deltaPercent)).toBe(105);
+      expect(steps.next(100, f.zooms[0].factor, f.zooms[0].deltaPercent)).toBe(110);
       f.send("wheel", { ...wheel, deltaY: 100 });
       f.flush();
-      expect(steps.next(105, f.zooms[1].factor, f.zooms[1].deltaPercent)).toBe(100);
+      expect(steps.next(110, f.zooms[1].factor, f.zooms[1].deltaPercent)).toBe(100);
     } finally { f.cleanup(); }
   });
 
@@ -197,7 +197,8 @@ describe("preview zoom gestures", () => {
       expect(f.zooms).toEqual([]);
       f.flush();
       expect(f.zooms).toHaveLength(1);
-      expect(f.zooms[0].factor).toBeCloseTo(wheelZoomFactor(-10) ** 2);
+      expect(f.zooms[0].factor).toBe(1);
+      expect(f.zooms[0].deltaPercent).toBe(20);
       expect(f.zooms[0].clientX).toBe(140);
     } finally { f.cleanup(); }
   });
@@ -283,4 +284,21 @@ describe("preview zoom gestures", () => {
     expect(container.scrollLeft).toBe(100);
     expect(container.scrollTop).toBe(200);
   });
+});
+
+
+test("Ctrl-wheel settings apply immediately to existing handlers without changing pinch or buttons", () => {
+  const f = fixture();
+  try {
+    setCtrlWheelZoomStepPercent(20);
+    f.send("wheel", { ...wheel, deltaY: -100 });
+    f.flush();
+    expect(f.zooms[0].deltaPercent).toBe(20);
+    setCtrlWheelZoomStepPercent(5);
+    f.send("wheel", { ...wheel, deltaY: 1 });
+    f.flush();
+    expect(f.zooms[1].deltaPercent).toBe(-5);
+    expect(buttonZoomPercent(100, 1)).toBe(125);
+    expect(new GestureZoomSteps().next(100, 1.05)).toBe(105);
+  } finally { setCtrlWheelZoomStepPercent(10); f.cleanup(); }
 });

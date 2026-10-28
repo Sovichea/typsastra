@@ -72,6 +72,7 @@ export type AppSettings = {
     colorMode: PreviewColorMode;
     lowMemoryMode: boolean;
     landscapeScalePercent: number;
+    ctrlWheelZoomStepPercent: number;
     cursorSync: boolean;
     syncDebounceMs: number;
     forwardSyncTimeoutMs: number;
@@ -139,6 +140,7 @@ export const defaultAppSettings: AppSettings = {
     colorMode: "document",
     lowMemoryMode: false,
     landscapeScalePercent: 30,
+    ctrlWheelZoomStepPercent: 10,
     // TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability
     // cursorSync: true,
     cursorSync: false,
@@ -333,6 +335,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       renderMode: previewRenderMode(preview.renderMode),
       colorMode: previewColorMode(preview.colorMode),
       lowMemoryMode: booleanValue(preview.lowMemoryMode, defaultAppSettings.preview.lowMemoryMode),
+      ctrlWheelZoomStepPercent: Math.round(boundedNumber(preview.ctrlWheelZoomStepPercent, 10, 5, 100) / 5) * 5,
       landscapeScalePercent: boundedNumber(preview.landscapeScalePercent, defaultAppSettings.preview.landscapeScalePercent, 0, 100),
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),
       syncDebounceMs: Math.round(boundedNumber(preview.syncDebounceMs, defaultAppSettings.preview.syncDebounceMs, 50, 2000)),

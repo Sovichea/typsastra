@@ -1149,7 +1149,10 @@ struct PreviewGenerationReaders {
 static PREVIEW_GENERATION_READERS: std::sync::LazyLock<Mutex<PreviewGenerationReaders>> =
     std::sync::LazyLock::new(|| Mutex::new(PreviewGenerationReaders::default()));
 
-fn prune_preview_generation_cache(generations: &Path, protected: Option<&Path>) -> Result<(), String> {
+fn prune_preview_generation_cache(
+    generations: &Path,
+    protected: Option<&Path>,
+) -> Result<(), String> {
     // Startup may supply an ordinary Windows path while staged files use the
     // canonical extended-length spelling. Reader identity must be identical.
     let canonical = match std::fs::canonicalize(generations) {
@@ -1158,8 +1161,11 @@ fn prune_preview_generation_cache(generations: &Path, protected: Option<&Path>) 
         Err(error) => return Err(error.to_string()),
     };
     let generations = canonical.as_path();
-    let protected = protected.map(|path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()));
-    let mut readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
+    let protected =
+        protected.map(|path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()));
+    let mut readers = PREVIEW_GENERATION_READERS
+        .lock()
+        .map_err(|e| e.to_string())?;
     if let Some(path) = protected {
         readers.current.insert(generations.to_path_buf(), path);
     }
@@ -1170,9 +1176,14 @@ fn prune_preview_generation_cache(generations: &Path, protected: Option<&Path>) 
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|value| value.to_str()) != Some("pdf") { continue; }
+        if path.extension().and_then(|value| value.to_str()) != Some("pdf") {
+            continue;
+        }
         if readers.current.get(generations) == Some(&path)
-            || readers.leases.values().any(|(leased, _)| leased == &path) { continue; }
+            || readers.leases.values().any(|(leased, _)| leased == &path)
+        {
+            continue;
+        }
         // Windows may still be closing a file handle; retry on the next cleanup.
         let _ = std::fs::remove_file(path);
     }
@@ -1186,31 +1197,52 @@ fn reset_preview_generation_readers(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn ready_preview_generation_window(window: tauri::WebviewWindow) -> Result<(), String> {
-    PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?
-        .ready_windows.insert(window.label().to_string());
+    PREVIEW_GENERATION_READERS
+        .lock()
+        .map_err(|e| e.to_string())?
+        .ready_windows
+        .insert(window.label().to_string());
     Ok(())
 }
 
 #[tauri::command]
 fn retain_preview_generation(
-    app: tauri::AppHandle, window: tauri::WebviewWindow, path: String,
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    path: String,
     handoff: Option<bool>,
 ) -> Result<Option<u64>, String> {
     let path = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
-    let local = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("workspace-cache");
+    let local = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("workspace-cache");
     let local = std::fs::canonicalize(local).unwrap_or_default();
     let cache = path.parent().and_then(Path::parent).and_then(Path::parent);
-    if local.as_os_str().is_empty() || !path.starts_with(&local)
-        || !cache.is_some_and(|cache| is_preview_generation_path(&path, cache)) {
+    if local.as_os_str().is_empty()
+        || !path.starts_with(&local)
+        || !cache.is_some_and(|cache| is_preview_generation_path(&path, cache))
+    {
         return Ok(None);
     }
     let owner = if handoff.unwrap_or(false) {
-        if app.get_webview_window("preview").is_none() { return Ok(None); }
+        if app.get_webview_window("preview").is_none() {
+            return Ok(None);
+        }
         "preview".to_string()
-    } else { window.label().to_string() };
-    let mut readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
-    if handoff.unwrap_or(false) && !readers.ready_windows.contains(&owner) { return Ok(None); }
-    if !path.is_file() { return Err("The preview generation is no longer available.".into()); }
+    } else {
+        window.label().to_string()
+    };
+    let mut readers = PREVIEW_GENERATION_READERS
+        .lock()
+        .map_err(|e| e.to_string())?;
+    if handoff.unwrap_or(false) && !readers.ready_windows.contains(&owner) {
+        return Ok(None);
+    }
+    if !path.is_file() {
+        return Err("The preview generation is no longer available.".into());
+    }
     readers.next_id += 1;
     let id = readers.next_id;
     readers.leases.insert(id, (path, owner));
@@ -1219,20 +1251,35 @@ fn retain_preview_generation(
 
 #[tauri::command]
 fn release_preview_generation(lease_id: u64) -> Result<(), String> {
-    let lease = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?.leases.remove(&lease_id);
+    let lease = PREVIEW_GENERATION_READERS
+        .lock()
+        .map_err(|e| e.to_string())?
+        .leases
+        .remove(&lease_id);
     if let Some((path, _)) = lease {
-        if let Some(parent) = path.parent() { prune_preview_generation_cache(parent, None)?; }
+        if let Some(parent) = path.parent() {
+            prune_preview_generation_cache(parent, None)?;
+        }
     }
     Ok(())
 }
 
 fn release_preview_window_generations(label: &str) {
-    let ids: Vec<_> = PREVIEW_GENERATION_READERS.lock().map(|mut readers| {
-        readers.ready_windows.remove(label);
-        readers.leases.iter().filter(|(_, (_, owner))| owner == label)
-            .map(|(id, _)| *id).collect()
-    }).unwrap_or_default();
-    for id in ids { let _ = release_preview_generation(id); }
+    let ids: Vec<_> = PREVIEW_GENERATION_READERS
+        .lock()
+        .map(|mut readers| {
+            readers.ready_windows.remove(label);
+            readers
+                .leases
+                .iter()
+                .filter(|(_, (_, owner))| owner == label)
+                .map(|(id, _)| *id)
+                .collect()
+        })
+        .unwrap_or_default();
+    for id in ids {
+        let _ = release_preview_generation(id);
+    }
 }
 
 fn stage_pdf_preview_generation_at(
@@ -1271,7 +1318,9 @@ fn stage_pdf_preview_generation_at(
     {
         // Publish under the same lock used by cleanup, so releasing another
         // reader cannot delete the newly renamed file before it is protected.
-        let mut readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
+        let mut readers = PREVIEW_GENERATION_READERS
+            .lock()
+            .map_err(|e| e.to_string())?;
         std::fs::rename(&source, &target)
             .map_err(|error| format!("Failed to stage compiled PDF preview: {error}"))?;
         readers.current.insert(generations.clone(), target.clone());
@@ -1346,9 +1395,14 @@ fn remove_preview_generation_file_at(path: String, cache_root_path: String) -> R
     if !is_preview_generation_path(&path, &cache_root) {
         return Err("Only staged PDF preview generations can be removed.".to_string());
     }
-    let readers = PREVIEW_GENERATION_READERS.lock().map_err(|e| e.to_string())?;
+    let readers = PREVIEW_GENERATION_READERS
+        .lock()
+        .map_err(|e| e.to_string())?;
     if readers.current.values().any(|current| current == &path)
-        || readers.leases.values().any(|(leased, _)| leased == &path) { return Ok(()); }
+        || readers.leases.values().any(|(leased, _)| leased == &path)
+    {
+        return Ok(());
+    }
     match std::fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -1504,7 +1558,9 @@ mod pdf_preview_generation_tests {
             let mut readers = super::PREVIEW_GENERATION_READERS.lock().unwrap();
             readers.next_id += 1;
             let id = readers.next_id;
-            readers.leases.insert(id, (path.clone(), "busy-reader".into()));
+            readers
+                .leases
+                .insert(id, (path.clone(), "busy-reader".into()));
             leased.push((id, path));
         }
         prune_preview_generation_cache(&generations, None).unwrap();

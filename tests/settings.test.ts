@@ -17,6 +17,13 @@ describe("application settings", () => {
     expect(settingsController).toContain('settings.editor.externalEditIntervalSeconds = Number(control.value)');
   });
 
+  test("defaults Ctrl-wheel zoom to 10 percent and normalizes custom steps", () => {
+    expect(normalizeAppSettings({}).preview.ctrlWheelZoomStepPercent).toBe(10);
+    for (const [value, expected] of [[20, 20], [12.5, 15], [1, 5], [200, 100], [NaN, 10]]) {
+      expect(normalizeAppSettings({ preview: { ctrlWheelZoomStepPercent: value } }).preview.ctrlWheelZoomStepPercent).toBe(expected);
+    }
+  });
+
   test("defaults landscape scale to 30 percent and bounds custom values", () => {
     expect(normalizeAppSettings({}).preview.landscapeScalePercent).toBe(30);
     expect(normalizeAppSettings({ preview: { landscapeScalePercent: 50 } }).preview.landscapeScalePercent).toBe(50);

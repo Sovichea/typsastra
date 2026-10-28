@@ -109,7 +109,8 @@ three-version history. The persistent low-memory PDF/index cache is separate.
 
 Preview panes support two-finger touchscreen pinch and Ctrl/Cmd + mouse wheel
 zoom. Touchpad pinch is currently unsupported; use Ctrl/Cmd + mouse wheel or
-the +/- buttons instead. Gestures use 5% increments; the +/- buttons use 25%
+the +/- buttons instead. Ctrl/Cmd + wheel uses the configurable **Ctrl/Cmd + wheel zoom step**, defaulting
+to **10%** (5-100% in steps of 5%). Touchscreen pinch uses 5% increments; the +/- buttons use 25%
 increments. Zoom percentages are displayed as whole numbers. Zoom follows the
 gesture position and applies to live previews, standalone PDFs, images (including
 Image Tools), SVG and Markdown previews, and Table Tools. Ordinary PDF and table

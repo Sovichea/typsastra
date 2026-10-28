@@ -313,6 +313,7 @@ export class SettingsController {
     onChange("settings-low-memory-mode", (settings, control) => {
       settings.preview.lowMemoryMode = (control as HTMLInputElement).checked;
     });
+    onChange("settings-ctrl-wheel-zoom-step", (settings, control) => { settings.preview.ctrlWheelZoomStepPercent = Number(control.value); });
     onChange("settings-landscape-scale", (settings, control) => { settings.preview.landscapeScalePercent = Number(control.value); });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-forward-sync-timeout", (settings, control) => {
@@ -617,6 +618,7 @@ export class SettingsController {
       : this.workspacePreviewRenderMode ?? preview.renderMode;
     setValue("settings-preview-render-mode", effectivePreviewRenderMode);
     setValue("settings-preview-color-mode", preview.colorMode);
+    setValue("settings-ctrl-wheel-zoom-step", String(preview.ctrlWheelZoomStepPercent));
     setValue("settings-landscape-scale", String(preview.landscapeScalePercent));
     setValue("settings-sync-debounce", String(preview.syncDebounceMs));
     setValue("settings-forward-sync-timeout", String(preview.forwardSyncTimeoutMs));

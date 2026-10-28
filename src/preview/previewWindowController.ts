@@ -1,3 +1,4 @@
+import { setCtrlWheelZoomStepPercent } from "./previewZoomGestures";
 import { invoke } from "@tauri-apps/api/core";
 import { initializePreviewGenerationSession, releasePreviewGeneration } from "./previewGenerationLease";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -89,6 +90,10 @@ export class PreviewWindowController {
 
     await listen<ThemeName>("preview-theme-update", event => {
       void applyUIThemeVariables(event.payload).then(() => deps.previewFrame.syncTheme());
+    });
+
+    await listen<number>("preview-ctrl-wheel-zoom-step-update", event => {
+      setCtrlWheelZoomStepPercent(event.payload);
     });
 
     await listen<number>("preview-landscape-scale-update", event => {
