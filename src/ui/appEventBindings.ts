@@ -57,6 +57,8 @@ export interface AppEventActions {
   restoreUndockedPreviewScrollPosition: (position: PreviewScrollPositionPayload) => void;
   changePreviewContentMode: (mode: PreviewContentMode) => Promise<void> | void;
   changePreviewColorMode: (mode: PreviewColorMode) => void;
+  changePreviewOutlineVisible: (visible: boolean) => void;
+  publishPreviewOutline: () => void;
   applyDeveloperLogSettings: (settings: { developerMode: boolean; developerLogs: DeveloperLogSettings }) => void;
   setProjectMain: (path: string) => Promise<void> | void;
   openProjectDocument: (request: { path: string; approveLargePreview: boolean }) => Promise<void> | void;
@@ -328,6 +330,7 @@ export function bindAppEvents(actions: AppEventActions): void {
     void listenEvent("preview-window-ready", () => {
       const update = actions.previewWindowUpdate();
       if (update) void publishPdfUpdate(update).catch(console.error);
+      actions.publishPreviewOutline();
     });
     void listenEvent<PreviewScrollPositionPayload>("preview-scroll-position-changed", event => {
       actions.restoreUndockedPreviewScrollPosition(event.payload);
@@ -337,6 +340,12 @@ export function bindAppEvents(actions: AppEventActions): void {
     });
     void listenEvent<PreviewColorMode>("preview-color-mode-request", event => {
       actions.changePreviewColorMode(event.payload);
+    });
+    void listenEvent<boolean>("preview-outline-visible-request", event => {
+      actions.changePreviewOutlineVisible(event.payload);
+    });
+    void listenEvent("preview-outline-request", () => {
+      actions.publishPreviewOutline();
     });
     void listenEvent<{ developerMode: boolean; developerLogs: DeveloperLogSettings }>(
       "typsastra-dev-log-settings-updated",

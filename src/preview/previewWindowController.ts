@@ -7,6 +7,8 @@ import { applyUIThemeVariables } from "../editor/extensions";
 import type { PreviewColorMode, ThemeName } from "../settings";
 import type { PdfUpdatePayload } from "./pdfPreviewRenderController";
 import type { DraftPreviewController } from "./draftPreviewController";
+import type { PdfiumOutlineItem } from "./pdfiumDocument";
+import { PreviewOutlineNavigator, type PreviewSourceOutlineItem } from "./previewOutlineNavigator";
 import type { PreviewFrame } from "./previewFrame";
 import type { PreviewViewportAnchor } from "./previewViewportAnchor";
 
@@ -32,10 +34,15 @@ export interface PreviewWindowDependencies {
   sourceMapRootPath(): string | null;
   previewRootPath(): string | null;
   setWorkspaceRootPath(path: string | null): void;
+  undockedOutlineVisible(): boolean;
+  setUndockedOutlineVisible(visible: boolean): void;
   loadPdfPath(path: string, identity: string, sessionKey: string, surface: PdfUpdatePayload["surface"]): Promise<unknown>;
 }
 
 export class PreviewWindowController {
+  private outlineNavigator: PreviewOutlineNavigator | null = null;
+  private previewSurface: "live" | "pdf" = "live";
+
   constructor(private readonly deps: PreviewWindowDependencies) {}
 
   isPreviewOnlyWindow(): boolean {
@@ -76,6 +83,27 @@ export class PreviewWindowController {
       previewWrapper.style.height = "100%";
     }
 
+    const previewPane = document.getElementById("preview-render-pane");
+    if (previewPane) {
+      this.outlineNavigator = new PreviewOutlineNavigator({
+        host: previewPane,
+        navigateBookmark: bookmarkIndex => {
+          void deps.previewFrame.scrollToOutlineBookmark(bookmarkIndex);
+        },
+        navigateDestination: destination => {
+          void deps.previewFrame.revealDocumentPosition({
+            page_no: destination.pageNo,
+            x: destination.x ?? 0,
+            y: destination.y ?? 0,
+          }, { ripple: true });
+        },
+        navigatePosition: position => {
+          void deps.previewFrame.revealDocumentPosition(position, { ripple: true });
+        },
+      });
+      this.outlineNavigator.setVisible(deps.undockedOutlineVisible());
+    }
+
     await getCurrentWindow().show();
 
     const { listen, emit } = await import("@tauri-apps/api/event");
@@ -113,11 +141,16 @@ export class PreviewWindowController {
       deps.previewFrame.setColorMode(event.payload);
     });
 
+    await listen<readonly PreviewSourceOutlineItem[]>("preview-outline-update", event => {
+      this.setSourceOutline(event.payload);
+    });
+
     await listen<string | PdfUpdatePayload>("pdf-update", async event => {
       const fallbackIdentity = deps.sourceMapRootPath() ?? deps.previewRootPath() ?? "preview";
       const update = typeof event.payload === "string"
         ? { path: event.payload, identity: fallbackIdentity, sessionKey: fallbackIdentity, surface: "live" as const }
         : event.payload;
+      this.previewSurface = update.surface;
       try {
         document.getElementById("preview-container-wrapper")?.setAttribute(
           "data-preview-status-enabled", String(update.surface === "live"),
@@ -147,6 +180,7 @@ export class PreviewWindowController {
       } finally {
         await releasePreviewGeneration(update.generationLease);
       }
+      void emit("preview-outline-request");
     });
 
     await listen<{ page_no: number; x: number; y: number }>("pdf-forward-sync", event => {
@@ -163,6 +197,24 @@ export class PreviewWindowController {
     // Do not allocate handoff readers before this window has an update listener.
     await invoke("ready_preview_generation_window");
     void emit("preview-window-ready");
+  }
+
+  public setSourceOutline(items: readonly PreviewSourceOutlineItem[]): void {
+    if (this.previewSurface === "pdf") return;
+    this.outlineNavigator?.setSourceOutline(items);
+  }
+
+  public setStandalonePdfOutline(items: readonly PdfiumOutlineItem[] | null): void {
+    if (items !== null) this.previewSurface = "pdf";
+    this.outlineNavigator?.setStandalonePdfOutline(items);
+  }
+
+  private setOutlineVisible(visible: boolean): void {
+    this.deps.setUndockedOutlineVisible(visible);
+    this.outlineNavigator?.setVisible(visible);
+    void import("@tauri-apps/api/event")
+      .then(({ emit }) => emit("preview-outline-visible-request", visible))
+      .catch(error => console.error("Failed to synchronize undocked outline visibility", error));
   }
 
   publishScrollPosition(scrollTop: number): void {
@@ -203,6 +255,7 @@ export class PreviewWindowController {
     };
     const show = () => {
       const colorMode = deps.previewColorMode();
+      const outlineVisible = deps.undockedOutlineVisible();
       const colorItem = (mode: PreviewColorMode, label: string) => `
         <div class="dropdown-item preview-color-mode-item" data-preview-color-mode="${mode}" role="menuitemradio" aria-checked="${colorMode === mode}">
           <span>${label}</span><span class="preview-color-mode-check" aria-hidden="true">${colorMode === mode ? "✓" : ""}</span>
@@ -221,6 +274,10 @@ export class PreviewWindowController {
             ${colorItem("dark", "Dark preview")}
             ${colorItem("inverted", "Inverted preview (experimental)")}
           </div>
+        </div>
+        <div class="dropdown-separator"></div>
+        <div class="dropdown-item" data-preview-action="toggle-outline" role="menuitemcheckbox" aria-checked="${outlineVisible}">
+          <span>Outline panel</span><span class="preview-color-mode-check" aria-hidden="true">${outlineVisible ? "✓" : ""}</span>
         </div>
         <div class="dropdown-separator"></div>
         <div class="dropdown-item" data-preview-action="export-pdf">Export PDF</div>
@@ -265,6 +322,7 @@ export class PreviewWindowController {
       if (action === "zoom-out") deps.zoomOut();
       else if (action === "zoom-fit") deps.zoomToFit();
       else if (action === "zoom-in") deps.zoomIn();
+      else if (action === "toggle-outline") this.setOutlineVisible(!deps.undockedOutlineVisible());
       else if (action === "dock") document.getElementById("undock-preview-btn")?.click();
       else if (action === "export-pdf" || action === "open-external") void requestMainWindowAction(action);
     });

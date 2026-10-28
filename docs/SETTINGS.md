@@ -31,6 +31,7 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,` (`Cmd + 
     "renderMode": "on-save",
     "colorMode": "document",
     "lowMemoryMode": false,
+    "undockedOutline": true,
     "cursorSync": false,
     "syncDebounceMs": 500,
     "forwardSyncTimeoutMs": 5000,
@@ -190,6 +191,15 @@ lightweight placeholders that keep the source image's exact intrinsic aspect
 ratio. Explicit `width` and `height` values are transferred to the placeholder
 block; image-only fitting options are omitted. Hover or keyboard-focus a
 placeholder to inspect the original image on demand.
+
+When the preview is undocked, a floating **Outline** panel is shown over the
+preview by default. Compiled Typst previews list the active document's headings;
+directly opened PDFs list their PDF bookmarks. Selecting an entry jumps to that
+destination. The panel is limited to one-third of the preview height. Drag it by
+its header to reposition it, or use the minimize button to dock it as a compact
+bar in the bottom-left corner. Use **Preview Options → Outline panel** in the
+undocked window to show or hide the panel entirely. The visibility choice is
+stored globally as `preview.undockedOutline`.
 
 The selected content mode is stored per workspace. Dynamic, remote, package,
 missing, and unsupported images remain unchanged and are listed in the Draft

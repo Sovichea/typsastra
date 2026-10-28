@@ -1,13 +1,14 @@
 import type { PreviewDocumentPosition } from "../compiler/lsp";
 
-type RenderedOutlineItem = {
+export type OutlinePreviewItem = {
   title: string;
   position?: PreviewDocumentPosition;
   bookmarkIndex?: number;
-  children: RenderedOutlineItem[];
+  children: OutlinePreviewItem[];
 };
 import { createAppIcon } from "../ui/icons";
 import type { PdfiumDestination, PdfiumOutlineItem } from "../preview/pdfiumDocument";
+import type { PreviewSourceOutlineItem } from "../preview/previewOutlineNavigator";
 
 export type DocumentHeading = {
   id: string;
@@ -63,7 +64,14 @@ export async function parseDocumentOutline(
   readFile: (path: string) => Promise<string | null>,
   visited: Set<string> = new Set()
 ): Promise<DocumentHeading[]> {
-  const flat = await parseDocumentOutlineFlat(filePath, source, workspaceRoot, readFile, visited);
+  const flat = await parseDocumentOutlineFlat(
+    filePath,
+    source,
+    workspaceRoot,
+    readFile,
+    visited,
+    new Map<string, number>(),
+  );
   
   const roots: DocumentHeading[] = [];
   const parents: DocumentHeading[] = [];
@@ -77,17 +85,15 @@ export async function parseDocumentOutline(
   return roots;
 }
 
-const occurrences = new Map<string, number>();
-
 async function parseDocumentOutlineFlat(
   filePath: string,
   source: string,
   workspaceRoot: string,
   readFile: (path: string) => Promise<string | null>,
-  visited: Set<string>
+  visited: Set<string>,
+  occurrences: Map<string, number>,
 ): Promise<DocumentHeading[]> {
   const flat: DocumentHeading[] = [];
-  if (visited.size === 0) occurrences.clear();
   visited.add(filePath);
   
   let blockCommentDepth = 0;
@@ -145,7 +151,7 @@ async function parseDocumentOutlineFlat(
             if (!visited.has(resolvedPath)) {
               const includeSource = await readFile(resolvedPath);
               if (includeSource !== null) {
-                const subHeadings = await parseDocumentOutlineFlat(resolvedPath, includeSource, workspaceRoot, readFile, visited);
+                const subHeadings = await parseDocumentOutlineFlat(resolvedPath, includeSource, workspaceRoot, readFile, visited, occurrences);
                 flat.push(...subHeadings);
               }
             }
@@ -167,8 +173,8 @@ function flattenHeadings(headings: readonly DocumentHeading[]): DocumentHeading[
   return headings.flatMap(heading => [heading, ...flattenHeadings(heading.children)]);
 }
 
-function flattenRenderedOutline(items: readonly RenderedOutlineItem[]): RenderedOutlineItem[] {
-  return items.flatMap(item => [item, ...flattenRenderedOutline(item.children)]);
+function flattenOutlinePreviewItems(items: readonly OutlinePreviewItem[]): OutlinePreviewItem[] {
+  return items.flatMap(item => [item, ...flattenOutlinePreviewItems(item.children)]);
 }
 
 type StandalonePdfOutlineItem = PdfiumOutlineItem & {
@@ -197,6 +203,63 @@ function comparableTitle(title: string): string {
     .toLocaleLowerCase();
 }
 
+export function matchOutlinePreviewPositions(
+  headings: readonly DocumentHeading[],
+  items: readonly OutlinePreviewItem[],
+): void {
+  const flatHeadings = flattenHeadings(headings);
+  for (const heading of flatHeadings) {
+    heading.previewPosition = undefined;
+    heading.previewBookmarkIndex = undefined;
+  }
+  const rendered = flattenOutlinePreviewItems(items);
+  const claimed = new Set<number>();
+  const renderedTitles = rendered.map(item => comparableTitle(item.title));
+  const exactMatches = new Map<string, number[]>();
+  rendered.forEach((item, index) => {
+    if (item.position === undefined && item.bookmarkIndex === undefined) return;
+    const title = renderedTitles[index];
+    const indexes = exactMatches.get(title) ?? [];
+    indexes.push(index);
+    exactMatches.set(title, indexes);
+  });
+  for (const heading of flatHeadings) {
+    const title = comparableTitle(heading.title);
+    const exact = exactMatches.get(title);
+    let renderedIndex = exact?.shift() ?? -1;
+    while (renderedIndex !== -1 && claimed.has(renderedIndex)) {
+      renderedIndex = exact?.shift() ?? -1;
+    }
+    if (renderedIndex === -1) {
+      renderedIndex = rendered.findIndex((item, index) => {
+        if (
+          claimed.has(index)
+          || (item.position === undefined && item.bookmarkIndex === undefined)
+        ) return false;
+        return renderedTitles[index].endsWith(title);
+      });
+    }
+    if (renderedIndex === -1) continue;
+    claimed.add(renderedIndex);
+    heading.previewPosition = rendered[renderedIndex].position;
+    heading.previewBookmarkIndex = rendered[renderedIndex].bookmarkIndex;
+  }
+}
+
+export function outlineSourceSnapshot(
+  headings: readonly DocumentHeading[],
+): PreviewSourceOutlineItem[] {
+  const convert = (heading: DocumentHeading): PreviewSourceOutlineItem => ({
+    title: heading.title,
+    bookmarkIndex: heading.previewBookmarkIndex,
+    position: heading.previewPosition
+      ? { ...heading.previewPosition }
+      : undefined,
+    children: heading.children.map(convert),
+  });
+  return headings.map(convert);
+}
+
 export class DocumentOutlineController {
   private headings: DocumentHeading[] = [];
   private flatHeadings: DocumentHeading[] = [];
@@ -215,6 +278,7 @@ export class DocumentOutlineController {
     private readonly onNavigate: (heading: DocumentHeading) => void,
     private readonly onNavigatePdf?: (destination: PdfiumDestination) => void,
     private readonly onActiveHeadingChanged?: (heading: DocumentHeading) => void,
+    private readonly onChanged?: () => void,
   ) {}
 
   public initialize(): void {
@@ -239,6 +303,7 @@ export class DocumentOutlineController {
     if (this.selectedHeadingId && !validIds.has(this.selectedHeadingId)) this.selectedHeadingId = null;
     this.render();
     this.setCursorPosition(this.cursor);
+    this.onChanged?.();
   }
 
   public clear(): void {
@@ -253,6 +318,7 @@ export class DocumentOutlineController {
     this.pendingPreviewSyncHeadingKey = null;
     this.collapsed.clear();
     this.render();
+    this.onChanged?.();
   }
 
   public setCursorPosition(
@@ -303,42 +369,9 @@ export class DocumentOutlineController {
     return position;
   }
 
-  public updatePreviewPositions(items: readonly RenderedOutlineItem[]): void {
+  public updatePreviewPositions(items: readonly OutlinePreviewItem[]): void {
+    matchOutlinePreviewPositions(this.headings, items);
     for (const heading of this.flatHeadings) {
-      heading.previewPosition = undefined;
-      heading.previewBookmarkIndex = undefined;
-    }
-    const rendered = flattenRenderedOutline(items);
-    const claimed = new Set<number>();
-    const renderedTitles = rendered.map(item => comparableTitle(item.title));
-    const exactMatches = new Map<string, number[]>();
-    rendered.forEach((item, index) => {
-      if (item.position === undefined && item.bookmarkIndex === undefined) return;
-      const title = renderedTitles[index];
-      const indexes = exactMatches.get(title) ?? [];
-      indexes.push(index);
-      exactMatches.set(title, indexes);
-    });
-    for (const heading of this.flatHeadings) {
-      const title = comparableTitle(heading.title);
-      const exact = exactMatches.get(title);
-      let renderedIndex = exact?.shift() ?? -1;
-      while (renderedIndex !== -1 && claimed.has(renderedIndex)) {
-        renderedIndex = exact?.shift() ?? -1;
-      }
-      if (renderedIndex === -1) {
-        renderedIndex = rendered.findIndex((item, index) => {
-          if (
-            claimed.has(index)
-            || (item.position === undefined && item.bookmarkIndex === undefined)
-          ) return false;
-          return renderedTitles[index].endsWith(title);
-        });
-      }
-      if (renderedIndex === -1) continue;
-      claimed.add(renderedIndex);
-      heading.previewPosition = rendered[renderedIndex].position;
-      heading.previewBookmarkIndex = rendered[renderedIndex].bookmarkIndex;
       const headingKey = `${heading.filePath}\0${heading.id}`;
       if (
         this.pendingPreviewSyncHeadingKey === headingKey
@@ -348,6 +381,7 @@ export class DocumentOutlineController {
         this.onActiveHeadingChanged?.(heading);
       }
     }
+    this.onChanged?.();
   }
 
   public setStandalonePdfOutline(items: readonly PdfiumOutlineItem[]): void {
@@ -357,6 +391,7 @@ export class DocumentOutlineController {
     this.activeHeadingKey = null;
     this.collapsed.clear();
     this.render();
+    this.onChanged?.();
   }
 
   public clearStandalonePdfOutline(): void {
@@ -366,6 +401,7 @@ export class DocumentOutlineController {
     this.selectedHeadingId = null;
     this.render();
     this.setCursorPosition(this.cursor);
+    this.onChanged?.();
   }
 
   private requestPreviewSync(heading: DocumentHeading, headingKey: string): void {

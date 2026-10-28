@@ -57,6 +57,7 @@ import { fileNameFromPath, filePathKey, relativeFilePath } from "./platform/path
 import { isBinaryImagePath, isMarkdownDocumentPath, isTypstDocumentPath, fileExtension } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import type { PreviewFrame, PreviewClickPoint, PreviewInteractionStatus, PreviewPageStatus, PreviewSurface } from "./preview/previewFrame";
+import type { PreviewSourceOutlineItem } from "./preview/previewOutlineNavigator";
 import type { MarkdownPreviewFrame, MarkdownResource } from "./preview/markdownPreviewFrame";
 import { PreviewController } from "./preview/previewController";
 import { PreviewSyncController } from "./preview/previewSyncController";
@@ -123,7 +124,7 @@ import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type SystemToolchain, type ToolchainStatus } from "./toolchain/toolchainController";
 import { ToolchainSetupController, type ToolchainInstallProgress } from "./toolchain/toolchainSetupController";
-import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
+import { DocumentOutlineController, matchOutlinePreviewPositions, outlineSourceSnapshot, parseDocumentOutline, type DocumentHeading, type OutlinePreviewItem } from "./outline/documentOutline";
 import { WindowStateController } from "./window/windowStateController";
 import { bindAppEvents, type DevUiAction } from "./ui/appEventBindings";
 import { ReleaseSummaryController } from "./ui/releaseSummaryController";
@@ -462,6 +463,8 @@ export class TypsastraWorkspaceController {
   private set blockedLargePreviewRoot(rootPath: string | null) { this.largePreviewGuardController.blockedRoot = rootPath; }
   private previewScrollTop = 0;
   private previewViewportAnchor: PreviewViewportAnchor | null = null;
+  private previewOutlinePublishGeneration = 0;
+  private previewDocumentOutlineItems: OutlinePreviewItem[] = [];
   private previewScrollSaveTimer: number | null = null;
   private recommendedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
   private selectedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
@@ -1113,7 +1116,11 @@ export class TypsastraWorkspaceController {
     onPageChanged: status => this.updatePreviewPageStatus(status),
     loadDraftImage: id => this.draftPreviewController.loadImage(id),
     onDebug: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
-    onDocumentOutline: items => this.documentOutlineController.updatePreviewPositions(items),
+    onDocumentOutline: items => {
+      if (this.previewWindowController.isPreviewOnlyWindow()) return;
+      this.previewDocumentOutlineItems = items;
+      this.documentOutlineController.updatePreviewPositions(items);
+    },
     onScrollPositionChanged: scrollTop => this.handlePreviewScrollPositionChanged(scrollTop),
     onLoadStage: (stage, detail) => {
       // Preview-only windows skip the workspace bootstrap. Their PDF lifecycle
@@ -1128,6 +1135,8 @@ export class TypsastraWorkspaceController {
     resolveMarkdownImage: (documentPath, source) => this.resolveMarkdownImage(documentPath, source),
     openMarkdownLink: (documentPath, href) => this.openMarkdownLink(documentPath, href),
     onStandalonePdfOutlineChanged: items => {
+      this.previewWindowController.setStandalonePdfOutline(items);
+      if (this.previewWindowController.isPreviewOnlyWindow()) return;
       if (items === null) this.documentOutlineController.clearStandalonePdfOutline();
       else this.documentOutlineController.setStandalonePdfOutline(items);
     },
@@ -1672,6 +1681,7 @@ export class TypsastraWorkspaceController {
       y: destination.y ?? 0,
     }, { ripple: true }),
     heading => this.outlineNavigationController.revealInPreview(heading),
+    () => this.publishPreviewOutline(),
   );
   private readonly outlineNavigationController = new OutlineNavigationController({
     activeTab: () => this.getActiveTab(),
@@ -2103,6 +2113,10 @@ export class TypsastraWorkspaceController {
       // Different root, so the cached table anchor index no longer applies.
       void this.refreshTableDirectiveIndex();
     },
+    undockedOutlineVisible: () => this.settingsController.value.preview.undockedOutline,
+    setUndockedOutlineVisible: visible => this.settingsController.update(settings => {
+      settings.preview.undockedOutline = visible;
+    }),
     loadPdfPath: (path, identity, sessionKey, surface) => this.loadPdfPath(path, identity, sessionKey, surface),
   });
   private readonly editorTabActivationController = new EditorTabActivationController({
@@ -2686,6 +2700,52 @@ export class TypsastraWorkspaceController {
 
   private scheduleDocumentOutlineUpdate(path: string, delay = 180): void {
     this.documentLanguageController.scheduleOutlineUpdate(path, delay);
+  }
+
+  private async publishPreviewOutline(): Promise<void> {
+    try {
+      if (this.previewWindowController.isPreviewOnlyWindow()) return;
+      if (!this.layoutController.isPreviewUndocked()) return;
+      const generation = ++this.previewOutlinePublishGeneration;
+      const mainPath = this.pinnedMainFilePath;
+      if (!mainPath || !isTypstDocumentPath(mainPath)) {
+        this.emitPreviewOutline([]);
+        return;
+      }
+      const openTab = this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(mainPath));
+      let source = openTab?.contentLoaded ? openTab.content : null;
+      if (source === null) {
+        try {
+          source = await invoke<string>("read_workspace_file", { path: mainPath });
+        } catch {
+          source = null;
+        }
+      }
+      if (generation !== this.previewOutlinePublishGeneration) return;
+      if (source === null) {
+        this.emitPreviewOutline([]);
+        return;
+      }
+      const headings = await parseDocumentOutline(
+        mainPath,
+        source,
+        this.workspaceRootPath ?? "",
+        path => invoke<string>("read_workspace_file", { path }).catch(() => null),
+      );
+      if (generation !== this.previewOutlinePublishGeneration) return;
+      if (this.previewWindowController.isPreviewOnlyWindow()) return;
+      if (!this.layoutController.isPreviewUndocked()) return;
+      matchOutlinePreviewPositions(headings, this.previewDocumentOutlineItems);
+      this.emitPreviewOutline(outlineSourceSnapshot(headings));
+    } catch (error) {
+      console.error("Failed to prepare the undocked preview outline", error);
+    }
+  }
+
+  private emitPreviewOutline(items: readonly PreviewSourceOutlineItem[]): void {
+    void import("@tauri-apps/api/event")
+      .then(({ emit }) => emit("preview-outline-update", items))
+      .catch(error => console.error("Failed to publish the undocked preview outline", error));
   }
 
   private foldCurrentFile(): void {
@@ -4061,6 +4121,10 @@ export class TypsastraWorkspaceController {
       changePreviewColorMode: mode => this.settingsController.update(settings => {
         settings.preview.colorMode = mode;
       }),
+      changePreviewOutlineVisible: visible => this.settingsController.update(settings => {
+        settings.preview.undockedOutline = visible;
+      }),
+      publishPreviewOutline: () => this.publishPreviewOutline(),
       applyDeveloperLogSettings: update => this.settingsController.update(settings => {
         settings.developerMode = update.developerMode;
         Object.assign(settings.developerLogs, update.developerLogs);
