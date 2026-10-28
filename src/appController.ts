@@ -1550,6 +1550,7 @@ export class TypsastraWorkspaceController {
       ? this.imageToolsController.refresh()
       : undefined,
     getPreviewFrame: () => this.previewFrame.element,
+    openPreviewExternally: () => this.openLastPreviewExternally(),
     getPreviewColorMode: () => this.settingsController.value.preview.colorMode,
     setPreviewColorMode: mode => this.settingsController.update(settings => {
       settings.preview.colorMode = mode;
@@ -3661,6 +3662,10 @@ export class TypsastraWorkspaceController {
     return this.editorFileGuardController.openFileExternally(path, button);
   }
 
+  private openLastPreviewExternally(): Promise<void> {
+    return this.lastPdfPath ? this.openFileExternally(this.lastPdfPath) : Promise.resolve();
+  }
+
   private renderImageToolPreview(source: string | null, imagePath?: string): void {
     this.previewContentController.renderImageToolPreview(source, imagePath);
   }
@@ -4064,7 +4069,7 @@ export class TypsastraWorkspaceController {
       openProjectDocument: request => this.openProjectDocumentFromDevApi(request),
       performDevUiAction: action => this.performDevUiAction(action),
       previewContentMode: () => this.draftPreviewController.mode,
-      openLastPreviewExternally: () => this.lastPdfPath ? this.openFileExternally(this.lastPdfPath) : undefined,
+      openLastPreviewExternally: () => this.openLastPreviewExternally(),
       handlePdfPreviewClick: point => this.handlePdfPreviewClick(point),
       drainPendingLaunchRequests: () => this.drainPendingLaunchRequests(),
       navigateToImageTool: imagePath => this.navigateToImageTool(imagePath),

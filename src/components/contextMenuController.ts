@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { basename, dirname, join } from "@tauri-apps/api/path";
 import { confirm, message } from "@tauri-apps/plugin-dialog";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { open } from "@tauri-apps/plugin-shell";
 import { closeCompletion } from "@codemirror/autocomplete";
 import { closeHoverTooltips, type EditorView } from "@codemirror/view";
 import { selectAll, toggleLineComment } from "@codemirror/commands";
@@ -26,6 +25,7 @@ export type ContextMenuDependencies = {
   getExplorerForElement?: (element: HTMLElement) => WorkspaceExplorer | null;
   refreshSecondaryExplorer?: () => void | Promise<void>;
   getPreviewFrame: () => HTMLIFrameElement | null;
+  openPreviewExternally: () => void | Promise<void>;
   getPreviewColorMode: () => PreviewColorMode;
   setPreviewColorMode: (mode: PreviewColorMode) => void;
   loadFile: (path: string) => void | Promise<void>;
@@ -559,10 +559,7 @@ export class ContextMenuController {
   }
 
   private async openPreviewPdf(): Promise<void> {
-    const activeFile = this.dependencies.getActiveFile();
-    if (!activeFile) return;
-    const pdf = await join(await dirname(activeFile), (await basename(activeFile)).replace(/\.typ$/i, ".pdf"));
-    await open(pdf);
+    await this.dependencies.openPreviewExternally();
   }
 
   private async parentDirectory(workspace: string): Promise<string> {

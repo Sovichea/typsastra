@@ -1,6 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ContextMenuController } from "../src/components/contextMenuController";
+import { TypsastraWorkspaceController } from "../src/appController";
+
+test("external viewer opens the displayed cached PDF rather than guessing a source-adjacent path", async () => {
+  const opened: string[] = [];
+  const workspace = Object.assign(Object.create(TypsastraWorkspaceController.prototype), {
+    pdfPreviewRenderController: { lastPdfPath: "cache/preview/generations/current.pdf" },
+    openFileExternally: async (path: string) => { opened.push(path); },
+  });
+  const menu = Object.assign(Object.create(ContextMenuController.prototype), {
+    dependencies: { openPreviewExternally: () => workspace.openLastPreviewExternally() },
+  });
+  await menu.openPreviewPdf();
+  expect(opened).toEqual(["cache/preview/generations/current.pdf"]);
+  workspace.pdfPreviewRenderController.lastPdfPath = "images/reference.pdf";
+  await menu.openPreviewPdf();
+  expect(opened[1]).toBe("images/reference.pdf");
+  workspace.pdfPreviewRenderController.lastPdfPath = "";
+  await menu.openPreviewPdf();
+  expect(opened).toHaveLength(2);
+});
 
 const root = join(import.meta.dir, "..");
 const read = (...parts: string[]): string => readFileSync(join(root, ...parts), "utf8");
