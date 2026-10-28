@@ -261,6 +261,7 @@ export class PreviewFrame {
   private standalonePdfSearchMatches: StandalonePdfSearchMatch[] = [];
   private standalonePdfSearchIndex = -1;
   private standalonePdfSearchGeneration = 0;
+  private pendingSearchRevealIndex: number | null = null;
   private standalonePdfSearchTimer: number | null = null;
   private standalonePdfSelectionAnchor: StandalonePdfSelectionEndpoint | null = null;
   private standalonePdfSelectionFocus: StandalonePdfSelectionEndpoint | null = null;
@@ -337,8 +338,13 @@ export class PreviewFrame {
       if (doc) this.setPreviewLinkModifier(doc, false);
     });
 
-    this.resizeObserver = new ResizeObserver(() => this.refreshPreviewAfterResize());
+    this.resizeObserver = new ResizeObserver(entries => {
+      this.syncPdfSearchOverlayOffset();
+      if (entries.some(entry => entry.target === this.pane)) this.refreshPreviewAfterResize();
+    });
     this.resizeObserver.observe(this.pane);
+    const statusBanner = document.getElementById("preview-status-banner");
+    if (statusBanner) this.resizeObserver.observe(statusBanner);
   }
 
   private refreshPreviewAfterResize(): void {
@@ -1195,6 +1201,7 @@ export class PreviewFrame {
       .pdf-text-layer:not(.pdfium-text-layer) br::selection{background:transparent}
       .pdf-selection-layer{position:absolute;inset:0;z-index:3;overflow:hidden;opacity:.52;pointer-events:none}
       .pdf-selection-marker{position:absolute;box-sizing:border-box;background:AccentColor;pointer-events:none}
+      :root[data-preview-surface="live"] .pdf-text-layer{pointer-events:none;user-select:none}
       .pdf-search-marker{position:absolute;z-index:2;box-sizing:border-box;background:rgba(255,214,0,.52);pointer-events:none}
       .pdf-search-marker.is-current{background:rgba(255,145,0,.68);outline:1px solid rgba(122,66,0,.72);outline-offset:-1px}
       #pdf-search-panel{position:fixed;top:0;left:0;right:0;z-index:2147483647;box-sizing:border-box;display:grid;grid-template-columns:minmax(120px,1fr) repeat(2,var(--preview-editor-line-height)) 50px;align-items:center;gap:4px;width:100%;padding:6px 38px 6px 8px;border:1px solid var(--preview-ui-border);border-top:0;border-radius:0;background:var(--preview-ui-bg);color:var(--preview-ui-text);box-shadow:0 4px 12px rgba(0,0,0,.15);font-family:var(--preview-editor-font)}
@@ -1891,7 +1898,9 @@ export class PreviewFrame {
     viewport: any,
     doc: Document,
   ): Promise<HTMLElement | null> {
-    if (doc.documentElement.dataset.previewSurface !== "pdf") return null;
+    if (doc.documentElement.dataset.previewSurface !== "pdf" && !this.isLiveSearchOpen()) return null;
+    const owner = this.pdfDoc;
+    const generation = this.pdfGeneration;
     if (isPdfiumPage(page)) return this.renderPdfiumTextLayer(page, viewport, doc);
     if (typeof page?.streamTextContent !== "function") return null;
 
@@ -1924,6 +1933,8 @@ export class PreviewFrame {
         viewport,
       });
       await textLayer.render();
+      if (owner !== this.pdfDoc || generation !== this.pdfGeneration
+        || (doc.documentElement.dataset.previewSurface === "live" && !this.isLiveSearchOpen())) return null;
       const pageNo = Number(page?.pageNumber ?? 0);
       if (pageNo > 0) {
         const sourceItems = Array.isArray(textContentSource?.items)
@@ -2207,6 +2218,7 @@ export class PreviewFrame {
   }
 
   private resetStandalonePdfSearch(): void {
+    this.pendingSearchRevealIndex = null;
     this.standalonePdfSearchGeneration += 1;
     if (this.standalonePdfSearchTimer !== null) {
       window.clearTimeout(this.standalonePdfSearchTimer);
@@ -2454,9 +2466,29 @@ export class PreviewFrame {
     return root?.dataset.previewSurface === "pdf" && root.dataset.pdfReplacing !== "true";
   }
 
+  private syncPdfSearchOverlayOffset(): void {
+    const panel = this.iframe?.contentDocument?.getElementById("pdf-search-panel");
+    if (panel) {
+      const height = document.getElementById("preview-status-banner")?.getBoundingClientRect().height ?? 0;
+      panel.style.top = `${height}px`;
+    }
+  }
+
+  private isSearchablePdfSurface(): boolean {
+    const root = this.iframe?.contentDocument?.documentElement;
+    return (root?.dataset.previewSurface === "pdf" || root?.dataset.previewSurface === "live")
+      && root.dataset.pdfReplacing !== "true";
+  }
+
+  private isLiveSearchOpen(): boolean {
+    const doc = this.iframe?.contentDocument;
+    const panel = doc?.getElementById("pdf-search-panel");
+    return doc?.documentElement.dataset.previewSurface === "live" && !!panel && !panel.hidden;
+  }
+
   private shouldOpenStandalonePdfSearch(event: KeyboardEvent): boolean {
     if (!this.isFindShortcut(event)) return false;
-    return this.isStandalonePdfSurface()
+    return this.isSearchablePdfSurface()
       && (this.previewPointerInside || document.activeElement === this.iframe);
   }
 
@@ -2485,10 +2517,11 @@ export class PreviewFrame {
 
   public openStandalonePdfSearch(): void {
     const doc = this.iframe?.contentDocument;
-    if (!doc || !this.pdfDoc || !this.isStandalonePdfSurface()) return;
+    if (!doc || !this.pdfDoc || !this.isSearchablePdfSurface()) return;
     const panel = doc.getElementById("pdf-search-panel") as HTMLElement | null;
     const input = doc.getElementById("pdf-search-input") as HTMLInputElement | null;
     if (!panel || !input) return;
+    this.syncPdfSearchOverlayOffset();
     panel.hidden = false;
     input.focus();
     input.select();
@@ -2505,10 +2538,16 @@ export class PreviewFrame {
       window.clearTimeout(this.standalonePdfSearchTimer);
       this.standalonePdfSearchTimer = null;
     }
+    this.pendingSearchRevealIndex = null;
     this.standalonePdfSearchGeneration += 1;
     this.standalonePdfSearchMatches = [];
     this.standalonePdfSearchIndex = -1;
     this.clearStandalonePdfSearchMarkers();
+    if (doc?.documentElement.dataset.previewSurface === "live") {
+      doc.querySelectorAll("#viewer-container .pdf-text-layer").forEach(layer => layer.remove());
+      this.standalonePdfTextLayers.clear();
+      this.standalonePdfSelectionPages.clear();
+    }
     this.updateStandalonePdfSearchCount();
     this.iframe?.contentWindow?.focus();
   }
@@ -2524,8 +2563,9 @@ export class PreviewFrame {
   private async searchStandalonePdf(rawQuery: string): Promise<void> {
     const query = rawQuery.trim().toLocaleLowerCase();
     const generation = ++this.standalonePdfSearchGeneration;
+    this.pendingSearchRevealIndex = null;
     this.updateStandalonePdfSearchCount(query ? "Searching…" : undefined);
-    if (!query || !this.pdfDoc || !this.isStandalonePdfSurface()) {
+    if (!query || !this.pdfDoc || !this.isSearchablePdfSurface()) {
       this.standalonePdfSearchMatches = [];
       this.standalonePdfSearchIndex = -1;
       this.clearStandalonePdfSearchMarkers();
@@ -2562,9 +2602,45 @@ export class PreviewFrame {
     if (!isCurrent()) return;
     this.standalonePdfSearchMatches = matches;
     this.standalonePdfSearchIndex = matches.length > 0 ? 0 : -1;
+    await this.ensureLiveSearchTextLayers(isCurrent);
+    if (!isCurrent()) return;
     this.renderAllStandalonePdfSearchMarkers();
     this.updateStandalonePdfSearchCount();
     if (matches.length > 0) this.revealStandalonePdfSearchMatch();
+  }
+
+  private async ensureLiveSearchTextLayers(isCurrent: () => boolean): Promise<void> {
+    if (!this.isLiveSearchOpen()) return;
+    const pdfDoc = this.pdfDoc;
+    const doc = this.iframe?.contentDocument;
+    if (!pdfDoc || !doc) return;
+    for (const pageNo of this.renderedPageNumbers()) {
+      if (!isCurrent()) return;
+      if (this.standalonePdfTextLayers.has(pageNo) || this.activeRenders.has(pageNo)) continue;
+      const slot = doc.querySelector<HTMLElement>(`#viewer-container > .pdf-page-container[data-page-no="${pageNo}"]`);
+      if (!slot) continue;
+      const renderKey = this.currentPageRenderKey(this.pdfGeneration, pageNo);
+      let page;
+      try { page = await pdfDoc.getPage(pageNo); }
+      catch (error) {
+        if (!isCurrent()) return;
+        console.warn(`Failed to prepare live search page ${pageNo}:`, error);
+        continue;
+      }
+      this.pageRenderOwnership.retain(page);
+      try {
+        if (!isCurrent()) return;
+        const layer = await this.renderStandaloneTextLayer(page, page.getViewport({ scale: this.pageScale(pageNo) }), doc);
+        if (!layer) continue;
+        if (this.pdfDoc !== pdfDoc || !slot.isConnected || !this.isLiveSearchOpen()
+          || renderKey !== this.currentPageRenderKey(this.pdfGeneration, pageNo)) {
+          if (this.standalonePdfTextLayers.get(pageNo)?.container === layer) this.standalonePdfTextLayers.delete(pageNo);
+          continue;
+        }
+        slot.querySelector(".pdf-text-layer")?.remove();
+        slot.append(layer);
+      } finally { this.pageRenderOwnership.release(page); }
+    }
   }
 
   private stepStandalonePdfSearch(direction: -1 | 1): void {
@@ -2580,6 +2656,7 @@ export class PreviewFrame {
   private revealStandalonePdfSearchMatch(): void {
     const match = this.standalonePdfSearchMatches[this.standalonePdfSearchIndex];
     if (!match) return;
+    this.pendingSearchRevealIndex = null;
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${match.pageNo}"]`);
     if (!slot) return;
@@ -2591,6 +2668,7 @@ export class PreviewFrame {
     } else if (!this.standalonePdfTextLayers.has(match.pageNo)) {
       // Keep navigation inside the iframe. Element.scrollIntoView() can also
       // scroll the parent WebView, which moves Typsastra's title bar away.
+      this.pendingSearchRevealIndex = this.standalonePdfSearchIndex;
       this.scrollStandalonePdfViewport(slot.offsetTop, match.pageNo);
       this.queuePageRender(match.pageNo, 0, "settled-visible");
     }
@@ -2604,6 +2682,9 @@ export class PreviewFrame {
     const panelBottom = panel && !panel.hidden ? panel.getBoundingClientRect().bottom : 0;
     const rect = marker.getBoundingClientRect();
     const viewportBottom = view.innerHeight;
+    if (rect.left < 0 || rect.right > view.innerWidth) {
+      view.scrollBy({ left: rect.left + rect.width / 2 - view.innerWidth / 2, behavior: "auto" });
+    }
     if (rect.top >= panelBottom && rect.bottom <= viewportBottom) return;
     const availableTop = panelBottom;
     const availableHeight = Math.max(1, viewportBottom - availableTop);
@@ -2711,6 +2792,14 @@ export class PreviewFrame {
             Math.min(rect.height, slotRect.bottom - rect.top),
           );
         }
+      }
+    }
+    if (this.pendingSearchRevealIndex === this.standalonePdfSearchIndex
+      && this.standalonePdfSearchMatches[this.standalonePdfSearchIndex]?.pageNo === pageNo) {
+      const marker = slot.querySelector<HTMLElement>(`.pdf-search-marker[data-match-index="${this.standalonePdfSearchIndex}"]`);
+      if (marker) {
+        this.pendingSearchRevealIndex = null;
+        this.revealStandalonePdfMarker(marker);
       }
     }
   }

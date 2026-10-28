@@ -115,6 +115,24 @@ outdated**, **Compiling**, and **Compilation failed**, and disappears only after
 a successful compilation of the current source revision. Changes arriving during
 a compile keep the preview outdated. Language-server health is shown separately.
 
+The preview toolbar's **Find** button and **Ctrl/Cmd + F** while the preview is
+focused search the full compiled PDF in both live and standalone views. Matches
+are highlighted; **Enter**/**Shift + Enter** or the next/previous buttons move
+between them. Searching and stepping through results do not move the source
+editor. Click highlighted text in the live preview to use normal inverse sync
+and open its source file, including an included file. Closing live-preview Find
+releases its temporary text layers.
+
+**Live-preview Unicode search limitation:** live-preview PDFs are compiled by
+Tinymist, which does not implement the Enhanced Unicode Engine's PDF logical-unit
+architecture. Live-preview Find therefore does not provide logical-unit-based
+Unicode search. Complex-script text, reordered glyphs, and ligatures may not
+match their logical Unicode sequence even when they look correct. Sharing the
+standalone PDF search UI does not add this architecture to Tinymist's output.
+To use logical-unit output, export with the Enhanced Unicode Engine and open
+that PDF in standalone view; search quality still depends on the generated PDF
+and viewer support.
+
 Compiled preview PDFs use immutable generation files. The current generation
 remains available for reopening or undocking the preview. Older generations are
 removed after their preview documents, pending undocked-window updates, and

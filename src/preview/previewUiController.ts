@@ -131,7 +131,7 @@ export class PreviewUiController {
       if (showTypstOnly) recompileBtn.classList.remove("hidden");
       else recompileBtn.classList.add("hidden");
     }
-    searchBtn?.classList.toggle("hidden", !isPdf);
+    searchBtn?.classList.toggle("hidden", !isPdf && !showTypstOnly);
     if (menuBtn) {
       if (showTypstOnly || isPdf) menuBtn.classList.remove("hidden");
       else menuBtn.classList.add("hidden");

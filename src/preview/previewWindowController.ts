@@ -56,6 +56,8 @@ export class PreviewWindowController {
     document.getElementById("preview-zoom-in-btn")?.addEventListener("click", () => deps.zoomIn());
     document.getElementById("preview-zoom-out-btn")?.addEventListener("click", () => deps.zoomOut());
     document.getElementById("preview-zoom-fit-btn")?.addEventListener("click", () => deps.zoomToFit());
+    document.getElementById("preview-search-btn")?.classList.remove("hidden");
+    document.getElementById("preview-search-btn")?.addEventListener("click", () => deps.previewFrame.openStandalonePdfSearch());
     deps.initializePreviewPageControls();
 
     const undockBtn = document.getElementById("undock-preview-btn");

@@ -82,6 +82,21 @@ rather than substitute a faster approximate or PDF-text-based jump.
 
 If the source-map socket is unavailable, Typsastra logs the failure and does not pretend that the sync succeeded.
 
+## Live-preview search and Unicode scope
+
+Live-preview Find searches text extracted from the Tinymist-compiled PDF and
+uses the same matching/highlight UI as standalone PDF Find. It does not invoke
+inverse sync automatically; clicking a highlighted result follows the ordinary
+PDF-coordinate inverse-sync path.
+
+Tinymist does not implement the Enhanced Unicode Engine's PDF logical-unit
+architecture. Consequently, live-preview search has no logical-unit-based
+Unicode search guarantee, particularly for complex scripts, reordered glyphs,
+and ligatures. PDF.js text normalization cannot reconstruct a missing compiler
+logical-unit contract. Enhanced Unicode Engine PDF exports opened in standalone
+view are a separate output path; their Unicode search behavior must be validated
+against the generated PDF and viewer.
+
 ## Inverse sync
 
 Inverse sync starts from a PDF click.

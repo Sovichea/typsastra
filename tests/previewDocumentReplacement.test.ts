@@ -64,7 +64,7 @@ describe("standalone PDF document replacement", () => {
     expect(failureBody).toContain("this.pdfLoadingTask = null;");
     expect(failureBody).toContain("this.pageDimensions.clear();");
     expect(failureBody).toContain("classifyStandalonePdfLoadFailure(error)");
-    expect(source).toContain("if (!doc || !this.pdfDoc || !this.isStandalonePdfSurface()) return;");
+    expect(source).toContain("if (!doc || !this.pdfDoc || !this.isSearchablePdfSurface()) return;");
   });
 
   test("binds search to one immutable PDF document across every await", async () => {

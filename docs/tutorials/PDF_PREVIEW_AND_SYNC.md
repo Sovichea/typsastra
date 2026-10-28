@@ -44,6 +44,21 @@ resetting to the top of the page. The configured main document and every source
 file included by it also share one PDF page position, so switching between
 chapters does not restore competing per-tab preview positions.
 
+## Search in live preview
+
+Use the preview toolbar's **Find** button or **Ctrl/Cmd + F** while the preview
+is focused. Find highlights matches throughout the compiled PDF. Next/previous
+navigation does not trigger inverse sync; click highlighted text to navigate
+to its source, including an included file.
+
+Live-preview search does **not** support the Enhanced Unicode Engine's PDF
+logical-unit architecture: Tinymist compiles the live-preview PDF and does not
+implement that architecture. Complex-script or reordered text may therefore
+fail to match a logical Unicode query despite rendering correctly. The shared
+search UI does not make live-preview output equivalent to an Enhanced Unicode
+Engine export. Export with that engine and open the PDF in standalone view to
+use its logical-unit output, subject to PDF and viewer support.
+
 ## Forward and inverse sync
 
 Use **Reveal Cursor in Preview** or `Alt+Enter` (`Option+Enter` on macOS) for
