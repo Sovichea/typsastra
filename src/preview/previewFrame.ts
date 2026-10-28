@@ -272,6 +272,8 @@ export class PreviewFrame {
   private standalonePdfSelectionDragging = false;
   private standalonePdfSelectionRetainClick = false;
   private pdfOutlineDestinations: unknown[] = [];
+  private presentationAuditTimer: number | null = null;
+  private presentationAuditAttempts = 0;
 
   constructor(
     private readonly pane: HTMLElement,
@@ -345,6 +347,10 @@ export class PreviewFrame {
     this.resizeObserver.observe(this.pane);
     const statusBanner = document.getElementById("preview-status-banner");
     if (statusBanner) this.resizeObserver.observe(statusBanner);
+    window.addEventListener("focus", () => this.refreshAfterPresentationChange());
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) this.refreshAfterPresentationChange();
+    });
   }
 
   private refreshPreviewAfterResize(): void {
@@ -466,14 +472,79 @@ export class PreviewFrame {
     this.repaintVisiblePages();
   }
 
-  private repaintVisiblePages(): void {
+  private repaintVisiblePages(attempt = 0): void {
     const doc = this.iframe?.contentDocument;
     if (!this.pdfDoc || !doc) return;
+    if (this.pane.clientWidth <= 0 || this.pane.clientHeight <= 0) {
+      if (attempt < 8) requestAnimationFrame(() => this.repaintVisiblePages(attempt + 1));
+      return;
+    }
+    // A hidden/covered surface can leave stale render tasks or composited
+    // canvases behind. Drop both so the visible pages are rebuilt from PDF.js
+    // instead of trusting the old presentation markers.
+    this.cancelAllPageRenders();
+    const viewportHeight = this.iframe?.clientHeight ?? this.pane.clientHeight;
     doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container").forEach(slot => {
+      const rect = slot.getBoundingClientRect();
+      if (rect.bottom < -1000 || rect.top > viewportHeight + 1000) return;
+      // Keep the previous canvas mounted until its replacement is ready, but
+      // stop claiming that the presentation marker is current.
       delete slot.dataset.presentedKey;
     });
     if (this.isFitToWidth) this.applyFitToWidth();
     else this.renderVisiblePages();
+    this.schedulePresentationAudit();
+  }
+
+  private schedulePresentationAudit(): void {
+    if (this.presentationAuditTimer !== null) {
+      window.clearTimeout(this.presentationAuditTimer);
+    }
+    this.presentationAuditTimer = window.setTimeout(() => {
+      this.presentationAuditTimer = null;
+      this.auditVisiblePresentation();
+    }, 350);
+  }
+
+  private auditVisiblePresentation(): void {
+    const slots = this.visiblePageSlots();
+    if (slots.length === 0) {
+      this.presentationAuditAttempts = 0;
+      return;
+    }
+    const unhealthy = slots.some(slot => {
+      const pageNo = Number(slot.dataset.pageNo);
+      const key = this.currentPageRenderKey(this.pdfGeneration, pageNo);
+      const canvas = slot.querySelector<HTMLCanvasElement>(".pdf-page-canvas-original, .pdf-page-canvas");
+      return slot.dataset.presentedKey !== key
+        || !canvas
+        || canvas.width < 1
+        || canvas.height < 1;
+    });
+    if (!unhealthy) {
+      this.presentationAuditAttempts = 0;
+      return;
+    }
+    if (this.presentationAuditAttempts >= 2) {
+      this.presentationAuditAttempts = 0;
+      this.onDebug?.("Preview presentation audit stopped after repeated repair attempts.");
+      return;
+    }
+    this.presentationAuditAttempts += 1;
+    this.onDebug?.(`Preview presentation audit repairing visible pages (attempt ${this.presentationAuditAttempts}).`);
+    this.repaintVisiblePages();
+  }
+
+  private visiblePageSlots(): HTMLElement[] {
+    const doc = this.iframe?.contentDocument;
+    if (!doc) return [];
+    const viewportHeight = this.iframe?.clientHeight ?? 0;
+    if (viewportHeight <= 0) return [];
+    return [...doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container")]
+      .filter(slot => {
+        const rect = slot.getBoundingClientRect();
+        return rect.bottom > 0 && rect.top < viewportHeight;
+      });
   }
 
   public syncTheme(): void {
@@ -1074,6 +1145,7 @@ export class PreviewFrame {
         this.trackReplacementPagePaints(iframeDoc);
         this.motion.reset(this.iframe?.contentWindow?.scrollY ?? 0, performance.now());
         this.renderVisiblePages();
+        this.schedulePresentationAudit();
       }));
       await this.onLoadStage?.("viewer installed", {
         transport: transportStats.transport,
@@ -1553,9 +1625,15 @@ export class PreviewFrame {
     for (const slot of doc.querySelectorAll<HTMLElement>("#viewer-container > .pdf-page-container")) {
       const rect = slot.getBoundingClientRect();
       if (rect.bottom >= -1000 && rect.top <= viewportHeight + 1000) {
+        const pageNo = Number(slot.dataset.pageNo);
+        const key = this.currentPageRenderKey(this.pdfGeneration, pageNo);
+        const canvas = slot.querySelector<HTMLCanvasElement>(".pdf-page-canvas-original, .pdf-page-canvas");
+        if (slot.dataset.presentedKey === key && (!canvas || canvas.width < 1 || canvas.height < 1)) {
+          delete slot.dataset.presentedKey;
+        }
         const visible = rect.bottom > 0 && rect.top < viewportHeight;
         this.queuePageRender(
-          Number(slot.dataset.pageNo), visible ? 0 : 2,
+          pageNo, visible ? 0 : 2,
           visible ? "settled-visible" : "directional-neighbor"
         );
       }

@@ -43,14 +43,25 @@ describe("standalone PDF document replacement", () => {
 
   test("docking clears presentation markers so hidden canvas bitmaps repaint", () => {
     const slots = [
-      { dataset: { presentedKey: "current" as string | undefined } },
-      { dataset: { presentedKey: "current" as string | undefined } },
+      {
+        dataset: { presentedKey: "current" as string | undefined },
+        getBoundingClientRect: () => ({ bottom: 100, top: 0 }),
+        children: [] as HTMLElement[],
+      },
+      {
+        dataset: { presentedKey: "current" as string | undefined },
+        getBoundingClientRect: () => ({ bottom: 100, top: 0 }),
+        children: [] as HTMLElement[],
+      },
     ];
     let paints = 0;
     const frame = Object.assign(Object.create(PreviewFrame.prototype), {
       pdfDoc: {},
       isFitToWidth: false,
-      iframe: { contentDocument: { querySelectorAll: () => slots } },
+      pane: { clientWidth: 800, clientHeight: 600 },
+      iframe: { clientHeight: 600, contentDocument: { querySelectorAll: () => slots } },
+      cancelAllPageRenders: () => {},
+      schedulePresentationAudit: () => {},
       renderVisiblePages: () => { paints++; },
     });
     frame.refreshAfterPresentationChange();
@@ -88,13 +99,17 @@ describe("standalone PDF document replacement", () => {
       let resets = 0;
       const frame = Object.assign(Object.create(PreviewFrame.prototype), {
         pdfGeneration: 1, pdfDoc: {}, mountedUrl: "mirror/main.typ", mountedSessionKey: "main",
+        pane: { clientWidth: 800, clientHeight: 600 },
         iframe: {
+          clientHeight: 600,
           contentDocument: { querySelectorAll: () => [] },
           contentWindow: { scrollY: 800 },
         },
         isFitToWidth: false,
         clearMessageHost: () => {},
         motion: { reset: (top: number) => { expect(top).toBe(800); resets++; } },
+        cancelAllPageRenders: () => {},
+        schedulePresentationAudit: () => {},
         trackReplacementPagePaints: () => {}, renderVisiblePages: () => { paints++; },
         pumpPageRenderQueue: () => {}, visiblePageNumber: () => 2, reportPageStatus: () => {},
       });
@@ -124,6 +139,28 @@ describe("standalone PDF document replacement", () => {
 
     frame.setMessageOverlay("<svg></svg>", false);
     expect(replaced).toEqual(["<svg></svg>"]);
+  });
+
+  test("presentation audit repairs a visible page without a committed canvas", () => {
+    const slots = [{
+      dataset: { pageNo: "7", presentedKey: "current" as string | undefined },
+      getBoundingClientRect: () => ({ bottom: 500, top: 100 }),
+      querySelector: () => null,
+    }];
+    let repairs = 0;
+    const frame = Object.assign(Object.create(PreviewFrame.prototype), {
+      pdfGeneration: 1,
+      pdfDoc: {},
+      iframe: { clientHeight: 600, contentDocument: { querySelectorAll: () => slots } },
+      currentPageRenderKey: () => "current",
+      presentationAuditAttempts: 0,
+      repaintVisiblePages: () => { repairs++; },
+      onDebug: () => {},
+    });
+
+    frame.auditVisiblePresentation();
+    expect(repairs).toBe(1);
+    expect(frame.presentationAuditAttempts).toBe(1);
   });
 
   test("an old preview cannot restore its scroll anchor into a replacement PDF", () => {
@@ -309,13 +346,14 @@ describe("stationary preview rendering", () => {
   test("queues the visible viewport immediately without an IntersectionObserver or scroll event", () => {
     const queued: unknown[][] = [];
     const slots = [
-      { dataset: { pageNo: "17" }, getBoundingClientRect: () => ({ top: 20, bottom: 700 }) },
-      { dataset: { pageNo: "18" }, getBoundingClientRect: () => ({ top: 720, bottom: 1400 }) },
-      { dataset: { pageNo: "19" }, getBoundingClientRect: () => ({ top: 1420, bottom: 2100 }) },
-      { dataset: { pageNo: "20" }, getBoundingClientRect: () => ({ top: 2120, bottom: 2800 }) },
+      { dataset: { pageNo: "17" }, getBoundingClientRect: () => ({ top: 20, bottom: 700 }), querySelector: () => ({}) },
+      { dataset: { pageNo: "18" }, getBoundingClientRect: () => ({ top: 720, bottom: 1400 }), querySelector: () => ({}) },
+      { dataset: { pageNo: "19" }, getBoundingClientRect: () => ({ top: 1420, bottom: 2100 }), querySelector: () => ({}) },
+      { dataset: { pageNo: "20" }, getBoundingClientRect: () => ({ top: 2120, bottom: 2800 }), querySelector: () => ({}) },
     ];
     const frame = Object.assign(Object.create(PreviewFrame.prototype), {
       iframe: { clientHeight: 800, contentWindow: {}, contentDocument: { querySelectorAll: () => slots } },
+      currentPageRenderKey: () => "current",
       queuePageRender: (...args: unknown[]) => queued.push(args),
     });
     frame.installPageObserver(frame.iframe);
