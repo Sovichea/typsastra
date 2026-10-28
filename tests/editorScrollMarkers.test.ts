@@ -25,4 +25,14 @@ describe("editor overview scroll markers", () => {
     expect(source).toContain("attempt >= 2");
     expect(source).toContain("this.ensureScrollMarkerVisible(editor, doc, position, attempt + 1)");
   });
+
+  test("uses an informational blue marker for ordinary image warnings", async () => {
+    const source = await Bun.file(
+      new URL("../src/editor/editorController.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain('marker instanceof ImageOptimizationMarker && marker.severity === "info"');
+    expect(source).toContain('? "info"');
+    expect(source).toContain('severity === "warning" ? "#cca700" : "#3794ff"');
+  });
 });

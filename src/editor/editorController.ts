@@ -409,11 +409,13 @@ export class EditorController {
       });
     }
     imageWarnings?.between(0, doc.length, (from, to, marker) => {
-      // Ordinary images only get the informational gutter icon, not an
-      // overview-ruler warning tick.
-      if (marker instanceof ImageOptimizationMarker && marker.severity === "info") return;
+      // Ordinary images use the same blue informational marker as their gutter
+      // icon; optimizer recommendations remain warning-colored.
+      const severity = marker instanceof ImageOptimizationMarker && marker.severity === "info"
+        ? "info"
+        : "warning";
       const line = doc.lineAt(Math.max(0, Math.min(from, doc.length))).number;
-      addMarker({ line, severity: "warning", from, to: Math.max(from, to) });
+      addMarker({ line, severity, from, to: Math.max(from, to) });
     });
     editor.state.field(unusedBindingMarkerField, false)?.between(0, doc.length, from => {
       const position = Math.max(0, Math.min(from, doc.length));
