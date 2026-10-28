@@ -215,13 +215,45 @@ describe("preview freshness", () => {
     const freshness = new PreviewFreshnessController();
     let cancellations = 0;
     const controller = Object.assign(Object.create(PdfPreviewRenderController.prototype), {
-      deps: { freshness }, externalRevision: 0, queuedContents: "old snapshot", queuedForced: false,
+      deps: {
+        freshness,
+        preparation: { isPreviewDependency: () => true },
+      },
+      externalRevision: 0, queuedContents: "old snapshot", queuedForced: false,
       cancelOnTypeSchedule: () => { cancellations++; },
     });
     controller.noteExternalSourceChange("chapter.typ");
     expect(controller.queuedContents).toBeNull();
     expect(cancellations).toBe(1);
     expect(freshness.state.status).toBe("outdated");
+  });
+  test("ignores external changes outside the main preview dependency graph", () => {
+    const freshness = new PreviewFreshnessController();
+    let cancellations = 0;
+    const controller = Object.assign(Object.create(PdfPreviewRenderController.prototype), {
+      deps: {
+        freshness,
+        preparation: {
+          isPreviewDependency: (path: string) => path === "C:/project/main.typ",
+        },
+      },
+      externalRevision: 0, queuedContents: "old snapshot", queuedForced: false,
+      cancelOnTypeSchedule: () => { cancellations++; },
+    });
+
+    controller.noteExternalSourceChange("C:/project/copied.typ");
+    expect(controller.externalRevision).toBe(0);
+    expect(controller.queuedContents).toBe("old snapshot");
+    expect(cancellations).toBe(0);
+    expect(freshness.state.status).toBe("current");
+    expect(freshness.state.externalFiles).toEqual([]);
+
+    controller.noteExternalSourceChange("C:/project/main.typ");
+    expect(controller.externalRevision).toBe(1);
+    expect(controller.queuedContents).toBeNull();
+    expect(cancellations).toBe(1);
+    expect(freshness.state.status).toBe("outdated");
+    expect(freshness.state.externalFiles).toEqual(["C:/project/main.typ"]);
   });
   test("adopting an active external source does not invoke the editor's automatic compilation path", () => {
     const changes: string[] = [];

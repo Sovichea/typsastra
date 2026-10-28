@@ -36,6 +36,8 @@ type RenderPreparationResult = {
   draftDiagnostics: DraftImageDiagnostic[];
   draftCacheHits: number;
   draftReachableFiles: string[];
+  previewDependencyFiles?: string[];
+  sourceMapEntryFile?: string;
   timings: RenderPreparationTimings;
 };
 
@@ -63,6 +65,7 @@ export type PreparedPdfPreview = {
   overlayPreparationMs: number;
   backendTimings: RenderPreparationTimings;
   reachableSourcePaths: string[];
+  sourceMapEntryPath: string;
 };
 
 export interface PdfPreviewPreparationDependencies {
@@ -91,6 +94,8 @@ function normalizeEditorText(text: string): string {
 /** Owns render-mirror preparation and the generated source registry used by PDF preview. */
 export class PdfPreviewPreparationController {
   private readonly generatedFilesValue = new Map<string, PreparedPreviewFile>();
+  private previewDependencyMainPathKeyValue: string | null = null;
+  private previewDependencyPathKeysValue = new Set<string>();
 
   constructor(private readonly deps: PdfPreviewPreparationDependencies) {}
 
@@ -100,6 +105,32 @@ export class PdfPreviewPreparationController {
 
   public clearGeneratedFiles(): void {
     this.generatedFilesValue.clear();
+    this.previewDependencyMainPathKeyValue = null;
+    this.previewDependencyPathKeysValue.clear();
+  }
+
+  /** True when the file belongs to the configured main document's preview graph. */
+  public isPreviewDependency(path: string): boolean {
+    const mainPath = this.deps.getPinnedMainFilePath();
+    if (!mainPath) return false;
+    const mainPathKey = filePathKey(this.deps.mapToOriginalPath(mainPath));
+    const pathKey = filePathKey(this.deps.mapToOriginalPath(path));
+    if (this.previewDependencyMainPathKeyValue !== mainPathKey) {
+      // No preparation has completed for the current main yet. Treat only the
+      // main document itself as preview-relevant instead of guessing.
+      return pathKey === mainPathKey;
+    }
+    return this.previewDependencyPathKeysValue.has(pathKey);
+  }
+
+  private rememberPreviewDependencies(mainPath: string, dependencyPaths: readonly string[]): void {
+    const mainPathKey = filePathKey(this.deps.mapToOriginalPath(mainPath));
+    const pathKeys = new Set(
+      dependencyPaths.map(path => filePathKey(this.deps.mapToOriginalPath(path))),
+    );
+    pathKeys.add(mainPathKey);
+    this.previewDependencyMainPathKeyValue = mainPathKey;
+    this.previewDependencyPathKeysValue = pathKeys;
   }
 
   public generatedFile(path: string): PreparedPreviewFile | undefined {
@@ -129,13 +160,14 @@ export class PdfPreviewPreparationController {
     const entryFile = this.deps.mapToOriginalPath(pinnedMainFilePath);
 
     try {
-      await prepareRenderProjectWithCopyGuard({
+      const result = await prepareRenderProjectWithCopyGuard<RenderPreparationResult>({
         projectRoot: workspaceRootPath,
         entryFile,
         cacheRoot,
         generateSourceMap: true,
         previewContentMode: "normal",
       });
+      this.rememberPreviewDependencies(entryFile, result.previewDependencyFiles ?? []);
     } catch (error) {
       console.error("Failed to prepare render project:", error);
     }
@@ -175,6 +207,7 @@ export class PdfPreviewPreparationController {
     };
     const projectPreparationStartedAt = performance.now();
     const result = await prepareRenderProjectWithCopyGuard<RenderPreparationResult>(options);
+    this.rememberPreviewDependencies(originalRootPath, result.previewDependencyFiles ?? []);
     const projectPreparationMs = performance.now() - projectPreparationStartedAt;
     this.ensureCurrent(preparationRevision);
     const draftAssets = new Map(result.draftAssets.map((asset: DraftImageAsset) => [asset.id, asset]));
@@ -252,6 +285,7 @@ export class PdfPreviewPreparationController {
       overlayPreparationMs,
       backendTimings: result.timings,
       reachableSourcePaths: result.draftReachableFiles.map((path: string) => this.deps.mapToOriginalPath(path)),
+      sourceMapEntryPath: result.sourceMapEntryFile ?? result.generatedEntryFile,
     };
   }
 

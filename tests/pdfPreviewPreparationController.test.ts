@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { PdfPreviewPreparationController } from "../src/preview/pdfPreviewPreparationController";
+import { filePathKey } from "../src/platform/paths";
 
 describe("PDF preview preparation controller", () => {
   test("owns render-mirror preparation behind an explicit typed dependency port", async () => {
@@ -12,6 +14,9 @@ describe("PDF preview preparation controller", () => {
       "prepareRenderProjectWithCopyGuard<RenderPreparationResult>(options)",
     );
     expect(source).toContain('invoke<RenderPreparationFileResult>("prepare_render_file"');
+    expect(source).toContain("result.previewDependencyFiles ?? []");
+    expect(source).toContain("sourceMapEntryPath: result.sourceMapEntryFile ?? result.generatedEntryFile");
+    expect(source).toContain("public isPreviewDependency(path: string): boolean");
     expect(source).not.toContain("enableKhmerZws");
     expect(source).toContain("public ensureCurrent(revision: number): void");
     expect(source).not.toContain(": any");
@@ -35,5 +40,38 @@ describe("PDF preview preparation controller", () => {
     expect(source).toContain("return this.pdfPreviewPreparationController.prepareProjectIfNeeded();");
     expect(source).not.toContain('invoke<RenderPreparationResult>("prepare_render_project"');
     expect(source).not.toContain('invoke<RenderPreparationFileResult>("prepare_render_file"');
+  });
+
+  test("recognizes only files in the prepared main-document graph", () => {
+    const mainPath = "C:/project/main.typ";
+    const preparation = Object.assign(
+      Object.create(PdfPreviewPreparationController.prototype),
+      {
+        deps: {
+          getPinnedMainFilePath: () => mainPath,
+          mapToOriginalPath: (path: string) => path,
+        },
+        previewDependencyMainPathKeyValue: filePathKey(mainPath),
+        previewDependencyPathKeysValue: new Set([
+          "c:/project/main.typ",
+          "c:/project/chapter.typ",
+          "c:/project/images/photo.png",
+          "c:/project/refs.bib",
+        ]),
+      },
+    );
+
+    expect(preparation.isPreviewDependency("C:\\project\\main.typ")).toBe(true);
+    expect(preparation.isPreviewDependency("C:/project/chapter.typ")).toBe(true);
+    expect(preparation.isPreviewDependency("C:/project/images/photo.png")).toBe(true);
+    expect(preparation.isPreviewDependency("C:/project/refs.bib")).toBe(true);
+    expect(preparation.isPreviewDependency("C:/project/copied.typ")).toBe(false);
+    expect(preparation.isPreviewDependency("C:/project/images/unused.png")).toBe(false);
+
+    // A suspended or queued preparation for a previous main must not admit its
+    // dependencies into the current main's freshness state.
+    preparation.previewDependencyMainPathKeyValue = "c:/project/old-main.typ";
+    expect(preparation.isPreviewDependency("C:/project/chapter.typ")).toBe(false);
+    expect(preparation.isPreviewDependency(mainPath)).toBe(true);
   });
 });

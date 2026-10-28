@@ -34,6 +34,21 @@ describe("PDF preview render controller", () => {
     expect(source).not.toContain("exportPdfToFile(previewPath)");
   });
 
+  test("roots the hidden source-map task at the render mirror for nested main files", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
+    ).text();
+    const mirror = await Bun.file(
+      new URL("../src-tauri/src/render_prepare/mirror.rs", import.meta.url),
+    ).text();
+
+    expect(mirror).toContain("fn prepare_source_map_entry(");
+    expect(mirror).toContain("#include \\\"{relative_path}\\\"");
+    expect(source).toContain("preparedPreview.sourceMapEntryPath,");
+    expect(source).toContain("this.sourceMapRootPathValue = preparedPreview.sourceMapEntryPath;");
+    expect(source).toContain("entryFilePath: previewPath");
+  });
+
   test("keeps an identical generated PDF mounted across live preview session changes", async () => {
     const source = await Bun.file(
       new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),

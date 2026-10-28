@@ -233,6 +233,9 @@ export class PdfPreviewRenderController {
   }
 
   public noteExternalSourceChange(path: string): void {
+    // Files outside the configured main document's dependency graph do not
+    // affect this preview and must not mark it outdated.
+    if (!this.deps.preparation.isPreviewDependency(path)) return;
     this.externalRevision++;
     this.deps.freshness?.changed(path, true);
     this.cancelOnTypeSchedule();
@@ -471,6 +474,7 @@ export class PdfPreviewRenderController {
       this.deps.log("info", "preview scheduler", `Render generation ${generation}: preview root prepared at ${previewPath}.`);
       const preparedPaths = [...new Set([
         previewPath,
+        preparedPreview.sourceMapEntryPath,
         ...preparedPreview.changedPaths,
         ...[...this.deps.preparation.generatedFiles.values()].map(file => file.generatedPath),
       ].map(nativeFilePath))];
@@ -570,10 +574,10 @@ export class PdfPreviewRenderController {
         return;
       }
       const sourceMapTaskId = previewSessionIdentity(
-        previewPath,
+        preparedPreview.sourceMapEntryPath,
         previewRefreshStyle(this.deps.getPreviewRenderMode()),
       ).taskId;
-      this.sourceMapRootPathValue = previewPath;
+      this.sourceMapRootPathValue = preparedPreview.sourceMapEntryPath;
       this.sourceMapTaskIdValue = sourceMapTaskId;
       const sessionKey = this.deps.getPreviewSessionKey() ?? previewPath;
       const pdfHash = await this.hashGeneratedPdf(pdfPath);

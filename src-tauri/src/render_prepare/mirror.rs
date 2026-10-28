@@ -4,6 +4,8 @@ use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, UNIX_EPOCH};
+use typst_syntax::ast::Expr;
+use typst_syntax::SyntaxNode;
 
 use super::draft::{
     prepare_draft_images, DraftImageAsset, DraftImageDiagnostic, DraftPreparation,
@@ -158,6 +160,10 @@ pub struct RenderPrepareResult {
     pub draft_diagnostics: Vec<DraftImageDiagnostic>,
     pub draft_cache_hits: usize,
     pub draft_reachable_files: Vec<PathBuf>,
+    #[serde(default)]
+    pub preview_dependency_files: Vec<PathBuf>,
+    #[serde(default)]
+    pub source_map_entry_file: PathBuf,
     pub storage: RenderCacheStorageReport,
     pub timings: RenderPrepareTimings,
 }
@@ -354,8 +360,11 @@ pub fn mirror_project_cancellable(
             .strip_prefix(project_root)
             .unwrap_or(&options.entry_file),
     );
+    let source_map_entry_file = prepare_source_map_entry(&render_dir, &generated_entry_file)?;
     let mut draft_reachable_files = draft_reachable_files.into_iter().collect::<Vec<_>>();
     draft_reachable_files.sort();
+    let preview_dependency_files =
+        collect_preview_dependency_files(project_root, &draft_reachable_files);
     storage.recorded_at_ms = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -371,6 +380,8 @@ pub fn mirror_project_cancellable(
         draft_diagnostics,
         draft_cache_hits,
         draft_reachable_files,
+        preview_dependency_files,
+        source_map_entry_file,
         storage,
         timings: RenderPrepareTimings {
             total_ms: total_started_at.elapsed().as_secs_f64() * 1_000.0,
@@ -518,6 +529,100 @@ fn collect_reachable_typst_files(project_root: &Path, entry_file: &Path) -> Hash
         }
     }
     reachable
+}
+
+fn collect_preview_dependency_files(
+    project_root: &Path,
+    reachable_sources: &[PathBuf],
+) -> Vec<PathBuf> {
+    let project_root = normalized_dependency_path(project_root);
+    let mut files = HashSet::new();
+    for source_path in reachable_sources {
+        files.insert(source_path.clone());
+        let Ok(source) = fs::read_to_string(source_path) else {
+            continue;
+        };
+        let parent = source_path.parent().unwrap_or(project_root.as_path());
+        let mut literals = Vec::new();
+        collect_string_literals(&typst_syntax::parse(&source), &mut literals);
+        for raw in literals {
+            if let Some(path) = local_file_reference(&raw, parent, &project_root) {
+                files.insert(path);
+            }
+        }
+    }
+    let mut files = files.into_iter().collect::<Vec<_>>();
+    files.sort();
+    files
+}
+
+fn collect_string_literals(node: &SyntaxNode, literals: &mut Vec<String>) {
+    if let Some(Expr::Str(value)) = node.cast::<Expr>() {
+        literals.push(value.get().to_string());
+    }
+    for child in node.children() {
+        collect_string_literals(child, literals);
+    }
+}
+
+/// Tinymist roots a dedicated preview project at the entry file's parent when
+/// the entry is outside the language server's workspace. A nested mirror entry
+/// would therefore lose root-relative imports. A root-level wrapper keeps the
+/// hidden source-map task on the same render-mirror root as the visible PDF.
+fn prepare_source_map_entry(render_root: &Path, entry_file: &Path) -> Result<PathBuf, String> {
+    let Ok(relative_path) = entry_file.strip_prefix(render_root) else {
+        return Ok(entry_file.to_path_buf());
+    };
+    if relative_path.components().count() <= 1 {
+        return Ok(entry_file.to_path_buf());
+    }
+
+    let relative_path = relative_path.to_string_lossy().replace('\\', "/");
+    let wrapper_name = format!(
+        ".typsastra-source-map-{:016x}.typ",
+        stable_path_hash(&relative_path),
+    );
+    let wrapper_path = render_root.join(wrapper_name);
+    let contents = format!("#include \"{relative_path}\"\n");
+    if fs::read_to_string(&wrapper_path).ok().as_deref() != Some(contents.as_str()) {
+        fs::write(&wrapper_path, contents).map_err(|error| {
+            format!(
+                "Failed to prepare the source-map entry {}: {error}",
+                wrapper_path.display()
+            )
+        })?;
+    }
+    Ok(wrapper_path)
+}
+
+fn stable_path_hash(path: &str) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in path.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+fn local_file_reference(raw: &str, parent: &Path, project_root: &Path) -> Option<PathBuf> {
+    if raw.is_empty() || raw.starts_with('@') || raw.contains("://") || raw.contains('\\') {
+        return None;
+    }
+    let path =
+        normalized_dependency_path(&crate::resolve_typst_dependency(raw, parent, project_root));
+    // Reachable Typst sources are collected by following include/import edges.
+    // A plain string naming a .typ file must not pull an unrelated copy into
+    // the preview graph.
+    if path
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("typ"))
+        || !path.starts_with(project_root)
+        || !path.is_file()
+    {
+        return None;
+    }
+    Some(path)
 }
 
 fn normalized_workspace_identity(project_root: &Path) -> String {
@@ -1374,6 +1479,95 @@ mod tests {
         assert_eq!(
             entries[1].project_root.as_deref(),
             Some(first_project.as_path())
+        );
+    }
+
+    #[test]
+    fn collects_only_dependencies_reachable_from_the_main_document() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let images = root.join("images");
+        fs::create_dir_all(&images).unwrap();
+        fs::write(
+            root.join("main.typ"),
+            concat!(
+                "#include \"chapter.typ\"\n",
+                "#image(\"images/used.png\")\n",
+                "#bibliography(\"refs.bib\")\n",
+                "#read(\"notes.txt\")\n",
+                "#let copied-name = \"copied.typ\"\n",
+                "#let dynamic-image = \"images/dynamic.png\"\n",
+                "#image(dynamic-image)\n",
+            ),
+        )
+        .unwrap();
+        fs::write(root.join("chapter.typ"), "#image(\"images/chapter.png\")").unwrap();
+        fs::write(root.join("copied.typ"), "#image(\"images/unused.png\")").unwrap();
+        fs::write(root.join("refs.bib"), "").unwrap();
+        fs::write(root.join("notes.txt"), "").unwrap();
+        fs::write(root.join("images/used.png"), "").unwrap();
+        fs::write(root.join("images/chapter.png"), "").unwrap();
+        fs::write(root.join("images/dynamic.png"), "").unwrap();
+        fs::write(root.join("images/unused.png"), "").unwrap();
+
+        let reachable = collect_reachable_typst_files(root, &root.join("main.typ"));
+        let reachable = reachable.into_iter().collect::<Vec<_>>();
+        let dependencies = collect_preview_dependency_files(root, &reachable);
+        let canonical_root = normalized_dependency_path(root);
+        let relative = dependencies
+            .iter()
+            .map(|path| {
+                path.strip_prefix(&canonical_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            relative,
+            vec![
+                "chapter.typ",
+                "images/chapter.png",
+                "images/dynamic.png",
+                "images/used.png",
+                "main.typ",
+                "notes.txt",
+                "refs.bib",
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_the_source_map_task_rooted_at_the_render_mirror() {
+        let workspace = tempfile::tempdir().unwrap();
+        let render_root = workspace.path().join("render");
+        let nested = render_root.join("nested/book/main.typ");
+        let root_entry = render_root.join("main.typ");
+        fs::create_dir_all(nested.parent().unwrap()).unwrap();
+        fs::create_dir_all(root_entry.parent().unwrap()).unwrap();
+        fs::write(&nested, "= Nested").unwrap();
+        fs::write(&root_entry, "= Root").unwrap();
+
+        assert_eq!(
+            prepare_source_map_entry(&render_root, &root_entry).unwrap(),
+            root_entry,
+        );
+
+        let wrapper = prepare_source_map_entry(&render_root, &nested).unwrap();
+        assert_eq!(wrapper.parent(), Some(render_root.as_path()));
+        assert!(wrapper
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(".typsastra-source-map-"));
+        assert_eq!(
+            fs::read_to_string(&wrapper).unwrap(),
+            "#include \"nested/book/main.typ\"\n",
+        );
+        assert_eq!(
+            prepare_source_map_entry(&render_root, &nested).unwrap(),
+            wrapper,
         );
     }
 
