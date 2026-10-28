@@ -151,6 +151,12 @@ export type StoredProjectState = {
   tables: StoredTable[];
 };
 
+export type StoredUndockedPreviewWindow = {
+  width: number;
+  height: number;
+  maximized: boolean;
+};
+
 export type StoredWorkspaceState = {
   schemaVersion: 2;
   activeFile: string | null;
@@ -170,6 +176,7 @@ export type StoredWorkspaceState = {
   previewViewportAnchor?: PreviewViewportAnchor | null;
   previewZoomPercent?: number;
   previewFitToWidth?: boolean;
+  previewWindow: StoredUndockedPreviewWindow | null;
 };
 
 export type WorkspaceMetadata = {
@@ -278,7 +285,8 @@ export function normalizeWorkspaceMetadata(
       previewZoomPercent: typeof workspace.previewZoomPercent === "number" && Number.isFinite(workspace.previewZoomPercent)
         ? Math.max(10, Math.min(500, workspace.previewZoomPercent)) : undefined,
       previewFitToWidth: typeof workspace.previewFitToWidth === "boolean" ? workspace.previewFitToWidth : undefined,
-      previewScrollTop: Math.max(0, numberOr(workspace.previewScrollTop, 0))
+      previewScrollTop: Math.max(0, numberOr(workspace.previewScrollTop, 0)),
+      previewWindow: normalizeUndockedPreviewWindow(workspace.previewWindow)
     }
   };
 }
@@ -366,6 +374,22 @@ function toolchainOrNull(value: unknown): StoredWorkspaceToolchain | null {
   return typeof toolchain.tinymistVersion === "string" && typeof toolchain.typstVersion === "string"
     ? { tinymistVersion: toolchain.tinymistVersion, typstVersion: toolchain.typstVersion }
     : null;
+}
+
+function normalizeUndockedPreviewWindow(value: unknown): StoredUndockedPreviewWindow | null {
+  const record = objectValue(value);
+  const width = typeof record.width === "number" && Number.isFinite(record.width)
+    ? Math.round(record.width)
+    : null;
+  const height = typeof record.height === "number" && Number.isFinite(record.height)
+    ? Math.round(record.height)
+    : null;
+  if (width === null || height === null || width < 320 || height < 240) return null;
+  return {
+    width: Math.min(width, 8192),
+    height: Math.min(height, 8192),
+    maximized: record.maximized === true,
+  };
 }
 
 function normalizeScriptLanguages(value: unknown): StoredScriptLanguageAssignment[] {

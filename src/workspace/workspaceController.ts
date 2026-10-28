@@ -9,6 +9,7 @@ import {
   normalizeWorkspaceMetadata,
   WorkspaceStateStore,
   type LegacyWorkspaceState,
+  type StoredUndockedPreviewWindow,
   type WorkspaceMetadata,
 } from "./workspaceStateStore";
 
@@ -43,6 +44,7 @@ export interface WorkspacePersistenceSnapshot {
   previewViewportAnchor?: PreviewViewportAnchor | null;
   previewZoomPercent?: number;
   previewFitToWidth?: boolean;
+  previewWindow?: StoredUndockedPreviewWindow | null;
 }
 
 export interface WorkspaceViewportInput {
@@ -137,6 +139,7 @@ export class WorkspaceController {
         previewViewportAnchor: current.previewViewportAnchor,
         previewZoomPercent: current.previewZoomPercent,
         previewFitToWidth: current.previewFitToWidth,
+        previewWindow: current.previewWindow ?? null,
       },
     };
     this.port.setWorkspaceMetadata(metadata);

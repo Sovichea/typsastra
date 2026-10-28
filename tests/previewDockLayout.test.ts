@@ -5,6 +5,7 @@ import {
   normalizeLogConsoleHeight,
   resizeBodyClass,
 } from "../src/layout/layoutController";
+import { undockedPreviewWindowStateFromQuery } from "../src/preview/previewWindowController";
 
 describe("preview dock layout", () => {
   test("keeps the docked split separate from the temporary undocked width", async () => {
@@ -22,6 +23,46 @@ describe("preview dock layout", () => {
     expect(layout).toContain("previewWrapper.style.width = `${100 - this.dockedInputWidthPct}%`");
     expect(app).toContain("inputContainerWidthPct: this.layoutController.getDockedInputWidthPct()");
     expect(lifecycle).toContain("app.layoutController.setDockedInputWidthPct(state.layout.inputContainerWidthPct)");
+  });
+
+  test("restores the saved undocked preview window size and maximized state", async () => {
+    expect(undockedPreviewWindowStateFromQuery("?mode=preview&previewWidth=1440&previewHeight=900&previewMaximized=1")).toEqual({
+      width: 1440,
+      height: 900,
+      maximized: true,
+    });
+    expect(undockedPreviewWindowStateFromQuery("?mode=preview")).toEqual({
+      width: 800,
+      height: 600,
+      maximized: false,
+    });
+    expect(undockedPreviewWindowStateFromQuery("?previewWidth=100&previewHeight=100&previewMaximized=0")).toEqual({
+      width: 320,
+      height: 240,
+      maximized: false,
+    });
+
+    const layout = await Bun.file(new URL("../src/layout/layoutController.ts", import.meta.url)).text();
+    const previewWindow = await Bun.file(
+      new URL("../src/preview/previewWindowController.ts", import.meta.url),
+    ).text();
+    const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    const bindings = await Bun.file(
+      new URL("../src/ui/appEventBindings.ts", import.meta.url),
+    ).text();
+    const lifecycle = await Bun.file(
+      new URL("../src/workspace/workspaceLifecycleController.ts", import.meta.url),
+    ).text();
+
+    expect(layout).toContain('query.set("previewWidth", String(preferred.width))');
+    expect(layout).toContain('query.set("previewHeight", String(preferred.height))');
+    expect(layout).toContain('query.set("previewMaximized", preferred.maximized ? "1" : "0")');
+    expect(layout).toContain("maximized: preferred?.maximized ?? false");
+    expect(previewWindow).toContain('emit("preview-window-state-changed"');
+    expect(previewWindow).toContain("previewWindow.onResized(schedule)");
+    expect(app).toContain("previewWindow: this.previewWindow");
+    expect(lifecycle).toContain("app.previewWindow = state.previewWindow ?? null");
+    expect(bindings).toContain('listenEvent<StoredUndockedPreviewWindow>("preview-window-state-changed"');
   });
 
   test("does not auto-dock an intentionally undocked preview when the editor is shown", async () => {

@@ -98,7 +98,7 @@ import { EditorPreviewActivationController } from "./editor/editorPreviewActivat
 import { EditorTabActivationController, type ActivateEditorTabOptions } from "./editor/editorTabActivationController";
 import { AppDialogController } from "./ui/appDialog";
 import { LayoutController } from "./layout/layoutController";
-import type { WorkspaceMetadata } from "./workspace/workspaceStateStore";
+import type { StoredUndockedPreviewWindow, WorkspaceMetadata } from "./workspace/workspaceStateStore";
 import { RecentProjectsController } from "./workspace/recentProjectsController";
 import {
   type WorkspaceChange
@@ -463,6 +463,8 @@ export class TypsastraWorkspaceController {
   private set blockedLargePreviewRoot(rootPath: string | null) { this.largePreviewGuardController.blockedRoot = rootPath; }
   private previewScrollTop = 0;
   private previewViewportAnchor: PreviewViewportAnchor | null = null;
+  private previewWindow: StoredUndockedPreviewWindow | null = null;
+  private previewWindowStateSaveTimer: number | null = null;
   private previewOutlinePublishGeneration = 0;
   private previewDocumentOutlineItems: OutlinePreviewItem[] = [];
   private previewScrollSaveTimer: number | null = null;
@@ -1318,7 +1320,8 @@ export class TypsastraWorkspaceController {
     () => this.workspaceResumeController.beginHorizontalResize(),
     () => this.workspaceResumeController.endHorizontalResize(),
     () => this.captureDockedPreviewViewport(),
-    () => this.restoreDockedPreviewScrollPosition()
+    () => this.restoreDockedPreviewScrollPosition(),
+    () => this.previewWindow,
   );
   private readonly workspaceController = new WorkspaceController({
     ensureDockedPreviewVisible: () => this.layoutController.ensureDockedPreviewVisible(),
@@ -1351,6 +1354,7 @@ export class TypsastraWorkspaceController {
         ? this.previewFrame.currentViewportAnchor ?? this.previewViewportAnchor : this.previewViewportAnchor,
       previewZoomPercent: this.previewFrame.currentZoomPercent,
       previewFitToWidth: this.previewFrame.isFitMode,
+      previewWindow: this.previewWindow,
     }),
     setWorkspaceMetadata: metadata => {
       this.workspaceMetadata = metadata;
@@ -4124,6 +4128,26 @@ export class TypsastraWorkspaceController {
       changePreviewOutlineVisible: visible => this.settingsController.update(settings => {
         settings.preview.undockedOutline = visible;
       }),
+      changePreviewWindowState: state => {
+        if (!Number.isFinite(state.width) || !Number.isFinite(state.height)) return;
+        const next: StoredUndockedPreviewWindow = {
+          width: Math.max(320, Math.min(8192, Math.round(state.width))),
+          height: Math.max(240, Math.min(8192, Math.round(state.height))),
+          maximized: state.maximized === true,
+        };
+        if (this.previewWindow
+          && this.previewWindow.width === next.width
+          && this.previewWindow.height === next.height
+          && this.previewWindow.maximized === next.maximized) return;
+        this.previewWindow = next;
+        if (this.previewWindowStateSaveTimer !== null) {
+          window.clearTimeout(this.previewWindowStateSaveTimer);
+        }
+        this.previewWindowStateSaveTimer = window.setTimeout(() => {
+          this.previewWindowStateSaveTimer = null;
+          void this.saveWorkspaceState();
+        }, 250);
+      },
       publishPreviewOutline: () => this.publishPreviewOutline(),
       applyDeveloperLogSettings: update => this.settingsController.update(settings => {
         settings.developerMode = update.developerMode;

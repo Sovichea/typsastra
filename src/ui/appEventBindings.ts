@@ -9,6 +9,7 @@ import type { PreviewClickPoint } from "../preview/previewFrame";
 import type { PreviewScrollPositionPayload } from "../preview/previewWindowController";
 import type { PreviewContentMode } from "../preview/draftPreviewController";
 import type { DeveloperLogSettings, PreviewColorMode } from "../settings";
+import type { StoredUndockedPreviewWindow } from "../workspace/workspaceStateStore";
 import { ApplicationShortcutSequence, shortcutFor, shortcutStrokes, type ShortcutOverrides } from "../platform/shortcutRegistry";
 import { installWelcomeKeyboardNavigation } from "../workspace/welcomeNavigation";
 import { installModalFocusTrap } from "./modalFocus";
@@ -58,6 +59,7 @@ export interface AppEventActions {
   changePreviewContentMode: (mode: PreviewContentMode) => Promise<void> | void;
   changePreviewColorMode: (mode: PreviewColorMode) => void;
   changePreviewOutlineVisible: (visible: boolean) => void;
+  changePreviewWindowState: (state: StoredUndockedPreviewWindow) => void;
   publishPreviewOutline: () => void;
   applyDeveloperLogSettings: (settings: { developerMode: boolean; developerLogs: DeveloperLogSettings }) => void;
   setProjectMain: (path: string) => Promise<void> | void;
@@ -346,6 +348,9 @@ export function bindAppEvents(actions: AppEventActions): void {
     });
     void listenEvent("preview-outline-request", () => {
       actions.publishPreviewOutline();
+    });
+    void listenEvent<StoredUndockedPreviewWindow>("preview-window-state-changed", event => {
+      actions.changePreviewWindowState(event.payload);
     });
     void listenEvent<{ developerMode: boolean; developerLogs: DeveloperLogSettings }>(
       "typsastra-dev-log-settings-updated",

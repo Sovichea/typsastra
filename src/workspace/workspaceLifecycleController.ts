@@ -9,7 +9,7 @@ import { parseDocumentScripts } from "../editor/documentTypography";
 import type { ImportedTypsastraProject } from "../projectArchive";
 import type { CreatedProject } from "../projectTemplates";
 import type { ToolchainStatus } from "../toolchain/toolchainController";
-import { workspaceRestoreCandidates, type WorkspaceMetadata } from "./workspaceStateStore";
+import { workspaceRestoreCandidates, type StoredUndockedPreviewWindow, type WorkspaceMetadata } from "./workspaceStateStore";
 import type { EditorTab } from "../editor/editorTab";
 import type { DocumentTypography } from "../editor/documentTypography";
 import type { PreviewRenderMode } from "../settings";
@@ -39,6 +39,8 @@ function formatCacheBytes(bytes: number): string {
 export interface WorkspaceLifecycleSessionState {
   previewScrollTop: number;
   previewViewportAnchor: PreviewViewportAnchor | null;
+  previewWindow: StoredUndockedPreviewWindow | null;
+  previewWindowStateSaveTimer: number | null;
   previewScrollSaveTimer: number | null;
   pinnedMainFilePath: string | null;
   pinnedLspMainPath: string | null;
@@ -198,6 +200,7 @@ export class WorkspaceLifecycleController {
       const project = metadata.project;
       app.previewScrollTop = state.previewScrollTop;
       app.previewViewportAnchor = state.previewViewportAnchor ?? null;
+      app.previewWindow = state.previewWindow ?? null;
       app.previewFrame.restoreWorkspaceScrollPosition(
         state.previewScrollTop, state.previewViewportAnchor, state.previewZoomPercent, state.previewFitToWidth,
       );
@@ -707,6 +710,9 @@ export class WorkspaceLifecycleController {
     app.draftPreviewController.reset();
     app.previewScrollTop = 0;
     app.previewViewportAnchor = null;
+    app.previewWindow = null;
+    if (app.previewWindowStateSaveTimer !== null) window.clearTimeout(app.previewWindowStateSaveTimer);
+    app.previewWindowStateSaveTimer = null;
     if (app.previewScrollSaveTimer !== null) window.clearTimeout(app.previewScrollSaveTimer);
     app.previewScrollSaveTimer = null;
     app.previewSyncController.cancelManual();

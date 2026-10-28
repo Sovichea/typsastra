@@ -1,3 +1,5 @@
+import type { StoredUndockedPreviewWindow } from "../workspace/workspaceStateStore";
+
 export function clampEditorPreviewSplitPct(
   requestedInputPct: number,
   viewportWidthPx: number,
@@ -43,7 +45,8 @@ export class LayoutController {
     private readonly onEditorWidthResizeStart: () => void = () => {},
     private readonly onEditorWidthResizeEnd: () => void = () => {},
     private readonly onPreviewUndocking: () => void = () => {},
-    private readonly onPreviewDocked: () => void = () => {}
+    private readonly onPreviewDocked: () => void = () => {},
+    private readonly undockedPreviewWindowState: () => StoredUndockedPreviewWindow | null = () => null
   ) {}
 
   public initialize(): void {
@@ -320,12 +323,20 @@ export class LayoutController {
       if (input) input.style.width = "100%";
       try {
         const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+        const preferred = this.undockedPreviewWindowState();
+        const query = new URLSearchParams({ mode: "preview" });
+        if (preferred) {
+          query.set("previewWidth", String(preferred.width));
+          query.set("previewHeight", String(preferred.height));
+          query.set("previewMaximized", preferred.maximized ? "1" : "0");
+        }
         const win = new WebviewWindow("preview", {
-          url: "index.html?mode=preview",
+          url: `index.html?${query.toString()}`,
           title: "Typsastra - Live Preview",
           zoomHotkeysEnabled: true,
-          width: 800,
-          height: 600
+          width: preferred?.width ?? 800,
+          height: preferred?.height ?? 600,
+          maximized: preferred?.maximized ?? false
         });
         win.once("tauri://close-requested", async () => {
           try {

@@ -65,7 +65,8 @@ describe("workspace state store", () => {
         previewViewportAnchor: null,
         previewZoomPercent: undefined,
         previewFitToWidth: undefined,
-        previewScrollTop: 0
+        previewScrollTop: 0,
+        previewWindow: null
       }
     });
   });
@@ -88,6 +89,29 @@ describe("workspace state store", () => {
       { script: "Khmr", languageTag: "km" },
       { script: "Latn", languageTag: "fr-FR" },
     ]);
+  });
+
+  test("persists the undocked preview window size and maximized state", () => {
+    const stored = normalizeWorkspaceMetadata({
+      workspace: {
+        previewWindow: { width: 1440, height: 900, maximized: true },
+      },
+    });
+    expect(stored.workspace.previewWindow).toEqual({
+      width: 1440,
+      height: 900,
+      maximized: true,
+    });
+
+    expect(normalizeWorkspaceMetadata({
+      workspace: { previewWindow: { width: 200, height: 900, maximized: false } },
+    }).workspace.previewWindow).toBeNull();
+    expect(normalizeWorkspaceMetadata({
+      workspace: { previewWindow: { width: 1440, height: 200, maximized: false } },
+    }).workspace.previewWindow).toBeNull();
+    expect(normalizeWorkspaceMetadata({
+      workspace: { previewWindow: null },
+    }).workspace.previewWindow).toBeNull();
   });
 
   test("rejects absolute and traversing metadata paths", () => {

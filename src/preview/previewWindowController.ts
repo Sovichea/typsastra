@@ -11,6 +11,31 @@ import type { PdfiumOutlineItem } from "./pdfiumDocument";
 import { PreviewOutlineNavigator, type PreviewSourceOutlineItem } from "./previewOutlineNavigator";
 import type { PreviewFrame } from "./previewFrame";
 import type { PreviewViewportAnchor } from "./previewViewportAnchor";
+import type { StoredUndockedPreviewWindow } from "../workspace/workspaceStateStore";
+
+const DEFAULT_UNDOCKED_PREVIEW_WIDTH = 800;
+const DEFAULT_UNDOCKED_PREVIEW_HEIGHT = 600;
+const MIN_UNDOCKED_PREVIEW_WIDTH = 320;
+const MIN_UNDOCKED_PREVIEW_HEIGHT = 240;
+const MAX_UNDOCKED_PREVIEW_SIZE = 8192;
+
+export function undockedPreviewWindowStateFromQuery(
+  search: string,
+): StoredUndockedPreviewWindow {
+  const params = new URLSearchParams(search);
+  const dimension = (value: string | null, fallback: number, minimum: number): number => {
+    if (value === null) return fallback;
+    const parsed = Number(value);
+    return Number.isFinite(parsed)
+      ? Math.max(minimum, Math.min(MAX_UNDOCKED_PREVIEW_SIZE, Math.round(parsed)))
+      : fallback;
+  };
+  return {
+    width: dimension(params.get("previewWidth"), DEFAULT_UNDOCKED_PREVIEW_WIDTH, MIN_UNDOCKED_PREVIEW_WIDTH),
+    height: dimension(params.get("previewHeight"), DEFAULT_UNDOCKED_PREVIEW_HEIGHT, MIN_UNDOCKED_PREVIEW_HEIGHT),
+    maximized: params.get("previewMaximized") === "1",
+  };
+}
 
 export type UndockedPreviewAction = "export-pdf" | "open-external" | "recompile";
 
@@ -42,6 +67,11 @@ export interface PreviewWindowDependencies {
 export class PreviewWindowController {
   private outlineNavigator: PreviewOutlineNavigator | null = null;
   private previewSurface: "live" | "pdf" = "live";
+  private previewWindowNormalSize = {
+    width: DEFAULT_UNDOCKED_PREVIEW_WIDTH,
+    height: DEFAULT_UNDOCKED_PREVIEW_HEIGHT,
+  };
+  private previewWindowStateTimer: number | null = null;
 
   constructor(private readonly deps: PreviewWindowDependencies) {}
 
@@ -71,7 +101,12 @@ export class PreviewWindowController {
     if (undockBtn) {
       undockBtn.title = "Dock Preview";
       undockBtn.addEventListener("click", () => {
-        void this.publishCurrentScrollPosition().finally(() => getCurrentWindow().close());
+        void Promise.all([
+          this.publishCurrentScrollPosition(),
+          this.publishPreviewWindowState(),
+        ]).catch(error => {
+          console.error("Failed to publish the final undocked preview state", error);
+        }).finally(() => getCurrentWindow().close());
       });
     }
 
@@ -105,6 +140,12 @@ export class PreviewWindowController {
     }
 
     await getCurrentWindow().show();
+    const initialWindowState = undockedPreviewWindowStateFromQuery(window.location.search);
+    this.previewWindowNormalSize = {
+      width: initialWindowState.width,
+      height: initialWindowState.height,
+    };
+    await this.initializePreviewWindowStateTracking();
 
     const { listen, emit } = await import("@tauri-apps/api/event");
     this.initializeOptions(
@@ -215,6 +256,45 @@ export class PreviewWindowController {
     void import("@tauri-apps/api/event")
       .then(({ emit }) => emit("preview-outline-visible-request", visible))
       .catch(error => console.error("Failed to synchronize undocked outline visibility", error));
+  }
+
+  private async initializePreviewWindowStateTracking(): Promise<void> {
+    const previewWindow = getCurrentWindow();
+    const schedule = () => {
+      if (this.previewWindowStateTimer !== null) {
+        window.clearTimeout(this.previewWindowStateTimer);
+      }
+      this.previewWindowStateTimer = window.setTimeout(() => {
+        this.previewWindowStateTimer = null;
+        void this.publishPreviewWindowState();
+      }, 150);
+    };
+    await previewWindow.onResized(schedule);
+    window.addEventListener("resize", schedule);
+    void previewWindow.onCloseRequested(() => {
+      void this.publishPreviewWindowState();
+    });
+  }
+
+  private async publishPreviewWindowState(): Promise<void> {
+    const previewWindow = getCurrentWindow();
+    if (await previewWindow.isMinimized()) return;
+    const maximized = await previewWindow.isMaximized();
+    if (!maximized) {
+      const scale = await previewWindow.scaleFactor();
+      const size = (await previewWindow.innerSize()).toLogical(scale);
+      if (size.width >= MIN_UNDOCKED_PREVIEW_WIDTH && size.height >= MIN_UNDOCKED_PREVIEW_HEIGHT) {
+        this.previewWindowNormalSize = {
+          width: Math.round(size.width),
+          height: Math.round(size.height),
+        };
+      }
+    }
+    const { emit } = await import("@tauri-apps/api/event");
+    await emit("preview-window-state-changed", {
+      ...this.previewWindowNormalSize,
+      maximized,
+    } satisfies StoredUndockedPreviewWindow);
   }
 
   publishScrollPosition(scrollTop: number): void {

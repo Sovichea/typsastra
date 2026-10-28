@@ -18,7 +18,8 @@ Typsastra stores portable state under `.typsastra`:
 - `config.json`: project ID, relative main file, recommended toolchain,
   document script-language assignments, and accepted project terminology;
 - `workspace.json`: open tabs, active file, cursor/scroll/fold state, expanded
-  directories, pane layout, and selected toolchain.
+  directories, pane layout, selected toolchain, and the preferred undocked
+  preview window size and maximized state.
 
 Paths are project-relative and normalized with `/`, so moving or copying the
 whole directory retains the main-file setting. Workspace state is loaded before
