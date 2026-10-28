@@ -2221,7 +2221,7 @@ body.typsastra-resizing #input-container-wrapper::after {
   font-size: 10px;
   line-height: 1.35;
 }
-.settings-language-tools .settings-secondary-button {
+.settings-language-tools > .settings-secondary-button {
   align-self: flex-start;
 }
 .settings-language-catalog {
@@ -2407,7 +2407,8 @@ body.typsastra-resizing #input-container-wrapper::after {
   font-size: 11px;
   color: var(--ui-header-text);
 }
-.settings-language-catalog-row button {
+.settings-language-catalog-row > button {
+  align-self: start;
   min-width: 104px;
   white-space: nowrap;
 }

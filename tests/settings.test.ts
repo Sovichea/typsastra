@@ -331,12 +331,15 @@ describe("editor settings presentation", () => {
     const rowStart = settingsStyles.indexOf(".settings-language-catalog-row {");
     const rowEnd = settingsStyles.indexOf("}", rowStart);
     const rowCss = settingsStyles.slice(rowStart, rowEnd);
-    const buttonStart = settingsStyles.indexOf(".settings-language-catalog-row button {");
+    const buttonStart = settingsStyles.indexOf(".settings-language-catalog-row > button {");
     const buttonEnd = settingsStyles.indexOf("}", buttonStart);
     const buttonCss = settingsStyles.slice(buttonStart, buttonEnd);
 
     expect(rowCss).toContain("grid-template-columns: minmax(0, 1fr) auto");
     expect(settingsStyles).toContain(".settings-language-catalog-row > div:first-child { min-width: 0; }");
+    expect(settingsStyles).toContain(".settings-language-tools > .settings-secondary-button {");
+    expect(settingsStyles).not.toContain(".settings-language-tools .settings-secondary-button {");
+    expect(buttonCss).toContain("align-self: start");
     expect(buttonCss).toContain("min-width: 104px");
     expect(buttonCss).toContain("white-space: nowrap");
   });
