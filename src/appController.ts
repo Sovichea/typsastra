@@ -3319,7 +3319,7 @@ export class TypsastraWorkspaceController {
       this.previewDisabled
     );
     if (!this.isLoadingFile && canRenderPreview) {
-      this.pdfPreviewRenderController.noteContentMutation(true);
+      this.pdfPreviewRenderController.noteContentMutation(true, this.getActiveTab()?.content, rawText);
     }
     this.appendDeveloperLog({
       kind: "info",

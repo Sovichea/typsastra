@@ -12,12 +12,29 @@ export class PreviewFreshnessController {
   private active: CompilationToken | null = null;
   private externalFiles = new Set<string>();
   private status: PreviewFreshness["status"] = "current";
+  private editorChanges = new Map<string, { baseline: string; current: string }>();
+  private untrackedChange = false;
   constructor(private readonly publish: (state: PreviewFreshness) => void = () => {}) {}
   get state(): PreviewFreshness { return { status: this.status, externalFiles: [...this.externalFiles] }; }
   changed(path?: string, external = false): void {
     this.revision++;
+    this.untrackedChange = true;
     if (external && path) this.externalFiles.add(path);
     if (this.status !== "compiling") this.status = "outdated";
+    this.publish(this.state);
+  }
+  editorChanged(path: string, before: string, after: string): void {
+    this.revision++;
+    if (!this.editorChanges.size && this.status !== "current" && this.status !== "compiling") this.untrackedChange = true;
+    if (!this.untrackedChange) {
+      const change = this.editorChanges.get(path) ?? { baseline: before, current: before };
+      change.current = after;
+      this.editorChanges.set(path, change);
+    }
+    if (this.status !== "compiling") {
+      this.status = !this.untrackedChange && [...this.editorChanges.values()].every(change => change.current === change.baseline)
+        ? "current" : "outdated";
+    }
     this.publish(this.state);
   }
   begin(): CompilationToken {
@@ -28,14 +45,26 @@ export class PreviewFreshnessController {
     if (token.id !== this.active?.id) return;
     this.active = null;
     this.status = success ? token.revision === this.revision ? "current" : "outdated" : "failed";
-    if (this.status === "current") this.externalFiles.clear();
+    if (this.status === "current") {
+      this.externalFiles.clear();
+      this.editorChanges.clear();
+      this.untrackedChange = false;
+    } else if (success) {
+      // A completed compile may include edits made since the old preview.
+      // Its exact source baseline is unknown when newer edits raced it.
+      this.editorChanges.clear();
+      this.untrackedChange = true;
+    }
     this.publish(this.state);
   }
   interrupted(token?: CompilationToken): void {
     if (token?.id !== this.active?.id || !this.active) return;
-    this.active = null; this.status = "outdated"; this.publish(this.state);
+    this.active = null;
+    this.status = !this.untrackedChange && this.editorChanges.size > 0
+      && [...this.editorChanges.values()].every(change => change.current === change.baseline) ? "current" : "outdated";
+    this.publish(this.state);
   }
-  reset(): void { this.active = null; this.revision++; this.externalFiles.clear(); this.status = "current"; this.publish(this.state); }
+  reset(): void { this.active = null; this.revision++; this.externalFiles.clear(); this.editorChanges.clear(); this.untrackedChange = false; this.status = "current"; this.publish(this.state); }
 }
 
 export function renderPreviewFreshnessBanner(state: PreviewFreshness, root: Document = document): void {

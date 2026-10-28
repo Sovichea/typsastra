@@ -4,6 +4,42 @@ import { PdfPreviewRenderController } from "../src/preview/pdfPreviewRenderContr
 import { TypsastraWorkspaceController } from "../src/appController";
 
 describe("preview freshness", () => {
+  test("undo clears source changed only when every edited file matches the preview", () => {
+    const freshness = new PreviewFreshnessController();
+    freshness.editorChanged("main.typ", "main", "edited main");
+    freshness.editorChanged("include.typ", "include", "edited include");
+    freshness.editorChanged("main.typ", "edited main", "main");
+    expect(freshness.state.status).toBe("outdated");
+    freshness.editorChanged("include.typ", "edited include", "include");
+    expect(freshness.state.status).toBe("current");
+    freshness.editorChanged("main.typ", "main", "edited main");
+    expect(freshness.state.status).toBe("outdated");
+  });
+  test("undo cannot hide changes to an externally edited file", () => {
+    const freshness = new PreviewFreshnessController();
+    freshness.editorChanged("main.typ", "main", "edited");
+    freshness.changed("data.json", true);
+    freshness.editorChanged("main.typ", "edited", "main");
+    expect(freshness.state.status).toBe("outdated");
+    expect(freshness.state.externalFiles).toEqual(["data.json"]);
+  });
+  test("successful compilation replaces the undo baseline", () => {
+    const freshness = new PreviewFreshnessController();
+    freshness.editorChanged("main.typ", "old", "compiled");
+    freshness.finish(freshness.begin(), true);
+    freshness.editorChanged("main.typ", "compiled", "old");
+    expect(freshness.state.status).toBe("outdated");
+    freshness.editorChanged("main.typ", "old", "compiled");
+    expect(freshness.state.status).toBe("current");
+  });
+  test("undo during a cancelled on-type compile restores the prior preview status", () => {
+    const freshness = new PreviewFreshnessController();
+    freshness.editorChanged("main.typ", "old", "new");
+    const token = freshness.begin();
+    freshness.editorChanged("main.typ", "new", "old");
+    freshness.interrupted(token);
+    expect(freshness.state.status).toBe("current");
+  });
   test("returning from other preview surfaces restores the current live PDF without compiling", async () => {
     for (const mounted of [true, false]) {
       let loads = 0;

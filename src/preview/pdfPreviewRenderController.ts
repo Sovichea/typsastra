@@ -241,9 +241,14 @@ export class PdfPreviewRenderController {
     if (!this.queuedForced) this.queuedContents = null;
   }
 
-  public noteContentMutation(canRenderPreview: boolean): number {
+  public noteContentMutation(canRenderPreview: boolean, before?: string, after?: string): number {
     if (canRenderPreview) {
-      this.deps.freshness?.changed(this.deps.getActiveFilePath() ?? undefined);
+      const path = this.deps.getActiveFilePath();
+      if (path && before !== undefined && after !== undefined) {
+        this.deps.freshness?.editorChanged(filePathKey(path), before, after);
+      } else {
+        this.deps.freshness?.changed(path ?? undefined);
+      }
       this.preparationRevisionValue += 1;
       if (this.deps.getPreviewRenderMode() === "on-type") {
         void invoke("cancel_render_preparation").catch(() => {});
