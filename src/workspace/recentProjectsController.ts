@@ -138,6 +138,7 @@ function projectName(path: string): string {
 }
 
 export class RecentProjectsController {
+  private contextMenu: HTMLElement | null = null;
   private popupOverlay: HTMLElement | null = null;
   private popupSearch: HTMLInputElement | null = null;
   private popupList: HTMLElement | null = null;
@@ -173,6 +174,27 @@ export class RecentProjectsController {
       }
     });
 
+    for (const id of ["welcome-recent-projects", "recent-projects-submenu", "recent-projects-list"]) {
+      const container = document.getElementById(id);
+      container?.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const item = (event.target as Element).closest<HTMLElement>("[data-recent-project-path]");
+        this.showContextMenu(item?.dataset.recentProjectPath, event.clientX, event.clientY, item ?? container);
+      });
+      container?.addEventListener("keydown", event => {
+        if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+        event.preventDefault(); event.stopPropagation();
+        const item = (event.target as Element).closest<HTMLElement>("[data-recent-project-path]");
+        const rect = (item ?? container).getBoundingClientRect();
+        this.showContextMenu(item?.dataset.recentProjectPath, rect.left, rect.bottom, item ?? container);
+      });
+    }
+    document.addEventListener("pointerdown", event => {
+      if (this.contextMenu && !this.contextMenu.contains(event.target as Node)) this.closeContextMenu();
+    });
+    window.addEventListener("resize", () => this.closeContextMenu());
+
     this.render();
   }
 
@@ -194,6 +216,71 @@ export class RecentProjectsController {
     localStorage.setItem(storageKey, JSON.stringify(recent));
     this.render();
     if (!this.popupOverlay?.classList.contains("hidden")) this.renderPopupList();
+  }
+
+  public remove(path: string): void {
+    this.updateRecentProjects(removeRecentProject(this.read(), path));
+  }
+
+  public clear(): void {
+    this.updateRecentProjects([]);
+  }
+
+  private updateRecentProjects(projects: string[]): void {
+    localStorage.setItem(storageKey, JSON.stringify(projects));
+    this.render();
+    if (this.popupOverlay && !this.popupOverlay.classList.contains("hidden")) this.renderPopupList();
+  }
+
+  private closeContextMenu(): void {
+    this.contextMenu?.remove();
+    this.contextMenu = null;
+  }
+
+  private showContextMenu(path: string | undefined, x: number, y: number, origin: HTMLElement): void {
+    this.closeContextMenu();
+    if (!this.read().length) return;
+    const existing = document.getElementById("context-menu");
+    if (existing) existing.style.display = "none";
+    const menu = document.createElement("div");
+    menu.id = "recent-project-context-menu";
+    menu.className = "recent-project-context-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Recent project actions");
+    const restoreFocus = () => {
+      if (origin.isConnected) origin.focus();
+      else if (this.popupOverlay && !this.popupOverlay.classList.contains("hidden")) this.popupSearch?.focus();
+      else document.querySelector<HTMLElement>("#welcome-recent-projects button")?.focus();
+    };
+    const action = (label: string, run: () => void) => {
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "dropdown-item";
+      button.setAttribute("role", "menuitem"); button.textContent = label;
+      button.addEventListener("click", event => {
+        event.stopPropagation(); this.closeContextMenu(); run(); restoreFocus();
+      });
+      menu.appendChild(button);
+    };
+    if (path) action("Remove from Recent Projects", () => this.remove(path));
+    action("Clear All Recent Projects", () => this.clear());
+    menu.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation(); this.closeContextMenu(); restoreFocus();
+      } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault(); event.stopPropagation();
+        const items = [...menu.querySelectorAll<HTMLButtonElement>("button")];
+        const current = items.indexOf(document.activeElement as HTMLButtonElement);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+          : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        items[next]?.focus();
+      } else if (event.key === "Tab") this.closeContextMenu();
+    });
+    document.body.appendChild(menu);
+    this.contextMenu = menu;
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+    menu.querySelector<HTMLButtonElement>("button")?.focus();
   }
 
   public openAt(index: number): boolean {
@@ -231,6 +318,7 @@ export class RecentProjectsController {
   }
 
   private closePopup(): void {
+    this.closeContextMenu();
     this.popupOverlay?.classList.add("hidden");
     this.popupSearch?.setAttribute("aria-expanded", "false");
   }
@@ -297,6 +385,7 @@ export class RecentProjectsController {
         const item = document.createElement("button");
         item.type = "button";
         item.className = "dropdown-item recent-project-menu-item";
+        item.dataset.recentProjectPath = path;
         item.title = path;
         item.append(
           this.text(projectName(path), "recent-project-menu-name"),
@@ -350,6 +439,7 @@ export class RecentProjectsController {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "recent-projects-list-item";
+      item.dataset.recentProjectPath = path;
       item.id = `recent-project-result-${index}`;
       item.setAttribute("role", "option");
       item.setAttribute("aria-selected", "false");
@@ -409,6 +499,7 @@ export class RecentProjectsController {
     const item = document.createElement("button");
     item.type = "button";
     item.className = "welcome-item recent-project-item";
+    item.dataset.recentProjectPath = path;
     item.title = path;
     item.append(
       this.icon("folder", "welcome-item-icon"),

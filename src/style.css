@@ -28,6 +28,7 @@
 
 :root {
   --ui-font: 'MiSans Latin';
+  --menu-font-size: 13px;
   --editor-code-font: 'Fira Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
   --editor-unicode-font: sans-serif;
   --font-family-sans: var(--ui-font), var(--editor-unicode-font), sans-serif;
@@ -294,7 +295,7 @@ html {
   justify-content: space-between;
   align-items: center;
   color: var(--ui-text);
-  font-size: 13px;
+  font-size: var(--menu-font-size);
   cursor: pointer;
 }
 
@@ -388,6 +389,7 @@ button.dropdown-item {
   border: 0;
   background: transparent;
   font: inherit;
+  font-size: var(--menu-font-size);
   text-align: left;
 }
 
@@ -6389,3 +6391,31 @@ body.typsastra-resume-recovering #workspace-viewport::after {
 #preview-status-banner button:disabled { opacity: .6; cursor: default; }
 
 #preview-container-wrapper:has(#interactive-image-container, [data-table-zoom]) #preview-status-banner { display: none; }
+
+
+.recent-project-context-menu {
+  position: fixed;
+  z-index: 100001;
+  min-width: 245px;
+  max-width: calc(100vw - 16px);
+  padding: 4px 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+.recent-project-context-menu .dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.recent-project-context-menu .dropdown-item:hover,
+.recent-project-context-menu .dropdown-item:focus-visible {
+  background: var(--ui-hover);
+  outline: none;
+}
