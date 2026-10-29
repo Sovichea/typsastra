@@ -124,7 +124,7 @@ import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type SystemToolchain, type ToolchainStatus } from "./toolchain/toolchainController";
 import { ToolchainSetupController, type ToolchainInstallProgress } from "./toolchain/toolchainSetupController";
-import { DocumentOutlineController, matchOutlinePreviewPositions, outlineSourceSnapshot, parseDocumentOutline, type DocumentHeading, type OutlinePreviewItem } from "./outline/documentOutline";
+import { DocumentOutlineController, matchOutlinePreviewPositions, outlineSourceSnapshot, parseDocumentOutline, type DocumentHeading, type DocumentOutlineNotice, type OutlinePreviewItem } from "./outline/documentOutline";
 import { WindowStateController } from "./window/windowStateController";
 import { bindAppEvents, type DevUiAction } from "./ui/appEventBindings";
 import { ReleaseSummaryController } from "./ui/releaseSummaryController";
@@ -1709,6 +1709,7 @@ export class TypsastraWorkspaceController {
     }, { ripple: true }),
     heading => this.outlineNavigationController.revealInPreview(heading),
     () => this.publishPreviewOutline(),
+    notices => this.reportOutlineNotices(notices),
   );
   private readonly outlineNavigationController = new OutlineNavigationController({
     activeTab: () => this.getActiveTab(),
@@ -3641,6 +3642,23 @@ export class TypsastraWorkspaceController {
 
   private appendDeveloperLog(entry: LspLogEntry): void {
     this.developerLogController.appendDeveloper(entry);
+  }
+
+  private reportOutlineNotices(notices: readonly DocumentOutlineNotice[]): void {
+    this.logConsoleController.clearLogsBySource(["outline"]);
+    for (const notice of notices) {
+      this.logConsoleController.appendLog({
+        kind: notice.kind === "import-not-supported" ? "info" : "warning",
+        source: "outline",
+        message: notice.message,
+        filePath: notice.filePath,
+        fileName: fileNameFromPath(notice.filePath),
+        line: notice.line,
+        column: 1,
+        channel: "lsp",
+        counted: true,
+      });
+    }
   }
 
   private appendSpellcheckDebug(event: SpellcheckDebugEvent): void {

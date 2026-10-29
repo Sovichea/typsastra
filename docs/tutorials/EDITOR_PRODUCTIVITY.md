@@ -28,10 +28,18 @@ a file-only outline for editor navigation; their own includes are not expanded
 until they are pinned as the main document. While a file in the main document
 is active, including the main file itself, headings from other files are muted so
 the active file's headings stand out. Select a heading to open its source and
-scroll the PDF to that heading. Pane focus and keyboard navigation let you move
-between
-the editor, preview, Explorer, Outline, and Spellcheck without reaching for the
-mouse.
+scroll the PDF to that heading.
+
+A file included more than once appears at each inclusion point, and headings keep
+stable identities based on their source file, so reordering includes does not
+change which item is selected or expanded. The Outline pane shows only headings.
+Includes that cannot be indexed are reported in the Log console: missing files,
+dynamic includes, and include cycles appear as warnings, while local `.typ`
+modules referenced with `#import` are informational because imported Typst
+modules are not expanded. Only literal `#include` directives are indexed.
+
+Pane focus and keyboard navigation let you move between the editor, preview,
+Explorer, Outline, and Spellcheck without reaching for the mouse.
 
 ## Typst-aware editing
 

@@ -116,7 +116,19 @@ Deferred:
 Implemented:
 
 - Literal `#include` directives are followed recursively in document order.
-  Recursion cycles are stopped with a visited-file guard.
+  Recursion cycles are detected along the active include chain rather than by a
+  global visited set, so a file included more than once keeps every outline
+  occurrence.
+- Heading identities include the normalized source file and the per-file
+  heading occurrence. Identical titles in different files, and repeated
+  inclusions of the same file, stay independently addressable when unrelated
+  includes are reordered or edited.
+- The outline reports includes that cannot be indexed: missing files, dynamic
+  includes, include cycles, and local `.typ` files referenced with `#import`.
+  These diagnostics appear in the Log console with source navigation, not in
+  the outline pane. Missing includes and cycles are warnings; unsupported
+  `#import` references are informational. `#import` files are not expanded into
+  the outline.
 - Clicking a heading opens its precise source location and scrolls the PDF to
   that heading's matched bookmark destination. The scroll falls back to the
   heading's page and retries briefly while the preview surface settles.
@@ -127,10 +139,6 @@ Implemented:
 
 Deferred:
 
-- Preserving repeated occurrences of the same included file.
-- Unresolved or dynamic-include notices.
-- File-based heading identities beyond the current level/title occurrence
-  identity.
 - A separate Reveal in Preview command.
 
 ## C. Back/Forward source navigation
