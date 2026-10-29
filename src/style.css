@@ -6650,6 +6650,7 @@ body.typsastra-resume-recovering #workspace-viewport::after {
 .project-search-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 4px;
   min-width: 0;
 }
@@ -6663,11 +6664,12 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   color: var(--ui-text);
   font-size: 11px;
 }
-.project-search-filters label {
+.project-search-filter-field {
   display: grid;
   gap: 4px;
   margin-top: 6px;
 }
+.project-search-filters .project-search-toggle { margin-top: 6px; }
 .project-search-filters input[type="text"] {
   width: 100%;
   min-width: 0;
@@ -6683,6 +6685,7 @@ body.typsastra-resume-recovering #workspace-viewport::after {
 }
 .project-search-filters input[type="text"]:focus { border-color: var(--ui-accent-color); }
 .project-search-status {
+  margin-top: 2px;
   color: var(--ui-header-text);
   font-size: 10px;
   line-height: 1.4;

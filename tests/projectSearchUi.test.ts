@@ -5,6 +5,7 @@ const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
 const app = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
 const controller = await Bun.file(new URL("../src/search/projectSearchController.ts", import.meta.url)).text();
 const worker = await Bun.file(new URL("../src/search/projectSearchWorker.ts", import.meta.url)).text();
+const styles = await Bun.file(new URL("../src/style.css", import.meta.url)).text();
 
 describe("project search sidebar", () => {
   test("adds Search to the activity bar and the Edit menu", () => {
@@ -23,6 +24,15 @@ describe("project search sidebar", () => {
   test("registers configurable Search Project and Replace in Project commands", () => {
     expect(shortcutFor("action-search-project", {}, false)).toBe("Mod-Shift-F");
     expect(shortcutFor("action-replace-project", {}, false)).toBe("Mod-Shift-H");
+  });
+
+  test("keeps filter checkboxes aligned with their labels", () => {
+    expect(html).toContain('<label class="project-search-filter-field">Include globs');
+    expect(html).toContain('<label class="project-search-toggle" title="Search only');
+    expect(styles).toContain(".project-search-filter-field {");
+    expect(styles).toContain(".project-search-filters .project-search-toggle { margin-top: 6px; }");
+    expect(styles).toContain("justify-content: flex-start;");
+    expect(styles).not.toContain(".project-search-filters label {");
   });
 
   test("opens search as a sidebar tool without replacing the editor or preview", () => {
