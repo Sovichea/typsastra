@@ -21,6 +21,7 @@ import {
 } from "./previewPolicy";
 import type { PreviewSyncController } from "./previewSyncController";
 import type { LowMemorySyncIndexController } from "./lowMemorySyncIndexController";
+import type { NavigationHistoryPort } from "../navigation/navigationHistoryController";
 
 function ensureEditorCaretRippleStyle(): void {
   if (document.getElementById("typsastra-editor-caret-ripple-style")) return;
@@ -75,6 +76,7 @@ export interface PreviewSourceNavigationDependencies {
   lowMemorySync: LowMemorySyncIndexController;
   setPreviewReadyStatus(message: string): void;
   log(kind: "info" | "warning", source: string, message: string): void;
+  navigationHistory?(): NavigationHistoryPort;
 }
 
 /** Owns source navigation between editor positions and the PDF preview. */
@@ -99,6 +101,19 @@ export class PreviewSourceNavigationController {
       return { handled: true };
     }
 
+    const history = this.deps.navigationHistory?.();
+    if (history) {
+      await history.run(() => this.navigateInverseSync(uri, position));
+      return { handled: true };
+    }
+    await this.navigateInverseSync(uri, position);
+    return { handled: true };
+  }
+
+  private async navigateInverseSync(
+    uri: string | undefined,
+    position: LspSourcePosition,
+  ): Promise<void> {
     const rawTargetPath = uri ? filePathFromUri(uri) : null;
     const targetPath = rawTargetPath ? this.deps.mapToOriginalPath(rawTargetPath) : null;
     const existingTargetTab = targetPath
@@ -123,7 +138,7 @@ export class PreviewSourceNavigationController {
       await this.deps.loadFile(resolvedTargetPath, {
         preservePreviewSession: isStandalone ? undefined : this.deps.capturePreviewSession(),
       });
-      if (!this.deps.getActiveTab()?.contentLoaded) return { handled: true };
+      if (!this.deps.getActiveTab()?.contentLoaded) return;
     }
 
     if (this.deps.getActiveMode() === "WYSIWYM") this.deps.switchViewLayoutMode();
@@ -132,7 +147,7 @@ export class PreviewSourceNavigationController {
     let cursor = 0;
     if (rawTargetPath && targetPath && this.deps.isRenderCachePath(rawTargetPath)) {
       const workspaceRootPath = this.deps.getWorkspaceRootPath();
-      if (!workspaceRootPath) return { handled: true };
+      if (!workspaceRootPath) return;
       const relativePath = targetPath.startsWith(workspaceRootPath)
         ? targetPath.substring(workspaceRootPath.length).replace(/^[/\\]+/, "")
         : targetPath;
@@ -152,7 +167,6 @@ export class PreviewSourceNavigationController {
     }
 
     await this.applyInverseSyncSelection(cursor);
-    return { handled: true };
   }
 
   public revealCursorInPreviewManually(): void {

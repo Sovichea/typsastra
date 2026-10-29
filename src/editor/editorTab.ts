@@ -5,6 +5,12 @@ import type { EditorUndoHistory } from "./tabHistory";
 
 export type EditorTab = {
   path: string;
+  /** True for a pathless new buffer that has not been saved to disk yet. */
+  untitled?: boolean;
+  /** Stable identity used by crash recovery while the buffer has no path. */
+  untitledId?: string;
+  /** User-facing tab title for pathless buffers. */
+  title?: string;
   content: string;
   savedContent: string;
   contentLoaded: boolean;
@@ -15,6 +21,8 @@ export type EditorTab = {
   externalContent?: string;
   /** External revision still awaiting an explicit On save preview compilation. */
   externalPreviewPending?: boolean;
+  /** Restored from crash recovery; never auto-save it without an explicit Save. */
+  recoveredUnsaved?: boolean;
   previewRootPath: string | null;
   previewMainPath: string | null;
   previewTaskId: string | null;

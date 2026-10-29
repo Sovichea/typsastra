@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { EditorFileContentController } from "../src/editor/editorFileContentController";
 import {
   fileExtension,
   isBinaryImagePath,
@@ -48,6 +49,13 @@ describe("file types", () => {
     expect(contentController).toContain('invoke<boolean>("is_probably_plain_text_file", { path })');
     expect(contentController).toContain("this.detectedPlainTextPaths.add(key)");
     expect(contentController).toContain("return isPlainText;");
+  });
+
+  test("opens project text discovery results in the generic text editor", () => {
+    const loader = new EditorFileContentController({ normalizeFoldRanges: () => [] });
+    expect(loader.isInternallySupportedPath("/docs/analysis.py")).toBe(false);
+    loader.markPlainTextPath("/docs/analysis.py");
+    expect(loader.isInternallySupportedPath("/docs/analysis.py")).toBe(true);
   });
 
   test("extracts only a file-name extension", () => {

@@ -6,6 +6,7 @@ export type OutlinePreviewItem = {
   bookmarkIndex?: number;
   children: OutlinePreviewItem[];
 };
+import { filePathKey } from "../platform/paths";
 import { createAppIcon } from "../ui/icons";
 import type { PdfiumDestination, PdfiumOutlineItem } from "../preview/pdfiumDocument";
 import type { PreviewSourceOutlineItem } from "../preview/previewOutlineNavigator";
@@ -22,6 +23,25 @@ export type DocumentHeading = {
   previewPosition?: PreviewDocumentPosition;
   previewBookmarkIndex?: number;
   children: DocumentHeading[];
+};
+
+export type DocumentOutlineNoticeKind =
+  | "missing-include"
+  | "dynamic-include"
+  | "include-cycle"
+  | "import-not-supported";
+
+export type DocumentOutlineNotice = {
+  kind: DocumentOutlineNoticeKind;
+  filePath: string;
+  line: number;
+  message: string;
+};
+
+export type DocumentOutlineParseResult = {
+  headings: DocumentHeading[];
+  notices: DocumentOutlineNotice[];
+  files: string[];
 };
 
 function updateBlockCommentDepth(line: string, initialDepth: number): number {
@@ -62,17 +82,43 @@ export async function parseDocumentOutline(
   source: string,
   workspaceRoot: string,
   readFile: (path: string) => Promise<string | null>,
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
+  followIncludes = true,
 ): Promise<DocumentHeading[]> {
+  const result = await parseDocumentOutlineDetailed(
+    filePath,
+    source,
+    workspaceRoot,
+    readFile,
+    { ancestors: visited, followIncludes },
+  );
+  return result.headings;
+}
+
+export async function parseDocumentOutlineDetailed(
+  filePath: string,
+  source: string,
+  workspaceRoot: string,
+  readFile: (path: string) => Promise<string | null>,
+  options: { ancestors?: ReadonlySet<string>; followIncludes?: boolean } = {},
+): Promise<DocumentOutlineParseResult> {
+  const notices: DocumentOutlineNotice[] = [];
+  const noticeKeys = new Set<string>();
+  const files = new Set<string>();
+  const occurrenceByFile = new Map<string, Map<string, number>>();
   const flat = await parseDocumentOutlineFlat(
     filePath,
     source,
     workspaceRoot,
     readFile,
-    visited,
-    new Map<string, number>(),
+    new Set(options.ancestors ?? []),
+    occurrenceByFile,
+    notices,
+    noticeKeys,
+    files,
+    options.followIncludes !== false,
   );
-  
+
   const roots: DocumentHeading[] = [];
   const parents: DocumentHeading[] = [];
   for (const heading of flat) {
@@ -82,7 +128,18 @@ export async function parseDocumentOutline(
     else roots.push(heading);
     parents.push(heading);
   }
-  return roots;
+  return { headings: roots, notices, files: [...files] };
+}
+
+function addOutlineNotice(
+  notices: DocumentOutlineNotice[],
+  keys: Set<string>,
+  notice: DocumentOutlineNotice,
+): void {
+  const key = `${notice.kind}\0${filePathKey(notice.filePath)}\0${notice.line}\0${notice.message}`;
+  if (keys.has(key)) return;
+  keys.add(key);
+  notices.push(notice);
 }
 
 async function parseDocumentOutlineFlat(
@@ -90,12 +147,20 @@ async function parseDocumentOutlineFlat(
   source: string,
   workspaceRoot: string,
   readFile: (path: string) => Promise<string | null>,
-  visited: Set<string>,
-  occurrences: Map<string, number>,
+  ancestors: Set<string>,
+  occurrenceByFile: Map<string, Map<string, number>>,
+  notices: DocumentOutlineNotice[],
+  noticeKeys: Set<string>,
+  files: Set<string>,
+  followIncludes: boolean,
 ): Promise<DocumentHeading[]> {
   const flat: DocumentHeading[] = [];
-  visited.add(filePath);
-  
+  const fileKey = filePathKey(filePath);
+  ancestors.add(fileKey);
+  files.add(filePath);
+  const fileOccurrences = occurrenceByFile.get(fileKey) ?? new Map<string, number>();
+  occurrenceByFile.set(fileKey, fileOccurrences);
+
   let blockCommentDepth = 0;
   let rawFenceLength = 0;
   let lineStart = 0;
@@ -129,11 +194,11 @@ async function parseDocumentOutlineFlat(
           const level = match[2].length;
           const title = displayTitle(match[4]);
           const signature = `${level}:${title}`;
-          const occurrence = (occurrences.get(signature) ?? 0) + 1;
-          occurrences.set(signature, occurrence);
+          const occurrence = (fileOccurrences.get(signature) ?? 0) + 1;
+          fileOccurrences.set(signature, occurrence);
           const markerLength = match[1].length + match[2].length + match[3].length;
           flat.push({
-            id: `${signature}:${occurrence}`,
+            id: `${fileKey}::${signature}:${occurrence}`,
             level,
             title,
             filePath,
@@ -143,17 +208,66 @@ async function parseDocumentOutlineFlat(
             line: lineNumber,
             children: []
           });
-        } else {
-          const includeMatch = line.match(/include\s*["']([^"']+)["']/);
+        } else if (followIncludes) {
+          const includeMatch = line.match(/#include\s*(?:\(\s*)?["']([^"']+)["']/);
           if (includeMatch) {
             const includePath = includeMatch[1];
             const resolvedPath = resolveIncludePath(filePath, workspaceRoot, includePath);
-            if (!visited.has(resolvedPath)) {
+            const resolvedKey = filePathKey(resolvedPath);
+            if (ancestors.has(resolvedKey)) {
+              addOutlineNotice(notices, noticeKeys, {
+                kind: "include-cycle",
+                filePath,
+                line: lineNumber,
+                message: `Include cycle stopped at "${includePath}".`,
+              });
+            } else {
               const includeSource = await readFile(resolvedPath);
-              if (includeSource !== null) {
-                const subHeadings = await parseDocumentOutlineFlat(resolvedPath, includeSource, workspaceRoot, readFile, visited, occurrences);
+              if (includeSource === null) {
+                addOutlineNotice(notices, noticeKeys, {
+                  kind: "missing-include",
+                  filePath,
+                  line: lineNumber,
+                  message: `Could not resolve include "${includePath}".`,
+                });
+              } else {
+                const subHeadings = await parseDocumentOutlineFlat(
+                  resolvedPath,
+                  includeSource,
+                  workspaceRoot,
+                  readFile,
+                  new Set(ancestors),
+                  occurrenceByFile,
+                  notices,
+                  noticeKeys,
+                  files,
+                  followIncludes,
+                );
                 flat.push(...subHeadings);
               }
+            }
+          } else if (/#include\b/.test(line)) {
+            addOutlineNotice(notices, noticeKeys, {
+              kind: "dynamic-include",
+              filePath,
+              line: lineNumber,
+              message: `Dynamic include on line ${lineNumber} is not indexed.`,
+            });
+          }
+          if (/#import\b/.test(line)) {
+            const importMatch = line.match(/#import\s*(?:\(\s*)?["']([^"']+)["']/);
+            const importPath = importMatch?.[1] ?? "";
+            if (
+              importPath.toLowerCase().endsWith(".typ")
+              && !importPath.startsWith("@")
+              && !importPath.includes("://")
+            ) {
+              addOutlineNotice(notices, noticeKeys, {
+                kind: "import-not-supported",
+                filePath,
+                line: lineNumber,
+                message: `Imported Typst modules are not indexed: "${importPath}".`,
+              });
             }
           }
         }
@@ -270,6 +384,8 @@ export class DocumentOutlineController {
   private selectedHeadingId: string | null = null;
   private pdfOutline: StandalonePdfOutlineItem[] | null = null;
   private flatPdfOutline: StandalonePdfOutlineItem[] = [];
+  private previewOutlineItems: readonly OutlinePreviewItem[] = [];
+  private projectFiles = new Set<string>();
   private pendingPreviewSyncHeadingKey: string | null = null;
 
   constructor(
@@ -279,6 +395,7 @@ export class DocumentOutlineController {
     private readonly onNavigatePdf?: (destination: PdfiumDestination) => void,
     private readonly onActiveHeadingChanged?: (heading: DocumentHeading) => void,
     private readonly onChanged?: () => void,
+    private readonly onNotices?: (notices: readonly DocumentOutlineNotice[]) => void,
   ) {}
 
   public initialize(): void {
@@ -290,11 +407,26 @@ export class DocumentOutlineController {
     this.render();
   }
 
-  public async update(path: string | null, source: string, workspaceRoot: string, readFile: (path: string) => Promise<string | null>): Promise<void> {
+  public async update(
+    path: string | null,
+    source: string,
+    workspaceRoot: string,
+    readFile: (path: string) => Promise<string | null>,
+    isCurrent: () => boolean = () => true,
+    followIncludes = true,
+  ): Promise<void> {
+    const parsed = path?.toLowerCase().endsWith(".typ")
+      ? await parseDocumentOutlineDetailed(path, source, workspaceRoot, readFile, { followIncludes })
+      : { headings: [], notices: [], files: [] };
+    if (!isCurrent()) return;
+    if (followIncludes) {
+      this.projectFiles = new Set(parsed.files.map(filePathKey));
+    }
+    this.onNotices?.(parsed.notices);
     this.pdfOutline = null;
     this.flatPdfOutline = [];
-    this.activePath = path;
-    this.headings = path?.toLowerCase().endsWith(".typ") ? await parseDocumentOutline(path, source, workspaceRoot, readFile) : [];
+    this.headings = parsed.headings;
+    matchOutlinePreviewPositions(this.headings, this.previewOutlineItems);
     this.flatHeadings = flattenHeadings(this.headings);
     const validIds = new Set(this.flatHeadings.map(heading => heading.id));
     for (const id of this.collapsed) {
@@ -315,10 +447,20 @@ export class DocumentOutlineController {
     this.selectedHeadingId = null;
     this.pdfOutline = null;
     this.flatPdfOutline = [];
+    this.previewOutlineItems = [];
+    this.projectFiles.clear();
+    this.onNotices?.([]);
     this.pendingPreviewSyncHeadingKey = null;
     this.collapsed.clear();
     this.render();
     this.onChanged?.();
+  }
+
+  public setActiveFilePath(activePath: string | null): void {
+    const previousPathKey = this.activePath ? filePathKey(this.activePath) : null;
+    const nextPathKey = activePath ? filePathKey(activePath) : null;
+    this.activePath = activePath;
+    if (previousPathKey !== nextPathKey) this.updateFileEmphasis();
   }
 
   public setCursorPosition(
@@ -328,10 +470,11 @@ export class DocumentOutlineController {
   ): void {
     if (this.pdfOutline !== null) return;
     this.cursor = cursor;
-    this.activePath = activePath;
+    this.setActiveFilePath(activePath);
     let active: DocumentHeading | undefined;
+    const activePathKey = activePath ? filePathKey(activePath) : null;
     for (const heading of this.flatHeadings) {
-      if (heading.filePath === activePath) {
+      if (activePathKey && filePathKey(heading.filePath) === activePathKey) {
         if (heading.from > cursor) break;
         active = heading;
       }
@@ -358,10 +501,19 @@ export class DocumentOutlineController {
     return this.flatHeadings.find(heading => heading.id === id);
   }
 
+  public hasProjectFile(path: string): boolean {
+    return this.projectFiles.has(filePathKey(path));
+  }
+
+  public hasProjectFiles(): boolean {
+    return this.projectFiles.size > 0;
+  }
+
   public previewPositionAt(cursor: number): PreviewDocumentPosition | undefined {
     let position: PreviewDocumentPosition | undefined;
+    const activePathKey = this.activePath ? filePathKey(this.activePath) : null;
     for (const heading of this.flatHeadings) {
-      if (heading.filePath === this.activePath) {
+      if (activePathKey && filePathKey(heading.filePath) === activePathKey) {
         if (heading.from > cursor) break;
         if (heading.previewPosition) position = heading.previewPosition;
       }
@@ -370,6 +522,7 @@ export class DocumentOutlineController {
   }
 
   public updatePreviewPositions(items: readonly OutlinePreviewItem[]): void {
+    this.previewOutlineItems = items;
     matchOutlinePreviewPositions(this.headings, items);
     for (const heading of this.flatHeadings) {
       const headingKey = `${heading.filePath}\0${heading.id}`;
@@ -404,6 +557,25 @@ export class DocumentOutlineController {
     this.onChanged?.();
   }
 
+  private updateFileEmphasis(): void {
+    const activeKey = this.activePath ? filePathKey(this.activePath) : null;
+    const activeFileHasHeadings = !!activeKey
+      && this.flatHeadings.some(heading => filePathKey(heading.filePath) === activeKey);
+    this.container.querySelectorAll<HTMLElement>(".outline-item[data-outline-file]").forEach(row => {
+      const fileKey = row.dataset.outlineFile ? filePathKey(row.dataset.outlineFile) : null;
+      row.classList.toggle(
+        "outline-item-other-file",
+        activeFileHasHeadings && !!fileKey && fileKey !== activeKey,
+      );
+    });
+  }
+
+  public waitForPreviewPosition(heading: DocumentHeading): void {
+    const current = this.findHeading(heading.id) ?? heading;
+    if (current.previewPosition !== undefined || current.previewBookmarkIndex !== undefined) return;
+    this.pendingPreviewSyncHeadingKey = `${current.filePath}\0${current.id}`;
+  }
+
   private requestPreviewSync(heading: DocumentHeading, headingKey: string): void {
     const hasDestination = heading.previewPosition !== undefined
       || heading.previewBookmarkIndex !== undefined;
@@ -433,11 +605,12 @@ export class DocumentOutlineController {
       this.selectedHeadingId = null;
       const empty = document.createElement("div");
       empty.className = "outline-empty";
-      empty.textContent = "No headings in the active document.";
+      empty.textContent = "No headings in this outline.";
       this.container.replaceChildren(empty);
       return;
     }
     this.container.replaceChildren(this.renderLevel(this.headings));
+    this.updateFileEmphasis();
   }
 
   private visibleRows(): HTMLElement[] {
@@ -511,6 +684,7 @@ export class DocumentOutlineController {
       const row = document.createElement("div");
       row.className = `outline-item${this.selectedHeadingId === heading.id ? " keyboard-selected" : ""}`;
       row.dataset.outlineId = heading.id;
+      row.dataset.outlineFile = heading.filePath;
       row.setAttribute("role", "treeitem");
       row.setAttribute("aria-selected", String(this.selectedHeadingId === heading.id));
       row.title = `${heading.title} (line ${heading.line})`;

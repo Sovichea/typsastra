@@ -36,7 +36,7 @@ export interface WorkspacePersistenceSnapshot {
   inputContainerWidthPct: number;
   explorerSidebarWidthPx: number;
   sidebarVisible: boolean;
-  activeSidebarTool: "explorer" | "images" | "tables";
+  activeSidebarTool: "explorer" | "search" | "images" | "tables";
   activeDocumentPane: "outline" | "spellcheck" | "none";
   previewContentMode: "normal" | "draft";
   previewRenderMode: PreviewRenderMode;

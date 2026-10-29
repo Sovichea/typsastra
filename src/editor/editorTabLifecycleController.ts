@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { isBinaryImagePath } from "../platform/fileTypes";
-import { fileNameFromPath, filePathKey } from "../platform/paths";
+import { fileNameFromPath, filePathKey, isUntitledDocumentPath } from "../platform/paths";
 import type { PreviewSessionController } from "../preview/previewSessionController";
 import type { LspDocumentController } from "../session/lspDocumentController";
 import type { TypographyController } from "../typography/typographyController";
@@ -13,12 +13,14 @@ export interface EditorTabLoadOptions {
   temporary?: boolean;
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  preservePreviewViewport?: boolean;
   focusEditor?: boolean;
 }
 
 interface ActivationOptions {
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  preservePreviewViewport?: boolean;
   focusEditor?: boolean;
 }
 
@@ -30,6 +32,7 @@ export interface EditorTabLifecycleDependencies {
   typography(): TypographyController;
   pinnedMainFilePath(): string | null;
   persistActiveTabState(): void;
+  discardRecoverySnapshot(tab: EditorTab): void | Promise<void>;
   promoteToPermanent(tab: EditorTab): void | Promise<void>;
   activateTab(path: string, persistCurrent: boolean, options?: ActivationOptions): Promise<void>;
   classifyUnknownTextPath(path: string): Promise<boolean>;
@@ -62,10 +65,11 @@ export class EditorTabLifecycleController {
     const tab = tabs[tabIndex];
     if (!skipDirtyCheck && tab.isDirty) {
       const shouldClose = await confirm(
-        `Close ${fileNameFromPath(tab.path)} without saving?`,
+        `Close ${tab.title ?? fileNameFromPath(tab.path)} without saving?`,
         { title: "Unsaved Changes", kind: "warning" },
       );
       if (!shouldClose) return;
+      await this.dependencies.discardRecoverySnapshot(tab);
     }
 
     const wasActive = this.dependencies.session.activeFilePath === path;
@@ -98,6 +102,7 @@ export class EditorTabLifecycleController {
   async load(path: string, options: EditorTabLoadOptions = {}): Promise<void> {
     const tabs = this.dependencies.session.tabs;
     const existingTab = tabs.find(tab => filePathKey(tab.path) === filePathKey(path));
+    if (!existingTab && isUntitledDocumentPath(path)) return;
     if (existingTab) {
       if (!options.temporary) void this.dependencies.promoteToPermanent(existingTab);
       await this.dependencies.activateTab(existingTab.path, true, this.activationOptions(options));
@@ -156,6 +161,7 @@ export class EditorTabLifecycleController {
     return {
       preservePreviewSession: options.preservePreviewSession,
       skipPreviewActivation: options.skipPreviewActivation,
+      preservePreviewViewport: options.preservePreviewViewport,
       focusEditor: options.focusEditor,
     };
   }

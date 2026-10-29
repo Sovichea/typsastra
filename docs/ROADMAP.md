@@ -343,7 +343,7 @@ The trackable post-release work is in the [v1.x implementation plan](./V1X_IMPLE
   live-preview path only after v1.0, using measured page-count, output-size,
   latency, and memory budgets. PDF preview remains authoritative, and
   Typsastra must never retain both complete representations.
-- **Later v1.x:** global project search, package/dependency inventory, support
+- **Later v1.x:** cross-workspace search and replace, package/dependency inventory, support
   bundles, and additional stable complex-script providers.
 
 ## Deferred to v2.x

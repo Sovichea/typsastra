@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { PreviewClickPoint } from "../preview/previewFrame";
 import type { PreviewScrollPositionPayload } from "../preview/previewWindowController";
@@ -20,7 +20,7 @@ import { nativeAppMenuOwnsShortcuts } from "../platform/nativeAppMenuSpec";
 export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 
 export type DevUiAction =
-  | { action: "sidebar-tool"; tool: "explorer" | "images" | "tables" }
+  | { action: "sidebar-tool"; tool: "explorer" | "search" | "images" | "tables" }
   | { action: "preview-recompile" }
   | { action: "preview-color-mode"; mode: PreviewColorMode }
   | { action: "preview-zoom"; direction: "in" | "out" | "fit" }
@@ -88,7 +88,7 @@ export interface AppEventActions {
   restartWorkspace: () => Promise<void> | void;
   closeProject: () => Promise<boolean> | void;
   workspaceRootPath: () => string | null;
-  onNewFileCreated: (path: string) => Promise<void> | void;
+  createUntitledFile: () => Promise<void> | void;
 
   zoomOut: () => void;
   zoomIn: () => void;
@@ -105,11 +105,14 @@ export interface AppEventActions {
   exportSourceZip: () => Promise<void> | void;
   undo: () => void;
   redo: () => void;
+  navigateBack: () => Promise<void> | void;
+  navigateForward: () => Promise<void> | void;
   selectAllActiveSurface: () => void;
   foldCurrentFile: () => void;
   unfoldCurrentFile: () => void;
+  openProjectSearch: (replace?: boolean) => void;
   toggleSidebar: () => void;
-  setSidebarTool: (tool: "explorer" | "images" | "tables") => void;
+  setSidebarTool: (tool: "explorer" | "search" | "images" | "tables") => void;
   restoreDefaultLayout: () => void;
   toggleEditorToolbar: () => void;
   toggleLogConsole: () => void;
@@ -119,6 +122,7 @@ export interface AppEventActions {
 
   startWindowStateMonitor: () => Promise<void> | void;
   hasUnsavedChanges: () => boolean;
+  discardRecoverySnapshots: () => Promise<void> | void;
   prepareForClose: () => Promise<boolean>;
   persistWorkspaceState: () => Promise<void>;
   persistWindowState: () => Promise<void>;
@@ -282,6 +286,7 @@ function bindWindowControls(actions: AppEventActions): void {
     if (closeRequestInProgress) return;
     closeRequestInProgress = true;
     let proceed = true;
+    let discardRecovery = false;
     if (actions.hasUnsavedChanges()) {
       proceed = await confirm("You have unsaved changes. Are you sure you want to close Typsastra?", {
         title: "Unsaved Changes",
@@ -289,11 +294,13 @@ function bindWindowControls(actions: AppEventActions): void {
         okLabel: "Close Without Saving",
         cancelLabel: "Cancel"
       });
+      discardRecovery = proceed;
     }
     if (proceed) proceed = await actions.prepareForClose();
     if (proceed) {
       await actions.persistWorkspaceState();
       await actions.persistWindowState();
+      if (discardRecovery) await actions.discardRecoverySnapshots();
       try {
         const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
         const previewWin = await WebviewWindow.getByLabel("preview");
@@ -415,21 +422,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-import-project")?.addEventListener("click", () => void actions.importProject());
   document.getElementById("action-restart-workspace")?.addEventListener("click", () => void actions.restartWorkspace());
   document.getElementById("action-close-project")?.addEventListener("click", () => void actions.closeProject());
-  document.getElementById("action-new-file")?.addEventListener("click", async () => {
-    const workspaceRootPath = actions.workspaceRootPath();
-    if (!workspaceRootPath) {
-      alert("Please open a project first.");
-      return;
-    }
-    const savePath = await save({
-      defaultPath: workspaceRootPath,
-      filters: [{ name: "Typst Document", extensions: ["typ"] }]
-    });
-    if (typeof savePath === "string") {
-      await invoke("save_workspace_file", { path: savePath, contents: "= New Document\n" });
-      await actions.onNewFileCreated(savePath);
-    }
-  });
+  document.getElementById("action-new-file")?.addEventListener("click", () => void actions.createUntitledFile());
 
   document.getElementById("action-save-file")?.addEventListener("click", () => void actions.saveActiveFile());
   document.getElementById("action-save-file-as")?.addEventListener("click", () => void actions.saveActiveFileAs());
@@ -439,7 +432,11 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-exit")?.addEventListener("click", () => void getCurrentWindow().close());
   document.getElementById("action-undo")?.addEventListener("click", actions.undo);
   document.getElementById("action-redo")?.addEventListener("click", actions.redo);
+  document.getElementById("action-navigation-back")?.addEventListener("click", () => void actions.navigateBack());
+  document.getElementById("action-navigation-forward")?.addEventListener("click", () => void actions.navigateForward());
   document.getElementById("action-select-all")?.addEventListener("click", actions.selectAllActiveSurface);
+  document.getElementById("action-search-project")?.addEventListener("click", () => actions.openProjectSearch(false));
+  document.getElementById("action-replace-project")?.addEventListener("click", () => actions.openProjectSearch(true));
   document.getElementById("action-format-document")?.addEventListener("click", () => void actions.formatActiveDocument());
   document.getElementById("action-fold-file")?.addEventListener("click", actions.foldCurrentFile);
   document.getElementById("action-unfold-file")?.addEventListener("click", actions.unfoldCurrentFile);
@@ -447,6 +444,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-toggle-sidebar")?.addEventListener("click", actions.toggleSidebar);
   document.getElementById("sidebar-toggle-button")?.addEventListener("click", actions.toggleSidebar);
   document.getElementById("sidebar-explorer-button")?.addEventListener("click", () => actions.setSidebarTool("explorer"));
+  document.getElementById("sidebar-search-button")?.addEventListener("click", () => actions.openProjectSearch(false));
   document.getElementById("sidebar-images-button")?.addEventListener("click", () => actions.setSidebarTool("images"));
   document.getElementById("sidebar-tables-button")?.addEventListener("click", () => actions.setSidebarTool("tables"));
   document.getElementById("action-restore-default-layout")?.addEventListener("click", actions.restoreDefaultLayout);

@@ -15,6 +15,8 @@ describe("platform shortcut labels", () => {
     expect(formatShortcut("Ctrl+b", true)).toBe("Control+B");
     expect(formatShortcut("Alt+l", false)).toBe("Alt+L");
     expect(formatShortcut("Mod+Backquote", false)).toBe("Ctrl+`");
+    expect(formatShortcut("Alt+ArrowLeft", false)).toBe("Alt+Left");
+    expect(formatShortcut("Alt+ArrowLeft", true)).toBe("Option+Left");
   });
 
   test("names Alt as Option and Ctrl as Control on macOS only", () => {

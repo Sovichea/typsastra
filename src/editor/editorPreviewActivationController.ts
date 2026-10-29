@@ -31,6 +31,7 @@ export interface EditorPreviewActivationDependencies {
   invalidatePreviewWork(reason: string): void;
   noMainFileMessage(): string;
   disabledPreviewMessage(): string;
+  untitledPreviewMessage(): string;
   renderPdfPreview(contents: string): void;
   logPreview(message: string): void;
 }
@@ -50,6 +51,19 @@ export class EditorPreviewActivationController {
     let target: PreviewTarget | null = null;
 
     this.deps.logPreview(`Tab preview prepare: tab=${path}; typst=${isTypstDocument}; lowMemory=${this.deps.isLowMemoryMode()}; skip=${options.skipPreviewActivation === true}; pinned=${this.deps.pinnedMainFilePath() ?? "none"}.`);
+    if (tab.untitled) {
+      this.deps.previewSession.applyTargetToTab(tab, {
+        rootPath: null,
+        mainPath: null,
+        imported: false,
+        standalone: true,
+        disabled: true,
+      });
+      if (!options.skipPreviewActivation) {
+        this.deps.previewFrame().setMessage(this.deps.untitledPreviewMessage());
+      }
+      return { target, guarded, presentationReused };
+    }
     if (options.skipPreviewActivation) {
       return { target, guarded, presentationReused };
     }
@@ -122,6 +136,7 @@ export class EditorPreviewActivationController {
     context: EditorPreviewActivationContext,
     options: EditorPreviewActivationOptions,
   ): Promise<void> {
+    if (tab.untitled) return;
     if (options.isCurrent?.() === false || options.skipPreviewActivation || !isTypstDocument) return;
 
     // Low-memory preview deliberately compiles in one-shot processes rather

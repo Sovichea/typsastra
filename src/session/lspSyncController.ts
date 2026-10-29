@@ -46,11 +46,12 @@ export class LspSyncController {
       || !this.deps.ready()
       || !this.deps.client()
     ) return;
+    const activeTab = this.deps.activeTab();
+    if (activeTab?.untitled) return;
 
     const documents = this.deps.documents();
     const version = documents.nextVersion();
     documents.latestVersion = version;
-    const activeTab = this.deps.activeTab();
     if (activeTab && activeTab.path === path) {
       activeTab.version = version;
       activeTab.latestVersion = version;
@@ -127,7 +128,7 @@ export class LspSyncController {
     if (!activePath || !workspaceRootPath || !this.deps.ready() || !client) return;
 
     const tab = this.deps.activeTab();
-    if (!tab?.contentLoaded || !isTypstDocumentPath(tab.path)) return;
+    if (!tab?.contentLoaded || !isTypstDocumentPath(tab.path) || tab.untitled) return;
     const contents = this.deps.activeEditorText();
 
     try {

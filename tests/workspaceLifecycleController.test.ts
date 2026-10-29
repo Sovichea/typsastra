@@ -209,6 +209,7 @@ describe("WorkspaceLifecycleController behavior", () => {
       saveWorkspaceState: async () => { calls.push("save-workspace"); },
       stopTinymistSession: async () => { calls.push("stop-lsp"); },
       sidebarController: { activeTool: "explorer", restore: () => {}, reset: () => {} },
+      projectSearchController: { reset: () => {} },
       imageToolsController: { setWorkspace: async () => {}, show: () => {} },
       tableToolController: { setWorkspace: () => {}, show: () => {} },
       settingsController: {
@@ -244,6 +245,12 @@ describe("WorkspaceLifecycleController behavior", () => {
         clearWorkspace: () => {},
       },
       documentOutlineController: { clear: () => {} },
+      navigationHistoryController: { clear: () => calls.push("clear-navigation-history") },
+      recoveryController: {
+        discardAllTabs: async (tabs: readonly { path: string }[]) => {
+          calls.push(`discard-recovery:${tabs.map(tab => tab.path).join(",")}`);
+        },
+      },
       spellcheckSidebarPane: { clear: () => {} },
       restoreDocumentSidebarPane: () => {},
       renderEditorTabs: () => {},
@@ -263,6 +270,7 @@ describe("WorkspaceLifecycleController behavior", () => {
         "stop-watching",
         "stop-lsp",
       ]);
+      expect(calls).toContain("clear-navigation-history");
       expect(calls).toContain("update-viewport");
     } finally {
       Object.defineProperty(globalThis, "document", { configurable: true, value: previousDocument });

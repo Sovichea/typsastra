@@ -32,6 +32,16 @@ export function filePathFromUri(uri: string): string {
   return /^\/[A-Za-z]:\//.test(pathname) ? pathname.slice(1) : pathname;
 }
 
+export const UNTITLED_DOCUMENT_PATH_PREFIX = "untitled:";
+
+export function untitledDocumentPath(id: string): string {
+  return `${UNTITLED_DOCUMENT_PATH_PREFIX}${id}.typ`;
+}
+
+export function isUntitledDocumentPath(path: string): boolean {
+  return path.startsWith(UNTITLED_DOCUMENT_PATH_PREFIX);
+}
+
 export function filePathKey(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/$/, "");
   const isWindowsPath = /^[A-Za-z]:\//.test(normalized) || normalized.startsWith("//");

@@ -34,6 +34,7 @@ export interface PreviewContentDependencies {
   getPreviewRenderMode(): PreviewRenderMode;
   getActiveTab(): EditorTab | null;
   getEditorText(): string;
+  untitledPreviewMessage(): string;
   isInternallySupportedPath(path: string): boolean;
   updateActionsToolbar(path: string): void;
   prepareTemplateAwarePreview(
@@ -127,6 +128,10 @@ export class PreviewContentController {
     const path = this.deps.getActiveFilePath();
     if (!path) return;
     const activeTab = this.deps.getActiveTab();
+    if (activeTab?.untitled) {
+      this.deps.previewFrame.setMessage(this.deps.untitledPreviewMessage());
+      return;
+    }
     const workspaceRootPath = this.deps.getWorkspaceRootPath();
     const pinnedMainPath = this.deps.getPinnedMainFilePath();
     const isCurrent = () => (

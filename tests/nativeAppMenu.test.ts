@@ -28,6 +28,8 @@ const expectedWorkspaceScoped = [
   "action-export-source-zip",
   "action-restart-workspace",
   "action-close-project",
+  "action-search-project",
+  "action-replace-project",
   "action-format-document",
   "action-fold-file",
   "action-unfold-file",
@@ -75,13 +77,14 @@ describe("native application menu spec", () => {
     }
   });
 
-  test("scopes exactly the fourteen workspace-dependent menu ids", () => {
+  test("scopes exactly the sixteen workspace-dependent menu ids", () => {
     expect(workspaceScopedMenuIds(spec)).toEqual(expectedWorkspaceScoped);
   });
 
   test("keeps the dynamic recent projects entry accelerator-free", () => {
     const fileMenu = spec.find(submenu => submenu.label === "File");
-    expect(fileMenu?.nodes[3]).toEqual({ kind: "recent-placeholder" });
+    expect(fileMenu?.nodes.find(node => node.kind === "recent-placeholder"))
+      .toEqual({ kind: "recent-placeholder" });
     for (const submenu of spec) {
       for (const node of submenu.nodes) {
         if (node.kind === "recent-placeholder") {

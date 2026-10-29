@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { LspStatus } from "../compiler/lsp";
 import { fileExtension, isBinaryImagePath, isTypstDocumentPath } from "../platform/fileTypes";
-import { filePathKey } from "../platform/paths";
+import { filePathKey, isUntitledDocumentPath } from "../platform/paths";
 import type { PreviewRenderMode } from "../settings";
 import type { EditorTab } from "./editorTab";
 
@@ -31,6 +31,11 @@ type DocumentPersistenceDependencies = {
   notifyLspSave: (path: string, content: string) => Promise<void>;
   logMemoryDiagnostics: (reason: string) => Promise<void>;
   clearExternalConflict: (path: string) => void;
+  autoSaveAllowed: () => boolean;
+  activeTab: () => EditorTab | null;
+  saveUntitledDocumentAs: () => Promise<void>;
+  recoveryRevision: (tab: EditorTab) => number;
+  recoverySaved: (tab: EditorTab, revision: number) => Promise<void> | void;
   renderEditorTabs: () => void;
   refreshPreviewAfterSave: (path: string, content: string) => Promise<void>;
   setLspStatus: (status: LspStatus) => void;
@@ -54,6 +59,10 @@ export class DocumentPersistenceController {
       if (intent === "manual" && inProgressIntent === "automatic") {
         await this.saveActiveFile("manual");
       }
+      return;
+    }
+    if (this.deps.activeTab()?.untitled) {
+      await this.deps.saveUntitledDocumentAs();
       return;
     }
     this.deps.flushEditorContentMutation();
@@ -84,6 +93,10 @@ export class DocumentPersistenceController {
   }
 
   async saveActiveFileAs(): Promise<void> {
+    if (this.deps.activeTab()?.untitled) {
+      await this.deps.saveUntitledDocumentAs();
+      return;
+    }
     const activeFilePath = this.deps.activeFilePath();
     if (!activeFilePath || !this.canPersistPath(activeFilePath)) return;
 
@@ -122,11 +135,13 @@ export class DocumentPersistenceController {
   }
 
   private async runAutoSaveCycle(): Promise<void> {
-    if (this.saveInProgress || !this.deps.workspaceRootPath()) return;
+    if (this.saveInProgress || !this.deps.workspaceRootPath() || !this.deps.autoSaveAllowed()) return;
     this.deps.flushEditorContentMutation();
     const dirtyTabs = this.deps.openTabs().filter(tab =>
       tab.contentLoaded
       && tab.isDirty
+      && !tab.untitled
+      && !tab.recoveredUnsaved
       && this.canPersistPath(tab.path)
     );
     if (dirtyTabs.length === 0) return;
@@ -149,12 +164,15 @@ export class DocumentPersistenceController {
     try {
       for (const tab of tabs) {
         const content = tab.content;
+        const recoveryRevision = this.deps.recoveryRevision(tab);
         await invoke("save_workspace_file", { path: tab.path, contents: content });
         if (tab.content !== content) continue;
         tab.savedContent = content;
         tab.isDirty = false;
+        tab.recoveredUnsaved = undefined;
         tab.externalContent = undefined;
         this.deps.clearExternalConflict(tab.path);
+        await this.deps.recoverySaved(tab, recoveryRevision);
         savedTabs.push(tab);
       }
     } catch (error) {
@@ -219,6 +237,7 @@ export class DocumentPersistenceController {
       ));
       const pendingExternalContents = pendingExternalTabs.map(tab => ({ tab, content: tab.content }));
       const contentChanged = pendingExternalTabs.length > 0 || activeTab?.externalContent !== undefined || content !== savedContentBeforeSave;
+      const recoveryRevision = activeTab ? this.deps.recoveryRevision(activeTab) : 0;
       await invoke("save_workspace_file", { path: activeFilePath, contents: content });
       await this.deps.logMemoryDiagnostics(`save ${saveDiagnosticId}: after workspace write`);
 
@@ -232,8 +251,10 @@ export class DocumentPersistenceController {
         activeTab.content = content;
         activeTab.savedContent = content;
         activeTab.isDirty = false;
+        activeTab.recoveredUnsaved = undefined;
         activeTab.externalContent = undefined;
         this.deps.clearExternalConflict(activeTab.path);
+        await this.deps.recoverySaved(activeTab, recoveryRevision);
         this.deps.renderEditorTabs();
       }
       this.deps.setLspStatus({ kind: "preview-ready", message: "File saved" });
@@ -259,7 +280,8 @@ export class DocumentPersistenceController {
   }
 
   private canPersistPath(path: string): boolean {
-    return this.deps.isInternallySupportedPath(path)
+    return !isUntitledDocumentPath(path)
+      && this.deps.isInternallySupportedPath(path)
       && !isBinaryImagePath(path)
       && fileExtension(path) !== "pdf";
   }

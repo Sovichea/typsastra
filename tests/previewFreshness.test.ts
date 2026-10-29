@@ -261,6 +261,7 @@ describe("preview freshness", () => {
       editorSessionController: { activeFilePath: "main.typ" }, activeMode: "CODE",
       pdfPreviewRenderController: { noteExternalSourceChange: (path: string) => changes.push(path) },
       diagnosticsController: { clearForPath: () => {} },
+      projectTextService: { invalidate: () => {} },
       lspSyncController: { queueContentMutation: () => {} },
       scheduleDocumentOutlineUpdate: () => {},
       handleContentMutation: () => { throw new Error("External reload must not trigger an editor mutation"); },

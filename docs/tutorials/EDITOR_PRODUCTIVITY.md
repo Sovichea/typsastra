@@ -17,10 +17,61 @@ are summarized along the editor scrollbar. Compiler diagnostics and spellcheck
 issues have their own gutter/scrollbar markers and can be navigated without
 moving the PDF unexpectedly.
 
-The Outline pane is built from the active Typst document. Select a heading to
-navigate to its source. Pane focus and keyboard navigation let you move between
-the editor, preview, Explorer, Outline, and Spellcheck without reaching for the
-mouse.
+Use [Search a project](PROJECT_SEARCH.md) to search every UTF-8 source file in
+the workspace, including unsaved open buffers. Project search supports literal,
+regex, and fuzzy matching, include/exclude globs, and a separate activity-bar
+panel that leaves the editor and preview visible.
+
+The Outline pane shows the pinned main Typst document and its includes when the
+main file or one of its included files is active. Other project Typst files show
+a file-only outline for editor navigation; their own includes are not expanded
+until they are pinned as the main document. While a file in the main document
+is active, including the main file itself, headings from other files are muted so
+the active file's headings stand out. Select a heading to open its source and
+scroll the PDF to that heading.
+
+A file included more than once appears at each inclusion point, and headings keep
+stable identities based on their source file, so reordering includes does not
+change which item is selected or expanded. The Outline pane shows only headings.
+Includes that cannot be indexed are reported in the Log console: missing files,
+dynamic includes, and include cycles appear as warnings, while local `.typ`
+modules referenced with `#import` are informational because imported Typst
+modules are not expanded. Only literal `#include` directives are indexed.
+
+Back and Forward at the left of the tab bar, and in the Edit menu, return to
+previous source locations from project search, the outline, definitions,
+diagnostics, inverse sync, Explorer file opens, and tab selections. They default
+to `Alt+Left` and `Alt+Right` and can be changed in **Settings → Shortcuts**.
+Returning to a location restores its selection and editor viewport without
+recompiling the preview or moving the PDF. History is kept for the current
+session and is cleared when the project closes. Scroll the tab bar with the
+wheel or trackpad; the chevron at its right edge opens a list of every open tab.
+
+Pane focus and keyboard navigation let you move between the editor, preview,
+Explorer, Outline, and Spellcheck without reaching for the mouse.
+
+## Unsaved-work recovery
+
+Typsastra snapshots unsaved text while you edit, including dirty tabs that are
+not currently active. Snapshots are written after a short idle pause and at
+least every five seconds during continuous typing. They live outside the
+project and are separate from preview caches.
+
+**New File** (`Ctrl/Cmd+N`) opens a pathless untitled buffer. It is not written
+to disk and is not persisted as a normal workspace tab; it is protected by the
+same unsaved-work snapshots instead. Use **Save** or **Save As** to choose a file
+path. After saving, the tab becomes an ordinary project file.
+
+After an unexpected shutdown, opening the affected project offers its available
+snapshots. The recovery prompt is not shown automatically at application startup,
+and snapshots belonging to other projects are not included. Each recovered file
+or untitled buffer can be reviewed, restored as an unsaved buffer, or discarded.
+If the file changed on disk, review the unified diff before restoring; only
+changed hunks and nearby context are shown, with additions and removals
+highlighted. Deleted files and untitled buffers reopen as dirty buffers so they
+can be kept with Save As. Saving removes only the matching snapshot revision;
+newer unsaved edits are retained. Corrupt records are reported separately and do
+not block other files.
 
 ## Typst-aware editing
 

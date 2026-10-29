@@ -47,7 +47,7 @@ export class EditorTabStateController {
       : editor.state.doc.toString();
     const selection = editor.state.selection.main;
     tab.content = content;
-    tab.isDirty = tab.externalContent !== undefined || tab.content !== tab.savedContent;
+    tab.isDirty = tab.untitled === true || tab.externalContent !== undefined || tab.content !== tab.savedContent;
     tab.version = this.deps.currentVersion();
     tab.latestVersion = this.deps.latestDocumentVersion();
     tab.selectionAnchor = selection.anchor;
@@ -131,7 +131,9 @@ export class EditorTabStateController {
     if (!tab) return;
     const wasDirty = tab.isDirty;
     tab.content = content;
-    tab.isDirty = tab.externalContent !== undefined || tab.content !== tab.savedContent;
+    tab.isDirty = tab.untitled === true
+      || tab.externalContent !== undefined
+      || tab.content !== tab.savedContent;
     if (tab.isDirty && tab.temporary) {
       void this.promoteToPermanent(tab);
     } else if (wasDirty !== tab.isDirty) {

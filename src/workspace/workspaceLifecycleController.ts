@@ -97,9 +97,10 @@ export interface WorkspaceLifecycleServices {
   };
   sidebarController: {
     activeTool: string;
-    restore(state: { visible: boolean; activeTool: "explorer" | "images" | "tables" }): void;
+    restore(state: { visible: boolean; activeTool: "explorer" | "search" | "images" | "tables" }): void;
     reset(): void;
   };
+  projectSearchController: { reset(): void };
   workspaceController: {
     absolutePath(root: string, path: string | null): Promise<string | null>;
     loadMetadata(root: string): Promise<WorkspaceMetadata>;
@@ -138,6 +139,8 @@ export interface WorkspaceLifecycleServices {
   sourceMapSessionController: { registeredTaskId: string | null; reset(): void };
   imagePreviewController: { clear(): void };
   documentOutlineController: { clear(): void };
+  navigationHistoryController: { clear(): void };
+  recoveryController: { discardAllTabs(tabs: readonly EditorTab[]): Promise<void> };
   spellcheckSidebarPane: { clear(): void };
   logConsoleController: { clearAllLogs(): void; setVisible(visible: boolean): void };
 }
@@ -668,9 +671,10 @@ export class WorkspaceLifecycleController {
   async close(options: { confirmUnsaved?: boolean } = {}): Promise<boolean> {
     const app = this.app;
     const confirmUnsaved = options.confirmUnsaved ?? true;
-    if (confirmUnsaved && app.openTabs.some(tab => tab.isDirty)) {
+    const discardedTabs = confirmUnsaved ? app.openTabs.filter(tab => tab.isDirty) : [];
+    if (discardedTabs.length > 0) {
       const shouldClose = await confirm(
-        "Close this project with unsaved changes? The editor state will be kept for session recovery, but the files are not saved to disk.",
+        "Close this project with unsaved changes? Unsaved changes will be discarded and the files are not saved to disk.",
         { title: "Unsaved Changes", kind: "warning" },
       );
       if (!shouldClose) return false;
@@ -717,8 +721,10 @@ export class WorkspaceLifecycleController {
     app.previewScrollSaveTimer = null;
     app.previewSyncController.cancelManual();
 
+    if (discardedTabs.length > 0) await app.recoveryController.discardAllTabs(discardedTabs);
     app.workspaceRootPath = null;
     app.renderCacheRootPath = null;
+    app.projectSearchController.reset();
     app.sidebarController.reset();
     app.restoreDocumentSidebarPane("outline");
     app.spellcheckSidebarPane.clear();
@@ -775,6 +781,7 @@ export class WorkspaceLifecycleController {
     if (app.activeMode === "WYSIWYM") app.mapMarkupToWysiwym("");
     app.explorer.clearWorkspace();
     app.documentOutlineController.clear();
+    app.navigationHistoryController.clear();
     app.renderEditorTabs();
     app.setLspStatus({ kind: "stopped", message: "Project closed" });
     app.updateWorkspaceViewportVisibility();

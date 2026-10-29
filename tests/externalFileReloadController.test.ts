@@ -18,18 +18,20 @@ function fixture(overrides: Partial<ExternalFileReloadDependencies> = {}) {
   const changed: string[] = [];
   const presented: string[] = [];
   const warnings: string[] = [];
+  const discarded: string[] = [];
   const deps: ExternalFileReloadDependencies = {
     presentation: { replaceActiveTextContents: (_tab: EditorTab, text: string) => { presented.push(text); } } as unknown as ExternalFileReloadDependencies["presentation"],
     openTabs: () => [source], activeFilePath: () => source.path,
     isInternallySupportedPath: () => true, isSaving: () => false, flushEditorContentMutation: () => {},
     pathExists: async () => true, readText: async () => disk, readImage: async () => disk,
-    closeTab: async () => {}, loadPdfPath: () => {}, renderTabs: () => {},
+    closeTab: async () => {}, discardRecoverySnapshot: async current => { discarded.push(current.path); },
+    loadPdfPath: () => {}, renderTabs: () => {},
     sourceChanged: current => { changed.push(current.content); },
     confirmReload: async () => false,
     setLspStatus: () => {}, appendWorkspaceWarning: message => { warnings.push(message); },
     invalidateLazyLoad: () => {}, ...overrides,
   };
-  return { source, changed, presented, warnings, deps, controller: new ExternalFileReloadController(deps), set disk(text: string) { disk = text; } };
+  return { source, changed, presented, warnings, discarded, deps, controller: new ExternalFileReloadController(deps), set disk(text: string) { disk = text; } };
 }
 
 describe("external source monitoring", () => {
@@ -42,6 +44,7 @@ describe("external source monitoring", () => {
     expect(f.source.externalPreviewPending).toBe(false);
     expect(f.presented).toEqual(["external"]);
     expect(f.changed).toEqual(["external"]);
+    expect(f.discarded).toEqual([f.source.path]);
     expect(await f.controller.reloadOpenFiles()).toBe(false);
     expect(f.source.isDirty).toBe(false);
     expect(f.changed).toHaveLength(1);
@@ -95,6 +98,7 @@ describe("external source monitoring", () => {
     expect(prompts).toBe(1);
     expect(f.source.content).toBe("local");
     expect(f.changed).toEqual([]);
+    expect(f.discarded).toEqual([]);
     f.disk = "external again";
     await f.controller.reloadOpenFiles();
     expect(prompts).toBe(2);
@@ -107,7 +111,29 @@ describe("external source monitoring", () => {
     await f.controller.reloadOpenFiles();
     expect(f.source.content).toBe("external");
     expect(f.source.isDirty).toBe(false);
+    expect(f.discarded).toEqual([f.source.path]);
     expect(f.controller.conflictPaths.size).toBe(0);
+  });
+
+  test("discards the snapshot of a clean file removed outside Typsastra", async () => {
+    let closed = false;
+    const f = fixture({
+      pathExists: async () => false,
+      closeTab: async () => { closed = true; },
+    });
+    await f.controller.reloadOpenFiles();
+    expect(closed).toBe(true);
+    expect(f.discarded).toEqual([f.source.path]);
+  });
+
+  test("keeps the snapshot when a dirty file disappears during an external conflict", async () => {
+    const f = fixture({ pathExists: async () => false });
+    f.source.content = "local";
+    f.source.isDirty = true;
+    await f.controller.reloadOpenFiles();
+    expect(f.source.content).toBe("local");
+    expect(f.discarded).toEqual([]);
+    expect(f.warnings[0]).toContain("removed outside Typsastra");
   });
 
   test("rejects a disk read if the editor or save baseline changed while it was pending", async () => {

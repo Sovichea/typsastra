@@ -55,6 +55,8 @@ import { SettingsController } from "./settingsController";
 import { SettingsRuntimeController } from "./settingsRuntimeController";
 import { fileNameFromPath, filePathKey, relativeFilePath } from "./platform/paths";
 import { isBinaryImagePath, isMarkdownDocumentPath, isTypstDocumentPath, fileExtension } from "./platform/fileTypes";
+import { createUntitledTab, nextUntitledTitle } from "./editor/untitledDocument";
+import { untitledIdFromRecoveryDocumentId } from "./recovery/recoveryIdentity";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import type { PreviewFrame, PreviewClickPoint, PreviewInteractionStatus, PreviewPageStatus, PreviewSurface } from "./preview/previewFrame";
 import type { PreviewSourceOutlineItem } from "./preview/previewOutlineNavigator";
@@ -124,7 +126,7 @@ import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type SystemToolchain, type ToolchainStatus } from "./toolchain/toolchainController";
 import { ToolchainSetupController, type ToolchainInstallProgress } from "./toolchain/toolchainSetupController";
-import { DocumentOutlineController, matchOutlinePreviewPositions, outlineSourceSnapshot, parseDocumentOutline, type DocumentHeading, type OutlinePreviewItem } from "./outline/documentOutline";
+import { DocumentOutlineController, matchOutlinePreviewPositions, outlineSourceSnapshot, parseDocumentOutline, type DocumentHeading, type DocumentOutlineNotice, type OutlinePreviewItem } from "./outline/documentOutline";
 import { WindowStateController } from "./window/windowStateController";
 import { bindAppEvents, type DevUiAction } from "./ui/appEventBindings";
 import { ReleaseSummaryController } from "./ui/releaseSummaryController";
@@ -143,7 +145,8 @@ import { WebviewStorageController } from "./webviewStorageController";
 import { SystemResumeMonitor } from "./platform/systemResume";
 import { WorkspaceResumeController } from "./platform/workspaceResumeController";
 import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativeAppMenu";
-import { setShortcutLabelOverrides } from "./platform/shortcuts";
+import { formatShortcut, setShortcutLabelOverrides } from "./platform/shortcuts";
+import { shortcutFor } from "./platform/shortcutRegistry";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
 import { createAppIcon } from "./ui/icons";
@@ -160,11 +163,30 @@ import { DocumentPersistenceController, type SaveIntent } from "./editor/documen
 import { DocumentFormattingController } from "./editor/documentFormattingController";
 import { DocumentLanguageController } from "./editor/documentLanguageController";
 import { EditorFileGuardController } from "./editor/editorFileGuardController";
-import { EditorFileContentController } from "./editor/editorFileContentController";
+import {
+  EditorFileContentController,
+  normalizeEditorText,
+} from "./editor/editorFileContentController";
 import { WorkspaceTextController } from "./workspace/workspaceTextController";
+import { ProjectTextService, textRevisionToken } from "./workspace/projectTextService";
+import { findEditorSearchMatches } from "./editor/searchMatcher";
+import {
+  applyTextEdits,
+  isGraphemeSafeReplacementRange,
+  type ProjectReplacementBatch,
+  type ProjectReplacementRequest,
+  type ProjectReplacementResult,
+} from "./search/projectReplacement";
+import {
+  ProjectSearchController,
+  type ProjectSearchNavigationTarget,
+} from "./search/projectSearchController";
 import { DocumentTypographyApplicationController } from "./typography/documentTypographyApplicationController";
 import { SourceLocationController } from "./navigation/sourceLocationController";
 import { OutlineNavigationController } from "./navigation/outlineNavigationController";
+import { NavigationHistoryController } from "./navigation/navigationHistoryController";
+import { RecoveryController, type RecoveryRecord } from "./recovery/recoveryController";
+import { RecoveryReviewController } from "./recovery/recoveryReviewController";
 import { TinymistIntegrationController } from "./session/tinymistIntegrationController";
 
 
@@ -258,6 +280,23 @@ export class TypsastraWorkspaceController {
   private readonly editorFileContentController = new EditorFileContentController({
     normalizeFoldRanges: (value, docLength) => this.normalizeFoldRanges(value, docLength),
   });
+  private readonly projectTextService = new ProjectTextService({
+    workspaceRootPath: () => this.workspaceRootPath,
+    openTabs: () => this.openTabs,
+    markPlainTextPath: path => this.editorFileContentController.markPlainTextPath(path),
+  });
+  private readonly projectSearchController = new ProjectSearchController({
+    workspaceRootPath: () => this.workspaceRootPath,
+    pinnedMainFilePath: () => this.pinnedMainFilePath,
+    projectText: () => this.projectTextService,
+    openResult: target => this.navigateToProjectSearchResult(target),
+    applyReplacement: request => this.applyProjectReplacement(request),
+    undoReplacement: () => this.undoProjectReplacement(),
+    replacementUndoAvailable: () => this.projectReplacementUndoAvailable(),
+    resetReplacementBatch: () => {
+      this.projectReplacementBatch = null;
+    },
+  });
   private readonly previewSessionController = new PreviewSessionController({
     workspaceRootPath: () => this.workspaceRootPath,
     previewRenderMode: () => this.effectivePreviewRenderMode,
@@ -284,6 +323,7 @@ export class TypsastraWorkspaceController {
     isPinnedMainFile: path => this.isPinnedMainFile(path),
     editorText: () => this.editorInstance.state.doc.toString(),
     workspaceRootPath: () => this.workspaceRootPath,
+    readWorkspaceText: path => this.workspaceText(path),
     activeTab: () => this.getActiveTab(),
     editorCursorPosition: () => this.editorInstance.state.selection.main.head,
     scriptLanguages: () => this.workspaceMetadata?.project.scriptLanguages ?? [],
@@ -353,6 +393,7 @@ export class TypsastraWorkspaceController {
     typography: () => this.typographyController,
     pinnedMainFilePath: () => this.pinnedMainFilePath,
     persistActiveTabState: () => this.persistActiveTabState(),
+    discardRecoverySnapshot: tab => this.recoveryController.discardTab(tab),
     promoteToPermanent: tab => this.promoteToPermanent(tab),
     activateTab: (path, persistCurrent, options) => this.activateEditorTab(path, persistCurrent, options),
     classifyUnknownTextPath: path => this.classifyUnknownTextPath(path),
@@ -379,6 +420,7 @@ export class TypsastraWorkspaceController {
     invalidatePreviewWork: reason => this.invalidatePreviewWork(reason),
     noMainFileMessage: () => this.noMainFileMessage(),
     disabledPreviewMessage: () => this.disabledPreviewMessage(),
+    untitledPreviewMessage: () => this.untitledPreviewMessage(),
     renderPdfPreview: contents => { void this.renderPdfPreview(contents, false, true); },
     logPreview: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
   });
@@ -406,6 +448,7 @@ export class TypsastraWorkspaceController {
     readText: path => invoke<string>("read_workspace_file", { path }),
     readImage: path => invoke<string>("read_workspace_file_as_base64", { path }),
     closeTab: path => this.closeEditorTab(path, true),
+    discardRecoverySnapshot: tab => this.recoveryController.discardTab(tab),
     loadPdfPath: path => { void this.loadPdfPath(path, path); },
     renderTabs: () => this.renderEditorTabs(),
     sourceChanged: tab => this.handleExternalSourceChange(tab),
@@ -457,6 +500,9 @@ export class TypsastraWorkspaceController {
   private readonly offProjectPreviewRoots = new Map<string, string>();
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
+  private recoveryReviewAutoShowReady = false;
+  private projectReplacementInProgress = false;
+  private projectReplacementBatch: ProjectReplacementBatch | null = null;
   private workspaceServicesDeferredForLargeFile = false;
   private get approvedLargePreviewRoots(): Set<string> { return this.largePreviewGuardController.approvedRoots; }
   private get inspectedPreviewRoots(): Set<string> { return this.largePreviewGuardController.inspectedRoots; }
@@ -546,7 +592,8 @@ export class TypsastraWorkspaceController {
       : 300,
     onContentMutationStart: path => {
       if (
-        this.effectivePreviewRenderMode === "on-type"
+        !this.projectReplacementInProgress
+        && this.effectivePreviewRenderMode === "on-type"
         && activeFileCanRenderPreview(
           path,
           this.pinnedMainFilePath,
@@ -720,6 +767,7 @@ export class TypsastraWorkspaceController {
     generatedPreviewText: path => this.pdfGeneratedPreviewText(path),
     resolveOpenTabPath: path =>
       this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(path))?.path ?? null,
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly surroundWithDiscoveryController = new SurroundWithDiscoveryController({
     client: () => this.documentSessionController.hasClient ? this.lspClient : null,
@@ -731,22 +779,32 @@ export class TypsastraWorkspaceController {
 
   private codePane = document.getElementById("code-editor-pane")!;
   private editorTabBar = document.getElementById("editor-tab-bar")!;
-  private readonly editorTabViewController = new EditorTabViewController(this.editorTabBar, {
-    tabs: () => this.openTabs,
-    activeFilePath: () => this.activeFilePath,
-    pinnedMainFilePath: () => this.pinnedMainFilePath,
-    sortPinnedMainFirst: () => this.editorSessionController.sortPinnedMainFirst(this.pinnedMainFilePath),
-    activateTab: path => this.activateEditorTab(path),
-    closeTab: path => this.closeEditorTab(path),
-    promoteTab: tab => this.promoteToPermanent(tab),
-    reportActivationFailure: (path, error) => {
-      console.error("Failed to load restored tab:", path, error);
-      void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
-        title: "Unable to Open File",
-        kind: "error"
-      });
+  private readonly editorTabViewController = new EditorTabViewController(
+    this.editorTabBar,
+    {
+      tabs: () => this.openTabs,
+      activeFilePath: () => this.activeFilePath,
+      pinnedMainFilePath: () => this.pinnedMainFilePath,
+      sortPinnedMainFirst: () => this.editorSessionController.sortPinnedMainFirst(this.pinnedMainFilePath),
+      activateTab: path => this.navigateToEditorTab(path),
+      closeTab: path => this.closeEditorTab(path),
+      promoteTab: tab => this.promoteToPermanent(tab),
+      navigateBack: () => this.navigateBack(),
+      navigateForward: () => this.navigateForward(),
+      reportActivationFailure: (path, error) => {
+        console.error("Failed to load restored tab:", path, error);
+        void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
+          title: "Unable to Open File",
+          kind: "error"
+        });
+      },
     },
-  });
+    {
+      container: document.getElementById("editor-tab-list") as HTMLElement,
+      button: document.getElementById("editor-tab-list-toggle") as HTMLButtonElement,
+      menu: document.getElementById("editor-tab-list-menu") as HTMLElement,
+    },
+  );
   private readonly editorFileGuardController = new EditorFileGuardController({
     previewFrame: () => this.previewFrame,
     onPdfBlocked: path => {
@@ -779,11 +837,7 @@ export class TypsastraWorkspaceController {
       void this.saveWorkspaceState();
     },
   });
-  private readonly tabStripController = new TabStripController(
-    this.editorTabBar,
-    document.getElementById("editor-tabs-previous") as HTMLButtonElement,
-    document.getElementById("editor-tabs-next") as HTMLButtonElement
-  );
+  private readonly tabStripController = new TabStripController(this.editorTabBar);
   private editorVisualToolbar = document.getElementById("editor-visual-toolbar")!;
   private codeRenderPane = document.getElementById("code-render-pane")!;
   // WYSIWYM is intentionally disabled for this release. Keep a detached
@@ -1078,6 +1132,8 @@ export class TypsastraWorkspaceController {
       );
     },
     invalidatePreview: reason => this.invalidatePreviewWork(reason),
+    showSearch: () => this.projectSearchController.show(),
+    hideSearch: () => {},
     showImageTools: () => {
       // Project tools stay closed for a standalone file.
       if (this.standaloneFilePath !== null) return;
@@ -1202,6 +1258,44 @@ export class TypsastraWorkspaceController {
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
   private readonly logConsoleController = new LogConsoleController(entry => this.navigateToLogEntry(entry));
+  private readonly navigationHistoryController = new NavigationHistoryController({
+    activeFilePath: () => this.activeFilePath,
+    activeTabContentLoaded: () => this.getActiveTab()?.contentLoaded === true,
+    editor: () => this.editorInstance,
+    loadFile: (path, options) => this.loadFile(path, options),
+    pathExists: path => invoke<boolean>("workspace_path_exists", { path }),
+    showNotice: message => this.reportNavigationWarning(message),
+    onChanged: () => this.updateNavigationHistoryControls(),
+  });
+  private readonly recoveryController = new RecoveryController({
+    activeTab: () => this.getActiveTab(),
+    openTabs: () => this.openTabs,
+    activeFilePath: () => this.activeFilePath,
+    workspaceRootPath: () => this.workspaceRootPath,
+    editor: () => this.editorInstance,
+    logWarning: (message, persistent) => this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "recovery",
+      message,
+      channel: "lsp",
+      counted: true,
+      persistent,
+    }),
+  });
+  private readonly recoveryReviewController = new RecoveryReviewController({
+    recovery: () => this.recoveryController,
+    pathExists: path => invoke<boolean>("workspace_path_exists", { path }),
+    readText: path => invoke<string>("read_workspace_file", { path }),
+    restoreRecord: record => this.restoreRecoveryRecord(record),
+    logWarning: message => this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "recovery",
+      message,
+      channel: "lsp",
+      counted: true,
+      persistent: true,
+    }),
+  });
   private readonly spellcheckSidebarPane = new SpellcheckSidebarPane(entry => this.navigateToLogEntry(entry));
   private activeDocumentPane: DocumentSidebarPane = "outline";
 
@@ -1276,6 +1370,7 @@ export class TypsastraWorkspaceController {
     },
     setActiveSpellcheckLocation: (filePath, offset, toOffset) =>
       this.spellcheckSidebarPane.setActiveLocation(filePath, offset, toOffset),
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly previewFailureController = new PreviewFailureController(this.logConsoleController, {
     mapToOriginalPath: path => this.mapToOriginalPath(path),
@@ -1391,6 +1486,8 @@ export class TypsastraWorkspaceController {
     prepareRenderProjectIfNeeded: () => this.prepareRenderProjectIfNeeded(),
     refreshActivePreviewRoot: force => this.refreshActivePreviewRoot(force),
     appendLog: entry => this.appendDeveloperLog(entry),
+    navigationHistory: () => this.navigationHistoryController,
+    recovery: () => this.recoveryController,
   });
   private readonly workspaceLifecycleController = new WorkspaceLifecycleController(
     this.createWorkspaceLifecycleDependencies(),
@@ -1428,6 +1525,9 @@ export class TypsastraWorkspaceController {
       );
     },
     sourcePathsChanged: paths => {
+      // External creates, deletes, renames, and edits all invalidate project
+      // text inventory. The next search rebuilds it from the new disk state.
+      this.projectTextService.invalidate();
       for (const path of paths) {
         if (!/\.(typ|bib|json|csv|yaml|yml|png|jpe?g|svg|webp|gif|pdf)$/i.test(path)) continue;
         const tab = this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(path));
@@ -1687,6 +1787,7 @@ export class TypsastraWorkspaceController {
     }, { ripple: true }),
     heading => this.outlineNavigationController.revealInPreview(heading),
     () => this.publishPreviewOutline(),
+    notices => this.reportOutlineNotices(notices),
   );
   private readonly outlineNavigationController = new OutlineNavigationController({
     activeTab: () => this.getActiveTab(),
@@ -1700,6 +1801,7 @@ export class TypsastraWorkspaceController {
     previewSync: () => this.previewSyncController,
     previewFrame: () => this.previewFrame,
     editor: () => this.editorInstance,
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly appDialogController = new AppDialogController();
   private readonly fileDropController = new FileDropController({
@@ -1797,6 +1899,11 @@ export class TypsastraWorkspaceController {
     },
     logMemoryDiagnostics: reason => this.performanceController.logMemoryDiagnostics(reason),
     clearExternalConflict: path => this.externalFileReloadController.clearConflict(path),
+    autoSaveAllowed: () => !this.projectReplacementInProgress,
+    activeTab: () => this.getActiveTab(),
+    saveUntitledDocumentAs: () => this.saveUntitledDocumentAs(),
+    recoveryRevision: tab => this.recoveryController.recoveryRevision(tab),
+    recoverySaved: (tab, revision) => this.recoveryController.handleTabSaved(tab, revision),
     renderEditorTabs: () => this.renderEditorTabs(),
     refreshPreviewAfterSave: async () => {
       // Resolve the effective preview root at save time instead of relying on
@@ -2007,6 +2114,7 @@ export class TypsastraWorkspaceController {
     lowMemorySync: this.lowMemorySyncIndexController,
     setPreviewReadyStatus: message => this.setLspStatus({ kind: "preview-ready", message }),
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly previewUiController = new PreviewUiController({
     previewFrame: this.previewFrame,
@@ -2035,6 +2143,7 @@ export class TypsastraWorkspaceController {
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     getActiveTab: () => this.getActiveTab(),
     getEditorText: () => this.editorInstance.state.doc.toString(),
+    untitledPreviewMessage: () => this.untitledPreviewMessage(),
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
     updateActionsToolbar: path => this.updatePreviewActionsToolbar(path),
     prepareTemplateAwarePreview: (target, activePath, contents) =>
@@ -2073,6 +2182,7 @@ export class TypsastraWorkspaceController {
     forwardSyncDebounceMs: () => this.settingsRuntimeController.forwardSyncDebounceMs,
     isDeveloperPerformanceLogEnabled: () => this.isDeveloperLogEnabled("performance"),
     shortcuts: () => this.settingsController.value.shortcuts,
+    navigationHistory: () => this.navigationHistoryController,
     insertExplorerImage: (path, position, view) => this.fileDropController.insertExplorerImage(path, position, view),
     pasteClipboardImages: (images, selection, view) => {
       this.fileDropController.pasteClipboardImages(images, selection, view);
@@ -2294,7 +2404,11 @@ export class TypsastraWorkspaceController {
     this.performanceController.timeStartupSync("initialize explorer", () => this.initExplorer());
     this.performanceController.timeStartupSync("initialize file drop", () => this.fileDropController.initialize());
     this.performanceController.timeStartupSync("initialize editor toolbar", () => this.editorToolbarController.initialize());
-    this.performanceController.timeStartupSync("initialize tab strip", () => this.tabStripController.initialize());
+    this.performanceController.timeStartupSync("initialize tab strip", () => {
+      this.tabStripController.initialize();
+      this.editorTabViewController.initialize();
+      this.updateNavigationHistoryControls();
+    });
     this.performanceController.timeStartupSync("bind global events", () => this.bindGlobalEvents());
     this.performanceController.timeStartupSync("initialize layout", () => this.layoutController.initialize());
     this.performanceController.timeStartupSync("monitor system resume", () => this.systemResumeMonitor.start());
@@ -2306,6 +2420,16 @@ export class TypsastraWorkspaceController {
     this.performanceController.timeStartupSync("initialize toolchain UI", () => this.toolchainController.initialize());
     this.performanceController.timeStartupSync("initialize context menu", () => this.contextMenuController.initialize());
     this.performanceController.timeStartupSync("initialize log console", () => this.logConsoleController.initialize());
+    try {
+      await this.performanceController.timeStartup("initialize recovery", () => this.recoveryController.initialize());
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "recovery",
+        message: `Could not inventory recovery snapshots: ${String(error)}`,
+      });
+    }
+    this.recoveryReviewController.initialize();
     this.performanceController.timeStartupSync("update workspace visibility", () => this.updateWorkspaceViewportVisibility());
 
     await this.performanceController.timeStartup("show main window", () => getCurrentWindow().show());
@@ -2341,6 +2465,7 @@ export class TypsastraWorkspaceController {
     ));
     this.pruneStandaloneCaches();
     await this.drainPendingLaunchRequests();
+    this.recoveryReviewAutoShowReady = true;
     this.performanceController.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
   }
 
@@ -2389,6 +2514,448 @@ export class TypsastraWorkspaceController {
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),
     });
+  }
+
+  private openProjectSearch(replace = false): void {
+    if (!this.workspaceRootPath || this.standaloneFilePath !== null) return;
+    this.sidebarController.setVisible(true);
+    this.sidebarController.setTool("search");
+    if (replace) this.projectSearchController.focusQuery(true);
+  }
+
+  private navigateToProjectSearchResult(target: ProjectSearchNavigationTarget): Promise<void> {
+    return this.navigationHistoryController.run(() => this.navigateToProjectSearchResultInternal(target));
+  }
+
+  private async applyProjectReplacement(
+    request: ProjectReplacementRequest,
+  ): Promise<ProjectReplacementResult> {
+    if (this.projectReplacementInProgress || request.options.mode === "fuzzy") {
+      return { ok: false, message: "Project replacement is not available right now." };
+    }
+    if (this.documentPersistenceController.isSaving) {
+      return { ok: false, message: "Wait for the current save to finish before replacing." };
+    }
+    this.flushEditorContentMutation();
+    const originalPath = this.activeFilePath;
+    const originalSelection = this.editorInstance.state.selection.main;
+    const originalScrollTop = this.editorInstance.scrollDOM.scrollTop;
+    const originalScrollLeft = this.editorInstance.scrollDOM.scrollLeft;
+    const plans: Array<{
+      path: string;
+      relativePath: string;
+      before: string;
+      after: string;
+      edits: Array<{ from: number; to: number; insert: string }>;
+    }> = [];
+    const appliedPlans: typeof plans = [];
+    let result: ProjectReplacementResult = { ok: false, message: "No replacement was applied." };
+    this.projectReplacementInProgress = true;
+    try {
+      for (const file of request.files) {
+        if (file.matches.length === 0) continue;
+        const outcome = await this.projectTextService.snapshot(file.path);
+        if (outcome.kind !== "snapshot") {
+          return { ok: false, message: `Could not read ${file.relativePath}.` };
+        }
+        const snapshot = outcome.snapshot;
+        if (textRevisionToken(snapshot.text) !== file.textRevision) {
+          return {
+            ok: false,
+            message: `${file.relativePath} changed since the search. Results were refreshed.`,
+          };
+        }
+        // Editor buffers normalize CRLF to LF. Search offsets are expressed in
+        // that normalized text, so apply them to the same representation.
+        const before = normalizeEditorText(snapshot.text);
+        const search = findEditorSearchMatches(before, {
+          search: request.options.query,
+          caseSensitive: request.options.caseSensitive,
+          literal: request.options.mode === "literal",
+          regexp: request.options.mode === "regex",
+          wholeWord: request.options.wholeWord,
+          matchDiacritics: request.options.mode === "regex"
+            ? true
+            : request.options.matchDiacritics,
+          replace: request.replacement,
+        });
+        if (search.error) {
+          return { ok: false, message: `${file.relativePath}: ${search.error}` };
+        }
+        const byRange = new Map(search.matches.map(match => [
+          `${match.from}:${match.to}`,
+          match,
+        ]));
+        const edits: Array<{ from: number; to: number; insert: string }> = [];
+        for (const requested of file.matches) {
+          const match = byRange.get(`${requested.from}:${requested.to}`);
+          if (!match) {
+            return {
+              ok: false,
+              message: `${file.relativePath} changed since the search. Results were refreshed.`,
+            };
+          }
+          if (!isGraphemeSafeReplacementRange(
+            match.lineText,
+            match.from - match.lineFrom,
+            match.to - match.lineFrom,
+          )) {
+            return {
+              ok: false,
+              message: `A replacement in ${file.relativePath} would split a grapheme cluster.`,
+            };
+          }
+          edits.push({
+            from: match.from,
+            to: match.to,
+            insert: match.replacement ?? request.replacement,
+          });
+        }
+        edits.sort((left, right) => left.from - right.from);
+        plans.push({
+          path: snapshot.file.path,
+          relativePath: file.relativePath,
+          before,
+          after: applyTextEdits(before, edits),
+          edits,
+        });
+      }
+      if (plans.length === 0) return { ok: false, message: "No matches were selected." };
+
+      // Open every target before mutating anything. A missing or unreadable
+      // file must not leave a partially applied replacement.
+      for (const plan of plans) {
+        await this.loadFile(plan.path, {
+          temporary: false,
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        const tab = this.openTabs.find(candidate =>
+          filePathKey(candidate.path) === filePathKey(plan.path));
+        if (!tab?.contentLoaded || tab.content !== plan.before) {
+          return {
+            ok: false,
+            message: `${plan.relativePath} could not be opened for replacement.`,
+          };
+        }
+      }
+
+      let appliedMatches = 0;
+      for (const plan of plans) {
+        await this.activateEditorTab(plan.path, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (
+          filePathKey(this.activeFilePath ?? "") !== filePathKey(plan.path)
+          || this.editorInstance.state.doc.toString() !== plan.before
+        ) {
+          return {
+            ok: false,
+            message: `${plan.relativePath} changed before replacement could be applied.`,
+          };
+        }
+        this.editorInstance.dispatch({ changes: plan.edits });
+        this.flushEditorContentMutation();
+        this.updateActiveTabContent(plan.after);
+        const tab = this.getActiveTab();
+        if (tab) {
+          tab.version += 1;
+          tab.latestVersion = tab.version;
+        }
+        this.persistActiveTabState();
+        this.projectTextService.invalidate(plan.path);
+        appliedPlans.push(plan);
+        appliedMatches += plan.edits.length;
+      }
+
+      if (originalPath) {
+        await this.activateEditorTab(originalPath, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (filePathKey(this.activeFilePath ?? "") === filePathKey(originalPath)) {
+          const doc = this.editorInstance.state.doc;
+          this.editorInstance.dispatch({
+            selection: {
+              anchor: Math.min(originalSelection.anchor, doc.length),
+              head: Math.min(originalSelection.head, doc.length),
+            },
+          });
+          this.editorInstance.scrollDOM.scrollTop = originalScrollTop;
+          this.editorInstance.scrollDOM.scrollLeft = originalScrollLeft;
+        }
+      }
+      this.renderEditorTabs();
+      this.projectReplacementBatch = {
+        files: plans.map(plan => ({
+          path: plan.path,
+          before: plan.before,
+          after: plan.after,
+        })),
+        query: request.options.query,
+        replacement: request.replacement,
+      };
+      result = {
+        ok: true,
+        files: plans.length,
+        matches: appliedMatches,
+      };
+    } catch (error) {
+      result = { ok: false, message: `Project replacement failed: ${String(error)}` };
+    } finally {
+      if (!result.ok && appliedPlans.length > 0) {
+        let rollbackFailed = false;
+        for (const plan of [...appliedPlans].reverse()) {
+          try {
+            await this.activateEditorTab(plan.path, false, {
+              skipPreviewActivation: true,
+              focusEditor: false,
+            });
+            if (
+              filePathKey(this.activeFilePath ?? "") !== filePathKey(plan.path)
+              || this.editorInstance.state.doc.toString() !== plan.after
+            ) {
+              rollbackFailed = true;
+              continue;
+            }
+            this.editorInstance.dispatch({
+              changes: {
+                from: 0,
+                to: this.editorInstance.state.doc.length,
+                insert: plan.before,
+              },
+            });
+            this.flushEditorContentMutation();
+            this.updateActiveTabContent(plan.before);
+            const tab = this.getActiveTab();
+            if (tab) {
+              tab.version += 1;
+              tab.latestVersion = tab.version;
+            }
+            this.persistActiveTabState();
+            this.projectTextService.invalidate(plan.path);
+          } catch {
+            rollbackFailed = true;
+          }
+        }
+        this.renderEditorTabs();
+        if (rollbackFailed) {
+          result = {
+            ...result,
+            message: `${result.message ?? "Project replacement failed."} Some files could not be reverted; review the open tabs before continuing.`,
+          };
+        }
+      }
+      this.projectReplacementInProgress = false;
+      if (
+        !result.ok
+        && originalPath
+        && filePathKey(this.activeFilePath ?? "") !== filePathKey(originalPath)
+      ) {
+        await this.activateEditorTab(originalPath, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        }).catch(() => undefined);
+        if (filePathKey(this.activeFilePath ?? "") === filePathKey(originalPath)) {
+          const doc = this.editorInstance.state.doc;
+          this.editorInstance.dispatch({
+            selection: {
+              anchor: Math.min(originalSelection.anchor, doc.length),
+              head: Math.min(originalSelection.head, doc.length),
+            },
+          });
+          this.editorInstance.scrollDOM.scrollTop = originalScrollTop;
+          this.editorInstance.scrollDOM.scrollLeft = originalScrollLeft;
+        }
+      }
+    }
+    if (
+      result.ok
+      && this.effectivePreviewRenderMode === "on-type"
+      && this.activeFilePath
+      && isTypstDocumentPath(this.activeFilePath)
+    ) {
+      this.scheduleEditorContentMutation(this.editorInstance.state.doc);
+    }
+    return result;
+  }
+
+  private async undoProjectReplacement(): Promise<ProjectReplacementResult> {
+    const batch = this.projectReplacementBatch;
+    if (!batch || this.projectReplacementInProgress) {
+      return { ok: false, message: "There is no replacement batch to undo." };
+    }
+    for (const file of batch.files) {
+      const tab = this.openTabs.find(candidate =>
+        filePathKey(candidate.path) === filePathKey(file.path));
+      const text = tab && filePathKey(this.activeFilePath ?? "") === filePathKey(file.path)
+        ? this.editorInstance.state.doc.toString()
+        : tab?.content;
+      if (!tab?.contentLoaded || text !== file.after) {
+        return {
+          ok: false,
+          message: "Undo Replace is unavailable because an affected buffer changed.",
+        };
+      }
+    }
+    const originalPath = this.activeFilePath;
+    const originalSelection = this.editorInstance.state.selection.main;
+    const originalScrollTop = this.editorInstance.scrollDOM.scrollTop;
+    const originalScrollLeft = this.editorInstance.scrollDOM.scrollLeft;
+    const undoneFiles: Array<{ path: string; before: string; after: string }> = [];
+    this.projectReplacementInProgress = true;
+    let result: ProjectReplacementResult = { ok: true, files: batch.files.length };
+    try {
+      for (const file of batch.files) {
+        await this.activateEditorTab(file.path, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (
+          filePathKey(this.activeFilePath ?? "") !== filePathKey(file.path)
+          || this.editorInstance.state.doc.toString() !== file.after
+        ) {
+          return { ok: false, message: "An affected buffer changed before undo could run." };
+        }
+        this.editorInstance.dispatch({
+          changes: {
+            from: 0,
+            to: this.editorInstance.state.doc.length,
+            insert: file.before,
+          },
+        });
+        this.flushEditorContentMutation();
+        this.updateActiveTabContent(file.before);
+        const tab = this.getActiveTab();
+        if (tab) {
+          tab.version += 1;
+          tab.latestVersion = tab.version;
+        }
+        this.persistActiveTabState();
+        this.projectTextService.invalidate(file.path);
+        undoneFiles.push(file);
+        if (tab?.isDirty) {
+          void this.recoveryController.flushTab(tab);
+        } else if (tab) {
+          void this.recoveryController.handleTabSaved(
+            tab,
+            this.recoveryController.recoveryRevision(tab),
+          );
+        }
+      }
+      if (originalPath) {
+        await this.activateEditorTab(originalPath, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (filePathKey(this.activeFilePath ?? "") === filePathKey(originalPath)) {
+          const doc = this.editorInstance.state.doc;
+          this.editorInstance.dispatch({
+            selection: {
+              anchor: Math.min(originalSelection.anchor, doc.length),
+              head: Math.min(originalSelection.head, doc.length),
+            },
+          });
+          this.editorInstance.scrollDOM.scrollTop = originalScrollTop;
+          this.editorInstance.scrollDOM.scrollLeft = originalScrollLeft;
+        }
+      }
+      this.projectReplacementBatch = null;
+      this.renderEditorTabs();
+    } catch (error) {
+      result = { ok: false, message: `Undo Replace failed: ${String(error)}` };
+    } finally {
+      if (!result.ok && undoneFiles.length > 0) {
+        let rollbackFailed = false;
+        for (const file of [...undoneFiles].reverse()) {
+          try {
+            await this.activateEditorTab(file.path, false, {
+              skipPreviewActivation: true,
+              focusEditor: false,
+            });
+            if (
+              filePathKey(this.activeFilePath ?? "") !== filePathKey(file.path)
+              || this.editorInstance.state.doc.toString() !== file.before
+            ) {
+              rollbackFailed = true;
+              continue;
+            }
+            this.editorInstance.dispatch({
+              changes: {
+                from: 0,
+                to: this.editorInstance.state.doc.length,
+                insert: file.after,
+              },
+            });
+            this.flushEditorContentMutation();
+            this.updateActiveTabContent(file.after);
+            const tab = this.getActiveTab();
+            if (tab) {
+              tab.version += 1;
+              tab.latestVersion = tab.version;
+            }
+            this.persistActiveTabState();
+            this.projectTextService.invalidate(file.path);
+            if (tab?.isDirty) {
+              void this.recoveryController.flushTab(tab);
+            } else if (tab) {
+              void this.recoveryController.handleTabSaved(
+                tab,
+                this.recoveryController.recoveryRevision(tab),
+              );
+            }
+          } catch {
+            rollbackFailed = true;
+          }
+        }
+        this.renderEditorTabs();
+        if (rollbackFailed) {
+          result = {
+            ...result,
+            message: `${result.message ?? "Undo Replace failed."} Some files could not be restored to the replacement output; review the open tabs before continuing.`,
+          };
+        }
+      }
+      this.projectReplacementInProgress = false;
+    }
+    if (
+      result.ok
+      && this.effectivePreviewRenderMode === "on-type"
+      && this.activeFilePath
+      && isTypstDocumentPath(this.activeFilePath)
+    ) {
+      this.scheduleEditorContentMutation(this.editorInstance.state.doc);
+    }
+    return result;
+  }
+
+  private projectReplacementUndoAvailable(): boolean {
+    const batch = this.projectReplacementBatch;
+    return !!batch && batch.files.every(file => {
+      const tab = this.openTabs.find(candidate =>
+        filePathKey(candidate.path) === filePathKey(file.path));
+      const text = tab && filePathKey(this.activeFilePath ?? "") === filePathKey(file.path)
+        ? this.editorInstance.state.doc.toString()
+        : tab?.content;
+      return !!tab?.contentLoaded && text === file.after;
+    });
+  }
+
+  private async navigateToProjectSearchResultInternal(target: ProjectSearchNavigationTarget): Promise<void> {
+    if (!this.workspaceRootPath || this.standaloneFilePath !== null) return;
+    if (filePathKey(target.path) !== filePathKey(this.activeFilePath ?? "")) {
+      await this.loadFile(target.path, { focusEditor: false });
+    }
+    if (!this.getActiveTab()?.contentLoaded) return;
+    const doc = this.editorInstance.state.doc;
+    const from = target.kind === "path" ? 0 : Math.max(0, Math.min(target.from, doc.length));
+    const to = target.kind === "path" ? 0 : Math.max(from, Math.min(target.to, doc.length));
+    this.editorInstance.dispatch({
+      selection: { anchor: from, head: to },
+      effects: EditorView.scrollIntoView(from, { y: "center" }),
+    });
+    this.editorInstance.focus();
   }
 
   private async navigateToImageTool(imagePath: string): Promise<void> {
@@ -2522,6 +3089,7 @@ export class TypsastraWorkspaceController {
   private applySettingsToRuntime(settings: AppSettings): void {
     const { editor } = settings;
     setShortcutLabelOverrides(settings.shortcuts);
+    this.updateNavigationHistoryControls();
     this.settingsRuntimeController.apply(settings);
     this.previewFrame.setColorMode(settings.preview.colorMode);
     this.updatePreviewColorModeButton(settings.preview.colorMode);
@@ -2603,7 +3171,7 @@ export class TypsastraWorkspaceController {
     this.explorer = new WorkspaceExplorer(
       document.getElementById("workspace-explorer-tree")!,
       (path: string, options?: { temporary?: boolean; focusEditor?: boolean }) => {
-        void this.loadFile(path, options);
+        void this.navigationHistoryController.run(() => this.loadFile(path, options));
       },
       (path: string) => this.isPinnedMainFile(path),
       document.getElementById("workspace-explorer-title")!
@@ -2615,6 +3183,7 @@ export class TypsastraWorkspaceController {
 
   private renderEditorTabs(): void {
     this.editorTabViewController.render();
+    this.projectSearchController.refreshReplacementControls();
     // The active tab may be an off-project file, which changes gutter tools.
     this.editorInstance?.dispatch({
       effects: setStandaloneDocumentEffect.of(this.activeDocumentIsStandalone()),
@@ -2662,6 +3231,9 @@ export class TypsastraWorkspaceController {
 
   private persistActiveTabState(): void {
     this.editorTabStateController.persistActive();
+    if (this.workspaceLoading) return;
+    const tab = this.getActiveTab();
+    if (tab?.isDirty) void this.recoveryController.flushTab(tab);
   }
 
   private restoreEditorTabViewport(tab: EditorTab, path: string): Promise<void> {
@@ -2735,7 +3307,7 @@ export class TypsastraWorkspaceController {
         mainPath,
         source,
         this.workspaceRootPath ?? "",
-        path => invoke<string>("read_workspace_file", { path }).catch(() => null),
+        path => this.workspaceText(path).catch(() => null),
       );
       if (generation !== this.previewOutlinePublishGeneration) return;
       if (this.previewWindowController.isPreviewOnlyWindow()) return;
@@ -2781,10 +3353,12 @@ export class TypsastraWorkspaceController {
 
   private markActiveTabDirty(): void {
     this.editorTabStateController.markActiveDirty();
+    this.projectSearchController.refreshReplacementControls();
   }
 
   private scheduleEditorContentMutation(doc: Text): void {
     if (!this.activeFilePath) return;
+    this.recoveryController.noteActiveDocumentChanged();
     this.editorController.scheduleContentMutation(this.activeFilePath, doc);
   }
 
@@ -3099,6 +3673,13 @@ export class TypsastraWorkspaceController {
   }
 
   private async saveActiveFile(intent: SaveIntent = "manual"): Promise<void> {
+    if (this.projectReplacementInProgress) {
+      this.setLspStatus({
+        kind: "preview-ready",
+        message: "Save is unavailable while a project replacement is being applied",
+      });
+      return;
+    }
     await this.documentPersistenceController.saveActiveFile(intent);
     // A save can add, move, or remove a `//@table:` anchor, which changes which
     // tables the sidebar reports as current, referenced, or unused.
@@ -3110,7 +3691,110 @@ export class TypsastraWorkspaceController {
   }
 
   private saveActiveFileAs(): Promise<void> {
+    if (this.projectReplacementInProgress) {
+      this.setLspStatus({
+        kind: "preview-ready",
+        message: "Save As is unavailable while a project replacement is being applied",
+      });
+      return Promise.resolve();
+    }
     return this.documentPersistenceController.saveActiveFileAs();
+  }
+
+  private async createUntitledFile(): Promise<void> {
+    if (!this.workspaceRootPath) {
+      await message("Open a project before creating a new file.", {
+        title: "New File",
+        kind: "info",
+      });
+      return;
+    }
+    const tab = createUntitledTab({
+      id: crypto.randomUUID(),
+      title: nextUntitledTitle(this.openTabs),
+    });
+    this.openTabs.push(tab);
+    await this.activateEditorTab(tab.path, false);
+    this.renderEditorTabs();
+    this.persistActiveTabState();
+    this.editorInstance.focus();
+    void this.recoveryController.flushTab(tab, true);
+    this.setLspStatus({
+      kind: "preview-ready",
+      message: "New untitled document. Save to choose a file path.",
+    });
+  }
+
+  private async saveUntitledDocumentAs(): Promise<void> {
+    const tab = this.getActiveTab();
+    if (!tab?.untitled) return;
+    this.flushEditorContentMutation();
+    const content = this.activeMode === "WYSIWYM"
+      ? this.mapWysiwymToMarkup()
+      : this.editorInstance.state.doc.toString();
+    const defaultPath = this.workspaceRootPath
+      ? await join(this.workspaceRootPath, `${tab.title ?? "Untitled"}.typ`)
+      : `${tab.title ?? "Untitled"}.typ`;
+    const savePath = await save({
+      defaultPath,
+      filters: [{ name: "Typst Document", extensions: ["typ"] }],
+    });
+    if (typeof savePath !== "string") return;
+    if (filePathKey(savePath) === filePathKey(tab.path)) return;
+    const existing = this.openTabs.find(candidate =>
+      candidate !== tab && filePathKey(candidate.path) === filePathKey(savePath));
+    if (existing) {
+      await message("That file is already open. Close it before saving this buffer there.", {
+        title: "Save As",
+        kind: "warning",
+      });
+      return;
+    }
+
+    try {
+      await invoke("save_workspace_file", { path: savePath, contents: content });
+      await this.recoveryController.discardTab(tab);
+      tab.path = savePath;
+      tab.untitled = false;
+      tab.untitledId = undefined;
+      tab.title = undefined;
+      tab.content = content;
+      tab.savedContent = content;
+      tab.contentLoaded = true;
+      tab.isDirty = false;
+      tab.recoveredUnsaved = undefined;
+      tab.externalContent = undefined;
+      tab.previewDisabled = false;
+      tab.offProject = this.workspaceRootPath !== null
+        && relativeFilePath(this.workspaceRootPath, savePath) === null;
+      if (tab.offProject) {
+        const folder = this.folderOfPath(savePath);
+        const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
+        if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
+      }
+      tab.version += 1;
+      tab.latestVersion = tab.version;
+      this.activeFilePath = savePath;
+      this.documentLanguageController.activate(savePath);
+      this.scheduleDocumentOutlineUpdate(savePath, 0);
+      if (this.workspaceRootPath) await this.explorer.loadWorkspace(this.workspaceRootPath);
+      this.explorer.setActiveFile(savePath);
+      this.renderEditorTabs();
+      this.persistActiveTabState();
+      await this.saveWorkspaceState();
+      this.setLspStatus({ kind: "preview-ready", message: "File saved as a new document" });
+      if (this.lspReady && this.lspClient) {
+        await this.lspDocumentController.recheckActiveAfterPin(content);
+        const resolved = await this.getLspUriAndContent(savePath, content);
+        if (resolved) await this.lspClient.notifyTextSave(resolved.uri, resolved.content);
+      }
+      void this.refreshActivePreviewRoot(true);
+    } catch (error) {
+      const failure = `Save As failed: ${String(error)}`;
+      console.error(failure);
+      this.setLspStatus({ kind: "error", message: failure });
+      alert(failure);
+    }
   }
 
   private formatActiveDocument(options: { silent?: boolean } = {}): Promise<boolean> {
@@ -3234,6 +3918,7 @@ export class TypsastraWorkspaceController {
 
   private async recompilePreviewManually(): Promise<void> {
     if (this.previewFreshness.state.lspErrors || this.previewFreshness.state.status === "compiling") return;
+    if (this.getActiveTab()?.untitled) return;
     const activePath = this.activeFilePath;
     if (!activePath?.toLowerCase().endsWith(".typ")) return;
     const previewSessionKey = this.previewFrame.currentSessionKey;
@@ -3393,7 +4078,7 @@ export class TypsastraWorkspaceController {
       this.previewImported,
       this.previewDisabled
     );
-    if (!this.isLoadingFile && canRenderPreview) {
+    if (!this.isLoadingFile && canRenderPreview && !this.projectReplacementInProgress) {
       this.pdfPreviewRenderController.noteContentMutation(true, this.getActiveTab()?.content, rawText);
     }
     this.appendDeveloperLog({
@@ -3407,7 +4092,11 @@ export class TypsastraWorkspaceController {
     if (!this.isLoadingFile) {
       this.updateActiveTabContent(rawText);
       this.typographyController.scheduleManualScaleCheck();
-      if (this.activeFilePath && isMarkdownDocumentPath(this.activeFilePath)) {
+      if (
+        !this.projectReplacementInProgress
+        && this.activeFilePath
+        && isMarkdownDocumentPath(this.activeFilePath)
+      ) {
         this.markdownPreviewFrame.schedule(this.activeFilePath, rawText);
       }
     }
@@ -3426,6 +4115,7 @@ export class TypsastraWorkspaceController {
       && canRenderPreview
       && this.effectivePreviewRenderMode === "on-type"
       && !this.previewDisabled
+      && !this.projectReplacementInProgress
     ) {
       const remainingPreviewDebounceMs = Math.max(
         0,
@@ -3598,6 +4288,23 @@ export class TypsastraWorkspaceController {
     this.developerLogController.appendDeveloper(entry);
   }
 
+  private reportOutlineNotices(notices: readonly DocumentOutlineNotice[]): void {
+    this.logConsoleController.clearLogsBySource(["outline"]);
+    for (const notice of notices) {
+      this.logConsoleController.appendLog({
+        kind: notice.kind === "import-not-supported" ? "info" : "warning",
+        source: "outline",
+        message: notice.message,
+        filePath: notice.filePath,
+        fileName: fileNameFromPath(notice.filePath),
+        line: notice.line,
+        column: 1,
+        channel: "lsp",
+        counted: true,
+      });
+    }
+  }
+
   private appendSpellcheckDebug(event: SpellcheckDebugEvent): void {
     this.developerLogController.appendSpellcheckDebug(event);
   }
@@ -3634,8 +4341,62 @@ export class TypsastraWorkspaceController {
     return this.sourceLocationController.navigateToLspLocation(uri, line, character);
   }
 
+  private navigateToEditorTab(path: string): Promise<void> {
+    return this.navigationHistoryController.run(() => this.activateEditorTab(path));
+  }
+
   private navigateToOutlineHeading(heading: DocumentHeading): Promise<void> {
     return this.outlineNavigationController.navigate(heading);
+  }
+
+  private navigateBack(): Promise<void> {
+    return this.navigationHistoryController.back();
+  }
+
+  private navigateForward(): Promise<void> {
+    return this.navigationHistoryController.forward();
+  }
+
+  private reportNavigationWarning(message: string): void {
+    this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "navigation",
+      message,
+      channel: "lsp",
+      counted: true,
+    });
+  }
+
+  private updateNavigationHistoryControls(): void {
+    const backAvailable = this.navigationHistoryController.canGoBack();
+    const forwardAvailable = this.navigationHistoryController.canGoForward();
+    const isMac = navigator.userAgent.toLowerCase().includes("mac");
+    const label = (id: string, fallback: string) => {
+      const shortcut = shortcutFor(id, this.settingsController.value.shortcuts, isMac);
+      return shortcut ? formatShortcut(shortcut.replace(/-/g, "+"), isMac) : fallback;
+    };
+    const backShortcut = label("action-navigation-back", isMac ? "Option+Left" : "Alt+Left");
+    const forwardShortcut = label("action-navigation-forward", isMac ? "Option+Right" : "Alt+Right");
+    for (const [tool, available, action, shortcut] of [
+      ["history-back", backAvailable, "Go Back", backShortcut],
+      ["history-forward", forwardAvailable, "Go Forward", forwardShortcut],
+    ] as const) {
+      const button = document.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
+      if (button) {
+        button.disabled = !available;
+        button.title = `${action} (${shortcut})`;
+        button.setAttribute("aria-label", action);
+      }
+    }
+    for (const [id, available] of [
+      ["action-navigation-back", backAvailable],
+      ["action-navigation-forward", forwardAvailable],
+    ] as const) {
+      const item = document.getElementById(id);
+      if (!item) continue;
+      item.classList.toggle("dropdown-item-disabled", !available);
+      item.setAttribute("aria-disabled", String(!available));
+    }
   }
 
   private switchViewLayoutMode() {
@@ -3704,6 +4465,7 @@ export class TypsastraWorkspaceController {
     // Refresh source editors independently. External multi-file writes are
     // incomplete transactions until the user explicitly recompiles the project.
     this.diagnosticsController.clearForPath(tab.path);
+    this.projectTextService.invalidate(tab.path);
     if (this.activeFilePath && filePathKey(tab.path) === filePathKey(this.activeFilePath)) {
       this.scheduleDocumentOutlineUpdate(tab.path);
       this.lspSyncController.queueContentMutation(tab.content);
@@ -3718,6 +4480,10 @@ export class TypsastraWorkspaceController {
 
   private disabledPreviewMessage(): string {
     return this.previewContentController.disabledPreviewMessage();
+  }
+
+  private untitledPreviewMessage(): string {
+    return `<div style="padding: 20px; color: var(--ui-header-text); font-family: var(--font-family-sans);">Save this untitled document to enable preview.</div>`;
   }
 
   private renderNonTextEditorPlaceholder(path: string, unsupported: boolean, source?: string): void {
@@ -3911,10 +4677,18 @@ export class TypsastraWorkspaceController {
     this.appendLspLog({ kind: "error", source: "workspace", message: `Workspace watcher failed: ${String(error)}` });
   }
 
-  private openWorkspace(selected: string): Promise<void> {
+  private openWorkspace(
+    selected: string,
+    options: { showRecovery?: boolean } = {},
+  ): Promise<void> {
     // Opening a project leaves standalone-file mode and drops its temp cache.
     this.discardStandaloneCache();
-    return this.workspaceLifecycleController.open(selected).then(() => this.syncDevProjectContext());
+    return this.workspaceLifecycleController.open(selected).then(async () => {
+      await this.syncDevProjectContext();
+      if (options.showRecovery !== false && this.recoveryReviewAutoShowReady) {
+        void this.recoveryReviewController.showIfNeeded({ workspaceRoot: selected });
+      }
+    });
   }
 
   private async openProjectDocumentFromDevApi(request: {
@@ -4080,7 +4854,10 @@ export class TypsastraWorkspaceController {
   }
 
   private setPinnedMainFile(path: string | null): Promise<void> {
-    return this.pinnedMainFileController.set(path).then(() => this.syncDevProjectContext());
+    return this.pinnedMainFileController.set(path).then(() => {
+      if (this.activeFilePath) this.scheduleDocumentOutlineUpdate(this.activeFilePath, 0);
+      return this.syncDevProjectContext();
+    });
   }
 
   private closeProject(options: { confirmUnsaved?: boolean } = {}): Promise<boolean> {
@@ -4197,10 +4974,7 @@ export class TypsastraWorkspaceController {
       restartWorkspace: () => this.restartWorkspace(),
       closeProject: () => this.closeProject(),
       workspaceRootPath: () => this.workspaceRootPath,
-      onNewFileCreated: async path => {
-        if (this.workspaceRootPath) await this.explorer.loadWorkspace(this.workspaceRootPath);
-        await this.loadFile(path);
-      },
+      createUntitledFile: () => this.createUntitledFile(),
       zoomOut: () => this.zoomOut(),
       zoomIn: () => this.zoomIn(),
       zoomToFit: () => this.zoomToFit(),
@@ -4215,6 +4989,8 @@ export class TypsastraWorkspaceController {
       exportSourceZip: () => this.projectExportController.exportSourceZip(),
       undo: () => { undo({ state: this.editorInstance.state, dispatch: this.editorInstance.dispatch }); },
       redo: () => { redo({ state: this.editorInstance.state, dispatch: this.editorInstance.dispatch }); },
+      navigateBack: () => this.navigateBack(),
+      navigateForward: () => this.navigateForward(),
       selectAllActiveSurface: () => {
         const active = document.activeElement as HTMLElement | null;
         if (active === this.previewFrame.element) {
@@ -4233,6 +5009,7 @@ export class TypsastraWorkspaceController {
       },
       foldCurrentFile: () => this.foldCurrentFile(),
       unfoldCurrentFile: () => this.unfoldCurrentFile(),
+      openProjectSearch: replace => this.openProjectSearch(replace),
       toggleSidebar: () => this.sidebarController.toggle(),
       setSidebarTool: tool => this.sidebarController.setTool(tool),
       restoreDefaultLayout: () => this.restoreDefaultLayout(),
@@ -4255,6 +5032,9 @@ export class TypsastraWorkspaceController {
       openExamplesWorkspace: () => this.openExamplesWorkspace(),
       startWindowStateMonitor: () => this.windowStateController.start(),
       hasUnsavedChanges: () => this.openTabs.some(tab => tab.isDirty),
+      discardRecoverySnapshots: () => this.recoveryController.discardAllTabs(
+        this.openTabs.filter(tab => tab.isDirty),
+      ),
       prepareForClose: () => this.appUpdateController.prepareForClose(),
       persistWorkspaceState: () => this.saveWorkspaceState(),
       persistWindowState: () => this.windowStateController.persistNow(),
@@ -4305,6 +5085,171 @@ export class TypsastraWorkspaceController {
    * and the preview cache uses a temporary directory under the application data
    * directory instead of the folder-keyed workspace cache.
    */
+  private async restoreRecoveryRecord(record: RecoveryRecord): Promise<boolean> {
+    const untitledId = untitledIdFromRecoveryDocumentId(record.documentId);
+    const untitled = untitledId !== null;
+    const path = record.path;
+    const displayName = record.title?.trim()
+      || (path ? fileNameFromPath(path) : untitled ? "Untitled" : "Recovery record");
+    if (!path && !untitled) return false;
+    try {
+      if (
+        record.workspaceRoot
+        && (!this.workspaceRootPath || filePathKey(this.workspaceRootPath) !== filePathKey(record.workspaceRoot))
+      ) {
+        const workspaceExists = await invoke<boolean>("workspace_path_exists", {
+          path: record.workspaceRoot,
+        });
+        if (!workspaceExists) {
+          this.reportRecoveryWarning(
+            `Could not restore ${displayName}: its workspace no longer exists.`,
+          );
+          return false;
+        }
+        await this.openWorkspace(record.workspaceRoot, { showRecovery: false });
+        if (
+          !this.workspaceRootPath
+          || filePathKey(this.workspaceRootPath) !== filePathKey(record.workspaceRoot)
+        ) {
+          return false;
+        }
+      }
+      if (untitled && !record.workspaceRoot && !this.workspaceRootPath) {
+        this.reportRecoveryWarning(`Could not restore ${displayName}: open a project first.`);
+        return false;
+      }
+
+      let diskText: string | null = null;
+      if (!untitled) {
+        const diskExists = await invoke<boolean>("workspace_path_exists", { path: path! });
+        diskText = diskExists
+          ? await invoke<string>("read_workspace_file", { path: path! }).catch(() => null)
+          : null;
+        if (!record.workspaceRoot) {
+          const folder = this.folderOfPath(path!);
+          if (this.workspaceRootPath === null) {
+            this.standaloneFilePath = path!;
+            this.workspaceRootPath = folder;
+            this.workspaceMetadata = null;
+            this.renderCacheRootPath = await this.prepareStandaloneCacheRoot(folder);
+            this.sidebarController.reset();
+            this.updateWorkspaceViewportVisibility();
+          } else {
+            const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
+            if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
+          }
+        }
+      }
+
+      let tab = untitled
+        ? this.openTabs.find(candidate => candidate.untitledId === untitledId)
+        : this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path!));
+      if (tab?.isDirty && tab.content !== record.text) {
+        const proceed = await confirm(
+          `Replace the current unsaved changes in ${tab.title ?? displayName} with the recovered snapshot?`,
+          { title: "Recover Unsaved Work", kind: "warning" },
+        );
+        if (!proceed) return false;
+      }
+      if (!tab) {
+        if (untitled) {
+          tab = createUntitledTab({
+            id: untitledId!,
+            title: displayName,
+            content: record.text,
+            savedContent: "",
+            dirty: true,
+            recoveredUnsaved: true,
+            selectionAnchor: record.selectionAnchor,
+            selectionHead: record.selectionHead,
+            scrollTop: record.scrollTop,
+            scrollLeft: record.scrollLeft,
+          });
+        } else {
+          tab = {
+            path: path!,
+            content: "",
+            savedContent: "",
+            contentLoaded: true,
+            isDirty: false,
+            previewRootPath: null,
+            previewMainPath: null,
+            previewTaskId: null,
+            previewSessionKey: null,
+            previewImported: false,
+            previewStandalone: true,
+            previewDisabled: false,
+            version: 1,
+            latestVersion: 1,
+            selectionAnchor: record.selectionAnchor,
+            selectionHead: record.selectionHead,
+            scrollTop: record.scrollTop,
+            scrollLeft: record.scrollLeft,
+            foldRanges: [],
+            foldStateExplicit: false,
+            temporary: false,
+            offProject: !record.workspaceRoot
+              && this.standaloneFilePath === null
+              && this.workspaceRootPath !== null,
+          };
+        }
+        this.openTabs.push(tab);
+      }
+      tab.content = record.text;
+      tab.savedContent = untitled ? "" : diskText ?? "";
+      tab.contentLoaded = true;
+      tab.recoveredUnsaved = true;
+      tab.isDirty = untitled ? true : record.text !== tab.savedContent;
+      if (untitled) {
+        tab.untitled = true;
+        tab.untitledId = untitledId!;
+        tab.title = displayName;
+        tab.previewDisabled = true;
+      }
+      tab.selectionAnchor = record.selectionAnchor;
+      tab.selectionHead = record.selectionHead;
+      tab.scrollTop = record.scrollTop;
+      tab.scrollLeft = record.scrollLeft;
+      tab.foldRanges ??= [];
+      tab.foldStateExplicit ??= false;
+      this.renderEditorTabs();
+
+      await this.activateEditorTab(tab.path, false, { skipPreviewActivation: true });
+      if (filePathKey(this.activeFilePath ?? "") === filePathKey(tab.path)) {
+        const doc = this.editorInstance.state.doc;
+        const anchor = Math.max(0, Math.min(record.selectionAnchor, doc.length));
+        const head = Math.max(0, Math.min(record.selectionHead, doc.length));
+        this.editorInstance.dispatch({ selection: { anchor, head } });
+        this.editorInstance.scrollDOM.scrollTop = record.scrollTop;
+        this.editorInstance.scrollDOM.scrollLeft = record.scrollLeft;
+        this.editorInstance.focus();
+      }
+      this.setLspStatus({
+        kind: "preview-ready",
+        message: untitled
+          ? `Recovered ${displayName}. Use Save As to choose a file path.`
+          : `Recovered unsaved changes from ${displayName}`,
+      });
+      return true;
+    } catch (error) {
+      this.reportRecoveryWarning(
+        `Could not restore ${displayName}: ${String(error)}`,
+      );
+      return false;
+    }
+  }
+
+  private reportRecoveryWarning(message: string): void {
+    this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "recovery",
+      message,
+      channel: "lsp",
+      counted: true,
+      persistent: true,
+    });
+  }
+
   private async openStandaloneFile(path: string): Promise<void> {
     const folder = this.folderOfPath(path);
     // A project is already open: add the file as an off-project tab beside it

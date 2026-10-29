@@ -1,4 +1,4 @@
-export type SidebarTool = "explorer" | "images" | "tables";
+export type SidebarTool = "explorer" | "search" | "images" | "tables";
 
 export interface SidebarControllerState {
   visible: boolean;
@@ -10,6 +10,8 @@ export interface SidebarControllerPort {
   isWorkspaceLoading(): boolean;
   isActiveSurfaceNonText(): boolean;
   invalidatePreview(reason: string): void;
+  showSearch?(): void;
+  hideSearch?(): void;
   showImageTools(): void;
   hideImageTools(): void;
   showTableTools(): void;
@@ -50,6 +52,7 @@ export class SidebarController {
   public reset(): void {
     this.state = { visible: true, activeTool: "explorer" };
     document.body.classList.remove("image-tools-active", "table-tools-active");
+    document.getElementById("project-search-sidebar-content")?.classList.add("hidden");
   }
 
   public toggle(): void {
@@ -70,41 +73,53 @@ export class SidebarController {
 
   public setTool(tool: SidebarTool, persist = true): void {
     if (!this.port.hasWorkspace()) return;
-    const toolChanged = this.state.activeTool !== tool;
+    const previousTool = this.state.activeTool;
+    const toolChanged = previousTool !== tool;
     this.state.activeTool = tool;
 
     const showingImages = tool === "images";
     const showingTables = tool === "tables";
-    const showingExplorer = !showingImages && !showingTables;
+    const showingSearch = tool === "search";
+    const showingExplorer = !showingImages && !showingTables && !showingSearch;
+    const showingEditor = showingExplorer || showingSearch;
+    const leavingPreviewTool = previousTool === "images" || previousTool === "tables";
     document.body.classList.toggle("image-tools-active", showingImages);
     document.body.classList.toggle("table-tools-active", showingTables);
     document.getElementById("explorer-sidebar-content")?.classList.toggle("hidden", !showingExplorer);
+    document.getElementById("project-search-sidebar-content")?.classList.toggle("hidden", !showingSearch);
     document.getElementById("image-tools-sidebar-content")?.classList.toggle("hidden", !showingImages);
     document.getElementById("tables-sidebar-content")?.classList.toggle("hidden", !showingTables);
     const explorerButton = document.getElementById("sidebar-explorer-button") as HTMLButtonElement | null;
+    const searchButton = document.getElementById("sidebar-search-button") as HTMLButtonElement | null;
     const imagesButton = document.getElementById("sidebar-images-button") as HTMLButtonElement | null;
     const tablesButton = document.getElementById("sidebar-tables-button") as HTMLButtonElement | null;
     explorerButton?.classList.toggle("active", showingExplorer);
+    searchButton?.classList.toggle("active", showingSearch);
     imagesButton?.classList.toggle("active", showingImages);
     tablesButton?.classList.toggle("active", showingTables);
     explorerButton?.setAttribute("aria-pressed", String(showingExplorer));
+    searchButton?.setAttribute("aria-pressed", String(showingSearch));
     imagesButton?.setAttribute("aria-pressed", String(showingImages));
     tablesButton?.setAttribute("aria-pressed", String(showingTables));
 
-    this.codeRenderPane.classList.toggle("hidden", !showingExplorer);
+    this.codeRenderPane.classList.toggle("hidden", !showingEditor);
     document.getElementById("image-viewer-pane")?.classList.add("hidden");
     document.getElementById("table-tool-inspector")?.classList.toggle("hidden", !showingTables);
     this.previewPane.classList.remove("hidden");
     this.port.setMainPreviewVisibleWhileUndocked(showingImages);
     if (showingImages) {
+      this.port.hideSearch?.();
       this.port.hideTableTools();
       if (toolChanged) this.port.invalidatePreview("switched to Image Tools");
       this.port.showImageTools();
     } else if (showingTables) {
+      this.port.hideSearch?.();
       this.port.hideImageTools();
       if (toolChanged) this.port.invalidatePreview("switched to Table Tools");
       this.port.showTableTools();
     } else {
+      if (showingSearch) this.port.showSearch?.();
+      else this.port.hideSearch?.();
       this.port.hideImageTools();
       this.port.hideTableTools();
       this.codeRenderPane.classList.toggle("hidden", this.port.isActiveSurfaceNonText());
@@ -112,8 +127,10 @@ export class SidebarController {
         "hidden",
         !this.port.isActiveSurfaceNonText(),
       );
-      if (toolChanged) this.port.showRestoringPreview();
-      this.port.restoreDocumentPreview();
+      if (leavingPreviewTool) {
+        if (toolChanged) this.port.showRestoringPreview();
+        this.port.restoreDocumentPreview();
+      }
     }
     this.applyVisibility();
     if (persist) this.port.persist();

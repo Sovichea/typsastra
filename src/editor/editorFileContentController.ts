@@ -35,6 +35,13 @@ export class EditorFileContentController {
     return isPlainText;
   }
 
+  /** Project text discovery already established that this file is UTF-8 text. */
+  markPlainTextPath(path: string): void {
+    const key = filePathKey(path);
+    this.classifiedUnknownPaths.add(key);
+    this.detectedPlainTextPaths.add(key);
+  }
+
   invalidateLoad(path: string): void {
     this.loadRequests.invalidate(filePathKey(path));
   }
@@ -73,6 +80,6 @@ export class EditorFileContentController {
   }
 }
 
-function normalizeEditorText(text: string): string {
+export function normalizeEditorText(text: string): string {
   return text.replace(/\r\n?/g, "\n");
 }

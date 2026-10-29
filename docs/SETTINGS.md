@@ -394,7 +394,7 @@ gates.
 
 ## Formatting
 
-Typst formatting is available from **Edit → Format Document** or `Ctrl+Shift+F`. **Format on save** is an Editor setting and defaults off.
+Typst formatting is available from **Edit → Format Document** or `Alt+Shift+F`. **Format on save** is an Editor setting and defaults off.
 
 ## Keyboard shortcuts
 
@@ -431,7 +431,9 @@ These are defaults, before any customizations:
 | Open Settings | `Ctrl+,` | `Cmd+,` |
 | Undo | `Ctrl+Z` | `Cmd+Z` |
 | Redo | `Ctrl+Y` | `Cmd+Shift+Z` |
-| Format Document | `Ctrl+Shift+F` | `Cmd+Shift+F` |
+| Search Project | `Ctrl+Shift+F` | `Cmd+Shift+F` |
+| Replace in Project | `Ctrl+Shift+H` | `Cmd+Shift+H` |
+| Format Document | `Alt+Shift+F` | `Option+Shift+F` |
 | Toggle Word Wrap | `Alt+Z` | `Option+Z` |
 | Toggle Explorer Sidebar | `Ctrl+B` | `Cmd+B` |
 | Toggle Editor Toolbar | `Ctrl+Shift+T` | `Cmd+Shift+T` |

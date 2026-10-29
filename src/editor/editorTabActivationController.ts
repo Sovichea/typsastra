@@ -1,6 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 import { fileExtension, isBinaryImagePath, isMarkdownDocumentPath, isSupportedInAppPath, isTypstDocumentPath } from "../platform/fileTypes";
-import { filePathKey } from "../platform/paths";
+import { filePathKey, isUntitledDocumentPath } from "../platform/paths";
 import type { PreviewSessionState, EditorTab } from "./editorTab";
 import type { LargeFileOpeningNotice } from "../workspace/largeFileOpening";
 import type { EditorTabPresentationController } from "./editorTabPresentationController";
@@ -16,6 +16,7 @@ import type { EditorController } from "./editorController";
 export type ActivateEditorTabOptions = {
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  preservePreviewViewport?: boolean;
   focusEditor?: boolean;
   largeFileConfirmed?: boolean;
 };
@@ -104,7 +105,7 @@ export class EditorTabActivationController {
     const generation = ++this.activationGeneration;
     const deps = this.deps;
     deps.explorer.setActiveFile(path);
-    if (deps.workspaceRootPath()) void deps.explorer.revealPath(path);
+    if (deps.workspaceRootPath() && !isUntitledDocumentPath(path)) void deps.explorer.revealPath(path);
 
     const tab = deps.openTabs().find(candidate => filePathKey(candidate.path) === filePathKey(path));
     const isCurrent = () => generation === this.activationGeneration && (!tab || deps.openTabs().includes(tab));
@@ -201,7 +202,9 @@ export class EditorTabActivationController {
       const unsupportedFile = !deps.isInternallySupportedPath(path);
       const isPdf = fileExtension(path) === "pdf";
       if (unsupportedFile || isBinaryImagePath(path) || isPdf) {
-        if (!sameActivePath) deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab));
+        if (!sameActivePath && !options.preservePreviewViewport) {
+          deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab));
+        }
         deps.presentation.presentNonText(
           tab,
           path,
@@ -254,7 +257,11 @@ export class EditorTabActivationController {
     // already run defers that offset until the *next* tab activation, causing
     // include tabs to appear one position behind each other. Only seed an
     // offset when this activation is going to mount a different PDF session.
-    if (!sameActivePath && !previewActivation.presentationReused) {
+    if (
+      !sameActivePath
+      && !previewActivation.presentationReused
+      && !options.preservePreviewViewport
+    ) {
       deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab));
     }
     // A large-file confirmation initially holds workspace services back. The
