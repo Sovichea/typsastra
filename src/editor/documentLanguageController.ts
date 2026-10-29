@@ -107,6 +107,13 @@ export class DocumentLanguageController {
         target.followIncludes,
       );
       if (generation !== this.outlineUpdateGeneration) return;
+      if (
+        filePathKey(target.path) !== filePathKey(path)
+        && !this.deps.outline().hasProjectFile(path)
+      ) {
+        this.scheduleOutlineUpdate(path, 0);
+        return;
+      }
       this.deps.outline().setCursorPosition(
         this.deps.editorCursorPosition(),
         this.deps.activeFilePath(),
@@ -156,6 +163,7 @@ export class DocumentLanguageController {
     if (
       filePathKey(path) === filePathKey(mainPath!)
       || this.deps.outline().hasProjectFile(path)
+      || !this.deps.outline().hasProjectFiles()
     ) {
       return { path: mainPath!, followIncludes: true };
     }

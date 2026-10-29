@@ -91,11 +91,14 @@ describe("document outline", () => {
     expect(language).toContain("const target = this.outlineTarget(path)");
     expect(language).toContain("const targetSource = await this.readWorkspaceFile(target.path)");
     expect(language).toContain("this.deps.outline().hasProjectFile(path)");
+    expect(language).toContain("!this.deps.outline().hasProjectFiles()");
+    expect(language).toContain("this.scheduleOutlineUpdate(path, 0)");
     expect(language).toContain("followIncludes: false");
     expect(language).toContain("target.followIncludes");
     expect(language).toContain("this.deps.outline().setCursorPosition(");
     expect(outlineSource).toContain("private projectFiles = new Set<string>()");
     expect(outlineSource).toContain("public hasProjectFile(path: string): boolean");
+    expect(outlineSource).toContain("public hasProjectFiles(): boolean");
     expect(outlineSource).toContain("this.projectFiles = new Set([...visited].map(filePathKey))");
     expect(outlineSource).toContain("private previewOutlineItems: readonly OutlinePreviewItem[] = []");
     expect(outlineSource).toContain("matchOutlinePreviewPositions(this.headings, this.previewOutlineItems)");

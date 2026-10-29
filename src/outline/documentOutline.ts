@@ -404,6 +404,10 @@ export class DocumentOutlineController {
     return this.projectFiles.has(filePathKey(path));
   }
 
+  public hasProjectFiles(): boolean {
+    return this.projectFiles.size > 0;
+  }
+
   public previewPositionAt(cursor: number): PreviewDocumentPosition | undefined {
     let position: PreviewDocumentPosition | undefined;
     const activePathKey = this.activePath ? filePathKey(this.activePath) : null;
