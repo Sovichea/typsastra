@@ -99,11 +99,11 @@ Implemented:
 - Unsaved open buffers take precedence for the main document and includes.
   Source edits, external changes, and main-file changes schedule a rebuild.
 - Late parse results are discarded when a newer outline update supersedes them.
-- Included files keep the main-document outline. While an included file is
-  active, headings from other files are muted so that file's headings stand out.
-  Other project Typst documents use a file-only outline for editor navigation;
-  their own includes are not expanded until the file is pinned as the main
-  document.
+- Included files keep the main-document outline. While a file in the main
+  document is active, headings from other files are muted so that file's own
+  headings stand out. This applies to the main file as well as includes. Other
+  project Typst documents use a file-only outline for editor navigation; their
+  own includes are not expanded until the file is pinned as the main document.
 - Standalone documents keep the active-file outline workflow. Standalone PDF
   bookmark navigation is unchanged.
 

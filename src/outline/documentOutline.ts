@@ -278,7 +278,6 @@ export class DocumentOutlineController {
   private readonly collapsed = new Set<string>();
   private cursor = 0;
   private activePath: string | null = null;
-  private outlineRootPath: string | null = null;
   private activeHeadingKey: string | null = null;
   private selectedHeadingId: string | null = null;
   private pdfOutline: StandalonePdfOutlineItem[] | null = null;
@@ -323,7 +322,6 @@ export class DocumentOutlineController {
     }
     this.pdfOutline = null;
     this.flatPdfOutline = [];
-    this.outlineRootPath = path;
     this.headings = headings;
     matchOutlinePreviewPositions(this.headings, this.previewOutlineItems);
     this.flatHeadings = flattenHeadings(this.headings);
@@ -342,7 +340,6 @@ export class DocumentOutlineController {
     this.flatHeadings = [];
     this.cursor = 0;
     this.activePath = null;
-    this.outlineRootPath = null;
     this.activeHeadingKey = null;
     this.selectedHeadingId = null;
     this.pdfOutline = null;
@@ -458,13 +455,13 @@ export class DocumentOutlineController {
 
   private updateFileEmphasis(): void {
     const activeKey = this.activePath ? filePathKey(this.activePath) : null;
-    const rootKey = this.outlineRootPath ? filePathKey(this.outlineRootPath) : null;
-    const fadeOtherFiles = !!activeKey && !!rootKey && activeKey !== rootKey;
+    const activeFileHasHeadings = !!activeKey
+      && this.flatHeadings.some(heading => filePathKey(heading.filePath) === activeKey);
     this.container.querySelectorAll<HTMLElement>(".outline-item[data-outline-file]").forEach(row => {
       const fileKey = row.dataset.outlineFile ? filePathKey(row.dataset.outlineFile) : null;
       row.classList.toggle(
         "outline-item-other-file",
-        fadeOtherFiles && !!fileKey && fileKey !== activeKey,
+        activeFileHasHeadings && !!fileKey && fileKey !== activeKey,
       );
     });
   }

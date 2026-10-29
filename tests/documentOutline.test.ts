@@ -107,7 +107,7 @@ describe("document outline", () => {
     expect(navigationSource).toContain("filePathKey(heading.filePath) !== filePathKey(activePath)");
   });
 
-  test("fades headings from files other than the active include", async () => {
+  test("fades headings from files other than the active main or include", async () => {
     const outlineSource = await Bun.file(
       new URL("../src/outline/documentOutline.ts", import.meta.url),
     ).text();
@@ -119,6 +119,7 @@ describe("document outline", () => {
     expect(outlineSource).toContain("public setActiveFilePath(activePath: string | null): void");
     expect(outlineSource).toContain("private updateFileEmphasis(): void");
     expect(outlineSource).toContain('"outline-item-other-file"');
+    expect(outlineSource).toContain("activeFileHasHeadings");
     expect(outlineSource).toContain("fileKey !== activeKey");
     const languageSource = await Bun.file(
       new URL("../src/editor/documentLanguageController.ts", import.meta.url),
