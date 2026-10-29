@@ -59,8 +59,7 @@ project and are separate from preview caches.
 
 After an unexpected shutdown, opening the affected project offers its available
 snapshots. The recovery prompt is not shown automatically at application startup,
-and snapshots belonging to other projects are not included. **File → Recover
-Unsaved Work…** can be used to inspect all snapshots explicitly. Each file can be
+and snapshots belonging to other projects are not included. Each file can be
 reviewed, restored as an unsaved buffer, or discarded. If the file changed on
 disk, review the unified diff before restoring; only changed hunks and nearby
 context are shown, with additions and removals highlighted. Deleted files reopen

@@ -199,8 +199,8 @@ Implemented:
   older revisions are rejected.
 - Writes use an atomic temporary file and keep the previous valid snapshot if
   publishing fails. Storage is capped at 100 MiB without silently deleting
-  records. Failures produce a persistent Log warning that points to
-  **File → Recover Unsaved Work…**.
+  records. Failures produce a persistent Log warning; the previous valid
+  snapshot remains available when its project is opened.
 - Snapshotting does not start Tinymist or request a compile.
 
 Deferred:
@@ -217,7 +217,7 @@ Implemented:
   Review, Restore, and Discard controls, storage usage, and corrupt-record
   reporting. Recovery is not shown automatically at application startup, and
   snapshots from other projects are excluded from the project-open prompt.
-  **File → Recover Unsaved Work…** shows all records explicitly.
+  There is no separate manual recovery command.
 - If disk already matches the recovered text, the record is resolved
   automatically. If disk differs from the saved baseline, Restore opens a
   git-style unified diff first, rendering only changed hunks with context

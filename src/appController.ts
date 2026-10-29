@@ -4406,11 +4406,6 @@ export class TypsastraWorkspaceController {
       shortcuts: () => this.settingsController.value.shortcuts,
       openWorkspace: path => this.openWorkspace(path),
       importProject: () => this.importTypsastraProject(),
-      showRecoveryReview: async () => {
-        if (!await this.recoveryReviewController.showIfNeeded()) {
-          this.setLspStatus({ kind: "preview-ready", message: "No unsaved recovery snapshots" });
-        }
-      },
       createProjectFromTemplate: () => this.createProjectFromTemplate(),
       restartWorkspace: () => this.restartWorkspace(),
       closeProject: () => this.closeProject(),

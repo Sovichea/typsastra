@@ -84,7 +84,6 @@ export interface AppEventActions {
 
   openWorkspace: (path: string) => Promise<void> | void;
   importProject: () => Promise<void> | void;
-  showRecoveryReview: () => Promise<void> | void;
   createProjectFromTemplate: () => Promise<void> | void;
   restartWorkspace: () => Promise<void> | void;
   closeProject: () => Promise<boolean> | void;
@@ -441,7 +440,6 @@ export function bindAppEvents(actions: AppEventActions): void {
 
   document.getElementById("action-save-file")?.addEventListener("click", () => void actions.saveActiveFile());
   document.getElementById("action-save-file-as")?.addEventListener("click", () => void actions.saveActiveFileAs());
-  document.getElementById("action-recovery-review")?.addEventListener("click", () => void actions.showRecoveryReview());
   document.getElementById("action-export-pdf")?.addEventListener("click", () => void actions.exportPdf());
   document.getElementById("action-export-project")?.addEventListener("click", () => void actions.exportProject());
   document.getElementById("action-export-source-zip")?.addEventListener("click", () => void actions.exportSourceZip());

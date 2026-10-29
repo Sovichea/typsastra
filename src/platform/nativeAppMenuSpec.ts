@@ -68,7 +68,6 @@ export function buildNativeMenuSpec(productName: string): NativeMenuSubmenuSpec[
         { kind: "item", id: "action-new-file", label: "New File", accelerator: "CmdOrCtrl+N", elementId: "action-new-file", workspaceScoped: true },
         { kind: "item", id: "action-open-folder", label: "Open Project…", accelerator: "CmdOrCtrl+O", elementId: "action-open-folder" },
         { kind: "item", id: "action-import-project", label: "Import Typsastra Project…", elementId: "action-import-project" },
-        { kind: "item", id: "action-recovery-review", label: "Recover Unsaved Work…", elementId: "action-recovery-review" },
         { kind: "recent-placeholder" },
         { kind: "separator" },
         { kind: "item", id: "action-save-file", label: "Save", accelerator: "CmdOrCtrl+S", elementId: "action-save-file", workspaceScoped: true },

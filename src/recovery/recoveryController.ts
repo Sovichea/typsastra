@@ -353,7 +353,7 @@ export class RecoveryController {
       ? `the ${Math.round(result.totalBytes / (1024 * 1024))} MiB recovery limit is full`
       : reason;
     this.deps.logWarning(
-      `Recovery snapshot for ${fileNameFromPath(tab.path)} could not be written: ${detail}. The previous valid snapshot was kept. Use File > Recover Unsaved Work to review and discard old snapshots.`,
+      `Recovery snapshot for ${fileNameFromPath(tab.path)} could not be written: ${detail}. The previous valid snapshot was kept and will be offered when its project is opened.`,
       true,
     );
   }

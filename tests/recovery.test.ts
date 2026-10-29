@@ -106,7 +106,7 @@ describe("recovery snapshots", () => {
     expect(html).toContain('id="recovery-overlay"');
     expect(html).toContain('id="recovery-list"');
     expect(html).toContain('id="recovery-review"');
-    expect(html).toContain('id="action-recovery-review"');
+    expect(html).not.toContain('id="action-recovery-review"');
     expect(review).toContain("if (text === record.text)");
     expect(review).toContain('changed ? "changed" : "unchanged"');
     expect(review).toContain("createUnifiedTextDiff");
