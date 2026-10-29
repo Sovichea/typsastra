@@ -87,7 +87,16 @@ export interface PdfPreviewRenderDependencies {
   isLowMemoryMode(): boolean;
   canRestoreLowMemoryPreviewCache(): boolean;
   restoreLowMemoryPreviewCache(): Promise<{ pdfPath: string; indexJson: string } | null>;
-  captureLowMemoryPreviewSignature(): Promise<string | null>;
+  canRestorePreviewCache(): boolean;
+  restorePreviewCache(): Promise<{ pdfPath: string; sourceSignature: string } | null>;
+  canPersistPreviewCache(): boolean;
+  capturePreviewSignature(): Promise<string | null>;
+  persistPreviewCache(
+    pdfPath: string,
+    sourceSignature: string,
+    previewRootPath: string,
+    workspaceRootPath: string,
+  ): Promise<void>;
   buildLowMemorySyncIndex(
     preparedRootPath: string,
     generation: number,
@@ -281,6 +290,61 @@ export class PdfPreviewRenderController {
     return this.render(contents, false, true);
   }
 
+  /** Load the last clean normal-mode PDF without compiling. */
+  public async restoreCachedPreview(): Promise<boolean> {
+    if (this.deps.isLowMemoryMode() || this.deps.isPreviewDisabled()) return false;
+    if (this.deps.draftPreview.mode !== "normal") return false;
+    if (!this.deps.canRestorePreviewCache() || !this.deps.getPreviewRootPath()) return false;
+    try {
+      const cached = await this.deps.restorePreviewCache();
+      if (!cached) return false;
+      this.lastPdfPathValue = cached.pdfPath;
+      this.managedPdfPathKeysValue.add(filePathKey(cached.pdfPath));
+      if (this.hasLiveViewportValue) {
+        this.deps.previewFrame.preserveViewportForNextLoad(
+          this.liveViewportAnchorValue,
+          this.liveScrollTopValue,
+        );
+      }
+      await this.loadPdfPath(
+        cached.pdfPath,
+        this.deps.getPreviewRootPath() ?? cached.pdfPath,
+        this.deps.getPreviewSessionKey() ?? this.deps.getPreviewRootPath() ?? cached.pdfPath,
+        "live",
+        false,
+      );
+      this.deps.log("info", "preview scheduler", "Reused cached PDF for an unchanged workspace snapshot at startup.");
+      this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
+      return true;
+    } catch (error) {
+      this.deps.log("warning", "preview scheduler", `Unable to restore cached preview PDF; compiling normally: ${String(error)}`);
+      return false;
+    }
+  }
+
+  /** Update the startup cache for the currently displayed clean PDF. */
+  public async persistCurrentPreviewCache(sourceSignature: string): Promise<boolean> {
+    if (this.deps.isLowMemoryMode() || !this.deps.canPersistPreviewCache()) return false;
+    const snapshot = this.liveSnapshot;
+    const previewRootPath = this.deps.getPreviewRootPath();
+    const workspaceRootPath = this.deps.getWorkspaceRootPath();
+    if (
+      !snapshot
+      || this.lastPdfSurfaceValue !== "live"
+      || !previewRootPath
+      || !workspaceRootPath
+      || snapshot.sourceRoot !== previewRootPath
+      || snapshot.sessionKey !== this.deps.getPreviewSessionKey()
+    ) return false;
+    await this.deps.persistPreviewCache(
+      snapshot.path,
+      sourceSignature,
+      previewRootPath,
+      workspaceRootPath,
+    );
+    return true;
+  }
+
   public async render(contents: string, force = false, restoreOnly = false): Promise<void> {
     this.deps.log(
       "info",
@@ -346,7 +410,16 @@ export class PdfPreviewRenderController {
       return;
     }
     const lowMemoryMode = this.deps.isLowMemoryMode();
-    if (!this.deps.getActiveFilePath() || (!lowMemoryMode && (!this.deps.isLspReady() || !this.deps.getLspClient()))) {
+    const generationContentMode = this.deps.draftPreview.mode;
+    const canRestoreNormalCache = !lowMemoryMode
+      && !force
+      && generationContentMode === "normal"
+      && this.deps.canRestorePreviewCache();
+    if (!this.deps.getActiveFilePath() || (
+      !lowMemoryMode
+      && !canRestoreNormalCache
+      && (!this.deps.isLspReady() || !this.deps.getLspClient())
+    )) {
       this.deps.log(
         "info",
         "preview scheduler",
@@ -374,7 +447,8 @@ export class PdfPreviewRenderController {
     const compileStartedAt = performance.now();
     const generation = ++this.generationValue;
     const generationActivePath = this.deps.getActiveFilePath();
-    const generationContentMode = this.deps.draftPreview.mode;
+    const generationPreviewRoot = this.deps.getPreviewRootPath();
+    const generationWorkspaceRoot = this.deps.getWorkspaceRootPath();
     const preparationRevision = this.preparationRevisionValue;
     let renderSucceeded = false;
     let preparedPreview: PreparedPdfPreview | null = null;
@@ -422,6 +496,51 @@ export class PdfPreviewRenderController {
         this.deps.log("warning", "preview scheduler", `Unable to restore low-memory preview cache; compiling normally: ${String(error)}`);
       }
     }
+    // Normal live previews also keep their last clean PDF. Reuse it before
+    // asking Tinymist to compile when the workspace still matches exactly.
+    if (
+      !lowMemoryMode
+      && !force
+      && generationContentMode === "normal"
+      && this.deps.canRestorePreviewCache()
+    ) {
+      try {
+        const cached = await this.deps.restorePreviewCache();
+        if (cached && generation === this.generationValue) {
+          this.lastPdfPathValue = cached.pdfPath;
+          this.managedPdfPathKeysValue.add(filePathKey(cached.pdfPath));
+          if (this.hasLiveViewportValue) {
+            this.deps.previewFrame.preserveViewportForNextLoad(
+              this.liveViewportAnchorValue,
+              this.liveScrollTopValue,
+            );
+          }
+          await this.loadPdfPath(
+            cached.pdfPath,
+            this.deps.getPreviewRootPath() ?? cached.pdfPath,
+            this.deps.getPreviewSessionKey() ?? this.deps.getPreviewRootPath() ?? cached.pdfPath,
+            "live",
+            false,
+          );
+          this.deps.log("info", "preview scheduler", "Reused cached PDF for an unchanged workspace snapshot.");
+          this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
+          if (freshnessRevision !== undefined) this.deps.freshness?.finish(freshnessRevision, true);
+          this.deps.onRenderSucceeded();
+          renderSucceeded = true;
+          return;
+        }
+      } catch (error) {
+        this.deps.log("warning", "preview scheduler", `Unable to restore cached preview PDF; compiling normally: ${String(error)}`);
+      }
+    }
+    if (!lowMemoryMode && (!this.deps.isLspReady() || !this.deps.getLspClient())) {
+      this.deps.log(
+        "info",
+        "preview scheduler",
+        "Preview cache is unavailable; waiting for Tinymist before compiling.",
+      );
+      return;
+    }
     await this.deps.performance.logMemoryDiagnostics(`render ${generation}: before preparation`);
     this.deps.log(
       "info",
@@ -433,9 +552,9 @@ export class PdfPreviewRenderController {
       this.deps.previewFrame.setLoading("Compiling live preview…");
     }
 
-      const lowMemorySourceSignature = lowMemoryMode
-        ? await this.deps.captureLowMemoryPreviewSignature().catch(() => null)
-        : null;
+      const previewSourceSignaturePromise = lowMemoryMode || this.deps.canPersistPreviewCache()
+        ? this.deps.capturePreviewSignature().catch(() => null)
+        : Promise.resolve(null);
 
       this.deps.preparation.ensureCurrent(preparationRevision);
       const draftPreparationStartedAt = performance.now();
@@ -636,8 +755,9 @@ export class PdfPreviewRenderController {
       }
       if (lowMemoryMode && stagedPdfPath) {
         const indexLease = await retainPreviewGeneration(stagedPdfPath);
+        const sourceSignature = await previewSourceSignaturePromise;
         void this.deps.buildLowMemorySyncIndex(
-          previewPath, generation, stagedPdfPath, lowMemorySourceSignature,
+          previewPath, generation, stagedPdfPath, sourceSignature,
         ).finally(() => releasePreviewGeneration(indexLease));
       }
       await this.deps.draftPreview.presentGeneration({
@@ -703,6 +823,28 @@ export class PdfPreviewRenderController {
             : undefined,
           reuseMounted: keepMountedPreview,
         } satisfies PdfUpdatePayload).catch(err => console.error("Error emitting pdf-update", err));
+      }
+      const previewSourceSignature = await previewSourceSignaturePromise;
+      if (
+        !lowMemoryMode
+        && previewSourceSignature
+        && publishedPdfPath
+        && generationPreviewRoot
+        && generationWorkspaceRoot
+        && filePathKey(generationPreviewRoot) === filePathKey(this.deps.getPreviewRootPath() ?? "")
+      ) {
+        void this.deps.persistPreviewCache(
+          publishedPdfPath,
+          previewSourceSignature,
+          generationPreviewRoot,
+          generationWorkspaceRoot,
+        ).catch(error => {
+          this.deps.log(
+            "info",
+            "preview scheduler",
+            `Preview PDF cache was not updated: ${String(error)}`,
+          );
+        });
       }
     } catch (error) {
       if (this.deps.typography.fontUpdateInProgress) {

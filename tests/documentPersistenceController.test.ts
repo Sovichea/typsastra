@@ -37,6 +37,7 @@ function createController(options: {
   let formatCalls = 0;
   let refreshCalls = 0;
   let saveUntitledCalls = 0;
+  let cachePreviewCalls = 0;
   const controller = new DocumentPersistenceController({
     activeFilePath: () => tab.path,
     activeMode: () => "CODE",
@@ -63,6 +64,7 @@ function createController(options: {
     autoSaveAllowed: () => true,
     activeTab: () => tab as never,
     saveUntitledDocumentAs: async () => { saveUntitledCalls += 1; },
+    cachePreviewAfterSave: async () => { cachePreviewCalls += 1; },
     recoveryRevision: () => 0,
     recoverySaved: async () => {},
     renderEditorTabs: () => {},
@@ -73,7 +75,8 @@ function createController(options: {
   return { controller, tab, include,
     runAutoSave: () => (controller as unknown as { runAutoSaveCycle(): Promise<void> }).runAutoSaveCycle(),
     get formatCalls() { return formatCalls; }, get refreshCalls() { return refreshCalls; },
-    get saveUntitledCalls() { return saveUntitledCalls; } };
+    get saveUntitledCalls() { return saveUntitledCalls; },
+    get cachePreviewCalls() { return cachePreviewCalls; } };
 }
 
 describe("document persistence preview scheduling", () => {
@@ -182,6 +185,38 @@ describe("document persistence preview scheduling", () => {
     expect(fixture.saveUntitledCalls).toBe(0);
     expect(invocations.filter(call => call.command === "save_workspace_file")).toHaveLength(0);
     expect(fixture.tab.isDirty).toBe(true);
+  });
+
+  test("manual and automatic saves refresh the startup preview cache", async () => {
+    const manual = createController({
+      content: "= Edited\n",
+      savedContent: "= Original\n",
+      dirty: true,
+      renderMode: "on-type",
+    });
+    await manual.controller.saveActiveFile("manual");
+    expect(manual.cachePreviewCalls).toBe(1);
+
+    const automatic = createController({
+      content: "= Edited\n",
+      savedContent: "= Original\n",
+      dirty: true,
+      renderMode: "on-type",
+    });
+    await automatic.runAutoSave();
+    expect(automatic.cachePreviewCalls).toBe(1);
+  });
+
+  test("an untitled Save As does not cache a file preview", async () => {
+    const fixture = createController({
+      content: "= New Document\n",
+      savedContent: "",
+      dirty: true,
+      renderMode: "on-type",
+      untitled: true,
+    });
+    await fixture.controller.saveActiveFile("manual");
+    expect(fixture.cachePreviewCalls).toBe(0);
   });
 
   test("a changed Typst file refreshes once on save mode, not on type mode", async () => {

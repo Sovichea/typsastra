@@ -213,6 +213,7 @@ export class TypsastraWorkspaceController {
     void this.finishEditorTextPresentation;
     void this.restoreActiveNonTextPreview;
     void this.restoreActiveLowMemoryPreview;
+    void this.restoreActiveCachedPreview;
     const root = this;
     return new Proxy({} as WorkspaceLifecycleDependencies, {
       get(_target, property) {
@@ -1902,6 +1903,7 @@ export class TypsastraWorkspaceController {
     autoSaveAllowed: () => !this.projectReplacementInProgress,
     activeTab: () => this.getActiveTab(),
     saveUntitledDocumentAs: () => this.saveUntitledDocumentAs(),
+    cachePreviewAfterSave: () => this.cachePreviewAfterSave(),
     recoveryRevision: tab => this.recoveryController.recoveryRevision(tab),
     recoverySaved: (tab, revision) => this.recoveryController.handleTabSaved(tab, revision),
     renderEditorTabs: () => this.renderEditorTabs(),
@@ -2004,7 +2006,12 @@ export class TypsastraWorkspaceController {
     // even when a different, clean tab happens to be active.
     canRestoreLowMemoryPreviewCache: () => !this.openTabs.some(tab => tab.isDirty),
     restoreLowMemoryPreviewCache: () => this.restoreLowMemoryPreviewCache(),
-    captureLowMemoryPreviewSignature: () => this.captureLowMemoryPreviewSignature(),
+    canRestorePreviewCache: () => this.canRestorePreviewCache(),
+    restorePreviewCache: () => this.restorePreviewCache(),
+    canPersistPreviewCache: () => this.canPersistPreviewCache(),
+    capturePreviewSignature: () => this.capturePreviewSignature(),
+    persistPreviewCache: (pdfPath, sourceSignature, previewRootPath, workspaceRootPath) =>
+      this.persistPreviewCache(pdfPath, sourceSignature, previewRootPath, workspaceRootPath),
     buildLowMemorySyncIndex: (preparedRootPath, generation, pdfPath, sourceSignature) =>
       this.buildLowMemorySyncIndex(preparedRootPath, generation, pdfPath, sourceSignature),
     ensureLargePreviewApproved: rootPath => this.ensureLargePreviewApproved(rootPath),
@@ -3541,11 +3548,86 @@ export class TypsastraWorkspaceController {
     return cached;
   }
 
-  private async captureLowMemoryPreviewSignature(): Promise<string | null> {
+  private async capturePreviewSignature(): Promise<string | null> {
     if (!this.workspaceRootPath) return null;
     return invoke<string>("workspace_preview_signature", {
       workspaceRootPath: this.workspaceRootPath,
     });
+  }
+
+  private canRestorePreviewCache(): boolean {
+    const tab = this.getActiveTab();
+    return this.canPersistPreviewCache()
+      && !!tab?.contentLoaded
+      && isTypstDocumentPath(tab.path);
+  }
+
+  private canPersistPreviewCache(): boolean {
+    return !this.settingsController.value.preview.lowMemoryMode
+      && this.draftPreviewController.mode === "normal"
+      && this.workspaceRootPath !== null
+      && this.standaloneFilePath === null
+      && this.openTabs.every(tab => !tab.isDirty);
+  }
+
+  private async restorePreviewCache(): Promise<{ pdfPath: string; sourceSignature: string } | null> {
+    const cacheRootPath = this.getCacheRootPath();
+    if (!this.workspaceRootPath || !this.previewRootPath || !cacheRootPath) return null;
+    return invoke<{ pdfPath: string; sourceSignature: string } | null>(
+      "restore_preview_pdf_cache",
+      {
+        workspaceRootPath: this.workspaceRootPath,
+        cacheRootPath,
+        previewRootPath: this.previewRootPath,
+      },
+    );
+  }
+
+  private async persistPreviewCache(
+    pdfPath: string,
+    sourceSignature: string,
+    previewRootPath: string,
+    workspaceRootPath: string,
+  ): Promise<void> {
+    if (!this.workspaceRootPath
+      || filePathKey(this.workspaceRootPath) !== filePathKey(workspaceRootPath)) return;
+    const cacheRootPath = this.getCacheRootPath();
+    if (!previewRootPath || !cacheRootPath) return;
+    await invoke("persist_preview_pdf_cache", {
+      workspaceRootPath,
+      cacheRootPath,
+      previewRootPath,
+      pdfPath,
+      sourceSignature,
+    });
+  }
+
+  private async cachePreviewAfterSave(): Promise<void> {
+    if (this.effectivePreviewRenderMode !== "on-type") return;
+    if (!isTypstDocumentPath(this.activeFilePath ?? "")) return;
+    if (!this.canPersistPreviewCache()) return;
+    if (this.pdfPreviewRenderController.pending) return;
+    if (this.previewFreshness.state.status !== "current") return;
+    if (!this.pdfPreviewRenderController.lastPdfPath
+      || this.pdfPreviewRenderController.lastPdfSurface !== "live") return;
+    const sourceSignature = await this.capturePreviewSignature();
+    if (!sourceSignature) return;
+    await this.pdfPreviewRenderController.persistCurrentPreviewCache(sourceSignature);
+  }
+
+  private async restoreActiveCachedPreview(): Promise<boolean> {
+    if (!this.canRestorePreviewCache() || !this.pinnedMainFilePath) return false;
+    const tab = this.getActiveTab();
+    if (!tab?.contentLoaded || !isTypstDocumentPath(tab.path)) return false;
+    const options = { skipPreviewActivation: false };
+    const context = await this.editorPreviewActivationController.prepare(
+      tab,
+      tab.path,
+      true,
+      options,
+    );
+    if (context.guarded || this.previewDisabled || !this.previewRootPath) return false;
+    return this.pdfPreviewRenderController.restoreCachedPreview();
   }
 
   private async buildLowMemorySyncIndex(

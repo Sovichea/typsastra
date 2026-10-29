@@ -106,6 +106,38 @@ describe("PDF preview render controller", () => {
     expect(source).toContain("this.lastPresentedLivePdfHash = null");
   });
 
+  test("restores a clean normal-mode PDF before compiling when reopening a project", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
+    ).text();
+    const lifecycle = await Bun.file(
+      new URL("../src/workspace/workspaceLifecycleController.ts", import.meta.url),
+    ).text();
+    const native = await Bun.file(
+      new URL("../src-tauri/src/lib.rs", import.meta.url),
+    ).text();
+
+    expect(source).toContain("restorePreviewCache()");
+    expect(source).toContain("this.deps.persistPreviewCache(");
+    expect(source).toContain("previewSourceSignature");
+    expect(source).toContain("Reused cached PDF for an unchanged workspace snapshot");
+    expect(source).toContain("public async restoreCachedPreview()");
+    expect(source).toContain("public async persistCurrentPreviewCache(");
+    expect(lifecycle).toContain("await app.restoreActiveCachedPreview()");
+    expect(lifecycle).toContain("restoreActiveDocumentAfterTinymistRestart(!restoredCachedPreview)");
+    expect(native).toContain("async fn restore_preview_pdf_cache(");
+    expect(native).toContain("async fn persist_preview_pdf_cache(");
+    expect(native).toContain('cache_root.join("preview-pdf-cache")');
+
+    const cacheRestore = source.indexOf("this.deps.restorePreviewCache()");
+    const lspWaitsForCache = source.indexOf(
+      "Preview cache is unavailable; waiting for Tinymist before compiling.",
+      cacheRestore,
+    );
+    expect(cacheRestore).toBeGreaterThan(-1);
+    expect(lspWaitsForCache).toBeGreaterThan(cacheRestore);
+  });
+
   test("keeps appController as a thin delegate for render, load, schedule, and invalidation", async () => {
     const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
 

@@ -22,6 +22,7 @@ function lifecycleHarness(
     ensureLargePreviewApproved: async () => true,
     preparePinnedMainTypography: async () => null,
     prepareRenderProjectIfNeeded: async () => { calls.push("prepare-preview"); },
+    restoreActiveCachedPreview: async () => { calls.push("restore-cached-preview"); return false; },
     invalidatePreviewWork: () => { calls.push("invalidate-preview"); },
     restartTinymistSession: async () => { calls.push("restart-lsp"); },
     stopTinymistSession: async () => { calls.push("stop-lsp"); },
@@ -97,6 +98,7 @@ describe("WorkspaceLifecycleController behavior", () => {
     await controller.startServices("C:/project");
 
     expect(calls).toEqual([
+      "restore-cached-preview",
       "prepare-preview",
       "invalidate-preview",
       "restart-lsp",

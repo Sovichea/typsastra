@@ -34,6 +34,7 @@ type DocumentPersistenceDependencies = {
   autoSaveAllowed: () => boolean;
   activeTab: () => EditorTab | null;
   saveUntitledDocumentAs: () => Promise<void>;
+  cachePreviewAfterSave: () => Promise<void> | void;
   recoveryRevision: (tab: EditorTab) => number;
   recoverySaved: (tab: EditorTab, revision: number) => Promise<void> | void;
   renderEditorTabs: () => void;
@@ -206,6 +207,9 @@ export class DocumentPersistenceController {
             });
           }
         }
+        void Promise.resolve(this.deps.cachePreviewAfterSave()).catch(error => {
+          this.deps.log("info", "preview scheduler", `Could not cache the auto-saved preview: ${String(error)}`);
+        });
       }
     }
   }
@@ -258,6 +262,9 @@ export class DocumentPersistenceController {
         this.deps.renderEditorTabs();
       }
       this.deps.setLspStatus({ kind: "preview-ready", message: "File saved" });
+      void Promise.resolve(this.deps.cachePreviewAfterSave()).catch(error => {
+        this.deps.log("info", "preview scheduler", `Could not cache the saved preview: ${String(error)}`);
+      });
       if (contentChanged && isTypstDocumentPath(activeFilePath)
         && this.deps.previewRenderMode() === "on-save") {
         // Saving has already succeeded. Start preview refresh separately so a

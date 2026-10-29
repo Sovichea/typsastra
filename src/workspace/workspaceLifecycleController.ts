@@ -157,10 +157,11 @@ export interface WorkspaceLifecycleOperations {
   ensureLargePreviewApproved(path: string): Promise<boolean>;
   preparePinnedMainTypography(path: string): Promise<DocumentTypography | null | false>;
   prepareRenderProjectIfNeeded(): Promise<void>;
+  restoreActiveCachedPreview(): Promise<boolean>;
   invalidatePreviewWork(reason: string): void;
   restartTinymistSession(message: string): Promise<void>;
   stopTinymistSession(message: string): Promise<void>;
-  restoreActiveDocumentAfterTinymistRestart(): Promise<void>;
+  restoreActiveDocumentAfterTinymistRestart(forcePreview?: boolean): Promise<void>;
   restoreActiveLowMemoryPreview(): Promise<void>;
   setPinnedMainFile(path: string | null): Promise<void>;
   closeEditorTab(path: string, skipDirtyCheck?: boolean): Promise<void>;
@@ -544,6 +545,11 @@ export class WorkspaceLifecycleController {
           app.editorToolbarController.synchronizeDocumentTypography(typography);
         }
       }
+      const restoredCachedPreview = !app.settingsController.value.preview.lowMemoryMode
+        && app.activeFilePath
+        ? await app.restoreActiveCachedPreview()
+        : false;
+      if (app.workspaceRootPath !== selected) return;
       await app.prepareRenderProjectIfNeeded();
       if (app.workspaceRootPath !== selected) return;
       if (app.settingsController.value.preview.lowMemoryMode) {
@@ -573,7 +579,7 @@ export class WorkspaceLifecycleController {
         }
       }
       if (app.workspaceRootPath === selected && app.activeFilePath) {
-        await app.restoreActiveDocumentAfterTinymistRestart();
+        await app.restoreActiveDocumentAfterTinymistRestart(!restoredCachedPreview);
       }
     } catch (error) {
       if (app.workspaceRootPath === selected) {
