@@ -79,9 +79,14 @@ import { SourceMapSessionController } from "./preview/sourceMapSessionController
 import { ImagePreviewController } from "./preview/imagePreviewController";
 import {
   DraftPreviewController,
+  type PreviewContentMode,
 } from "./preview/draftPreviewController";
 import { PdfPreviewPreparationController } from "./preview/pdfPreviewPreparationController";
-import { PdfPreviewRenderController } from "./preview/pdfPreviewRenderController";
+import {
+  PdfPreviewRenderController,
+  type DraftPreviewCacheMetadata,
+  type PreviewPdfCacheRestore,
+} from "./preview/pdfPreviewRenderController";
 import { activeFileCanRenderPreview, previewRefreshStyle, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { DiagnosticsController } from "./diagnostics/diagnosticsController";
@@ -2008,11 +2013,11 @@ export class TypsastraWorkspaceController {
     canRestoreLowMemoryPreviewCache: () => !this.openTabs.some(tab => tab.isDirty),
     restoreLowMemoryPreviewCache: () => this.restoreLowMemoryPreviewCache(),
     canRestorePreviewCache: () => this.canRestorePreviewCache(),
-    restorePreviewCache: () => this.restorePreviewCache(),
+    restorePreviewCache: contentMode => this.restorePreviewCache(contentMode),
     canPersistPreviewCache: () => this.canPersistPreviewCache(),
     capturePreviewSignature: () => this.capturePreviewSignature(),
-    persistPreviewCache: (pdfPath, sourceSignature, previewRootPath, workspaceRootPath) =>
-      this.persistPreviewCache(pdfPath, sourceSignature, previewRootPath, workspaceRootPath),
+    persistPreviewCache: (pdfPath, sourceSignature, previewRootPath, workspaceRootPath, contentMode, draft) =>
+      this.persistPreviewCache(pdfPath, sourceSignature, previewRootPath, workspaceRootPath, contentMode, draft),
     buildLowMemorySyncIndex: (preparedRootPath, generation, pdfPath, sourceSignature) =>
       this.buildLowMemorySyncIndex(preparedRootPath, generation, pdfPath, sourceSignature),
     ensureLargePreviewApproved: rootPath => this.ensureLargePreviewApproved(rootPath),
@@ -3565,21 +3570,21 @@ export class TypsastraWorkspaceController {
 
   private canPersistPreviewCache(): boolean {
     return !this.settingsController.value.preview.lowMemoryMode
-      && this.draftPreviewController.mode === "normal"
       && this.workspaceRootPath !== null
       && this.standaloneFilePath === null
       && this.openTabs.every(tab => !tab.isDirty);
   }
 
-  private async restorePreviewCache(): Promise<{ pdfPath: string; sourceSignature: string } | null> {
+  private async restorePreviewCache(contentMode: PreviewContentMode): Promise<PreviewPdfCacheRestore | null> {
     const cacheRootPath = this.getCacheRootPath();
     if (!this.workspaceRootPath || !this.previewRootPath || !cacheRootPath) return null;
-    return invoke<{ pdfPath: string; sourceSignature: string } | null>(
+    return invoke<PreviewPdfCacheRestore | null>(
       "restore_preview_pdf_cache",
       {
         workspaceRootPath: this.workspaceRootPath,
         cacheRootPath,
         previewRootPath: this.previewRootPath,
+        contentMode,
       },
     );
   }
@@ -3589,6 +3594,8 @@ export class TypsastraWorkspaceController {
     sourceSignature: string,
     previewRootPath: string,
     workspaceRootPath: string,
+    contentMode: PreviewContentMode,
+    draft: DraftPreviewCacheMetadata | null,
   ): Promise<void> {
     if (!this.workspaceRootPath
       || filePathKey(this.workspaceRootPath) !== filePathKey(workspaceRootPath)) return;
@@ -3600,6 +3607,8 @@ export class TypsastraWorkspaceController {
       previewRootPath,
       pdfPath,
       sourceSignature,
+      contentMode,
+      draft,
     });
   }
 

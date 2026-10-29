@@ -21,7 +21,7 @@ import {
 import type { PreviewColorMode, PreviewRenderMode } from "../settings";
 import type { TypographyController } from "../typography/typographyController";
 import type { WorkspaceResumeController } from "../platform/workspaceResumeController";
-import type { DraftImageAsset, DraftPreviewController, PreviewContentMode } from "./draftPreviewController";
+import type { DraftImageAsset, DraftImageDiagnostic, DraftPreviewController, PreviewContentMode } from "./draftPreviewController";
 import type { PreviewFrame, PreviewSurface } from "./previewFrame";
 import type { PreviewViewportAnchor } from "./previewViewportAnchor";
 import {
@@ -59,6 +59,20 @@ export type PdfUpdatePayload = {
   reuseMounted?: boolean;
 };
 
+export type DraftPreviewCacheMetadata = {
+  assets: DraftImageAsset[];
+  diagnostics: DraftImageDiagnostic[];
+  assetRootPath?: string | null;
+  documentRootPath?: string | null;
+};
+
+export type PreviewPdfCacheRestore = {
+  pdfPath: string;
+  sourceSignature: string;
+  contentMode: PreviewContentMode;
+  draft?: DraftPreviewCacheMetadata | null;
+};
+
 type OneShotCompileResult = {
   pdfPath: string;
   diagnostics: string;
@@ -88,7 +102,7 @@ export interface PdfPreviewRenderDependencies {
   canRestoreLowMemoryPreviewCache(): boolean;
   restoreLowMemoryPreviewCache(): Promise<{ pdfPath: string; indexJson: string } | null>;
   canRestorePreviewCache(): boolean;
-  restorePreviewCache(): Promise<{ pdfPath: string; sourceSignature: string } | null>;
+  restorePreviewCache(contentMode: PreviewContentMode): Promise<PreviewPdfCacheRestore | null>;
   canPersistPreviewCache(): boolean;
   capturePreviewSignature(): Promise<string | null>;
   persistPreviewCache(
@@ -96,6 +110,8 @@ export interface PdfPreviewRenderDependencies {
     sourceSignature: string,
     previewRootPath: string,
     workspaceRootPath: string,
+    contentMode: PreviewContentMode,
+    draft: DraftPreviewCacheMetadata | null,
   ): Promise<void>;
   buildLowMemorySyncIndex(
     preparedRootPath: string,
@@ -290,13 +306,13 @@ export class PdfPreviewRenderController {
     return this.render(contents, false, true);
   }
 
-  /** Load the last clean normal-mode PDF without compiling. */
+  /** Load the last clean normal- or Draft-mode PDF without compiling. */
   public async restoreCachedPreview(): Promise<boolean> {
     if (this.deps.isLowMemoryMode() || this.deps.isPreviewDisabled()) return false;
-    if (this.deps.draftPreview.mode !== "normal") return false;
     if (!this.deps.canRestorePreviewCache() || !this.deps.getPreviewRootPath()) return false;
+    const contentMode = this.deps.draftPreview.mode;
     try {
-      const cached = await this.deps.restorePreviewCache();
+      const cached = await this.deps.restorePreviewCache(contentMode);
       if (!cached) return false;
       this.lastPdfPathValue = cached.pdfPath;
       this.managedPdfPathKeysValue.add(filePathKey(cached.pdfPath));
@@ -313,7 +329,20 @@ export class PdfPreviewRenderController {
         "live",
         false,
       );
-      this.deps.log("info", "preview scheduler", "Reused cached PDF for an unchanged workspace snapshot at startup.");
+      if (contentMode === "draft" && this.deps.draftPreview.mode === "draft") {
+        // Hover requests reject the zero sentinel, so a restored Draft preview
+        // needs its own positive generation before the thumbnail queue starts.
+        const presentationGeneration = ++this.generationValue;
+        await this.deps.draftPreview.presentGeneration({
+          generation: presentationGeneration,
+          mode: "draft",
+          assets: new Map((cached.draft?.assets ?? []).map(asset => [asset.id, asset])),
+          diagnostics: [...(cached.draft?.diagnostics ?? [])],
+          assetRootPath: cached.draft?.assetRootPath ?? this.deps.getWorkspaceRootPath(),
+          documentRootPath: cached.draft?.documentRootPath ?? null,
+        });
+      }
+      this.deps.log("info", "preview scheduler", `Reused cached PDF for an unchanged workspace snapshot at startup (content=${contentMode}).`);
       this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
       return true;
     } catch (error) {
@@ -336,11 +365,21 @@ export class PdfPreviewRenderController {
       || snapshot.sourceRoot !== previewRootPath
       || snapshot.sessionKey !== this.deps.getPreviewSessionKey()
     ) return false;
+    const draft = snapshot.mode === "draft"
+      ? {
+          assets: [...this.deps.draftPreview.assets.values()],
+          diagnostics: [...this.deps.draftPreview.diagnostics],
+          assetRootPath: this.deps.draftPreview.assetRootPath,
+          documentRootPath: this.deps.draftPreview.documentRootPath,
+        }
+      : null;
     await this.deps.persistPreviewCache(
       snapshot.path,
       sourceSignature,
       previewRootPath,
       workspaceRootPath,
+      snapshot.mode,
+      draft,
     );
     return true;
   }
@@ -496,16 +535,15 @@ export class PdfPreviewRenderController {
         this.deps.log("warning", "preview scheduler", `Unable to restore low-memory preview cache; compiling normally: ${String(error)}`);
       }
     }
-    // Normal live previews also keep their last clean PDF. Reuse it before
-    // asking Tinymist to compile when the workspace still matches exactly.
+    // Normal and Draft live previews keep their last clean PDF. Reuse it
+    // before asking Tinymist to compile when the workspace still matches.
     if (
       !lowMemoryMode
       && !force
-      && generationContentMode === "normal"
       && this.deps.canRestorePreviewCache()
     ) {
       try {
-        const cached = await this.deps.restorePreviewCache();
+        const cached = await this.deps.restorePreviewCache(generationContentMode);
         if (cached && generation === this.generationValue) {
           this.lastPdfPathValue = cached.pdfPath;
           this.managedPdfPathKeysValue.add(filePathKey(cached.pdfPath));
@@ -522,6 +560,16 @@ export class PdfPreviewRenderController {
             "live",
             false,
           );
+          if (generationContentMode === "draft" && this.deps.draftPreview.mode === "draft") {
+            await this.deps.draftPreview.presentGeneration({
+              generation,
+              mode: "draft",
+              assets: new Map((cached.draft?.assets ?? []).map(asset => [asset.id, asset])),
+              diagnostics: [...(cached.draft?.diagnostics ?? [])],
+              assetRootPath: cached.draft?.assetRootPath ?? this.deps.getWorkspaceRootPath(),
+              documentRootPath: cached.draft?.documentRootPath ?? null,
+            });
+          }
           this.deps.log("info", "preview scheduler", "Reused cached PDF for an unchanged workspace snapshot.");
           this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
           if (freshnessRevision !== undefined) this.deps.freshness?.finish(freshnessRevision, true);
@@ -833,11 +881,21 @@ export class PdfPreviewRenderController {
         && generationWorkspaceRoot
         && filePathKey(generationPreviewRoot) === filePathKey(this.deps.getPreviewRootPath() ?? "")
       ) {
+        const draftCacheMetadata: DraftPreviewCacheMetadata | null = generationContentMode === "draft"
+          ? {
+              assets: [...preparedPreview.draftAssets.values()],
+              diagnostics: [...preparedPreview.draftDiagnostics],
+              assetRootPath: generationWorkspaceRoot,
+              documentRootPath: preparedPreview.documentRootPath,
+            }
+          : null;
         void this.deps.persistPreviewCache(
           publishedPdfPath,
           previewSourceSignature,
           generationPreviewRoot,
           generationWorkspaceRoot,
+          generationContentMode,
+          draftCacheMetadata,
         ).catch(error => {
           this.deps.log(
             "info",

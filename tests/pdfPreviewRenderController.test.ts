@@ -106,7 +106,7 @@ describe("PDF preview render controller", () => {
     expect(source).toContain("this.lastPresentedLivePdfHash = null");
   });
 
-  test("restores a clean normal-mode PDF before compiling when reopening a project", async () => {
+  test("restores a clean normal- or Draft-mode PDF before compiling when reopening a project", async () => {
     const source = await Bun.file(
       new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
     ).text();
@@ -117,9 +117,11 @@ describe("PDF preview render controller", () => {
       new URL("../src-tauri/src/lib.rs", import.meta.url),
     ).text();
 
-    expect(source).toContain("restorePreviewCache()");
+    expect(source).toContain("restorePreviewCache(generationContentMode)");
+    expect(source).toContain("restorePreviewCache(contentMode)");
     expect(source).toContain("this.deps.persistPreviewCache(");
     expect(source).toContain("previewSourceSignature");
+    expect(source).toContain("draftCacheMetadata");
     expect(source).toContain("Reused cached PDF for an unchanged workspace snapshot");
     expect(source).toContain("public async restoreCachedPreview()");
     expect(source).toContain("public async persistCurrentPreviewCache(");
@@ -127,9 +129,11 @@ describe("PDF preview render controller", () => {
     expect(lifecycle).toContain("restoreActiveDocumentAfterTinymistRestart(!restoredCachedPreview)");
     expect(native).toContain("async fn restore_preview_pdf_cache(");
     expect(native).toContain("async fn persist_preview_pdf_cache(");
+    expect(native).toContain("content_mode: PreviewContentMode");
+    expect(native).toContain("struct DraftPreviewCacheMetadata");
     expect(native).toContain('cache_root.join("preview-pdf-cache")');
 
-    const cacheRestore = source.indexOf("this.deps.restorePreviewCache()");
+    const cacheRestore = source.indexOf("this.deps.restorePreviewCache(generationContentMode)");
     const lspWaitsForCache = source.indexOf(
       "Preview cache is unavailable; waiting for Tinymist before compiling.",
       cacheRestore,

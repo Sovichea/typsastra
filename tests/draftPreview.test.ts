@@ -185,6 +185,17 @@ describe("Draft Preview", () => {
     expect(plan).toContain("separate namespace for each main document");
   });
 
+  test("reuses cached Draft PDFs and their asset manifest on project open", () => {
+    expect(pdfRenderController).toContain("this.deps.restorePreviewCache(contentMode)");
+    expect(pdfRenderController).not.toContain('if (this.deps.draftPreview.mode !== "normal") return false;');
+    expect(pdfRenderController).toContain("cached.draft?.assets");
+    expect(pdfRenderController).toContain("const presentationGeneration = ++this.generationValue;");
+    expect(pdfRenderController).toContain("generation: presentationGeneration");
+    expect(pdfRenderController).toContain("assets: new Map((cached.draft?.assets ?? [])");
+    expect(pdfRenderController).toContain("documentRootPath: cached.draft?.documentRootPath ?? null");
+    expect(pdfRenderController).toContain("draftCacheMetadata");
+  });
+
   test("logs one aggregate thumbnail benchmark instead of per-image metrics", async () => {
     const native = await Bun.file(
       new URL("../src-tauri/src/render_prepare/draft_thumbnail.rs", import.meta.url)

@@ -48,7 +48,7 @@ use render_prepare::{
     cancel_draft_thumbnail_generation, cancel_render_preparation, get_draft_thumbnail_status,
     map_generated_to_source, map_source_to_generated, prepare_render_file, prepare_render_project,
     start_draft_thumbnail_generation, validate_existing_render_cache_owner,
-    workspace_render_cache_root,
+    workspace_render_cache_root, DraftImageAsset, DraftImageDiagnostic, PreviewContentMode,
 };
 use segmentation::{
     analyze_language_ranges, complete_language_word, get_provider_capabilities,
@@ -6750,13 +6750,30 @@ async fn hash_cached_preview_file(path: String) -> Result<String, String> {
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DraftPreviewCacheMetadata {
+    #[serde(default)]
+    assets: Vec<DraftImageAsset>,
+    #[serde(default)]
+    diagnostics: Vec<DraftImageDiagnostic>,
+    #[serde(default)]
+    asset_root_path: Option<String>,
+    #[serde(default)]
+    document_root_path: Option<String>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PreviewPdfCacheManifest {
     version: u8,
+    #[serde(default)]
+    content_mode: PreviewContentMode,
     root_path: String,
     source_signature: String,
     pdf_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    draft: Option<DraftPreviewCacheMetadata>,
 }
 
 #[derive(serde::Serialize)]
@@ -6776,6 +6793,18 @@ fn preview_cache_key(root: &Path, preview_root: &Path) -> Result<String, String>
         "{:x}",
         Sha256::digest(relative.to_string_lossy().as_bytes())
     ))
+}
+
+fn preview_pdf_cache_key(
+    root: &Path,
+    preview_root: &Path,
+    content_mode: PreviewContentMode,
+) -> Result<String, String> {
+    let key = preview_cache_key(root, preview_root)?;
+    Ok(match content_mode {
+        PreviewContentMode::Normal => key,
+        PreviewContentMode::Draft => format!("{key}-draft"),
+    })
 }
 
 fn collect_workspace_signature_files(
@@ -6961,9 +6990,11 @@ async fn persist_low_memory_preview_cache(
         .map_err(|error| format!("Unable to activate low-memory preview cache: {error}"))?;
     let manifest = PreviewPdfCacheManifest {
         version: 1,
+        content_mode: PreviewContentMode::Normal,
         root_path: preview_root.to_string_lossy().into_owned(),
         source_signature: current_source_signature,
         pdf_path: destination.to_string_lossy().into_owned(),
+        draft: None,
     };
     let manifest_temporary = directory.join(format!("{key}.json.tmp"));
     let manifest_destination = directory.join(format!("{key}.json"));
@@ -6987,6 +7018,9 @@ async fn persist_low_memory_preview_cache(
 struct PreviewPdfCacheEntry {
     pdf_path: String,
     source_signature: String,
+    content_mode: PreviewContentMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    draft: Option<DraftPreviewCacheMetadata>,
 }
 
 fn preview_pdf_cache_directory(cache_root: &Path) -> PathBuf {
@@ -6999,6 +7033,7 @@ async fn restore_preview_pdf_cache(
     workspace_root_path: String,
     cache_root_path: String,
     preview_root_path: String,
+    content_mode: PreviewContentMode,
 ) -> Result<Option<PreviewPdfCacheEntry>, String> {
     let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
@@ -7010,7 +7045,7 @@ async fn restore_preview_pdf_cache(
         resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
-    let key = preview_cache_key(&root, &preview_root)?;
+    let key = preview_pdf_cache_key(&root, &preview_root, content_mode)?;
     let directory = preview_pdf_cache_directory(&cache_root);
     let manifest_path = directory.join(format!("{key}.json"));
     let manifest = match tokio::fs::read_to_string(manifest_path).await {
@@ -7023,7 +7058,10 @@ async fn restore_preview_pdf_cache(
             ))
         }
     };
-    if manifest.version != 1 || manifest.root_path != preview_root.to_string_lossy() {
+    if manifest.version != 1
+        || manifest.content_mode != content_mode
+        || manifest.root_path != preview_root.to_string_lossy()
+    {
         return Ok(None);
     }
     if calculate_workspace_preview_signature(&root)? != manifest.source_signature {
@@ -7036,6 +7074,12 @@ async fn restore_preview_pdf_cache(
     Ok(Some(PreviewPdfCacheEntry {
         pdf_path: pdf_path.to_string_lossy().into_owned(),
         source_signature: manifest.source_signature,
+        content_mode,
+        draft: if content_mode == PreviewContentMode::Draft {
+            manifest.draft
+        } else {
+            None
+        },
     }))
 }
 
@@ -7047,6 +7091,8 @@ async fn persist_preview_pdf_cache(
     preview_root_path: String,
     pdf_path: String,
     source_signature: String,
+    content_mode: PreviewContentMode,
+    draft: Option<DraftPreviewCacheMetadata>,
 ) -> Result<String, String> {
     let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
@@ -7068,7 +7114,7 @@ async fn persist_preview_pdf_cache(
     let source = PathBuf::from(pdf_path)
         .canonicalize()
         .map_err(|error| format!("Unable to resolve generated preview PDF: {error}"))?;
-    let key = preview_cache_key(&root, &preview_root)?;
+    let key = preview_pdf_cache_key(&root, &preview_root, content_mode)?;
     let directory = preview_pdf_cache_directory(&cache_root);
     tokio::fs::create_dir_all(&directory)
         .await
@@ -7090,11 +7136,18 @@ async fn persist_preview_pdf_cache(
             .await
             .map_err(|error| format!("Unable to activate preview PDF cache: {error}"))?;
     }
+    let draft = if content_mode == PreviewContentMode::Draft {
+        draft
+    } else {
+        None
+    };
     let manifest = PreviewPdfCacheManifest {
         version: 1,
+        content_mode,
         root_path: preview_root.to_string_lossy().into_owned(),
         source_signature: current_source_signature,
         pdf_path: destination.to_string_lossy().into_owned(),
+        draft,
     };
     let manifest_temporary = directory.join(format!("{key}.json.tmp"));
     let manifest_destination = directory.join(format!("{key}.json"));
@@ -7249,6 +7302,91 @@ mod low_memory_cache_root_tests {
         )
         .expect_err("foreign cache root is rejected");
         assert!(error.contains("does not belong to the active project"));
+    }
+}
+
+#[cfg(test)]
+mod preview_pdf_cache_tests {
+    use super::{
+        preview_pdf_cache_key, DraftImageAsset, DraftPreviewCacheMetadata, PreviewContentMode,
+        PreviewPdfCacheManifest,
+    };
+    use crate::render_prepare::draft::DraftImageReference;
+    use std::path::PathBuf;
+
+    fn asset(id: &str) -> DraftImageAsset {
+        DraftImageAsset {
+            id: id.into(),
+            path: PathBuf::from(format!("C:/project/{id}.png")),
+            mime_type: "image/png".into(),
+            width: 640,
+            height: 480,
+            source_bytes: 2048,
+            estimated_decoded_bytes: 1_228_800,
+            references: vec![DraftImageReference {
+                source_path: PathBuf::from("C:/project/main.typ"),
+                from_utf16: 4,
+                to_utf16: 22,
+            }],
+        }
+    }
+
+    #[test]
+    fn draft_manifest_roundtrips_asset_metadata() {
+        let manifest = PreviewPdfCacheManifest {
+            version: 1,
+            content_mode: PreviewContentMode::Draft,
+            root_path: "C:/project/main.typ".into(),
+            source_signature: "signature".into(),
+            pdf_path: "C:/cache/main-draft.pdf".into(),
+            draft: Some(DraftPreviewCacheMetadata {
+                assets: vec![asset("cover")],
+                diagnostics: Vec::new(),
+                asset_root_path: Some("C:/project".into()),
+                document_root_path: Some("C:/project".into()),
+            }),
+        };
+
+        let encoded = serde_json::to_string(&manifest).expect("serialize draft manifest");
+        assert!(encoded.contains("\"contentMode\":\"draft\""));
+        let decoded: PreviewPdfCacheManifest =
+            serde_json::from_str(&encoded).expect("deserialize draft manifest");
+        assert_eq!(decoded.content_mode, PreviewContentMode::Draft);
+        let draft = decoded.draft.expect("draft metadata");
+        assert_eq!(draft.assets[0].id, "cover");
+        assert_eq!(draft.assets[0].references[0].from_utf16, 4);
+        assert_eq!(draft.asset_root_path.as_deref(), Some("C:/project"));
+    }
+
+    #[test]
+    fn older_manifests_default_to_normal_mode() {
+        let decoded: PreviewPdfCacheManifest = serde_json::from_str(
+            r#"{
+              "version": 1,
+              "rootPath": "C:/project/main.typ",
+              "sourceSignature": "signature",
+              "pdfPath": "C:/cache/main.pdf"
+            }"#,
+        )
+        .expect("deserialize normal manifest");
+
+        assert_eq!(decoded.content_mode, PreviewContentMode::Normal);
+        assert!(decoded.draft.is_none());
+    }
+
+    #[test]
+    fn draft_and_normal_caches_use_separate_keys() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let preview = workspace.path().join("main.typ");
+        std::fs::write(&preview, "= Main").expect("write preview source");
+
+        let normal = preview_pdf_cache_key(workspace.path(), &preview, PreviewContentMode::Normal)
+            .expect("normal cache key");
+        let draft = preview_pdf_cache_key(workspace.path(), &preview, PreviewContentMode::Draft)
+            .expect("draft cache key");
+
+        assert_ne!(normal, draft);
+        assert_eq!(draft, format!("{normal}-draft"));
     }
 }
 
