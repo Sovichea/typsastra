@@ -1424,8 +1424,8 @@ body.typsastra-resizing #input-container-wrapper::after {
 }
 
 .recovery-dialog {
-  width: min(960px, 100%);
-  height: min(720px, calc(100vh - 48px));
+  width: min(820px, 100%);
+  height: min(650px, calc(100vh - 48px));
 }
 
 .recovery-content {
@@ -1525,6 +1525,10 @@ body.typsastra-resizing #input-container-wrapper::after {
   color: var(--ui-accent-foreground);
   background: var(--ui-accent-color);
   border: 1px solid var(--ui-accent-color);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .recovery-row-actions .settings-primary:hover {
@@ -1614,14 +1618,28 @@ body.typsastra-resizing #input-container-wrapper::after {
   gap: 8px;
 }
 
+.recovery-review-actions button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .recovery-review-actions .settings-primary {
   color: var(--ui-accent-foreground);
   background: var(--ui-accent-color);
-  border-color: var(--ui-accent-color);
+  border: 1px solid var(--ui-accent-color);
 }
 
 .recovery-review-actions .settings-primary:hover {
   background: var(--ui-accent-hover);
+}
+
+.recovery-review-actions .settings-primary:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .about-dialog {
