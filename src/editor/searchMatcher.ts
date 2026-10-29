@@ -34,6 +34,7 @@ export type EditorSearchMatch = {
   lineFrom: number;
   lineText: string;
   lineRanges: Array<{ from: number; to: number }>;
+  replacement: string | null;
 };
 
 export type EditorSearchMatchResult = {
@@ -271,6 +272,33 @@ export class TypsastraSearchQuery extends SearchQuery {
   }
 }
 
+function unquoteRegexReplacement(value: string): string {
+  return value.replace(/\\([nrt\\])/g, (_match, character: string) =>
+    character === "n" ? "\n" : character === "r" ? "\r" : character === "t" ? "\t" : "\\"
+  );
+}
+
+function searchReplacement(
+  config: TypsastraSearchQueryConfig,
+  match: RegExpExecArray | undefined,
+): string | null {
+  if (config.replace === undefined) return null;
+  if (config.regexp) {
+    const replacement = unquoteRegexReplacement(config.replace);
+    if (!match) return replacement;
+    return replacement.replace(/\$([$&]|\d+)/g, (whole, index: string) => {
+      if (index === "&") return match[0];
+      if (index === "$") return "$";
+      for (let length = index.length; length > 0; length -= 1) {
+        const group = Number(index.slice(0, length));
+        if (group > 0 && group < match.length) return match[group] + index.slice(length);
+      }
+      return whole;
+    });
+  }
+  return config.replace;
+}
+
 /**
  * Runs the editor's own literal/regex matching against a plain text file.
  * This is shared by the editor search panel and project search so both use the
@@ -308,6 +336,7 @@ export function findEditorSearchMatches(
       const to = result.value.to;
       const line = state.doc.lineAt(from);
       const lineTo = Math.max(from, Math.min(to, line.to));
+      const regexMatch = (result.value as { match?: RegExpExecArray }).match;
       matches.push({
         from,
         to,
@@ -315,6 +344,7 @@ export function findEditorSearchMatches(
         lineFrom: line.from,
         lineText: line.text,
         lineRanges: [{ from: from - line.from, to: lineTo - line.from }],
+        replacement: searchReplacement(config, regexMatch),
       });
     }
   } catch (error) {

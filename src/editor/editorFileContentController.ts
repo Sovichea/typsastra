@@ -80,6 +80,6 @@ export class EditorFileContentController {
   }
 }
 
-function normalizeEditorText(text: string): string {
+export function normalizeEditorText(text: string): string {
   return text.replace(/\r\n?/g, "\n");
 }
