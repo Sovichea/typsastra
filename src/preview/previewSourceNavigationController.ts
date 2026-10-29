@@ -41,6 +41,13 @@ function nextAnimationFrame(): Promise<void> {
   return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }
 
+type ImageCallSite = {
+  sourcePath: string;
+  fromUtf16: number;
+  toUtf16: number;
+  functionName: string;
+};
+
 export interface PreviewSourceNavigationDependencies {
   previewSync: PreviewSyncController;
   draftPreview: DraftPreviewController;
@@ -166,7 +173,48 @@ export class PreviewSourceNavigationController {
       );
     }
 
-    await this.applyInverseSyncSelection(cursor);
+    const imageCursor = await this.backtrackImageCallSite(cursor);
+    if (imageCursor === null) return;
+    await this.applyInverseSyncSelection(imageCursor);
+  }
+
+  /**
+   * Typst maps an image element inside a helper body back to that helper's
+   * `image()` call. When the clicked image came from a named helper, prefer the
+   * helper's call site instead of the reusable definition.
+   */
+  private async backtrackImageCallSite(cursor: number): Promise<number | null> {
+    const workspaceRootPath = this.deps.getWorkspaceRootPath();
+    const previewRootPath = this.deps.getPreviewRootPath();
+    const sourcePath = this.deps.getActiveFilePath();
+    if (!workspaceRootPath || !previewRootPath || !sourcePath || !isTypstDocumentPath(sourcePath)) {
+      return cursor;
+    }
+    const sourceText = this.deps.getEditor().state.doc.toString();
+    if (!sourceText.includes("image")) return cursor;
+    const target = await invoke<ImageCallSite | null>("resolve_image_call_site", {
+      workspaceRootPath,
+      previewRootPath,
+      sourcePath,
+      sourceText,
+      offsetUtf16: Math.max(0, Math.min(cursor, sourceText.length)),
+    }).catch(error => {
+      this.deps.log("warning", "inverse sync", `Could not resolve image call site: ${String(error)}`);
+      return null;
+    });
+    if (!target) return cursor;
+    if (filePathKey(target.sourcePath) !== filePathKey(sourcePath)) {
+      await this.deps.loadFile(target.sourcePath, {
+        preservePreviewSession: this.deps.capturePreviewSession(),
+      });
+      if (!this.deps.getActiveTab()?.contentLoaded) return null;
+    }
+    this.deps.log(
+      "info",
+      "inverse sync",
+      `Image inverse sync backtracked to ${target.functionName}(...) at ${target.sourcePath}:${target.fromUtf16}.`,
+    );
+    return target.fromUtf16;
   }
 
   public revealCursorInPreviewManually(): void {

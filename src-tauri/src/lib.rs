@@ -6867,6 +6867,32 @@ async fn workspace_preview_signature(workspace_root_path: String) -> Result<Stri
     calculate_workspace_preview_signature(&root)
 }
 
+#[tauri::command]
+async fn resolve_image_call_site(
+    workspace_root_path: String,
+    preview_root_path: String,
+    source_path: String,
+    source_text: String,
+    offset_utf16: usize,
+) -> Result<Option<render_prepare::ImageCallSite>, String> {
+    let workspace_root = dunce::canonicalize(workspace_root_path)
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let preview_root = dunce::canonicalize(preview_root_path)
+        .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
+    let source_path = PathBuf::from(source_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        render_prepare::image_call_site::resolve_image_call_site(
+            &workspace_root,
+            &preview_root,
+            &source_path,
+            &source_text,
+            offset_utf16,
+        )
+    })
+    .await
+    .map_err(|error| format!("Image call-site lookup failed: {error}"))
+}
+
 fn low_memory_preview_cache_directory(cache_root: &Path) -> PathBuf {
     cache_root.join("low-memory-preview")
 }
@@ -8907,6 +8933,7 @@ pub fn run() {
             prepare_low_memory_sync_instrumentation,
             hash_cached_preview_file,
             workspace_preview_signature,
+            resolve_image_call_site,
             restore_low_memory_preview_cache,
             persist_low_memory_preview_cache,
             restore_preview_pdf_cache,
