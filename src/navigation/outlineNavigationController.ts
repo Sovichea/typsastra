@@ -1,4 +1,5 @@
 import { EditorView } from "@codemirror/view";
+import { filePathKey } from "../platform/paths";
 import type { PreviewDocumentPosition } from "../compiler/lsp";
 import type { DocumentHeading, DocumentOutlineController } from "../outline/documentOutline";
 import type { EditorTab } from "../editor/editorTab";
@@ -29,7 +30,8 @@ export class OutlineNavigationController {
     const activeTab = this.deps.activeTab();
     if (activeTab?.temporary) void this.deps.promoteToPermanent(activeTab);
 
-    if (heading.filePath !== this.deps.activeFilePath()) {
+    const activePath = this.deps.activeFilePath();
+    if (!activePath || filePathKey(heading.filePath) !== filePathKey(activePath)) {
       await this.deps.loadFile(heading.filePath, { focusEditor: false });
     }
     if (!this.deps.activeTabContentLoaded()) return;

@@ -64,6 +64,9 @@ describe("document outline", () => {
     const language = await Bun.file(
       new URL("../src/editor/documentLanguageController.ts", import.meta.url),
     ).text();
+    const navigationSource = await Bun.file(
+      new URL("../src/navigation/outlineNavigationController.ts", import.meta.url),
+    ).text();
 
     expect(language).toContain("private mainOutlinePath(path: string): string | null");
     expect(language).toContain("const mainPath = this.mainOutlinePath(path)");
@@ -77,6 +80,9 @@ describe("document outline", () => {
     ).text();
     expect(outlineSource).toContain("private previewOutlineItems: readonly OutlinePreviewItem[] = []");
     expect(outlineSource).toContain("matchOutlinePreviewPositions(this.headings, this.previewOutlineItems)");
+    expect(outlineSource).toContain("const activePathKey = activePath ? filePathKey(activePath) : null");
+    expect(outlineSource).toContain("filePathKey(heading.filePath) === activePathKey");
+    expect(navigationSource).toContain("filePathKey(heading.filePath) !== filePathKey(activePath)");
   });
 
   test("uses compiled PDF bookmark destinations without requiring Tinymist", async () => {

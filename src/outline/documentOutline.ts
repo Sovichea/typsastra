@@ -6,6 +6,7 @@ export type OutlinePreviewItem = {
   bookmarkIndex?: number;
   children: OutlinePreviewItem[];
 };
+import { filePathKey } from "../platform/paths";
 import { createAppIcon } from "../ui/icons";
 import type { PdfiumDestination, PdfiumOutlineItem } from "../preview/pdfiumDocument";
 import type { PreviewSourceOutlineItem } from "../preview/previewOutlineNavigator";
@@ -343,8 +344,9 @@ export class DocumentOutlineController {
     this.cursor = cursor;
     this.activePath = activePath;
     let active: DocumentHeading | undefined;
+    const activePathKey = activePath ? filePathKey(activePath) : null;
     for (const heading of this.flatHeadings) {
-      if (heading.filePath === activePath) {
+      if (activePathKey && filePathKey(heading.filePath) === activePathKey) {
         if (heading.from > cursor) break;
         active = heading;
       }
@@ -373,8 +375,9 @@ export class DocumentOutlineController {
 
   public previewPositionAt(cursor: number): PreviewDocumentPosition | undefined {
     let position: PreviewDocumentPosition | undefined;
+    const activePathKey = this.activePath ? filePathKey(this.activePath) : null;
     for (const heading of this.flatHeadings) {
-      if (heading.filePath === this.activePath) {
+      if (activePathKey && filePathKey(heading.filePath) === activePathKey) {
         if (heading.from > cursor) break;
         if (heading.previewPosition) position = heading.previewPosition;
       }
