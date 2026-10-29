@@ -227,8 +227,6 @@ export function initializeLucideIcons(): void {
   replaceSvg("#undock-preview-btn svg", isPreview ? "minimize2" : "externalLink", 16);
   replaceSvg("#sidebar-toggle-button svg", "panelLeft", 15);
   replaceContents("#settings-close, #log-console-close", "x", 15);
-  replaceContents("#editor-tabs-previous", "chevronLeft", 16);
-  replaceContents("#editor-tabs-next", "chevronRight", 16);
   replaceContents("#welcome-create-project .welcome-item-icon", "filePlus", 18);
   replaceContents("#welcome-open-project .welcome-item-icon", "folder", 18);
   replaceContents("#welcome-import-project .welcome-item-icon", "folderArchive", 18);

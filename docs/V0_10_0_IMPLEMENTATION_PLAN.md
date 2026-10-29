@@ -165,10 +165,12 @@ Implemented:
 
 Implemented:
 
-- Accessible Back/Forward toolbar controls and Edit menu commands default to
-  `Alt+Left` and `Alt+Right` and are configurable like other application
-  shortcuts. The reserved keys regain their CodeMirror meaning when the
-  application command is remapped.
+- Accessible Back/Forward controls at the left edge of the tab bar and matching
+  Edit menu commands default to `Alt+Left` and `Alt+Right` and are configurable
+  like other application shortcuts. The reserved keys regain their CodeMirror
+  meaning when the application command is remapped.
+- The tab bar scrolls with the wheel or trackpad. A chevron menu at its right
+  edge lists every open tab for direct selection when the strip overflows.
 - History is recorded at existing navigation boundaries: search navigation,
   outline navigation, LSP source navigation, diagnostics navigation, and
   inverse sync.

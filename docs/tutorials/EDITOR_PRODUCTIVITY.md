@@ -38,12 +38,14 @@ dynamic includes, and include cycles appear as warnings, while local `.typ`
 modules referenced with `#import` are informational because imported Typst
 modules are not expanded. Only literal `#include` directives are indexed.
 
-Back and Forward in the editor toolbar and Edit menu return to previous source
-locations from project search, the outline, definitions, diagnostics, and
-inverse sync. They default to `Alt+Left` and `Alt+Right` and can be changed in
-**Settings → Shortcuts**. Returning to a location restores its selection and
-editor viewport without recompiling the preview or moving the PDF. History is
-kept for the current session and is cleared when the project closes.
+Back and Forward at the left of the tab bar, and in the Edit menu, return to
+previous source locations from project search, the outline, definitions,
+diagnostics, and inverse sync. They default to `Alt+Left` and `Alt+Right` and
+can be changed in **Settings → Shortcuts**. Returning to a location restores its
+selection and editor viewport without recompiling the preview or moving the PDF.
+History is kept for the current session and is cleared when the project closes.
+Scroll the tab bar with the wheel or trackpad; the chevron at its right edge
+opens a list of every open tab.
 
 Pane focus and keyboard navigation let you move between the editor, preview,
 Explorer, Outline, and Spellcheck without reaching for the mouse.

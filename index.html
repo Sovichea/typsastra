@@ -517,33 +517,91 @@
                     <div id="input-container-wrapper" class="hidden">
                         <div id="editor-tab-strip" class="editor-tab-strip">
                             <div
+                                class="editor-tab-navigation"
+                                role="group"
+                                aria-label="Source navigation"
+                            >
+                                <button
+                                    class="editor-tab-nav-button"
+                                    data-tool="history-back"
+                                    type="button"
+                                    title="Go Back (Alt+Left)"
+                                    aria-label="Go Back"
+                                    disabled
+                                >
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="M19 12H5" />
+                                        <path d="m12 19-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <button
+                                    class="editor-tab-nav-button"
+                                    data-tool="history-forward"
+                                    type="button"
+                                    title="Go Forward (Alt+Right)"
+                                    aria-label="Go Forward"
+                                    disabled
+                                >
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="M5 12h14" />
+                                        <path d="m12 5 7 7-7 7" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div
                                 id="editor-tab-bar"
                                 class="editor-tab-bar"
                                 role="tablist"
                                 aria-label="Open files"
                             ></div>
-                            <div
-                                class="editor-tab-scroll-controls"
-                                aria-label="Scroll open tabs"
-                            >
+                            <div id="editor-tab-list" class="editor-tab-list dropdown-container">
                                 <button
-                                    id="editor-tabs-previous"
-                                    class="hidden"
+                                    id="editor-tab-list-toggle"
+                                    class="editor-tab-list-toggle"
                                     type="button"
-                                    title="Scroll tabs left"
-                                    aria-label="Scroll tabs left"
+                                    title="All open tabs"
+                                    aria-label="All open tabs"
+                                    aria-haspopup="menu"
+                                    aria-expanded="false"
+                                    aria-controls="editor-tab-list-menu"
                                 >
-                                    &#x2039;
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="m6 9 6 6 6-6" />
+                                    </svg>
                                 </button>
-                                <button
-                                    id="editor-tabs-next"
-                                    class="hidden"
-                                    type="button"
-                                    title="Scroll tabs right"
-                                    aria-label="Scroll tabs right"
-                                >
-                                    &#x203A;
-                                </button>
+                                <div
+                                    id="editor-tab-list-menu"
+                                    class="dropdown-menu editor-tab-list-menu"
+                                    role="menu"
+                                    aria-label="Open tabs"
+                                ></div>
                             </div>
                         </div>
                         <div
@@ -1632,52 +1690,6 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="toolbar-group toolbar-group-actions">
-                                <button
-                                    type="button"
-                                    class="toolbar-button"
-                                    data-tool="history-back"
-                                    title="Go Back (Alt+Left)"
-                                    aria-label="Go Back"
-                                    disabled
-                                >
-                                    <svg
-                                        width="14"
-                                        height="14"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <path d="M19 12H5" />
-                                        <path d="m12 19-7-7 7-7" />
-                                    </svg>
-                                </button>
-                                <button
-                                    type="button"
-                                    class="toolbar-button"
-                                    data-tool="history-forward"
-                                    title="Go Forward (Alt+Right)"
-                                    aria-label="Go Forward"
-                                    disabled
-                                >
-                                    <svg
-                                        width="14"
-                                        height="14"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <path d="M5 12h14" />
-                                        <path d="m12 5 7 7-7 7" />
-                                    </svg>
-                                </button>
                             </div>
                             <div class="toolbar-group toolbar-group-actions">
                                 <button

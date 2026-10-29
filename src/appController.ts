@@ -751,22 +751,30 @@ export class TypsastraWorkspaceController {
 
   private codePane = document.getElementById("code-editor-pane")!;
   private editorTabBar = document.getElementById("editor-tab-bar")!;
-  private readonly editorTabViewController = new EditorTabViewController(this.editorTabBar, {
-    tabs: () => this.openTabs,
-    activeFilePath: () => this.activeFilePath,
-    pinnedMainFilePath: () => this.pinnedMainFilePath,
-    sortPinnedMainFirst: () => this.editorSessionController.sortPinnedMainFirst(this.pinnedMainFilePath),
-    activateTab: path => this.activateEditorTab(path),
-    closeTab: path => this.closeEditorTab(path),
-    promoteTab: tab => this.promoteToPermanent(tab),
-    reportActivationFailure: (path, error) => {
-      console.error("Failed to load restored tab:", path, error);
-      void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
-        title: "Unable to Open File",
-        kind: "error"
-      });
+  private readonly editorTabViewController = new EditorTabViewController(
+    this.editorTabBar,
+    {
+      tabs: () => this.openTabs,
+      activeFilePath: () => this.activeFilePath,
+      pinnedMainFilePath: () => this.pinnedMainFilePath,
+      sortPinnedMainFirst: () => this.editorSessionController.sortPinnedMainFirst(this.pinnedMainFilePath),
+      activateTab: path => this.activateEditorTab(path),
+      closeTab: path => this.closeEditorTab(path),
+      promoteTab: tab => this.promoteToPermanent(tab),
+      reportActivationFailure: (path, error) => {
+        console.error("Failed to load restored tab:", path, error);
+        void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
+          title: "Unable to Open File",
+          kind: "error"
+        });
+      },
     },
-  });
+    {
+      container: document.getElementById("editor-tab-list") as HTMLElement,
+      button: document.getElementById("editor-tab-list-toggle") as HTMLButtonElement,
+      menu: document.getElementById("editor-tab-list-menu") as HTMLElement,
+    },
+  );
   private readonly editorFileGuardController = new EditorFileGuardController({
     previewFrame: () => this.previewFrame,
     onPdfBlocked: path => {
@@ -799,11 +807,7 @@ export class TypsastraWorkspaceController {
       void this.saveWorkspaceState();
     },
   });
-  private readonly tabStripController = new TabStripController(
-    this.editorTabBar,
-    document.getElementById("editor-tabs-previous") as HTMLButtonElement,
-    document.getElementById("editor-tabs-next") as HTMLButtonElement
-  );
+  private readonly tabStripController = new TabStripController(this.editorTabBar);
   private editorVisualToolbar = document.getElementById("editor-visual-toolbar")!;
   private codeRenderPane = document.getElementById("code-render-pane")!;
   // WYSIWYM is intentionally disabled for this release. Keep a detached
@@ -1582,9 +1586,6 @@ export class TypsastraWorkspaceController {
     renderWysiwym: markup => this.mapMarkupToWysiwym(markup),
     save: () => this.saveActiveFile(),
     revealCursorInPreview: () => this.revealCursorInPreviewManually(),
-    navigateBack: () => this.navigationHistoryController.back(),
-    navigateForward: () => this.navigationHistoryController.forward(),
-    refreshHistoryControls: () => this.updateNavigationHistoryControls(),
     applyTypography: (config, target) => this.applyTypography(config, target),
     getWorkspaceRoot: () => this.workspaceRootPath,
     onWorkspacePrivateFontDirectoriesChanged: () => this.typographyController.privateFontDirectoriesChanged()
@@ -2337,7 +2338,11 @@ export class TypsastraWorkspaceController {
     this.performanceController.timeStartupSync("initialize explorer", () => this.initExplorer());
     this.performanceController.timeStartupSync("initialize file drop", () => this.fileDropController.initialize());
     this.performanceController.timeStartupSync("initialize editor toolbar", () => this.editorToolbarController.initialize());
-    this.performanceController.timeStartupSync("initialize tab strip", () => this.tabStripController.initialize());
+    this.performanceController.timeStartupSync("initialize tab strip", () => {
+      this.tabStripController.initialize();
+      this.editorTabViewController.initialize();
+      this.updateNavigationHistoryControls();
+    });
     this.performanceController.timeStartupSync("bind global events", () => this.bindGlobalEvents());
     this.performanceController.timeStartupSync("initialize layout", () => this.layoutController.initialize());
     this.performanceController.timeStartupSync("monitor system resume", () => this.systemResumeMonitor.start());

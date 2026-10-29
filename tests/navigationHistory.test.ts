@@ -260,9 +260,6 @@ describe("navigation history", () => {
     const editorInitialization = await Bun.file(
       new URL("../src/editor/editorInitializationController.ts", import.meta.url),
     ).text();
-    const toolbar = await Bun.file(
-      new URL("../src/editor/toolbarController.ts", import.meta.url),
-    ).text();
 
     for (const source of [outline, sourceLocation, diagnostics, inverseSync]) {
       expect(source).toContain("navigationHistory?.()");
@@ -277,8 +274,15 @@ describe("navigation history", () => {
       "return this.navigationHistoryController.run(() => this.navigateToProjectSearchResultInternal(target));",
     );
     expect(app).toContain('source: "navigation"');
-    expect(html).toContain('data-tool="history-back"');
-    expect(html).toContain('data-tool="history-forward"');
+    const tabStrip = html.slice(
+      html.indexOf('id="editor-tab-strip"'),
+      html.indexOf('id="editor-visual-toolbar"'),
+    );
+    expect(tabStrip).toContain('data-tool="history-back"');
+    expect(tabStrip).toContain('data-tool="history-forward"');
+    expect(tabStrip).toContain('id="editor-tab-list-toggle"');
+    expect(html).not.toContain('editor-tab-scroll-controls');
+    expect(html).not.toContain('id="editor-tabs-previous"');
     expect(html).toContain('id="action-navigation-back"');
     expect(menu).toContain('accelerator: "Alt+Left"');
     expect(menu).toContain('accelerator: "Alt+Right"');
@@ -287,11 +291,8 @@ describe("navigation history", () => {
     expect(editorInitialization).toContain(
       "deps.navigationHistory?.()?.documentChanged(",
     );
-    expect(toolbar).toContain("refreshHistoryControls: () => void");
-    expect(toolbar).toContain("this.dependencies.refreshHistoryControls()");
-    expect(app).toContain(
-      "refreshHistoryControls: () => this.updateNavigationHistoryControls()",
-    );
+    expect(app).toContain("new TabStripController(this.editorTabBar)");
+    expect(app).toContain("this.editorTabViewController.initialize()");
   });
 
   test("resolves context before falling back to a clamped offset", () => {
