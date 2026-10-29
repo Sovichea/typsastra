@@ -1871,6 +1871,12 @@ fn legacy_workspace_cache_info_at(
     let Ok(metadata) = std::fs::symlink_metadata(&legacy_cache_root) else {
         return Ok(None);
     };
+    if !metadata.file_type().is_symlink()
+        && legacy_workspace_cache_is_draft_thumbnails_only(&legacy_cache_root)
+    {
+        let _ = std::fs::remove_dir_all(&legacy_cache_root);
+        return Ok(None);
+    }
     let (total_bytes, file_count) = if metadata.file_type().is_symlink() {
         (0, 0)
     } else {
@@ -1908,6 +1914,32 @@ fn legacy_cache_directory_size(path: &std::path::Path) -> (u64, usize) {
         }
     }
     (bytes, files)
+}
+
+/// Earlier Draft Preview builds wrote generated thumbnails into the project.
+/// That folder is disposable, so a legacy cache containing nothing else must
+/// not trigger the project-cache migration prompt.
+fn legacy_workspace_cache_is_draft_thumbnails_only(cache_root: &std::path::Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(cache_root) else {
+        return false;
+    };
+    let mut found = false;
+    for entry in entries.flatten() {
+        found = true;
+        if entry.file_name() != std::ffi::OsStr::new("draft-thumbnails") {
+            return false;
+        }
+    }
+    found
+}
+
+fn remove_disposable_legacy_draft_thumbnail_cache(root: &std::path::Path) {
+    let legacy_cache_root = root.join(".typsastra").join("cache");
+    if legacy_workspace_cache_is_draft_thumbnails_only(&legacy_cache_root) {
+        let _ = std::fs::remove_dir_all(&legacy_cache_root);
+        return;
+    }
+    let _ = std::fs::remove_dir_all(legacy_cache_root.join("draft-thumbnails"));
 }
 
 fn remove_legacy_workspace_cache_at(workspace_root_path: &str) -> Result<(), String> {
@@ -1952,6 +1984,7 @@ fn cleanup_workspace_preview_files_at(
     validate_existing_render_cache_owner(&root, &cache_root).map_err(|error| {
         format!("Failed to validate preview cache ownership before starting Tinymist: {error}")
     })?;
+    remove_disposable_legacy_draft_thumbnail_cache(&root);
     cleanup_dir_previews(&root);
     // Migrate caches written by versions that linked PDF/image assets back to
     // the project. Plain cache files keep project-folder copies safe.
@@ -6082,6 +6115,55 @@ mod preview_main_tests {
         remove_legacy_workspace_cache_at(&workspace.path().to_string_lossy())
             .expect("remove approved legacy cache");
         assert!(!workspace.path().join(".typsastra/cache").exists());
+    }
+
+    #[test]
+    fn legacy_draft_thumbnails_are_removed_without_a_migration_prompt() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let thumbnails = workspace
+            .path()
+            .join(".typsastra/cache/draft-thumbnails/main-document/cover.jpg");
+        std::fs::create_dir_all(thumbnails.parent().expect("thumbnail directory"))
+            .expect("create draft thumbnails");
+        std::fs::write(&thumbnails, b"thumbnail").expect("write draft thumbnail");
+
+        let info = legacy_workspace_cache_info_at(&workspace.path().to_string_lossy())
+            .expect("inspect legacy cache");
+        assert!(
+            info.is_none(),
+            "draft thumbnails must not prompt for migration"
+        );
+        assert!(!workspace.path().join(".typsastra/cache").exists());
+    }
+
+    #[test]
+    fn cleanup_removes_legacy_draft_thumbnails_beside_real_caches() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let app_data = tempfile::tempdir().expect("create app data");
+        let legacy = workspace.path().join(".typsastra/cache/render");
+        std::fs::create_dir_all(&legacy).expect("create legacy render cache");
+        std::fs::write(legacy.join("main.pdf"), b"cached pdf").expect("write legacy cache");
+        let thumbnails = workspace
+            .path()
+            .join(".typsastra/cache/draft-thumbnails/main-document/cover.jpg");
+        std::fs::create_dir_all(thumbnails.parent().expect("thumbnail directory"))
+            .expect("create draft thumbnails");
+        std::fs::write(&thumbnails, b"thumbnail").expect("write draft thumbnail");
+
+        cleanup_workspace_preview_files_at(
+            app_data.path(),
+            workspace.path().to_string_lossy().into_owned(),
+        )
+        .expect("initialize machine-local cache");
+
+        assert!(workspace
+            .path()
+            .join(".typsastra/cache/render/main.pdf")
+            .exists());
+        assert!(!workspace
+            .path()
+            .join(".typsastra/cache/draft-thumbnails")
+            .exists());
     }
 
     #[cfg(windows)]
