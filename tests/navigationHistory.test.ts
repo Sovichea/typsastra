@@ -274,6 +274,11 @@ describe("navigation history", () => {
       "return this.navigationHistoryController.run(() => this.navigateToProjectSearchResultInternal(target));",
     );
     expect(app).toContain('source: "navigation"');
+    expect(app).toContain("activateTab: path => this.navigateToEditorTab(path)");
+    expect(app).toContain("private navigateToEditorTab(path: string): Promise<void>");
+    expect(app).toContain("navigateBack: () => this.navigateBack(),");
+    expect(app).toContain("navigateForward: () => this.navigateForward(),");
+    expect(app).toContain("this.navigationHistoryController.run(() => this.loadFile(path, options))");
     const tabStrip = html.slice(
       html.indexOf('id="editor-tab-strip"'),
       html.indexOf('id="editor-visual-toolbar"'),

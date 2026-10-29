@@ -151,9 +151,10 @@ Implemented:
   the workspace closes. It is not persisted across restarts.
 - Explicit jumps from project search, outline, LSP definitions, diagnostics/log
   locations, and inverse sync record a departure before navigation and a
-  destination after successful completion. Typing, ordinary scrolling, and
-  routine tab switches do not add entries. Navigating after Back removes the
-  forward branch.
+  destination after successful completion. Manual Explorer file opens and tab
+  selections are navigation too. Typing, ordinary scrolling, automated tab
+  activation, tab restoration, and tab closing do not add entries. Navigating
+  after Back removes the forward branch.
 - Entries store the source path, selection, editor viewport, and a short
   source-context anchor. Replayed locations resolve that context against current
   text, so edits before or inside the recorded location keep the selection on
@@ -172,8 +173,8 @@ Implemented:
 - The tab bar scrolls with the wheel or trackpad. A chevron menu at its right
   edge lists every open tab for direct selection when the strip overflows.
 - History is recorded at existing navigation boundaries: search navigation,
-  outline navigation, LSP source navigation, diagnostics navigation, and
-  inverse sync.
+  outline navigation, LSP source navigation, diagnostics navigation, inverse
+  sync, and manual file/tab selection.
 - Replaying history activates the target tab without compiling a preview or
   queuing a PDF scroll. Navigation requests are serialized and obsolete requests
   are rejected so rapid Back/Forward or workspace closure cannot update the

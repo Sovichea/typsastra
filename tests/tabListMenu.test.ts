@@ -88,6 +88,9 @@ describe("tab list menu", () => {
     expect(tabs).toContain('button.role = "menuitem"');
     expect(tabs).toContain("private handleTabListKeydown(");
     expect(tabs).toContain("this.setTabListOpen(false)");
+    expect(tabs).toContain('[data-tool="history-back"]');
+    expect(tabs).toContain("this.deps.navigateBack()");
+    expect(tabs).toContain("this.deps.navigateForward()");
     expect(strip).not.toContain("previousButton");
     expect(strip).not.toContain("nextButton");
   });

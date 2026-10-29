@@ -11,6 +11,8 @@ type EditorTabViewDependencies = {
   closeTab: (path: string) => Promise<void> | void;
   promoteTab: (tab: EditorTab) => Promise<void> | void;
   reportActivationFailure: (path: string, error: unknown) => void;
+  navigateBack: () => Promise<void> | void;
+  navigateForward: () => Promise<void> | void;
 };
 
 type TabListElements = {
@@ -54,6 +56,10 @@ export class EditorTabViewController {
   ) {}
 
   public initialize(): void {
+    document.querySelector<HTMLButtonElement>('[data-tool="history-back"]')
+      ?.addEventListener("click", () => void this.deps.navigateBack());
+    document.querySelector<HTMLButtonElement>('[data-tool="history-forward"]')
+      ?.addEventListener("click", () => void this.deps.navigateForward());
     if (!this.tabList) return;
     this.tabList.button.addEventListener("click", () => {
       this.setTabListOpen(!this.tabListOpen);

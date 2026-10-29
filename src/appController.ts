@@ -758,9 +758,11 @@ export class TypsastraWorkspaceController {
       activeFilePath: () => this.activeFilePath,
       pinnedMainFilePath: () => this.pinnedMainFilePath,
       sortPinnedMainFirst: () => this.editorSessionController.sortPinnedMainFirst(this.pinnedMainFilePath),
-      activateTab: path => this.activateEditorTab(path),
+      activateTab: path => this.navigateToEditorTab(path),
       closeTab: path => this.closeEditorTab(path),
       promoteTab: tab => this.promoteToPermanent(tab),
+      navigateBack: () => this.navigateBack(),
+      navigateForward: () => this.navigateForward(),
       reportActivationFailure: (path, error) => {
         console.error("Failed to load restored tab:", path, error);
         void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
@@ -2679,7 +2681,7 @@ export class TypsastraWorkspaceController {
     this.explorer = new WorkspaceExplorer(
       document.getElementById("workspace-explorer-tree")!,
       (path: string, options?: { temporary?: boolean; focusEditor?: boolean }) => {
-        void this.loadFile(path, options);
+        void this.navigationHistoryController.run(() => this.loadFile(path, options));
       },
       (path: string) => this.isPinnedMainFile(path),
       document.getElementById("workspace-explorer-title")!
@@ -3725,6 +3727,10 @@ export class TypsastraWorkspaceController {
   }
   private navigateToLspLocation(uri: string, line: number, character: number): Promise<void> {
     return this.sourceLocationController.navigateToLspLocation(uri, line, character);
+  }
+
+  private navigateToEditorTab(path: string): Promise<void> {
+    return this.navigationHistoryController.run(() => this.activateEditorTab(path));
   }
 
   private navigateToOutlineHeading(heading: DocumentHeading): Promise<void> {
