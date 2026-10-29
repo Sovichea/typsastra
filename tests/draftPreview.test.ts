@@ -153,6 +153,19 @@ describe("Draft Preview", () => {
     expect(plan).toContain("one immutable queue");
   });
 
+  test("writes Draft thumbnails to the machine-local cache", async () => {
+    const thumbnails = await Bun.file(
+      new URL("../src-tauri/src/render_prepare/draft_thumbnail.rs", import.meta.url)
+    ).text();
+
+    expect(draftController).toContain("const cacheRootPath = this.port.cacheRootPath();");
+    expect(draftController).toContain("cacheRootPath,");
+    expect(controller).toContain("cacheRootPath: () => this.getCacheRootPath()");
+    expect(thumbnails).toContain('managed_cache_root.join("draft-thumbnails")');
+    expect(thumbnails).not.toContain('.join(".typsastra")');
+    expect(thumbnails).toContain('"The Draft thumbnail cache must live outside the active workspace."');
+  });
+
   test("scopes thumbnails and editor overlays to the selected main document", async () => {
     const mirror = await Bun.file(
       new URL("../src-tauri/src/render_prepare/mirror.rs", import.meta.url)

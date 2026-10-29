@@ -94,6 +94,7 @@ export type DraftThumbnailQueueMetric = {
 export interface DraftPreviewControllerPort {
   activeFilePath(): string | null;
   workspaceRootPath(): string | null;
+  cacheRootPath(): string | null;
   editor(): EditorView | null;
   previewFrame(): PreviewFrame;
   previewPageStatus(): PreviewPageStatus;
@@ -140,6 +141,7 @@ export class DraftPreviewController {
   get assets(): ReadonlyMap<string, DraftImageAsset> { return this.assetsValue; }
   get diagnostics(): readonly DraftImageDiagnostic[] { return this.diagnosticsValue; }
   get assetRootPath(): string | null { return this.assetRootPathValue; }
+  get documentRootPath(): string | null { return this.thumbnailDocumentRootPath; }
   get thumbnailGeneration(): number { return this.thumbnailGenerationValue; }
 
   setMode(mode: PreviewContentMode, presentedMode?: PreviewContentMode): void {
@@ -422,10 +424,12 @@ export class DraftPreviewController {
 
   async startThumbnailQueue(generation: number): Promise<void> {
     const workspaceRoot = this.port.workspaceRootPath();
+    const cacheRootPath = this.port.cacheRootPath();
     if (
       generation !== this.port.previewGeneration()
       || this.presentedModeValue !== "draft"
       || !workspaceRoot
+      || !cacheRootPath
       || !this.thumbnailDocumentRootPath
       || this.assetsValue.size === 0
     ) return;
@@ -436,6 +440,7 @@ export class DraftPreviewController {
       request: {
         generation,
         workspaceRoot,
+        cacheRootPath,
         documentRootPath: this.thumbnailDocumentRootPath,
         assets: [...this.assetsValue.values()],
         displayedPageAssetIds,

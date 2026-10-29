@@ -59,6 +59,7 @@ enum ThumbnailStatus {
 pub struct StartDraftThumbnailRequest {
     pub generation: u64,
     pub workspace_root: String,
+    pub cache_root_path: String,
     pub document_root_path: String,
     pub assets: Vec<DraftImageAsset>,
     pub displayed_page_asset_ids: Vec<String>,
@@ -125,13 +126,18 @@ pub async fn start_draft_thumbnail_generation(
     let queue_started = Instant::now();
     let workspace_root = canonical_path(Path::new(&request.workspace_root))
         .ok_or_else(|| "The thumbnail workspace root is unavailable.".to_string())?;
+    let managed_cache_root = PathBuf::from(&request.cache_root_path);
+    fs::create_dir_all(&managed_cache_root)
+        .map_err(|error| format!("Could not create the Draft thumbnail cache: {error}"))?;
+    let managed_cache_root = canonical_path(&managed_cache_root)
+        .ok_or_else(|| "The Draft thumbnail cache root is unavailable.".to_string())?;
+    if managed_cache_root.starts_with(&workspace_root) {
+        return Err("The Draft thumbnail cache must live outside the active workspace.".into());
+    }
     let document_root_path = canonical_path(Path::new(&request.document_root_path))
         .ok_or_else(|| "The thumbnail document root is unavailable.".to_string())?;
     let cache_namespace = thumbnail_document_namespace(&workspace_root, &document_root_path)?;
-    let thumbnail_root = workspace_root
-        .join(".typsastra")
-        .join("cache")
-        .join("draft-thumbnails");
+    let thumbnail_root = managed_cache_root.join("draft-thumbnails");
     remove_legacy_flat_thumbnail_entries(&thumbnail_root);
     let cache_root = thumbnail_root.join(cache_namespace);
     fs::create_dir_all(&cache_root)

@@ -1823,6 +1823,7 @@ export class TypsastraWorkspaceController {
     {
       activeFilePath: () => this.activeFilePath,
       workspaceRootPath: () => this.workspaceRootPath,
+      cacheRootPath: () => this.getCacheRootPath(),
       editor: () => this.editorInstance ?? null,
       previewFrame: () => this.previewFrame,
       previewPageStatus: () => this.previewPageStatus,
