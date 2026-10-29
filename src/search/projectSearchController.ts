@@ -1,4 +1,5 @@
 import { filePathKey } from "../platform/paths";
+import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import {
   ProjectTextRequestCancelled,
   textRevisionToken,
@@ -19,6 +20,14 @@ import {
   type ProjectSearchWorkerRequest,
   type ProjectSearchWorkerResponse,
 } from "./projectSearch";
+import {
+  isGraphemeSafeReplacementRange,
+  previewSearchReplacement,
+  projectReplacementMatchKey,
+  type ProjectReplacementFileRequest,
+  type ProjectReplacementRequest,
+  type ProjectReplacementResult,
+} from "./projectReplacement";
 
 export type ProjectSearchNavigationTarget = {
   path: string;
@@ -34,6 +43,10 @@ export interface ProjectSearchControllerDependencies {
   pinnedMainFilePath(): string | null;
   projectText(): ProjectTextService;
   openResult(target: ProjectSearchNavigationTarget): Promise<void> | void;
+  applyReplacement(request: ProjectReplacementRequest): Promise<ProjectReplacementResult>;
+  undoReplacement(): Promise<ProjectReplacementResult>;
+  replacementUndoAvailable(): boolean;
+  resetReplacementBatch(): void;
 }
 
 type SearchState = {
@@ -68,6 +81,10 @@ export class ProjectSearchController {
   private activeRequestId = 0;
   private readAbort: AbortController | null = null;
   private readonly fileResults = new Map<string, ProjectSearchFileResult>();
+  private readonly selectedMatches = new Set<string>();
+  private reviewingReplacement = false;
+  private applyingReplacement = false;
+  private suppressSelectionDefaults = false;
   private skippedFiles: readonly ProjectTextSkippedFile[] = [];
   private state: SearchState = {
     options: { ...DEFAULT_OPTIONS },
@@ -93,7 +110,12 @@ export class ProjectSearchController {
     this.cancelWork();
     this.generation += 1;
     this.fileResults.clear();
+    this.selectedMatches.clear();
+    this.reviewingReplacement = false;
+    this.applyingReplacement = false;
+    this.suppressSelectionDefaults = false;
     this.skippedFiles = [];
+    this.deps.resetReplacementBatch();
     this.state = {
       options: { ...DEFAULT_OPTIONS },
       searching: false,
@@ -104,13 +126,30 @@ export class ProjectSearchController {
     };
     const input = this.queryInput();
     if (input) input.value = "";
+    const replacement = this.replacementInput();
+    if (replacement) replacement.value = "";
     this.resetOptionControls();
     this.scheduleRender();
   }
 
-  public focusQuery(): void {
+  public focusQuery(focusReplace = false): void {
     this.initialize();
-    this.queryInput()?.focus();
+    (focusReplace ? this.replacementInput() : this.queryInput())?.focus();
+  }
+
+  public refreshReplacementControls(): void {
+    if (!this.initialized) return;
+    this.updateReplacementControls();
+  }
+
+  /** Match Image Tools: the same shell, typography, and caret for search fields. */
+  private wrapSearchField(input: HTMLInputElement | null): void {
+    if (!input || input.closest(".typsastra-caret-input-shell")) return;
+    const marker = document.createComment("project-search-input");
+    input.replaceWith(marker);
+    marker.replaceWith(wrapEditorCaretInput(input, {
+      shellClass: "sidebar-tool-search-shell",
+    }));
   }
 
   private initialize(): void {
@@ -118,6 +157,8 @@ export class ProjectSearchController {
     this.initialized = true;
     const input = this.queryInput();
     if (!input) return;
+    this.wrapSearchField(input);
+    this.wrapSearchField(this.replacementInput());
     input.addEventListener("input", () => this.scheduleSearch());
     input.addEventListener("keydown", event => {
       if (event.key === "Enter") {
@@ -141,13 +182,29 @@ export class ProjectSearchController {
     for (const element of [this.includeGlobsInput(), this.excludeGlobsInput()]) {
       element?.addEventListener("input", () => this.scheduleSearch());
     }
+    this.replacementInput()?.addEventListener("input", () => {
+      if (this.reviewingReplacement) this.scheduleRender();
+    });
+    document.getElementById("project-search-replace-all")
+      ?.addEventListener("click", () => this.requestReplacement(true));
+    document.getElementById("project-search-review-replace")
+      ?.addEventListener("click", () => this.startReplacementReview());
+    document.getElementById("project-search-undo-replace")
+      ?.addEventListener("click", () => {
+        if (this.applyingReplacement) return;
+        void this.undoReplacementBatch();
+      });
     document.getElementById("project-search-clear")?.addEventListener("click", () => {
       const field = this.queryInput();
       if (field) field.value = "";
       this.cancelWork();
       this.generation += 1;
       this.fileResults.clear();
+      this.selectedMatches.clear();
+      this.reviewingReplacement = false;
+      this.suppressSelectionDefaults = false;
       this.skippedFiles = [];
+      this.state.options = { ...this.state.options, query: "" };
       this.state.searching = false;
       this.state.error = null;
       this.state.truncated = false;
@@ -180,6 +237,9 @@ export class ProjectSearchController {
       notice: null,
     };
     this.fileResults.clear();
+    this.selectedMatches.clear();
+    this.reviewingReplacement = false;
+    this.suppressSelectionDefaults = false;
     this.skippedFiles = [];
     this.scheduleRender();
     if (!options.query.trim()) return;
@@ -333,6 +393,17 @@ export class ProjectSearchController {
     if (message.type === "file-result") {
       this.fileResults.set(filePathKey(message.result.path), message.result);
       if (message.result.error) this.state.error = message.result.error;
+      if (!this.suppressSelectionDefaults && this.state.options.mode !== "fuzzy") {
+        for (const match of this.fileMatchRanges(message.result)) {
+          if (match.safe) {
+            this.selectedMatches.add(projectReplacementMatchKey(
+              message.result.path,
+              match.from,
+              match.to,
+            ));
+          }
+        }
+      }
       this.scheduleRender();
       return;
     }
@@ -368,7 +439,23 @@ export class ProjectSearchController {
     this.worker = null;
     worker?.terminate();
     this.activeRequestId = 0;
+    this.pruneSelectedMatches();
     this.scheduleRender();
+  }
+
+  /** Drop selections that no longer correspond to a current safe match. */
+  private pruneSelectedMatches(): void {
+    if (this.selectedMatches.size === 0) return;
+    const valid = new Set<string>();
+    for (const file of this.fileResults.values()) {
+      for (const range of this.fileMatchRanges(file)) {
+        if (!range.safe) continue;
+        valid.add(projectReplacementMatchKey(file.path, range.from, range.to));
+      }
+    }
+    for (const key of this.selectedMatches) {
+      if (!valid.has(key)) this.selectedMatches.delete(key);
+    }
   }
 
   private cancelWork(): void {
@@ -403,8 +490,13 @@ export class ProjectSearchController {
 
   private render(): void {
     this.renderStatus();
+    this.updateReplacementControls();
     const results = this.resultsElement();
     if (!results) return;
+    if (this.reviewingReplacement) {
+      this.renderReplacementReview(results);
+      return;
+    }
     const files = [...this.fileResults.values()].sort((left, right) => {
       if (this.state.options.mode === "fuzzy") {
         const leftScore = left.pathMatch?.score ?? left.contentMatches[0]?.score ?? 0;
@@ -486,6 +578,28 @@ export class ProjectSearchController {
     section.className = "project-search-file";
     const header = document.createElement("div");
     header.className = "project-search-file-header";
+    if (this.state.options.mode !== "fuzzy") {
+      const ranges = this.fileMatchRanges(file).filter(range => range.safe);
+      const checked = ranges.filter(range =>
+        this.selectedMatches.has(projectReplacementMatchKey(file.path, range.from, range.to)));
+      const select = document.createElement("input");
+      select.type = "checkbox";
+      select.className = "project-search-select";
+      select.checked = ranges.length > 0 && checked.length === ranges.length;
+      select.indeterminate = checked.length > 0 && checked.length < ranges.length;
+      select.disabled = ranges.length === 0;
+      select.title = "Select all replaceable matches in this file";
+      select.setAttribute("aria-label", `Select matches in ${file.relativePath}`);
+      select.addEventListener("change", () => {
+        for (const range of ranges) {
+          const key = projectReplacementMatchKey(file.path, range.from, range.to);
+          if (select.checked) this.selectedMatches.add(key);
+          else this.selectedMatches.delete(key);
+        }
+        this.scheduleRender();
+      });
+      header.appendChild(select);
+    }
     const path = document.createElement("span");
     path.className = "project-search-file-path";
     path.textContent = file.relativePath;
@@ -519,7 +633,33 @@ export class ProjectSearchController {
     from: number,
     to: number,
     ranges: readonly { from: number; to: number }[],
-  ): HTMLButtonElement {
+  ): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className = "project-search-match-row";
+    const safe = isGraphemeSafeReplacementRange(
+      match.lineText,
+      from - match.lineFrom,
+      to - match.lineFrom,
+    );
+    if (this.state.options.mode !== "fuzzy") {
+      const select = document.createElement("input");
+      select.type = "checkbox";
+      select.className = "project-search-select project-search-select-match";
+      const key = projectReplacementMatchKey(file.path, from, to);
+      select.checked = this.selectedMatches.has(key);
+      select.disabled = !safe;
+      select.title = safe
+        ? "Include this match in the replacement"
+        : "This match splits a grapheme cluster and cannot be replaced safely";
+      select.setAttribute("aria-label", `Select ${file.relativePath}:${match.lineNumber}`);
+      select.addEventListener("change", () => {
+        if (select.checked) this.selectedMatches.add(key);
+        else this.selectedMatches.delete(key);
+        this.scheduleRender();
+      });
+      if (!safe) wrapper.classList.add("unsafe");
+      wrapper.appendChild(select);
+    }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "project-search-match";
@@ -529,7 +669,9 @@ export class ProjectSearchController {
     button.dataset.searchFrom = String(from);
     button.dataset.searchTo = String(to);
     button.dataset.searchKind = "content";
-    button.title = `${file.relativePath}:${match.lineNumber}`;
+    button.title = !safe
+      ? "This match splits a grapheme cluster and cannot be replaced safely"
+      : `${file.relativePath}:${match.lineNumber}`;
     const lineNumber = document.createElement("span");
     lineNumber.className = "project-search-line-number";
     lineNumber.textContent = String(match.lineNumber);
@@ -540,7 +682,8 @@ export class ProjectSearchController {
       to: to - match.lineFrom,
     });
     button.append(lineNumber, excerpt);
-    return button;
+    wrapper.appendChild(button);
+    return wrapper;
   }
 
   private renderPathMatch(file: ProjectSearchFileResult): HTMLButtonElement {
@@ -621,6 +764,267 @@ export class ProjectSearchController {
       this.state.error = String(error);
       this.scheduleRender();
     }
+  }
+
+  private fileMatchRanges(file: ProjectSearchFileResult): Array<{
+    from: number;
+    to: number;
+    safe: boolean;
+    match: ProjectSearchLineMatch;
+  }> {
+    const ranges: Array<{ from: number; to: number; safe: boolean; match: ProjectSearchLineMatch }> = [];
+    for (const match of file.contentMatches) {
+      for (const range of match.ranges) {
+        const from = match.lineFrom + range.from;
+        const to = match.lineFrom + range.to;
+        ranges.push({
+          from,
+          to,
+          safe: isGraphemeSafeReplacementRange(match.lineText, range.from, range.to),
+          match,
+        });
+      }
+    }
+    return ranges;
+  }
+
+  private replacementInput(): HTMLInputElement | null {
+    return document.getElementById("project-search-replace") as HTMLInputElement | null;
+  }
+
+  private updateReplacementControls(): void {
+    const fuzzy = this.state.options.mode === "fuzzy";
+    const row = document.getElementById("project-search-replace-row");
+    row?.classList.toggle("hidden", fuzzy);
+    const replaceAll = document.getElementById("project-search-replace-all") as HTMLButtonElement | null;
+    if (replaceAll) {
+      replaceAll.disabled = !this.canReplaceAll();
+      replaceAll.title = replaceAll.disabled
+        ? "Wait for a complete literal or regex search with replaceable matches"
+        : "Replace every safe match in these results";
+    }
+    const review = document.getElementById("project-search-review-replace") as HTMLButtonElement | null;
+    if (review) {
+      review.disabled = !this.canApplyReplacement();
+      review.title = review.disabled
+        ? "Select replaceable matches after a complete literal or regex search"
+        : "Review the selected matches before replacing";
+    }
+    const undo = document.getElementById("project-search-undo-replace") as HTMLButtonElement | null;
+    if (undo) {
+      const available = !this.applyingReplacement && this.deps.replacementUndoAvailable();
+      undo.classList.toggle("hidden", !available);
+      undo.disabled = !available;
+    }
+  }
+
+  private canReplaceAll(): boolean {
+    return this.replacementReady() && this.hasReplaceableMatches();
+  }
+
+  private canApplyReplacement(): boolean {
+    return this.replacementReady() && this.selectedMatches.size > 0;
+  }
+
+  private replacementReady(): boolean {
+    return this.state.options.mode !== "fuzzy"
+      && this.state.options.query.trim().length > 0
+      && !this.state.searching
+      && !this.state.truncated
+      && !this.state.incomplete
+      && !this.state.error
+      && !this.applyingReplacement;
+  }
+
+  private hasReplaceableMatches(): boolean {
+    for (const file of this.fileResults.values()) {
+      if (this.fileMatchRanges(file).some(range => range.safe)) return true;
+    }
+    return false;
+  }
+
+  private buildReplacementRequest(all = false): ProjectReplacementRequest | null {
+    const files: ProjectReplacementFileRequest[] = [];
+    for (const file of this.fileResults.values()) {
+      const matches = this.fileMatchRanges(file)
+        .filter(range => range.safe
+          && (all || this.selectedMatches.has(projectReplacementMatchKey(file.path, range.from, range.to))))
+        .map(range => ({ from: range.from, to: range.to }));
+      if (matches.length === 0) continue;
+      files.push({
+        path: file.path,
+        relativePath: file.relativePath,
+        textRevision: file.textRevision,
+        matches,
+      });
+    }
+    if (files.length === 0) return null;
+    return {
+      options: this.state.options,
+      replacement: this.replacementInput()?.value ?? "",
+      files,
+    };
+  }
+
+  private startReplacementReview(): void {
+    if (!this.canApplyReplacement() || !this.buildReplacementRequest()) return;
+    this.reviewingReplacement = true;
+    this.scheduleRender();
+  }
+
+  /** Apply now: `all` ignores checkboxes, otherwise the reviewed selection is used. */
+  private requestReplacement(all: boolean): boolean {
+    if (all ? !this.canReplaceAll() : !this.canApplyReplacement()) return false;
+    const request = this.buildReplacementRequest(all);
+    if (!request) return false;
+    this.applyingReplacement = true;
+    this.updateReplacementControls();
+    void this.applyReplacementRequest(request).finally(() => {
+      this.applyingReplacement = false;
+      this.updateReplacementControls();
+    });
+    return true;
+  }
+
+  private renderReplacementReview(container: HTMLElement): void {
+    const request = this.buildReplacementRequest();
+    if (!request) {
+      this.reviewingReplacement = false;
+      this.render();
+      return;
+    }
+    const section = document.createElement("section");
+    section.className = "project-search-review";
+    const title = document.createElement("div");
+    title.className = "project-search-review-title";
+    title.textContent = `Review replacement in ${request.files.length} file${request.files.length === 1 ? "" : "s"}`;
+    const summary = document.createElement("div");
+    summary.className = "project-search-review-summary";
+    const total = request.files.reduce((sum, file) => sum + file.matches.length, 0);
+    summary.textContent = `${total} match${total === 1 ? "" : "es"} selected. Source files are not written until you save.`;
+    section.append(title, summary);
+    let previewCount = 0;
+    let previewTruncated = false;
+    const maxPreviewLines = 500;
+
+    for (const requestFile of request.files) {
+      const file = this.fileResults.get(filePathKey(requestFile.path));
+      if (!file) continue;
+      const fileHeading = document.createElement("div");
+      fileHeading.className = "project-search-review-file";
+      fileHeading.textContent = `${file.relativePath} (${requestFile.matches.length})`;
+      section.appendChild(fileHeading);
+      for (const match of file.contentMatches) {
+        const selected = match.ranges
+          .map(range => ({
+            range,
+            from: match.lineFrom + range.from,
+            to: match.lineFrom + range.to,
+          }))
+          .filter(range => requestFile.matches.some(requested =>
+            requested.from === range.from && requested.to === range.to));
+        if (selected.length === 0) continue;
+        if (previewCount >= maxPreviewLines) {
+          previewTruncated = true;
+          break;
+        }
+        previewCount += 1;
+        let afterLine = match.lineText;
+        for (const selectedRange of [...selected].sort((left, right) => right.range.from - left.range.from)) {
+          const replacement = previewSearchReplacement(
+            this.state.options,
+            request.replacement,
+            match.lineText.slice(selectedRange.range.from, selectedRange.range.to),
+          );
+          afterLine = afterLine.slice(0, selectedRange.range.from)
+            + replacement
+            + afterLine.slice(selectedRange.range.to);
+        }
+        const line = document.createElement("div");
+        line.className = "project-search-review-line";
+        const lineNumber = document.createElement("span");
+        lineNumber.className = "project-search-line-number";
+        lineNumber.textContent = String(match.lineNumber);
+        const before = document.createElement("code");
+        before.className = "project-search-review-before";
+        before.textContent = `- ${match.lineText}`;
+        const after = document.createElement("code");
+        after.className = "project-search-review-after";
+        after.textContent = `+ ${afterLine}`;
+        line.append(lineNumber, before, after);
+        section.appendChild(line);
+      }
+      if (previewTruncated) break;
+    }
+    if (previewTruncated) {
+      const notice = this.notice(
+        `Showing the first ${maxPreviewLines} changed lines. Apply still replaces every selected match.`,
+        "info",
+      );
+      section.appendChild(notice);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "project-search-review-actions";
+    const back = document.createElement("button");
+    back.type = "button";
+    back.textContent = "Back";
+    back.addEventListener("click", () => {
+      this.reviewingReplacement = false;
+      this.scheduleRender();
+    });
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "primary";
+    apply.textContent = "Apply Replacement";
+    apply.addEventListener("click", () => {
+      apply.disabled = true;
+      if (!this.requestReplacement(false)) apply.disabled = false;
+    });
+    actions.append(back, apply);
+    section.appendChild(actions);
+    container.replaceChildren(section);
+  }
+
+  private async applyReplacementRequest(request: ProjectReplacementRequest): Promise<void> {
+    const result = await this.deps.applyReplacement(request);
+    this.reviewingReplacement = false;
+    this.selectedMatches.clear();
+    if (!result.ok) {
+      this.suppressSelectionDefaults = true;
+      void this.runSearch();
+      this.state.error = result.message ?? "Project replacement failed.";
+      this.scheduleRender();
+      return;
+    }
+    const notice = `Replaced ${result.matches ?? 0} match${result.matches === 1 ? "" : "es"} in ${result.files ?? 0} file${result.files === 1 ? "" : "s"}. Save to keep the changes, or choose Undo Replace to revert.`;
+    this.suppressSelectionDefaults = true;
+    void this.runSearch();
+    this.state.notice = notice;
+    this.scheduleRender();
+  }
+
+  private async undoReplacementBatch(): Promise<void> {
+    if (this.applyingReplacement) return;
+    this.applyingReplacement = true;
+    this.updateReplacementControls();
+    let result: ProjectReplacementResult;
+    try {
+      result = await this.deps.undoReplacement();
+    } finally {
+      this.applyingReplacement = false;
+    }
+    this.reviewingReplacement = false;
+    this.selectedMatches.clear();
+    this.suppressSelectionDefaults = true;
+    void this.runSearch();
+    if (!result.ok) {
+      this.state.error = result.message ?? "Undo Replace failed.";
+    } else {
+      this.state.notice = "Undo Replace restored the previous file contents.";
+    }
+    this.updateReplacementControls();
+    this.scheduleRender();
   }
 
   private readOptions(): ProjectSearchOptions {

@@ -161,9 +161,20 @@ import { DocumentPersistenceController, type SaveIntent } from "./editor/documen
 import { DocumentFormattingController } from "./editor/documentFormattingController";
 import { DocumentLanguageController } from "./editor/documentLanguageController";
 import { EditorFileGuardController } from "./editor/editorFileGuardController";
-import { EditorFileContentController } from "./editor/editorFileContentController";
+import {
+  EditorFileContentController,
+  normalizeEditorText,
+} from "./editor/editorFileContentController";
 import { WorkspaceTextController } from "./workspace/workspaceTextController";
-import { ProjectTextService } from "./workspace/projectTextService";
+import { ProjectTextService, textRevisionToken } from "./workspace/projectTextService";
+import { findEditorSearchMatches } from "./editor/searchMatcher";
+import {
+  applyTextEdits,
+  isGraphemeSafeReplacementRange,
+  type ProjectReplacementBatch,
+  type ProjectReplacementRequest,
+  type ProjectReplacementResult,
+} from "./search/projectReplacement";
 import {
   ProjectSearchController,
   type ProjectSearchNavigationTarget,
@@ -277,6 +288,12 @@ export class TypsastraWorkspaceController {
     pinnedMainFilePath: () => this.pinnedMainFilePath,
     projectText: () => this.projectTextService,
     openResult: target => this.navigateToProjectSearchResult(target),
+    applyReplacement: request => this.applyProjectReplacement(request),
+    undoReplacement: () => this.undoProjectReplacement(),
+    replacementUndoAvailable: () => this.projectReplacementUndoAvailable(),
+    resetReplacementBatch: () => {
+      this.projectReplacementBatch = null;
+    },
   });
   private readonly previewSessionController = new PreviewSessionController({
     workspaceRootPath: () => this.workspaceRootPath,
@@ -481,6 +498,8 @@ export class TypsastraWorkspaceController {
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
   private recoveryReviewAutoShowReady = false;
+  private projectReplacementInProgress = false;
+  private projectReplacementBatch: ProjectReplacementBatch | null = null;
   private workspaceServicesDeferredForLargeFile = false;
   private get approvedLargePreviewRoots(): Set<string> { return this.largePreviewGuardController.approvedRoots; }
   private get inspectedPreviewRoots(): Set<string> { return this.largePreviewGuardController.inspectedRoots; }
@@ -570,7 +589,8 @@ export class TypsastraWorkspaceController {
       : 300,
     onContentMutationStart: path => {
       if (
-        this.effectivePreviewRenderMode === "on-type"
+        !this.projectReplacementInProgress
+        && this.effectivePreviewRenderMode === "on-type"
         && activeFileCanRenderPreview(
           path,
           this.pinnedMainFilePath,
@@ -1876,6 +1896,7 @@ export class TypsastraWorkspaceController {
     },
     logMemoryDiagnostics: reason => this.performanceController.logMemoryDiagnostics(reason),
     clearExternalConflict: path => this.externalFileReloadController.clearConflict(path),
+    autoSaveAllowed: () => !this.projectReplacementInProgress,
     recoveryRevision: tab => this.recoveryController.recoveryRevision(tab),
     recoverySaved: (tab, revision) => this.recoveryController.handleTabSaved(tab, revision),
     renderEditorTabs: () => this.renderEditorTabs(),
@@ -2493,11 +2514,426 @@ export class TypsastraWorkspaceController {
     if (!this.workspaceRootPath || this.standaloneFilePath !== null) return;
     this.sidebarController.setVisible(true);
     this.sidebarController.setTool("search");
-    if (replace) this.projectSearchController.focusQuery();
+    if (replace) this.projectSearchController.focusQuery(true);
   }
 
   private navigateToProjectSearchResult(target: ProjectSearchNavigationTarget): Promise<void> {
     return this.navigationHistoryController.run(() => this.navigateToProjectSearchResultInternal(target));
+  }
+
+  private async applyProjectReplacement(
+    request: ProjectReplacementRequest,
+  ): Promise<ProjectReplacementResult> {
+    if (this.projectReplacementInProgress || request.options.mode === "fuzzy") {
+      return { ok: false, message: "Project replacement is not available right now." };
+    }
+    if (this.documentPersistenceController.isSaving) {
+      return { ok: false, message: "Wait for the current save to finish before replacing." };
+    }
+    this.flushEditorContentMutation();
+    const originalPath = this.activeFilePath;
+    const originalSelection = this.editorInstance.state.selection.main;
+    const originalScrollTop = this.editorInstance.scrollDOM.scrollTop;
+    const originalScrollLeft = this.editorInstance.scrollDOM.scrollLeft;
+    const plans: Array<{
+      path: string;
+      relativePath: string;
+      before: string;
+      after: string;
+      edits: Array<{ from: number; to: number; insert: string }>;
+    }> = [];
+    const appliedPlans: typeof plans = [];
+    let result: ProjectReplacementResult = { ok: false, message: "No replacement was applied." };
+    this.projectReplacementInProgress = true;
+    try {
+      for (const file of request.files) {
+        if (file.matches.length === 0) continue;
+        const outcome = await this.projectTextService.snapshot(file.path);
+        if (outcome.kind !== "snapshot") {
+          return { ok: false, message: `Could not read ${file.relativePath}.` };
+        }
+        const snapshot = outcome.snapshot;
+        if (textRevisionToken(snapshot.text) !== file.textRevision) {
+          return {
+            ok: false,
+            message: `${file.relativePath} changed since the search. Results were refreshed.`,
+          };
+        }
+        // Editor buffers normalize CRLF to LF. Search offsets are expressed in
+        // that normalized text, so apply them to the same representation.
+        const before = normalizeEditorText(snapshot.text);
+        const search = findEditorSearchMatches(before, {
+          search: request.options.query,
+          caseSensitive: request.options.caseSensitive,
+          literal: request.options.mode === "literal",
+          regexp: request.options.mode === "regex",
+          wholeWord: request.options.wholeWord,
+          matchDiacritics: request.options.mode === "regex"
+            ? true
+            : request.options.matchDiacritics,
+          replace: request.replacement,
+        });
+        if (search.error) {
+          return { ok: false, message: `${file.relativePath}: ${search.error}` };
+        }
+        const byRange = new Map(search.matches.map(match => [
+          `${match.from}:${match.to}`,
+          match,
+        ]));
+        const edits: Array<{ from: number; to: number; insert: string }> = [];
+        for (const requested of file.matches) {
+          const match = byRange.get(`${requested.from}:${requested.to}`);
+          if (!match) {
+            return {
+              ok: false,
+              message: `${file.relativePath} changed since the search. Results were refreshed.`,
+            };
+          }
+          if (!isGraphemeSafeReplacementRange(
+            match.lineText,
+            match.from - match.lineFrom,
+            match.to - match.lineFrom,
+          )) {
+            return {
+              ok: false,
+              message: `A replacement in ${file.relativePath} would split a grapheme cluster.`,
+            };
+          }
+          edits.push({
+            from: match.from,
+            to: match.to,
+            insert: match.replacement ?? request.replacement,
+          });
+        }
+        edits.sort((left, right) => left.from - right.from);
+        plans.push({
+          path: snapshot.file.path,
+          relativePath: file.relativePath,
+          before,
+          after: applyTextEdits(before, edits),
+          edits,
+        });
+      }
+      if (plans.length === 0) return { ok: false, message: "No matches were selected." };
+
+      // Open every target before mutating anything. A missing or unreadable
+      // file must not leave a partially applied replacement.
+      for (const plan of plans) {
+        await this.loadFile(plan.path, {
+          temporary: false,
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        const tab = this.openTabs.find(candidate =>
+          filePathKey(candidate.path) === filePathKey(plan.path));
+        if (!tab?.contentLoaded || tab.content !== plan.before) {
+          return {
+            ok: false,
+            message: `${plan.relativePath} could not be opened for replacement.`,
+          };
+        }
+      }
+
+      let appliedMatches = 0;
+      for (const plan of plans) {
+        await this.activateEditorTab(plan.path, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (
+          filePathKey(this.activeFilePath ?? "") !== filePathKey(plan.path)
+          || this.editorInstance.state.doc.toString() !== plan.before
+        ) {
+          return {
+            ok: false,
+            message: `${plan.relativePath} changed before replacement could be applied.`,
+          };
+        }
+        this.editorInstance.dispatch({ changes: plan.edits });
+        this.flushEditorContentMutation();
+        this.updateActiveTabContent(plan.after);
+        const tab = this.getActiveTab();
+        if (tab) {
+          tab.version += 1;
+          tab.latestVersion = tab.version;
+        }
+        this.persistActiveTabState();
+        this.projectTextService.invalidate(plan.path);
+        appliedPlans.push(plan);
+        appliedMatches += plan.edits.length;
+      }
+
+      if (originalPath) {
+        await this.activateEditorTab(originalPath, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (filePathKey(this.activeFilePath ?? "") === filePathKey(originalPath)) {
+          const doc = this.editorInstance.state.doc;
+          this.editorInstance.dispatch({
+            selection: {
+              anchor: Math.min(originalSelection.anchor, doc.length),
+              head: Math.min(originalSelection.head, doc.length),
+            },
+          });
+          this.editorInstance.scrollDOM.scrollTop = originalScrollTop;
+          this.editorInstance.scrollDOM.scrollLeft = originalScrollLeft;
+        }
+      }
+      this.renderEditorTabs();
+      this.projectReplacementBatch = {
+        files: plans.map(plan => ({
+          path: plan.path,
+          before: plan.before,
+          after: plan.after,
+        })),
+        query: request.options.query,
+        replacement: request.replacement,
+      };
+      result = {
+        ok: true,
+        files: plans.length,
+        matches: appliedMatches,
+      };
+    } catch (error) {
+      result = { ok: false, message: `Project replacement failed: ${String(error)}` };
+    } finally {
+      if (!result.ok && appliedPlans.length > 0) {
+        let rollbackFailed = false;
+        for (const plan of [...appliedPlans].reverse()) {
+          try {
+            await this.activateEditorTab(plan.path, false, {
+              skipPreviewActivation: true,
+              focusEditor: false,
+            });
+            if (
+              filePathKey(this.activeFilePath ?? "") !== filePathKey(plan.path)
+              || this.editorInstance.state.doc.toString() !== plan.after
+            ) {
+              rollbackFailed = true;
+              continue;
+            }
+            this.editorInstance.dispatch({
+              changes: {
+                from: 0,
+                to: this.editorInstance.state.doc.length,
+                insert: plan.before,
+              },
+            });
+            this.flushEditorContentMutation();
+            this.updateActiveTabContent(plan.before);
+            const tab = this.getActiveTab();
+            if (tab) {
+              tab.version += 1;
+              tab.latestVersion = tab.version;
+            }
+            this.persistActiveTabState();
+            this.projectTextService.invalidate(plan.path);
+          } catch {
+            rollbackFailed = true;
+          }
+        }
+        this.renderEditorTabs();
+        if (rollbackFailed) {
+          result = {
+            ...result,
+            message: `${result.message ?? "Project replacement failed."} Some files could not be reverted; review the open tabs before continuing.`,
+          };
+        }
+      }
+      this.projectReplacementInProgress = false;
+      if (
+        !result.ok
+        && originalPath
+        && filePathKey(this.activeFilePath ?? "") !== filePathKey(originalPath)
+      ) {
+        await this.activateEditorTab(originalPath, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        }).catch(() => undefined);
+        if (filePathKey(this.activeFilePath ?? "") === filePathKey(originalPath)) {
+          const doc = this.editorInstance.state.doc;
+          this.editorInstance.dispatch({
+            selection: {
+              anchor: Math.min(originalSelection.anchor, doc.length),
+              head: Math.min(originalSelection.head, doc.length),
+            },
+          });
+          this.editorInstance.scrollDOM.scrollTop = originalScrollTop;
+          this.editorInstance.scrollDOM.scrollLeft = originalScrollLeft;
+        }
+      }
+    }
+    if (
+      result.ok
+      && this.effectivePreviewRenderMode === "on-type"
+      && this.activeFilePath
+      && isTypstDocumentPath(this.activeFilePath)
+    ) {
+      this.scheduleEditorContentMutation(this.editorInstance.state.doc);
+    }
+    return result;
+  }
+
+  private async undoProjectReplacement(): Promise<ProjectReplacementResult> {
+    const batch = this.projectReplacementBatch;
+    if (!batch || this.projectReplacementInProgress) {
+      return { ok: false, message: "There is no replacement batch to undo." };
+    }
+    for (const file of batch.files) {
+      const tab = this.openTabs.find(candidate =>
+        filePathKey(candidate.path) === filePathKey(file.path));
+      const text = tab && filePathKey(this.activeFilePath ?? "") === filePathKey(file.path)
+        ? this.editorInstance.state.doc.toString()
+        : tab?.content;
+      if (!tab?.contentLoaded || text !== file.after) {
+        return {
+          ok: false,
+          message: "Undo Replace is unavailable because an affected buffer changed.",
+        };
+      }
+    }
+    const originalPath = this.activeFilePath;
+    const originalSelection = this.editorInstance.state.selection.main;
+    const originalScrollTop = this.editorInstance.scrollDOM.scrollTop;
+    const originalScrollLeft = this.editorInstance.scrollDOM.scrollLeft;
+    const undoneFiles: Array<{ path: string; before: string; after: string }> = [];
+    this.projectReplacementInProgress = true;
+    let result: ProjectReplacementResult = { ok: true, files: batch.files.length };
+    try {
+      for (const file of batch.files) {
+        await this.activateEditorTab(file.path, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (
+          filePathKey(this.activeFilePath ?? "") !== filePathKey(file.path)
+          || this.editorInstance.state.doc.toString() !== file.after
+        ) {
+          return { ok: false, message: "An affected buffer changed before undo could run." };
+        }
+        this.editorInstance.dispatch({
+          changes: {
+            from: 0,
+            to: this.editorInstance.state.doc.length,
+            insert: file.before,
+          },
+        });
+        this.flushEditorContentMutation();
+        this.updateActiveTabContent(file.before);
+        const tab = this.getActiveTab();
+        if (tab) {
+          tab.version += 1;
+          tab.latestVersion = tab.version;
+        }
+        this.persistActiveTabState();
+        this.projectTextService.invalidate(file.path);
+        undoneFiles.push(file);
+        if (tab?.isDirty) {
+          void this.recoveryController.flushTab(tab);
+        } else if (tab) {
+          void this.recoveryController.handleTabSaved(
+            tab,
+            this.recoveryController.recoveryRevision(tab),
+          );
+        }
+      }
+      if (originalPath) {
+        await this.activateEditorTab(originalPath, false, {
+          skipPreviewActivation: true,
+          focusEditor: false,
+        });
+        if (filePathKey(this.activeFilePath ?? "") === filePathKey(originalPath)) {
+          const doc = this.editorInstance.state.doc;
+          this.editorInstance.dispatch({
+            selection: {
+              anchor: Math.min(originalSelection.anchor, doc.length),
+              head: Math.min(originalSelection.head, doc.length),
+            },
+          });
+          this.editorInstance.scrollDOM.scrollTop = originalScrollTop;
+          this.editorInstance.scrollDOM.scrollLeft = originalScrollLeft;
+        }
+      }
+      this.projectReplacementBatch = null;
+      this.renderEditorTabs();
+    } catch (error) {
+      result = { ok: false, message: `Undo Replace failed: ${String(error)}` };
+    } finally {
+      if (!result.ok && undoneFiles.length > 0) {
+        let rollbackFailed = false;
+        for (const file of [...undoneFiles].reverse()) {
+          try {
+            await this.activateEditorTab(file.path, false, {
+              skipPreviewActivation: true,
+              focusEditor: false,
+            });
+            if (
+              filePathKey(this.activeFilePath ?? "") !== filePathKey(file.path)
+              || this.editorInstance.state.doc.toString() !== file.before
+            ) {
+              rollbackFailed = true;
+              continue;
+            }
+            this.editorInstance.dispatch({
+              changes: {
+                from: 0,
+                to: this.editorInstance.state.doc.length,
+                insert: file.after,
+              },
+            });
+            this.flushEditorContentMutation();
+            this.updateActiveTabContent(file.after);
+            const tab = this.getActiveTab();
+            if (tab) {
+              tab.version += 1;
+              tab.latestVersion = tab.version;
+            }
+            this.persistActiveTabState();
+            this.projectTextService.invalidate(file.path);
+            if (tab?.isDirty) {
+              void this.recoveryController.flushTab(tab);
+            } else if (tab) {
+              void this.recoveryController.handleTabSaved(
+                tab,
+                this.recoveryController.recoveryRevision(tab),
+              );
+            }
+          } catch {
+            rollbackFailed = true;
+          }
+        }
+        this.renderEditorTabs();
+        if (rollbackFailed) {
+          result = {
+            ...result,
+            message: `${result.message ?? "Undo Replace failed."} Some files could not be restored to the replacement output; review the open tabs before continuing.`,
+          };
+        }
+      }
+      this.projectReplacementInProgress = false;
+    }
+    if (
+      result.ok
+      && this.effectivePreviewRenderMode === "on-type"
+      && this.activeFilePath
+      && isTypstDocumentPath(this.activeFilePath)
+    ) {
+      this.scheduleEditorContentMutation(this.editorInstance.state.doc);
+    }
+    return result;
+  }
+
+  private projectReplacementUndoAvailable(): boolean {
+    const batch = this.projectReplacementBatch;
+    return !!batch && batch.files.every(file => {
+      const tab = this.openTabs.find(candidate =>
+        filePathKey(candidate.path) === filePathKey(file.path));
+      const text = tab && filePathKey(this.activeFilePath ?? "") === filePathKey(file.path)
+        ? this.editorInstance.state.doc.toString()
+        : tab?.content;
+      return !!tab?.contentLoaded && text === file.after;
+    });
   }
 
   private async navigateToProjectSearchResultInternal(target: ProjectSearchNavigationTarget): Promise<void> {
@@ -2741,6 +3177,7 @@ export class TypsastraWorkspaceController {
 
   private renderEditorTabs(): void {
     this.editorTabViewController.render();
+    this.projectSearchController.refreshReplacementControls();
     // The active tab may be an off-project file, which changes gutter tools.
     this.editorInstance?.dispatch({
       effects: setStandaloneDocumentEffect.of(this.activeDocumentIsStandalone()),
@@ -2910,6 +3347,7 @@ export class TypsastraWorkspaceController {
 
   private markActiveTabDirty(): void {
     this.editorTabStateController.markActiveDirty();
+    this.projectSearchController.refreshReplacementControls();
   }
 
   private scheduleEditorContentMutation(doc: Text): void {
@@ -3229,6 +3667,13 @@ export class TypsastraWorkspaceController {
   }
 
   private async saveActiveFile(intent: SaveIntent = "manual"): Promise<void> {
+    if (this.projectReplacementInProgress) {
+      this.setLspStatus({
+        kind: "preview-ready",
+        message: "Save is unavailable while a project replacement is being applied",
+      });
+      return;
+    }
     await this.documentPersistenceController.saveActiveFile(intent);
     // A save can add, move, or remove a `//@table:` anchor, which changes which
     // tables the sidebar reports as current, referenced, or unused.
@@ -3240,6 +3685,13 @@ export class TypsastraWorkspaceController {
   }
 
   private saveActiveFileAs(): Promise<void> {
+    if (this.projectReplacementInProgress) {
+      this.setLspStatus({
+        kind: "preview-ready",
+        message: "Save As is unavailable while a project replacement is being applied",
+      });
+      return Promise.resolve();
+    }
     return this.documentPersistenceController.saveActiveFileAs();
   }
 
@@ -3523,7 +3975,7 @@ export class TypsastraWorkspaceController {
       this.previewImported,
       this.previewDisabled
     );
-    if (!this.isLoadingFile && canRenderPreview) {
+    if (!this.isLoadingFile && canRenderPreview && !this.projectReplacementInProgress) {
       this.pdfPreviewRenderController.noteContentMutation(true, this.getActiveTab()?.content, rawText);
     }
     this.appendDeveloperLog({
@@ -3537,7 +3989,11 @@ export class TypsastraWorkspaceController {
     if (!this.isLoadingFile) {
       this.updateActiveTabContent(rawText);
       this.typographyController.scheduleManualScaleCheck();
-      if (this.activeFilePath && isMarkdownDocumentPath(this.activeFilePath)) {
+      if (
+        !this.projectReplacementInProgress
+        && this.activeFilePath
+        && isMarkdownDocumentPath(this.activeFilePath)
+      ) {
         this.markdownPreviewFrame.schedule(this.activeFilePath, rawText);
       }
     }
@@ -3556,6 +4012,7 @@ export class TypsastraWorkspaceController {
       && canRenderPreview
       && this.effectivePreviewRenderMode === "on-type"
       && !this.previewDisabled
+      && !this.projectReplacementInProgress
     ) {
       const remainingPreviewDebounceMs = Math.max(
         0,

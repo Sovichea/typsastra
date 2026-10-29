@@ -393,6 +393,22 @@
                         </div>
                         <div class="project-search-controls">
                             <input id="project-search-input" class="sidebar-tool-search project-search-input" type="search" placeholder="Search project" aria-label="Search project" autocomplete="off" spellcheck="false" />
+                            <div id="project-search-replace-row" class="project-search-replace-row">
+                                <input
+                                    id="project-search-replace"
+                                    class="sidebar-tool-search project-search-input"
+                                    type="text"
+                                    placeholder="Replace with"
+                                    aria-label="Replace with"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                />
+                                <div class="project-search-replace-actions">
+                                    <button id="project-search-replace-all" type="button" class="primary" title="Replace every safe match in these results" disabled>Replace All</button>
+                                    <button id="project-search-review-replace" type="button" title="Review selected matches before replacing" disabled>Review</button>
+                                    <button id="project-search-undo-replace" type="button" title="Revert the last replacement batch" class="hidden">Undo Replace</button>
+                                </div>
+                            </div>
                             <div class="project-search-control-row">
                                 <select id="project-search-mode" class="sidebar-tool-filter project-search-mode" aria-label="Project search mode">
                                     <option value="literal">Literal</option>

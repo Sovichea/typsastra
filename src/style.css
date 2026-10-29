@@ -7066,7 +7066,128 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   padding: 8px;
   border-bottom: 1px solid var(--ui-border);
 }
+/* The search, replace, and filter fields intentionally reuse the compact
+   sidebar field style shared with Image Tools. */
 .project-search-mode { width: 100%; }
+.project-search-replace-row {
+  display: grid;
+  gap: 4px;
+}
+.project-search-replace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.project-search-replace-actions button {
+  padding: 3px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font: 11px var(--font-family-sans);
+  cursor: pointer;
+}
+.project-search-replace-actions button:hover:not(:disabled) {
+  background: var(--ui-hover);
+}
+.project-search-replace-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.project-search-replace-actions button.primary {
+  border-color: var(--ui-accent-color);
+  color: var(--ui-accent-foreground);
+  background: var(--ui-accent-color);
+}
+.project-search-replace-actions button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ui-accent-color) 85%, var(--ui-text));
+}
+.project-search-select {
+  flex: 0 0 auto;
+  margin: 5px 0 0;
+}
+.project-search-match-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+.project-search-match-row .project-search-match {
+  flex: 1;
+  min-width: 0;
+}
+.project-search-match-row.unsafe .project-search-match {
+  opacity: 0.55;
+}
+.project-search-review {
+  display: grid;
+  gap: 8px;
+  padding: 8px 2px 12px;
+}
+.project-search-review-title {
+  color: var(--ui-text);
+  font: 600 12px var(--font-family-sans);
+}
+.project-search-review-summary {
+  color: var(--ui-header-text);
+  font: 10px/1.45 var(--font-family-sans);
+}
+.project-search-review-file {
+  margin-top: 4px;
+  color: var(--ui-text);
+  font: 600 11px var(--font-family-sans);
+  overflow-wrap: anywhere;
+}
+.project-search-review-line {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 2px 6px;
+  min-width: 0;
+}
+.project-search-review-line .project-search-line-number {
+  grid-row: 1 / span 2;
+}
+.project-search-review-before,
+.project-search-review-after {
+  grid-column: 2;
+  min-width: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font: 11px/1.45 var(--font-family-mono);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.project-search-review-before {
+  color: color-mix(in srgb, #cf222e 82%, var(--ui-text));
+  background: color-mix(in srgb, #cf222e 10%, transparent);
+}
+.project-search-review-after {
+  color: color-mix(in srgb, #2da44e 82%, var(--ui-text));
+  background: color-mix(in srgb, #2da44e 10%, transparent);
+}
+.project-search-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+.project-search-review-actions button {
+  padding: 5px 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font: 11px var(--font-family-sans);
+  cursor: pointer;
+}
+.project-search-review-actions button:hover {
+  background: var(--ui-hover);
+}
+.project-search-review-actions button.primary {
+  border-color: var(--ui-accent-color);
+  color: var(--ui-accent-foreground);
+  background: var(--ui-accent-color);
+}
 .project-search-toggles {
   display: flex;
   flex-wrap: wrap;
@@ -7108,7 +7229,7 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   padding: 0 7px;
   color: var(--ui-text);
   background: var(--ui-control-bg, var(--ui-bg));
-  font: 11px var(--font-family-sans);
+  font: 12px var(--font-family-sans);
 }
 .project-search-filters input[type="text"]:focus { border-color: var(--ui-accent-color); }
 .project-search-status {
@@ -7164,6 +7285,7 @@ body.typsastra-resume-recovering #workspace-viewport::after {
   padding: 0 2px 4px;
 }
 .project-search-file-path {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   color: var(--ui-text);

@@ -31,6 +31,7 @@ type DocumentPersistenceDependencies = {
   notifyLspSave: (path: string, content: string) => Promise<void>;
   logMemoryDiagnostics: (reason: string) => Promise<void>;
   clearExternalConflict: (path: string) => void;
+  autoSaveAllowed: () => boolean;
   recoveryRevision: (tab: EditorTab) => number;
   recoverySaved: (tab: EditorTab, revision: number) => Promise<void> | void;
   renderEditorTabs: () => void;
@@ -124,7 +125,7 @@ export class DocumentPersistenceController {
   }
 
   private async runAutoSaveCycle(): Promise<void> {
-    if (this.saveInProgress || !this.deps.workspaceRootPath()) return;
+    if (this.saveInProgress || !this.deps.workspaceRootPath() || !this.deps.autoSaveAllowed()) return;
     this.deps.flushEditorContentMutation();
     const dirtyTabs = this.deps.openTabs().filter(tab =>
       tab.contentLoaded

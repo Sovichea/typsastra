@@ -14,6 +14,10 @@ describe("project search sidebar", () => {
     expect(html).toContain('id="project-search-input"');
     expect(html).toContain('id="project-search-mode"');
     expect(html).toContain('id="project-search-main-only" type="checkbox" checked');
+    expect(html).toContain('id="project-search-replace"');
+    expect(html).toContain('id="project-search-replace-all"');
+    expect(html).toContain('id="project-search-review-replace"');
+    expect(html).toContain('id="project-search-undo-replace"');
     expect(html).toContain('id="project-search-results"');
     expect(html).toContain('id="action-search-project"');
     expect(html).toContain('id="action-replace-project"');
@@ -35,12 +39,25 @@ describe("project search sidebar", () => {
     expect(styles).not.toContain(".project-search-filters label {");
   });
 
+  test("uses the Image Tools sidebar search field and caret styling", () => {
+    expect(controller).toContain("wrapEditorCaretInput");
+    expect(controller).toContain('shellClass: "sidebar-tool-search-shell"');
+    expect(controller).toContain('document.createComment("project-search-input")');
+    expect(styles).toContain(".sidebar-tool-search-shell .sidebar-tool-search");
+    expect(styles).toContain(".sidebar-tool-search-shell .typsastra-input-caret");
+    expect(styles).toContain(".sidebar-tool-search-shell .typsastra-caret-measure");
+  });
+
   test("opens search as a sidebar tool without replacing the editor or preview", () => {
     expect(app).toContain("private openProjectSearch(replace = false)");
     expect(app).toContain('this.sidebarController.setTool("search")');
     expect(app).toContain("new ProjectSearchController");
     expect(app).toContain("navigateToProjectSearchResult");
     expect(app).toContain("private readonly projectSearchController");
+    expect(app).toContain("applyProjectReplacement");
+    expect(app).toContain("undoProjectReplacement");
+    expect(app).toContain("projectReplacementUndoAvailable");
+    expect(app).toContain("autoSaveAllowed: () => !this.projectReplacementInProgress");
   });
 
   test("runs matching in a worker with debounce, caps, and regex watchdog", () => {
@@ -55,6 +72,15 @@ describe("project search sidebar", () => {
     expect(controller).toContain("for (const range of match.ranges)");
     expect(controller).toContain("anchor.from - 24");
     expect(controller).toContain("anchor.to + 36");
+    expect(controller).toContain("buildReplacementRequest");
+    expect(controller).toContain("canReplaceAll");
+    expect(controller).toContain("requestReplacement(all: boolean)");
+    expect(controller).toContain("applyReplacementRequest");
+    expect(controller).toContain("renderReplacementReview");
+    expect(controller).toContain("isGraphemeSafeReplacementRange");
+    expect(controller).toContain("undoReplacementBatch");
+    expect(styles).toContain(".project-search-replace-row");
+    expect(styles).toContain(".project-search-review-before");
     expect(worker).toContain("matchProjectSearchFile");
     expect(worker).toContain('type: "file-result"');
     expect(worker).toContain('type: "done"');
