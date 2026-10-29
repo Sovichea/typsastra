@@ -96,7 +96,10 @@ describe("recovery snapshots", () => {
     expect(app).toContain("discardRecoverySnapshot: tab => this.recoveryController.discardTab(tab)");
     expect(app).toContain("private async restoreRecoveryRecord(");
     expect(app).toContain("tab.recoveredUnsaved = true");
-    expect(app).toContain("await this.recoveryReviewController.showIfNeeded()");
+    expect(app).toContain("this.recoveryReviewAutoShowReady = true");
+    expect(app).toContain("showIfNeeded({ workspaceRoot: selected })");
+    expect(app).not.toContain('"review recovery snapshots"');
+    expect(review).toContain("workspaceScoped");
     expect(persistence).toContain("!tab.recoveredUnsaved");
     expect(persistence).toContain("recoveryRevision = this.deps.recoveryRevision(tab)");
 

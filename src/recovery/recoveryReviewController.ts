@@ -1,4 +1,4 @@
-import { fileNameFromPath } from "../platform/paths";
+import { fileNameFromPath, filePathKey } from "../platform/paths";
 import type {
   RecoveryController,
   RecoveryCorruptRecord,
@@ -85,15 +85,23 @@ export class RecoveryReviewController {
     });
   }
 
-  public async showIfNeeded(): Promise<boolean> {
+  public async showIfNeeded(options: { workspaceRoot?: string | null } = {}): Promise<boolean> {
     if (this.showing) return false;
     this.showing = true;
     try {
       const listing = await this.deps.recovery().refreshListing();
-      if (listing.records.length === 0 && listing.corrupt.length === 0) return false;
-      await this.scanRecords(listing.records);
+      const workspaceScoped = Object.prototype.hasOwnProperty.call(options, "workspaceRoot");
+      const records = workspaceScoped
+        ? listing.records.filter(record => options.workspaceRoot === null
+          ? record.workspaceRoot === null
+          : !!record.workspaceRoot
+            && !!options.workspaceRoot
+            && filePathKey(record.workspaceRoot) === filePathKey(options.workspaceRoot))
+        : listing.records;
+      if (records.length === 0 && (workspaceScoped || listing.corrupt.length === 0)) return false;
+      await this.scanRecords(records);
       const refreshed = await this.deps.recovery().refreshListing();
-      this.corruptRows = refreshed.corrupt;
+      this.corruptRows = workspaceScoped ? [] : refreshed.corrupt;
       if (this.rows.length === 0 && this.corruptRows.length === 0) {
         this.hide();
         return false;

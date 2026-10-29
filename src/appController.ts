@@ -480,6 +480,7 @@ export class TypsastraWorkspaceController {
   private readonly offProjectPreviewRoots = new Map<string, string>();
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
+  private recoveryReviewAutoShowReady = false;
   private workspaceServicesDeferredForLargeFile = false;
   private get approvedLargePreviewRoots(): Set<string> { return this.largePreviewGuardController.approvedRoots; }
   private get inspectedPreviewRoots(): Set<string> { return this.largePreviewGuardController.inspectedRoots; }
@@ -2437,10 +2438,7 @@ export class TypsastraWorkspaceController {
     ));
     this.pruneStandaloneCaches();
     await this.drainPendingLaunchRequests();
-    await this.performanceController.timeStartup(
-      "review recovery snapshots",
-      () => this.recoveryReviewController.showIfNeeded(),
-    );
+    this.recoveryReviewAutoShowReady = true;
     this.performanceController.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
   }
 
@@ -4123,7 +4121,9 @@ export class TypsastraWorkspaceController {
     this.discardStandaloneCache();
     return this.workspaceLifecycleController.open(selected).then(async () => {
       await this.syncDevProjectContext();
-      if (options.showRecovery !== false) void this.recoveryReviewController.showIfNeeded();
+      if (options.showRecovery !== false && this.recoveryReviewAutoShowReady) {
+        void this.recoveryReviewController.showIfNeeded({ workspaceRoot: selected });
+      }
     });
   }
 

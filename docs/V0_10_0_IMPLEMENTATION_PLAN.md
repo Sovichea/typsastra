@@ -213,9 +213,11 @@ Deferred:
 
 Implemented:
 
-- A startup review dialog lists recoverable files with Review, Restore, and
-  Discard controls, storage usage, and corrupt-record reporting. It can be
-  reopened from **File → Recover Unsaved Work…**.
+- Opening a project with matching snapshots offers the recoverable files with
+  Review, Restore, and Discard controls, storage usage, and corrupt-record
+  reporting. Recovery is not shown automatically at application startup, and
+  snapshots from other projects are excluded from the project-open prompt.
+  **File → Recover Unsaved Work…** shows all records explicitly.
 - If disk already matches the recovered text, the record is resolved
   automatically. If disk differs from the saved baseline, Restore opens a
   side-by-side comparison first.
