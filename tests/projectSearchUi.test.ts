@@ -39,6 +39,9 @@ describe("project search sidebar", () => {
     expect(controller).toContain("PROJECT_SEARCH_REGEX_TIMEOUT_MS");
     expect(controller).toContain("startRegexWatchdog");
     expect(controller).toContain("textRevisionToken");
+    expect(controller).toContain("for (const range of match.ranges)");
+    expect(controller).toContain("anchor.from - 24");
+    expect(controller).toContain("anchor.to + 36");
     expect(worker).toContain("matchProjectSearchFile");
     expect(worker).toContain('type: "file-result"');
     expect(worker).toContain('type: "done"');

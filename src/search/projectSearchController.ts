@@ -462,20 +462,38 @@ export class ProjectSearchController {
     header.append(path, count);
     section.append(header);
     for (const match of file.contentMatches) {
-      section.append(this.renderContentMatch(file, match));
+      if (this.state.options.mode === "fuzzy") {
+        section.append(this.renderContentMatch(file, match, match.from, match.to, match.ranges));
+        continue;
+      }
+      for (const range of match.ranges) {
+        section.append(this.renderContentMatch(
+          file,
+          match,
+          match.lineFrom + range.from,
+          match.lineFrom + range.to,
+          [range],
+        ));
+      }
     }
     return section;
   }
 
-  private renderContentMatch(file: ProjectSearchFileResult, match: ProjectSearchLineMatch): HTMLButtonElement {
+  private renderContentMatch(
+    file: ProjectSearchFileResult,
+    match: ProjectSearchLineMatch,
+    from: number,
+    to: number,
+    ranges: readonly { from: number; to: number }[],
+  ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "project-search-match";
     button.dataset.searchPath = file.path;
     button.dataset.searchRevision = file.revision;
     button.dataset.searchTextRevision = file.textRevision;
-    button.dataset.searchFrom = String(match.from);
-    button.dataset.searchTo = String(match.to);
+    button.dataset.searchFrom = String(from);
+    button.dataset.searchTo = String(to);
     button.dataset.searchKind = "content";
     button.title = `${file.relativePath}:${match.lineNumber}`;
     const lineNumber = document.createElement("span");
@@ -483,7 +501,10 @@ export class ProjectSearchController {
     lineNumber.textContent = String(match.lineNumber);
     const excerpt = document.createElement("span");
     excerpt.className = "project-search-excerpt";
-    this.appendHighlightedExcerpt(excerpt, match.lineText, match.ranges);
+    this.appendHighlightedExcerpt(excerpt, match.lineText, ranges, {
+      from: from - match.lineFrom,
+      to: to - match.lineFrom,
+    });
     button.append(lineNumber, excerpt);
     return button;
   }
@@ -510,15 +531,23 @@ export class ProjectSearchController {
     container: HTMLElement,
     text: string,
     ranges: readonly { from: number; to: number }[],
+    anchor: { from: number; to: number },
   ): void {
     if (ranges.length === 0) {
       container.textContent = text;
       return;
     }
-    const first = ranges[0]!;
-    const last = ranges[ranges.length - 1]!;
-    const from = Math.max(0, first.from - 60);
-    const to = Math.min(text.length, last.to + 100);
+    let from = Math.max(0, anchor.from - 24);
+    let to = Math.min(text.length, anchor.to + 36);
+    // Keep the excerpt from clipping a word at either edge.
+    if (from > 0) {
+      const boundary = text.indexOf(" ", from);
+      if (boundary >= 0 && boundary < anchor.from) from = boundary + 1;
+    }
+    if (to < text.length) {
+      const boundary = text.lastIndexOf(" ", to);
+      if (boundary > anchor.to) to = boundary;
+    }
     if (from > 0) container.append("…");
     appendHighlighted(container, text, ranges, from, to);
     if (to < text.length) container.append("…");
