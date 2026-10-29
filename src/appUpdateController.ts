@@ -30,6 +30,9 @@ export class AppUpdateController {
       this.showAvailableVersion(simulatedVersion);
       return;
     }
+    // Development builds must not contact the update endpoint during startup.
+    // Use `bun run dev:update` for the explicit local simulation instead.
+    if (import.meta.env.DEV) return;
     void this.checkSilently();
   }
 

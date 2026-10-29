@@ -40,4 +40,11 @@ describe("staged application updates", () => {
     expect(packageJson.scripts["dev:update"]).toBe("bun run tauri:dev:update");
     expect(packageJson.scripts["tauri:dev:update"]).toContain("tauri.update-test.conf.json");
   });
+
+  test("does not fetch update metadata during startup in development builds", () => {
+    const devGuard = source.indexOf("if (import.meta.env.DEV) return;");
+    const productionCheck = source.indexOf("void this.checkSilently();");
+    expect(devGuard).toBeGreaterThan(-1);
+    expect(productionCheck).toBeGreaterThan(devGuard);
+  });
 });
