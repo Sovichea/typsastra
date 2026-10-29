@@ -30,6 +30,8 @@ export class OutlineNavigationController {
     const activeTab = this.deps.activeTab();
     if (activeTab?.temporary) void this.deps.promoteToPermanent(activeTab);
 
+    const outline = this.deps.outline();
+    outline.setActiveFilePath(heading.filePath);
     const activePath = this.deps.activeFilePath();
     if (!activePath || filePathKey(heading.filePath) !== filePathKey(activePath)) {
       await this.deps.loadFile(heading.filePath, { focusEditor: false });
@@ -37,7 +39,6 @@ export class OutlineNavigationController {
     if (!this.deps.activeTabContentLoaded()) return;
     if (this.deps.activeMode() === "WYSIWYM") this.deps.switchToCodeMode();
 
-    const outline = this.deps.outline();
     const currentHeading = outline.findHeading(heading.id) ?? heading;
     const editor = this.deps.editor();
     const cursor = Math.max(0, Math.min(currentHeading.textFrom, editor.state.doc.length));

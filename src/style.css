@@ -692,6 +692,15 @@ html.native-app-menu #app-menus {
 }
 .outline-item:hover { background: var(--ui-hover); }
 .outline-item.active { background: var(--ui-navigation-background); }
+.outline-item.outline-item-other-file .outline-label,
+.outline-item.outline-item-other-file .outline-disclosure {
+  opacity: 0.56;
+  transition: opacity 100ms ease;
+}
+.outline-item.outline-item-other-file:hover .outline-label,
+.outline-item.outline-item-other-file:hover .outline-disclosure {
+  opacity: 0.78;
+}
 .outline-item.keyboard-selected {
   background: transparent;
   box-shadow: none;

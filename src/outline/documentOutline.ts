@@ -278,6 +278,7 @@ export class DocumentOutlineController {
   private readonly collapsed = new Set<string>();
   private cursor = 0;
   private activePath: string | null = null;
+  private outlineRootPath: string | null = null;
   private activeHeadingKey: string | null = null;
   private selectedHeadingId: string | null = null;
   private pdfOutline: StandalonePdfOutlineItem[] | null = null;
@@ -322,7 +323,7 @@ export class DocumentOutlineController {
     }
     this.pdfOutline = null;
     this.flatPdfOutline = [];
-    this.activePath = path;
+    this.outlineRootPath = path;
     this.headings = headings;
     matchOutlinePreviewPositions(this.headings, this.previewOutlineItems);
     this.flatHeadings = flattenHeadings(this.headings);
@@ -341,6 +342,7 @@ export class DocumentOutlineController {
     this.flatHeadings = [];
     this.cursor = 0;
     this.activePath = null;
+    this.outlineRootPath = null;
     this.activeHeadingKey = null;
     this.selectedHeadingId = null;
     this.pdfOutline = null;
@@ -353,6 +355,13 @@ export class DocumentOutlineController {
     this.onChanged?.();
   }
 
+  public setActiveFilePath(activePath: string | null): void {
+    const previousPathKey = this.activePath ? filePathKey(this.activePath) : null;
+    const nextPathKey = activePath ? filePathKey(activePath) : null;
+    this.activePath = activePath;
+    if (previousPathKey !== nextPathKey) this.updateFileEmphasis();
+  }
+
   public setCursorPosition(
     cursor: number,
     activePath: string | null = this.activePath,
@@ -360,7 +369,7 @@ export class DocumentOutlineController {
   ): void {
     if (this.pdfOutline !== null) return;
     this.cursor = cursor;
-    this.activePath = activePath;
+    this.setActiveFilePath(activePath);
     let active: DocumentHeading | undefined;
     const activePathKey = activePath ? filePathKey(activePath) : null;
     for (const heading of this.flatHeadings) {
@@ -443,6 +452,19 @@ export class DocumentOutlineController {
     this.onChanged?.();
   }
 
+  private updateFileEmphasis(): void {
+    const activeKey = this.activePath ? filePathKey(this.activePath) : null;
+    const rootKey = this.outlineRootPath ? filePathKey(this.outlineRootPath) : null;
+    const fadeOtherFiles = !!activeKey && !!rootKey && activeKey !== rootKey;
+    this.container.querySelectorAll<HTMLElement>(".outline-item[data-outline-file]").forEach(row => {
+      const fileKey = row.dataset.outlineFile ? filePathKey(row.dataset.outlineFile) : null;
+      row.classList.toggle(
+        "outline-item-other-file",
+        fadeOtherFiles && !!fileKey && fileKey !== activeKey,
+      );
+    });
+  }
+
   public waitForPreviewPosition(heading: DocumentHeading): void {
     const current = this.findHeading(heading.id) ?? heading;
     if (current.previewPosition !== undefined || current.previewBookmarkIndex !== undefined) return;
@@ -483,6 +505,7 @@ export class DocumentOutlineController {
       return;
     }
     this.container.replaceChildren(this.renderLevel(this.headings));
+    this.updateFileEmphasis();
   }
 
   private visibleRows(): HTMLElement[] {
@@ -556,6 +579,7 @@ export class DocumentOutlineController {
       const row = document.createElement("div");
       row.className = `outline-item${this.selectedHeadingId === heading.id ? " keyboard-selected" : ""}`;
       row.dataset.outlineId = heading.id;
+      row.dataset.outlineFile = heading.filePath;
       row.setAttribute("role", "treeitem");
       row.setAttribute("aria-selected", String(this.selectedHeadingId === heading.id));
       row.title = `${heading.title} (line ${heading.line})`;

@@ -104,6 +104,32 @@ describe("document outline", () => {
     expect(navigationSource).toContain("filePathKey(heading.filePath) !== filePathKey(activePath)");
   });
 
+  test("fades headings from files other than the active include", async () => {
+    const outlineSource = await Bun.file(
+      new URL("../src/outline/documentOutline.ts", import.meta.url),
+    ).text();
+    const styles = await Bun.file(
+      new URL("../src/style.css", import.meta.url),
+    ).text();
+
+    expect(outlineSource).toContain("row.dataset.outlineFile = heading.filePath");
+    expect(outlineSource).toContain("public setActiveFilePath(activePath: string | null): void");
+    expect(outlineSource).toContain("private updateFileEmphasis(): void");
+    expect(outlineSource).toContain('"outline-item-other-file"');
+    expect(outlineSource).toContain("fileKey !== activeKey");
+    const languageSource = await Bun.file(
+      new URL("../src/editor/documentLanguageController.ts", import.meta.url),
+    ).text();
+    expect(languageSource).toContain("this.deps.outline().setActiveFilePath(path)");
+    const navigationSource = await Bun.file(
+      new URL("../src/navigation/outlineNavigationController.ts", import.meta.url),
+    ).text();
+    expect(navigationSource).toContain("outline.setActiveFilePath(heading.filePath)");
+    expect(styles).toContain(".outline-item.outline-item-other-file .outline-label");
+    expect(styles).toContain(".outline-item.outline-item-other-file .outline-disclosure");
+    expect(styles).toContain("opacity: 0.56;");
+  });
+
   test("uses compiled PDF bookmark destinations without requiring Tinymist", async () => {
     const frameSource = await Bun.file(
       new URL("../src/preview/previewFrame.ts", import.meta.url),

@@ -25,9 +25,10 @@ panel that leaves the editor and preview visible.
 The Outline pane shows the pinned main Typst document and its includes when the
 main file or one of its included files is active. Other project Typst files show
 a file-only outline for editor navigation; their own includes are not expanded
-until they are pinned as the main document. Select a heading to open its source
-and scroll the PDF to that heading. Pane focus and keyboard navigation let you
-move between
+until they are pinned as the main document. While an included file is active,
+headings from other files are muted so the active file's headings stand out.
+Select a heading to open its source and scroll the PDF to that heading. Pane
+focus and keyboard navigation let you move between
 the editor, preview, Explorer, Outline, and Spellcheck without reaching for the
 mouse.
 

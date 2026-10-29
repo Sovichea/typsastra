@@ -88,6 +88,7 @@ export class DocumentLanguageController {
         || !activeTab
         || filePathKey(activeTab.path) !== filePathKey(path)
       ) return;
+      this.deps.outline().setActiveFilePath(path);
       const target = this.outlineTarget(path);
       let outlinePath = target.path;
       let source = activeTab.content;
@@ -114,6 +115,7 @@ export class DocumentLanguageController {
   }
 
   updateOutlineNow(path: string, contents: string): void {
+    this.deps.outline().setActiveFilePath(path);
     void (async () => {
       const target = this.outlineTarget(path);
       let outlinePath = target.path;
