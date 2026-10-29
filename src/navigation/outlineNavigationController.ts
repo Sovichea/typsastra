@@ -1,4 +1,5 @@
 import { EditorView } from "@codemirror/view";
+import type { PreviewDocumentPosition } from "../compiler/lsp";
 import type { DocumentHeading, DocumentOutlineController } from "../outline/documentOutline";
 import type { EditorTab } from "../editor/editorTab";
 import type { PreviewFrame } from "../preview/previewFrame";
@@ -20,6 +21,8 @@ export interface OutlineNavigationDependencies {
 
 /** Owns editor/preview navigation when selecting a document outline heading. */
 export class OutlineNavigationController {
+  private previewRevealGeneration = 0;
+
   constructor(private readonly deps: OutlineNavigationDependencies) {}
 
   async navigate(heading: DocumentHeading): Promise<void> {
@@ -43,11 +46,12 @@ export class OutlineNavigationController {
     });
     outline.setCursorPosition(cursor, this.deps.activeFilePath());
     this.revealInPreview(currentHeading);
+    outline.waitForPreviewPosition(currentHeading);
   }
 
   revealInPreview(heading: DocumentHeading): void {
     if (heading.previewPosition) {
-      this.deps.previewFrame().scrollToPage(heading.previewPosition.page_no);
+      this.revealPreviewPosition(heading.previewPosition);
       return;
     }
     if (heading.previewBookmarkIndex !== undefined) {
@@ -55,6 +59,22 @@ export class OutlineNavigationController {
       return;
     }
     const previewPosition = this.deps.outline().previewPositionAt(heading.textFrom);
-    if (previewPosition) this.deps.previewFrame().scrollToPage(previewPosition.page_no);
+    if (previewPosition) this.revealPreviewPosition(previewPosition);
+  }
+
+  private revealPreviewPosition(position: PreviewDocumentPosition): void {
+    const generation = ++this.previewRevealGeneration;
+    const attempt = (remaining: number) => {
+      const frame = this.deps.previewFrame();
+      void frame.revealDocumentPosition(position, { ripple: true }).then(scrolled => {
+        if (generation !== this.previewRevealGeneration || scrolled) return;
+        if (remaining > 0) {
+          window.setTimeout(() => attempt(remaining - 1), 60);
+        } else {
+          frame.scrollToPage(position.page_no);
+        }
+      });
+    };
+    attempt(4);
   }
 }

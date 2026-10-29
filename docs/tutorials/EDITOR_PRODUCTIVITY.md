@@ -22,8 +22,10 @@ the workspace, including unsaved open buffers. Project search supports literal,
 regex, and fuzzy matching, include/exclude globs, and a separate activity-bar
 panel that leaves the editor and preview visible.
 
-The Outline pane is built from the active Typst document. Select a heading to
-navigate to its source. Pane focus and keyboard navigation let you move between
+The Outline pane is built from the pinned main Typst document and its includes,
+so it stays the same while switching between the main file and included
+chapters. Select a heading to open its source and scroll the PDF to that heading.
+Pane focus and keyboard navigation let you move between
 the editor, preview, Explorer, Outline, and Spellcheck without reaching for the
 mouse.
 

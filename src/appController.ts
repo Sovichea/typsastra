@@ -300,6 +300,7 @@ export class TypsastraWorkspaceController {
     isPinnedMainFile: path => this.isPinnedMainFile(path),
     editorText: () => this.editorInstance.state.doc.toString(),
     workspaceRootPath: () => this.workspaceRootPath,
+    readWorkspaceText: path => this.workspaceText(path),
     activeTab: () => this.getActiveTab(),
     editorCursorPosition: () => this.editorInstance.state.selection.main.head,
     scriptLanguages: () => this.workspaceMetadata?.project.scriptLanguages ?? [],
@@ -2779,7 +2780,7 @@ export class TypsastraWorkspaceController {
         mainPath,
         source,
         this.workspaceRootPath ?? "",
-        path => invoke<string>("read_workspace_file", { path }).catch(() => null),
+        path => this.workspaceText(path).catch(() => null),
       );
       if (generation !== this.previewOutlinePublishGeneration) return;
       if (this.previewWindowController.isPreviewOnlyWindow()) return;
@@ -4125,7 +4126,10 @@ export class TypsastraWorkspaceController {
   }
 
   private setPinnedMainFile(path: string | null): Promise<void> {
-    return this.pinnedMainFileController.set(path).then(() => this.syncDevProjectContext());
+    return this.pinnedMainFileController.set(path).then(() => {
+      if (this.activeFilePath) this.scheduleDocumentOutlineUpdate(this.activeFilePath, 0);
+      return this.syncDevProjectContext();
+    });
   }
 
   private closeProject(options: { confirmUnsaved?: boolean } = {}): Promise<boolean> {

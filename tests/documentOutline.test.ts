@@ -35,12 +35,48 @@ describe("document outline", () => {
     expect((await parse(source)).map(heading => heading.title)).toEqual(["Real heading"]);
   });
 
+  test("includes chapter headings in the main document outline", async () => {
+    const files = new Map<string, string>([
+      ["C:/workspace/chapters/one.typ", "== Chapter One\nText\n"],
+    ]);
+    const outline = await parseDocumentOutline(
+      "C:/workspace/main.typ",
+      "= Main\n#include \"chapters/one.typ\"\n= Conclusion\n",
+      "C:/workspace",
+      async path => files.get(path) ?? null,
+    );
+
+    expect(outline.map(heading => heading.title)).toEqual(["Main", "Conclusion"]);
+    expect(outline[0]?.children[0]?.title).toBe("Chapter One");
+    expect(outline[0]?.children[0]?.filePath).toBe("C:/workspace/chapters/one.typ");
+    expect(outline[0]?.children[0]?.line).toBe(1);
+  });
+
   test("keeps duplicate headings independently addressable", async () => {
     const outline = await parse("= Same\n= Same\n");
 
     expect(outline).toHaveLength(2);
     expect(outline[0].id).not.toBe(outline[1].id);
     expect(outline[1].from).toBe(7);
+  });
+
+  test("keeps the project outline rooted at the pinned main document", async () => {
+    const language = await Bun.file(
+      new URL("../src/editor/documentLanguageController.ts", import.meta.url),
+    ).text();
+
+    expect(language).toContain("private mainOutlinePath(path: string): string | null");
+    expect(language).toContain("const mainPath = this.mainOutlinePath(path)");
+    expect(language).toContain("const mainSource = await this.readWorkspaceFile(mainPath)");
+    expect(language).toContain("outlinePath = mainPath");
+    expect(language).toContain("relativeFilePath(workspaceRoot, path) === null");
+    expect(language).toContain("this.deps.outline().setCursorPosition(");
+
+    const outlineSource = await Bun.file(
+      new URL("../src/outline/documentOutline.ts", import.meta.url),
+    ).text();
+    expect(outlineSource).toContain("private previewOutlineItems: readonly OutlinePreviewItem[] = []");
+    expect(outlineSource).toContain("matchOutlinePreviewPositions(this.headings, this.previewOutlineItems)");
   });
 
   test("uses compiled PDF bookmark destinations without requiring Tinymist", async () => {
@@ -86,7 +122,9 @@ describe("document outline", () => {
     expect(appSource).toContain("cursorSyncEnabled: () => this.settingsController.value.preview.cursorSync");
     expect(navigationSource).toContain("revealInPreview(heading: DocumentHeading): void");
     expect(navigationSource).toContain("scrollToOutlineBookmark(heading.previewBookmarkIndex)");
-    expect(navigationSource).toContain("this.deps.previewFrame().scrollToPage(previewPosition.page_no)");
+    expect(navigationSource).toContain("this.revealPreviewPosition(heading.previewPosition)");
+    expect(navigationSource).toContain("frame.revealDocumentPosition(position, { ripple: true })");
+    expect(navigationSource).toContain("outline.waitForPreviewPosition(currentHeading)");
     expect(navigationSource).not.toContain("isLowMemoryMode");
   });
 });

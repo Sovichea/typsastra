@@ -1,7 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { LanguageCatalogCapabilities } from "../languageSupport";
 import type { DocumentOutlineController } from "../outline/documentOutline";
-import { filePathKey } from "../platform/paths";
+import { filePathKey, relativeFilePath } from "../platform/paths";
 import {
   parseLegacyDocumentLanguages,
   type DocumentTypography,
@@ -23,6 +22,7 @@ export interface DocumentLanguageDependencies {
   isPinnedMainFile(path: string): boolean;
   editorText(): string;
   workspaceRootPath(): string | null;
+  readWorkspaceText(path: string): Promise<string>;
   activeTab(): EditorTab | null;
   editorCursorPosition(): number;
   scriptLanguages(): readonly ScriptLanguageAssignment[];
@@ -80,7 +80,7 @@ export class DocumentLanguageController {
   scheduleOutlineUpdate(path: string, delay = 180): void {
     if (this.outlineUpdateTimer !== null) window.clearTimeout(this.outlineUpdateTimer);
     const generation = ++this.outlineUpdateGeneration;
-    this.outlineUpdateTimer = window.setTimeout(() => {
+    this.outlineUpdateTimer = window.setTimeout(async () => {
       this.outlineUpdateTimer = null;
       const activeTab = this.deps.activeTab();
       if (
@@ -88,26 +88,71 @@ export class DocumentLanguageController {
         || !activeTab
         || filePathKey(activeTab.path) !== filePathKey(path)
       ) return;
-      void this.deps.outline().update(
-        path,
-        activeTab.content,
+      const mainPath = this.mainOutlinePath(path);
+      let outlinePath = path;
+      let source = activeTab.content;
+      if (mainPath) {
+        outlinePath = mainPath;
+        if (filePathKey(mainPath) !== filePathKey(path)) {
+          const mainSource = await this.readWorkspaceFile(mainPath);
+          if (generation !== this.outlineUpdateGeneration) return;
+          if (mainSource === null) outlinePath = path;
+          else source = mainSource;
+        }
+      }
+      await this.deps.outline().update(
+        outlinePath,
+        source,
         this.deps.workspaceRootPath() || "",
         candidatePath => this.readWorkspaceFile(candidatePath),
+        () => generation === this.outlineUpdateGeneration,
+      );
+      if (generation !== this.outlineUpdateGeneration) return;
+      this.deps.outline().setCursorPosition(
+        this.deps.editorCursorPosition(),
+        this.deps.activeFilePath(),
       );
     }, delay);
   }
 
   updateOutlineNow(path: string, contents: string): void {
-    void this.deps.outline().update(
-      path,
-      contents,
-      this.deps.workspaceRootPath() || "",
-      candidatePath => this.readWorkspaceFile(candidatePath),
-    );
-    this.deps.outline().setCursorPosition(
-      this.deps.editorCursorPosition(),
-      this.deps.activeFilePath(),
-    );
+    void (async () => {
+      const mainPath = this.mainOutlinePath(path);
+      let outlinePath = path;
+      let source = contents;
+      if (mainPath) {
+        outlinePath = mainPath;
+        if (filePathKey(mainPath) !== filePathKey(path)) {
+          const mainSource = await this.readWorkspaceFile(mainPath);
+          if (mainSource === null) outlinePath = path;
+          else source = mainSource;
+        }
+      }
+      await this.deps.outline().update(
+        outlinePath,
+        source,
+        this.deps.workspaceRootPath() || "",
+        candidatePath => this.readWorkspaceFile(candidatePath),
+      );
+      this.deps.outline().setCursorPosition(
+        this.deps.editorCursorPosition(),
+        this.deps.activeFilePath(),
+      );
+    })();
+  }
+
+  private mainOutlinePath(path: string): string | null {
+    const mainPath = this.deps.pinnedMainFilePath();
+    const workspaceRoot = this.deps.workspaceRootPath();
+    if (
+      !mainPath
+      || !workspaceRoot
+      || !path.toLowerCase().endsWith(".typ")
+      || !mainPath.toLowerCase().endsWith(".typ")
+      || relativeFilePath(workspaceRoot, path) === null
+      || relativeFilePath(workspaceRoot, mainPath) === null
+    ) return null;
+    return mainPath;
   }
 
   clearOutline(): void {
@@ -132,7 +177,7 @@ export class DocumentLanguageController {
 
   private async readWorkspaceFile(path: string): Promise<string | null> {
     try {
-      return await invoke<string>("read_workspace_file", { path });
+      return await this.deps.readWorkspaceText(path);
     } catch {
       return null;
     }

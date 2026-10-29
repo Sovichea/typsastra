@@ -270,6 +270,7 @@ export class DocumentOutlineController {
   private selectedHeadingId: string | null = null;
   private pdfOutline: StandalonePdfOutlineItem[] | null = null;
   private flatPdfOutline: StandalonePdfOutlineItem[] = [];
+  private previewOutlineItems: readonly OutlinePreviewItem[] = [];
   private pendingPreviewSyncHeadingKey: string | null = null;
 
   constructor(
@@ -290,11 +291,22 @@ export class DocumentOutlineController {
     this.render();
   }
 
-  public async update(path: string | null, source: string, workspaceRoot: string, readFile: (path: string) => Promise<string | null>): Promise<void> {
+  public async update(
+    path: string | null,
+    source: string,
+    workspaceRoot: string,
+    readFile: (path: string) => Promise<string | null>,
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
+    const headings = path?.toLowerCase().endsWith(".typ")
+      ? await parseDocumentOutline(path, source, workspaceRoot, readFile)
+      : [];
+    if (!isCurrent()) return;
     this.pdfOutline = null;
     this.flatPdfOutline = [];
     this.activePath = path;
-    this.headings = path?.toLowerCase().endsWith(".typ") ? await parseDocumentOutline(path, source, workspaceRoot, readFile) : [];
+    this.headings = headings;
+    matchOutlinePreviewPositions(this.headings, this.previewOutlineItems);
     this.flatHeadings = flattenHeadings(this.headings);
     const validIds = new Set(this.flatHeadings.map(heading => heading.id));
     for (const id of this.collapsed) {
@@ -315,6 +327,7 @@ export class DocumentOutlineController {
     this.selectedHeadingId = null;
     this.pdfOutline = null;
     this.flatPdfOutline = [];
+    this.previewOutlineItems = [];
     this.pendingPreviewSyncHeadingKey = null;
     this.collapsed.clear();
     this.render();
@@ -370,6 +383,7 @@ export class DocumentOutlineController {
   }
 
   public updatePreviewPositions(items: readonly OutlinePreviewItem[]): void {
+    this.previewOutlineItems = items;
     matchOutlinePreviewPositions(this.headings, items);
     for (const heading of this.flatHeadings) {
       const headingKey = `${heading.filePath}\0${heading.id}`;
@@ -404,6 +418,12 @@ export class DocumentOutlineController {
     this.onChanged?.();
   }
 
+  public waitForPreviewPosition(heading: DocumentHeading): void {
+    const current = this.findHeading(heading.id) ?? heading;
+    if (current.previewPosition !== undefined || current.previewBookmarkIndex !== undefined) return;
+    this.pendingPreviewSyncHeadingKey = `${current.filePath}\0${current.id}`;
+  }
+
   private requestPreviewSync(heading: DocumentHeading, headingKey: string): void {
     const hasDestination = heading.previewPosition !== undefined
       || heading.previewBookmarkIndex !== undefined;
@@ -433,7 +453,7 @@ export class DocumentOutlineController {
       this.selectedHeadingId = null;
       const empty = document.createElement("div");
       empty.className = "outline-empty";
-      empty.textContent = "No headings in the active document.";
+      empty.textContent = "No headings in this outline.";
       this.container.replaceChildren(empty);
       return;
     }
