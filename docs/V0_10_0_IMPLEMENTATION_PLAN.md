@@ -120,10 +120,6 @@ Implemented:
 - Standalone documents keep the active-file outline workflow. Standalone PDF
   bookmark navigation is unchanged.
 
-Deferred:
-
-- The File/Project scope selector and per-workspace remembered scope.
-
 ### V010-B.2 — Include handling and navigation
 
 Implemented:
@@ -149,10 +145,6 @@ Implemented:
   scrolled once the positions become available.
 - Matched PDF positions are retained and re-applied when the outline is rebuilt,
   so repeated heading clicks continue to move the PDF.
-
-Deferred:
-
-- A separate Reveal in Preview command.
 
 ## C. Back/Forward source navigation
 
@@ -199,9 +191,12 @@ Implemented:
 
 Implemented:
 
-- Text buffers are snapshotted for project, standalone, off-project, and
-  missing-file restoration cases, including dirty inactive tabs. Image/Table
-  Tool models and historical versions remain deferred.
+- Text buffers are snapshotted for project, standalone, off-project, missing-file,
+  and pathless untitled cases, including dirty inactive tabs. Image/Table Tool
+  models and historical versions remain deferred.
+- New File creates a pathless untitled buffer. Untitled buffers use a stable
+  recovery identity, restore as unsaved tabs, and adopt their chosen path through
+  Save As.
 - Snapshots live in a dedicated application-local `recovery/` store, separate
   from render caches and project sources.
 - Versioned native list/read/write/delete commands record document identity,
@@ -218,25 +213,23 @@ Implemented:
 
 Deferred:
 
-- Pathless untitled buffers. The editor currently creates files with a path;
-  missing-file recovery uses a dirty buffer with Save As.
 - Image/Table Tool model recovery and historical snapshot timelines.
 
 ### V010-D.2 — Review and restore
 
 Implemented:
 
-- Opening a project with matching snapshots offers the recoverable files with
-  Review, Restore, and Discard controls, storage usage, and corrupt-record
-  reporting. Recovery is not shown automatically at application startup, and
-  snapshots from other projects are excluded from the project-open prompt.
-  There is no separate manual recovery command.
+- Opening a project with matching snapshots offers the recoverable files and
+  untitled buffers with Review, Restore, and Discard controls, storage usage, and
+  corrupt-record reporting. Recovery is not shown automatically at application
+  startup, and snapshots from other projects are excluded from the project-open
+  prompt. There is no separate manual recovery command.
 - If disk already matches the recovered text, the record is resolved
   automatically. If disk differs from the saved baseline, Restore opens a
   git-style unified diff first, rendering only changed hunks with context
   rather than the complete files.
-- Restore opens an unsaved buffer without writing disk. Missing files restore as
-  dirty buffers and can be kept with Save As.
+- Restore opens an unsaved buffer without writing disk. Missing files and
+  untitled buffers restore as dirty buffers and can be kept with Save As.
 - Saving deletes the matching snapshot revision only when no newer revision
   exists. Explicit tab/project/window discard flows also remove their records.
 - Unresolved snapshots remain after normal shutdown; corrupt records are listed
@@ -292,8 +285,6 @@ Implemented:
   outlines for non-main documents, active-heading sync, exact PDF heading scroll,
   repeated heading clicks, unsaved buffers, main changes, and rapid tab
   switching.
-- Deferred outline gates: File/Project scope and a separate Reveal in Preview
-  command.
 - Verify history branching, replay suppression, changed source contexts,
   missing/renamed destinations, and workspace-close cancellation.
 - Confirm all navigation paths preserve preview freshness, viewport, and the
@@ -302,8 +293,9 @@ Implemented:
 ### Recovery
 
 - Exercise forced termination, interrupted atomic writes, continuous editing,
-  inactive buffers, standalone/off-project files, missing files, disk conflicts,
-  corrupt records, storage limits, and permission/disk-write failures.
+  inactive buffers, standalone/off-project files, missing files, untitled
+  buffers, disk conflicts, corrupt records, storage limits, and
+  permission/disk-write failures.
 - Verify newer snapshots survive older saves and that recovery data survives
   disposable-cache maintenance.
 - Confirm review and restoration never overwrite source files automatically.

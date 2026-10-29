@@ -168,6 +168,7 @@ describe("image preview toolbar", () => {
       getPreviewRenderMode: () => "on-type",
       getActiveTab: () => null,
       getEditorText: () => "",
+      untitledPreviewMessage: () => "",
       isInternallySupportedPath: () => true,
       updateActionsToolbar: path => { toolbarPaths.push(path); },
       prepareTemplateAwarePreview: async target => target,

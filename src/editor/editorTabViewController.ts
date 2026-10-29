@@ -37,7 +37,7 @@ export function tabListItems(
 ): TabListItem[] {
   return tabs.map(tab => ({
     path: tab.path,
-    title: fileNameFromPath(tab.path),
+    title: tab.title ?? fileNameFromPath(tab.path),
     active: !!activeFilePath && filePathKey(tab.path) === filePathKey(activeFilePath),
     dirty: tab.isDirty,
     pinnedMain: !!pinnedMainFilePath
@@ -100,13 +100,13 @@ export class EditorTabViewController {
       tabButton.className = `editor-tab${isActive ? " active" : ""}${tab.isDirty ? " dirty" : ""}${tab.temporary ? " temporary" : ""}${isPinnedMain ? " pinned-main-tab" : ""}${tab.offProject ? " off-project" : ""}`;
       tabButton.type = "button";
       tabButton.role = "tab";
-      tabButton.title = tab.path;
+      tabButton.title = tab.title ?? tab.path;
       tabButton.setAttribute("aria-selected", String(isActive));
       tabButton.dataset.path = tab.path;
 
       const title = document.createElement("span");
       title.className = "editor-tab-title";
-      title.textContent = fileNameFromPath(tab.path);
+      title.textContent = tab.title ?? fileNameFromPath(tab.path);
       tabButton.appendChild(title);
 
       const dirtyDot = document.createElement("span");
@@ -119,7 +119,7 @@ export class EditorTabViewController {
         closeButton.className = "editor-tab-close";
         closeButton.appendChild(createAppIcon("x", { size: 13 }));
         closeButton.title = "Close";
-        closeButton.setAttribute("aria-label", `Close ${fileNameFromPath(tab.path)}`);
+        closeButton.setAttribute("aria-label", `Close ${tab.title ?? fileNameFromPath(tab.path)}`);
         tabButton.appendChild(closeButton);
         closeButton.addEventListener("click", event => {
           event.stopPropagation();

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { EditorView } from "@codemirror/view";
 import type { TinymistLspClient, LspSourcePosition } from "../compiler/lsp";
 import { isTypstDocumentPath } from "../platform/fileTypes";
-import { filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath } from "../platform/paths";
+import { filePathFromUri, filePathKey, filePathToUri, isUntitledDocumentPath, nativeFilePath, relativeFilePath } from "../platform/paths";
 import { decodeRustUnicodeEscapes } from "../compiler/previewError";
 import type { NavigationHistoryPort } from "./navigationHistoryController";
 
@@ -59,12 +59,16 @@ export class SourceLocationController {
 
   activeLspUri(): string {
     const activeFilePath = this.deps.activeFilePath();
-    if (!activeFilePath || !isTypstDocumentPath(activeFilePath)) return "";
+    if (
+      !activeFilePath
+      || isUntitledDocumentPath(activeFilePath)
+      || !isTypstDocumentPath(activeFilePath)
+    ) return "";
     return filePathToUri(activeFilePath);
   }
 
   resolveLspDocument(path: string, originalContent: string): { uri: string; content: string } | null {
-    if (!isTypstDocumentPath(path)) return null;
+    if (isUntitledDocumentPath(path) || !isTypstDocumentPath(path)) return null;
     return { uri: filePathToUri(path), content: originalContent };
   }
 

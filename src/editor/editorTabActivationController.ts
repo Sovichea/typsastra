@@ -1,6 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 import { fileExtension, isBinaryImagePath, isMarkdownDocumentPath, isSupportedInAppPath, isTypstDocumentPath } from "../platform/fileTypes";
-import { filePathKey } from "../platform/paths";
+import { filePathKey, isUntitledDocumentPath } from "../platform/paths";
 import type { PreviewSessionState, EditorTab } from "./editorTab";
 import type { LargeFileOpeningNotice } from "../workspace/largeFileOpening";
 import type { EditorTabPresentationController } from "./editorTabPresentationController";
@@ -105,7 +105,7 @@ export class EditorTabActivationController {
     const generation = ++this.activationGeneration;
     const deps = this.deps;
     deps.explorer.setActiveFile(path);
-    if (deps.workspaceRootPath()) void deps.explorer.revealPath(path);
+    if (deps.workspaceRootPath() && !isUntitledDocumentPath(path)) void deps.explorer.revealPath(path);
 
     const tab = deps.openTabs().find(candidate => filePathKey(candidate.path) === filePathKey(path));
     const isCurrent = () => generation === this.activationGeneration && (!tab || deps.openTabs().includes(tab));

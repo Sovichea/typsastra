@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { PreviewClickPoint } from "../preview/previewFrame";
 import type { PreviewScrollPositionPayload } from "../preview/previewWindowController";
@@ -88,7 +88,7 @@ export interface AppEventActions {
   restartWorkspace: () => Promise<void> | void;
   closeProject: () => Promise<boolean> | void;
   workspaceRootPath: () => string | null;
-  onNewFileCreated: (path: string) => Promise<void> | void;
+  createUntitledFile: () => Promise<void> | void;
 
   zoomOut: () => void;
   zoomIn: () => void;
@@ -422,21 +422,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-import-project")?.addEventListener("click", () => void actions.importProject());
   document.getElementById("action-restart-workspace")?.addEventListener("click", () => void actions.restartWorkspace());
   document.getElementById("action-close-project")?.addEventListener("click", () => void actions.closeProject());
-  document.getElementById("action-new-file")?.addEventListener("click", async () => {
-    const workspaceRootPath = actions.workspaceRootPath();
-    if (!workspaceRootPath) {
-      alert("Please open a project first.");
-      return;
-    }
-    const savePath = await save({
-      defaultPath: workspaceRootPath,
-      filters: [{ name: "Typst Document", extensions: ["typ"] }]
-    });
-    if (typeof savePath === "string") {
-      await invoke("save_workspace_file", { path: savePath, contents: "= New Document\n" });
-      await actions.onNewFileCreated(savePath);
-    }
-  });
+  document.getElementById("action-new-file")?.addEventListener("click", () => void actions.createUntitledFile());
 
   document.getElementById("action-save-file")?.addEventListener("click", () => void actions.saveActiveFile());
   document.getElementById("action-save-file-as")?.addEventListener("click", () => void actions.saveActiveFileAs());

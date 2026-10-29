@@ -3,7 +3,7 @@ import type { TinymistLspClient } from "../compiler/lsp";
 import type { EditorTabPresentationController } from "../editor/editorTabPresentationController";
 import type { EditorTab } from "../editor/editorTab";
 import type { LspDocumentController, LspDocumentResolution } from "../session/lspDocumentController";
-import { filePathKey } from "../platform/paths";
+import { filePathKey, isUntitledDocumentPath } from "../platform/paths";
 
 export interface WorkspaceTextDependencies {
   openTabs(): EditorTab[];
@@ -29,6 +29,7 @@ export class WorkspaceTextController {
   }
 
   async write(path: string, content: string): Promise<void> {
+    if (isUntitledDocumentPath(path)) return;
     await invoke("save_workspace_file", { path, contents: content });
     const tab = this.findTab(path);
     if (tab) {

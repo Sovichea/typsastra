@@ -17,9 +17,13 @@ function createController(options: {
   renderMode: "on-type" | "on-save";
   formatOnSave?: boolean;
   pendingInclude?: boolean;
+  untitled?: boolean;
 }) {
   const tab = {
-    path: "C:/project/main.typ",
+    path: options.untitled ? "untitled:test.typ" : "C:/project/main.typ",
+    untitled: options.untitled,
+    untitledId: options.untitled ? "test" : undefined,
+    title: options.untitled ? "Untitled 1" : undefined,
     content: options.content,
     savedContent: options.savedContent,
     isDirty: options.dirty,
@@ -32,6 +36,7 @@ function createController(options: {
   const include = { ...tab, path: "C:/project/chapter.typ", externalPreviewPending: true };
   let formatCalls = 0;
   let refreshCalls = 0;
+  let saveUntitledCalls = 0;
   const controller = new DocumentPersistenceController({
     activeFilePath: () => tab.path,
     activeMode: () => "CODE",
@@ -56,6 +61,8 @@ function createController(options: {
     logMemoryDiagnostics: async () => {},
     clearExternalConflict: () => {},
     autoSaveAllowed: () => true,
+    activeTab: () => tab as never,
+    saveUntitledDocumentAs: async () => { saveUntitledCalls += 1; },
     recoveryRevision: () => 0,
     recoverySaved: async () => {},
     renderEditorTabs: () => {},
@@ -65,7 +72,8 @@ function createController(options: {
   });
   return { controller, tab, include,
     runAutoSave: () => (controller as unknown as { runAutoSaveCycle(): Promise<void> }).runAutoSaveCycle(),
-    get formatCalls() { return formatCalls; }, get refreshCalls() { return refreshCalls; } };
+    get formatCalls() { return formatCalls; }, get refreshCalls() { return refreshCalls; },
+    get saveUntitledCalls() { return saveUntitledCalls; } };
 }
 
 describe("document persistence preview scheduling", () => {
@@ -145,6 +153,35 @@ describe("document persistence preview scheduling", () => {
     fixture.include.isDirty = true;
     await fixture.runAutoSave();
     expect(fixture.refreshCalls).toBe(0);
+  });
+
+  test("saving an untitled buffer opens Save As instead of writing a synthetic path", async () => {
+    invocations.length = 0;
+    const fixture = createController({
+      content: "= New Document\n",
+      savedContent: "",
+      dirty: true,
+      renderMode: "on-save",
+      untitled: true,
+    });
+    await fixture.controller.saveActiveFile("manual");
+    expect(fixture.saveUntitledCalls).toBe(1);
+    expect(invocations.filter(call => call.command === "save_workspace_file")).toHaveLength(0);
+  });
+
+  test("automatic save skips untitled buffers", async () => {
+    invocations.length = 0;
+    const fixture = createController({
+      content: "= New Document\n",
+      savedContent: "",
+      dirty: true,
+      renderMode: "on-save",
+      untitled: true,
+    });
+    await fixture.runAutoSave();
+    expect(fixture.saveUntitledCalls).toBe(0);
+    expect(invocations.filter(call => call.command === "save_workspace_file")).toHaveLength(0);
+    expect(fixture.tab.isDirty).toBe(true);
   });
 
   test("a changed Typst file refreshes once on save mode, not on type mode", async () => {

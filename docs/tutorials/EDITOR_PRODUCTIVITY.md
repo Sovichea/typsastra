@@ -57,15 +57,21 @@ not currently active. Snapshots are written after a short idle pause and at
 least every five seconds during continuous typing. They live outside the
 project and are separate from preview caches.
 
+**New File** (`Ctrl/Cmd+N`) opens a pathless untitled buffer. It is not written
+to disk and is not persisted as a normal workspace tab; it is protected by the
+same unsaved-work snapshots instead. Use **Save** or **Save As** to choose a file
+path. After saving, the tab becomes an ordinary project file.
+
 After an unexpected shutdown, opening the affected project offers its available
 snapshots. The recovery prompt is not shown automatically at application startup,
-and snapshots belonging to other projects are not included. Each file can be
-reviewed, restored as an unsaved buffer, or discarded. If the file changed on
-disk, review the unified diff before restoring; only changed hunks and nearby
-context are shown, with additions and removals highlighted. Deleted files reopen
-as dirty buffers so they can be kept with Save As. Saving removes only the
-matching snapshot revision; newer unsaved edits are retained. Corrupt records are
-reported separately and do not block other files.
+and snapshots belonging to other projects are not included. Each recovered file
+or untitled buffer can be reviewed, restored as an unsaved buffer, or discarded.
+If the file changed on disk, review the unified diff before restoring; only
+changed hunks and nearby context are shown, with additions and removals
+highlighted. Deleted files and untitled buffers reopen as dirty buffers so they
+can be kept with Save As. Saving removes only the matching snapshot revision;
+newer unsaved edits are retained. Corrupt records are reported separately and do
+not block other files.
 
 ## Typst-aware editing
 

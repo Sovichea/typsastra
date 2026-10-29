@@ -1503,6 +1503,11 @@ body.typsastra-resizing #input-container-wrapper::after {
   color: var(--ui-warning-color);
 }
 
+.recovery-status-untitled {
+  border-color: color-mix(in srgb, var(--ui-accent-color) 55%, var(--ui-border));
+  color: var(--ui-accent-color);
+}
+
 .recovery-status-error {
   border-color: color-mix(in srgb, #cf222e 60%, var(--ui-border));
   color: #cf222e;

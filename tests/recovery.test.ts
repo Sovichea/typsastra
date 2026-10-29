@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { EditorTab } from "../src/editor/editorTab";
+import { createUntitledTab } from "../src/editor/untitledDocument";
 import {
   canRecoverTab,
   recoveryDocumentId,
+  recoveryDocumentIdForTab,
   sha256Hex,
+  untitledIdFromRecoveryDocumentId,
 } from "../src/recovery/recoveryIdentity";
 
 function tab(path: string, overrides: Partial<EditorTab> = {}): EditorTab {
@@ -47,6 +50,15 @@ describe("recovery snapshots", () => {
     expect(canRecoverTab(tab("C:/project/export.pdf"))).toBe(false);
     expect(canRecoverTab(tab("C:/project/main.typ", { contentLoaded: false }))).toBe(false);
     expect(canRecoverTab(tab(""))).toBe(false);
+  });
+
+  test("recovers pathless untitled buffers with a stable identity", () => {
+    const untitled = createUntitledTab({ id: "draft-1", title: "Untitled 1" });
+    expect(canRecoverTab(untitled)).toBe(true);
+    expect(recoveryDocumentIdForTab("C:/project", untitled)).toBe("untitled:draft-1");
+    expect(untitledIdFromRecoveryDocumentId("untitled:draft-1")).toBe("draft-1");
+    expect(untitledIdFromRecoveryDocumentId(recoveryDocumentId("C:/project", "C:/project/main.typ")))
+      .toBeNull();
   });
 
   test("hashes the saved baseline with SHA-256", async () => {
@@ -96,6 +108,9 @@ describe("recovery snapshots", () => {
     expect(app).toContain("discardRecoverySnapshot: tab => this.recoveryController.discardTab(tab)");
     expect(app).toContain("private async restoreRecoveryRecord(");
     expect(app).toContain("tab.recoveredUnsaved = true");
+    expect(app).toContain("untitledIdFromRecoveryDocumentId(record.documentId)");
+    expect(app).toContain("private async createUntitledFile(");
+    expect(app).toContain("private async saveUntitledDocumentAs(");
     expect(app).toContain("this.recoveryReviewAutoShowReady = true");
     expect(app).toContain("showIfNeeded({ workspaceRoot: selected })");
     expect(app).not.toContain('"review recovery snapshots"');
@@ -109,6 +124,8 @@ describe("recovery snapshots", () => {
     expect(html).not.toContain('id="action-recovery-review"');
     expect(review).toContain("if (text === record.text)");
     expect(review).toContain('changed ? "changed" : "unchanged"');
+    expect(review).toContain("untitledIdFromRecoveryDocumentId");
+    expect(review).toContain("Untitled buffer with unsaved text");
     expect(review).toContain("createUnifiedTextDiff");
     expect(review).toContain("private renderDiff(");
     expect(html).toContain("Restore Unsaved Copy");

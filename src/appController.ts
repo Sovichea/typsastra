@@ -55,6 +55,8 @@ import { SettingsController } from "./settingsController";
 import { SettingsRuntimeController } from "./settingsRuntimeController";
 import { fileNameFromPath, filePathKey, relativeFilePath } from "./platform/paths";
 import { isBinaryImagePath, isMarkdownDocumentPath, isTypstDocumentPath, fileExtension } from "./platform/fileTypes";
+import { createUntitledTab, nextUntitledTitle } from "./editor/untitledDocument";
+import { untitledIdFromRecoveryDocumentId } from "./recovery/recoveryIdentity";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import type { PreviewFrame, PreviewClickPoint, PreviewInteractionStatus, PreviewPageStatus, PreviewSurface } from "./preview/previewFrame";
 import type { PreviewSourceOutlineItem } from "./preview/previewOutlineNavigator";
@@ -418,6 +420,7 @@ export class TypsastraWorkspaceController {
     invalidatePreviewWork: reason => this.invalidatePreviewWork(reason),
     noMainFileMessage: () => this.noMainFileMessage(),
     disabledPreviewMessage: () => this.disabledPreviewMessage(),
+    untitledPreviewMessage: () => this.untitledPreviewMessage(),
     renderPdfPreview: contents => { void this.renderPdfPreview(contents, false, true); },
     logPreview: message => this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message }),
   });
@@ -1897,6 +1900,8 @@ export class TypsastraWorkspaceController {
     logMemoryDiagnostics: reason => this.performanceController.logMemoryDiagnostics(reason),
     clearExternalConflict: path => this.externalFileReloadController.clearConflict(path),
     autoSaveAllowed: () => !this.projectReplacementInProgress,
+    activeTab: () => this.getActiveTab(),
+    saveUntitledDocumentAs: () => this.saveUntitledDocumentAs(),
     recoveryRevision: tab => this.recoveryController.recoveryRevision(tab),
     recoverySaved: (tab, revision) => this.recoveryController.handleTabSaved(tab, revision),
     renderEditorTabs: () => this.renderEditorTabs(),
@@ -2138,6 +2143,7 @@ export class TypsastraWorkspaceController {
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
     getActiveTab: () => this.getActiveTab(),
     getEditorText: () => this.editorInstance.state.doc.toString(),
+    untitledPreviewMessage: () => this.untitledPreviewMessage(),
     isInternallySupportedPath: path => this.isInternallySupportedPath(path),
     updateActionsToolbar: path => this.updatePreviewActionsToolbar(path),
     prepareTemplateAwarePreview: (target, activePath, contents) =>
@@ -3695,6 +3701,102 @@ export class TypsastraWorkspaceController {
     return this.documentPersistenceController.saveActiveFileAs();
   }
 
+  private async createUntitledFile(): Promise<void> {
+    if (!this.workspaceRootPath) {
+      await message("Open a project before creating a new file.", {
+        title: "New File",
+        kind: "info",
+      });
+      return;
+    }
+    const tab = createUntitledTab({
+      id: crypto.randomUUID(),
+      title: nextUntitledTitle(this.openTabs),
+    });
+    this.openTabs.push(tab);
+    await this.activateEditorTab(tab.path, false);
+    this.renderEditorTabs();
+    this.persistActiveTabState();
+    this.editorInstance.focus();
+    void this.recoveryController.flushTab(tab, true);
+    this.setLspStatus({
+      kind: "preview-ready",
+      message: "New untitled document. Save to choose a file path.",
+    });
+  }
+
+  private async saveUntitledDocumentAs(): Promise<void> {
+    const tab = this.getActiveTab();
+    if (!tab?.untitled) return;
+    this.flushEditorContentMutation();
+    const content = this.activeMode === "WYSIWYM"
+      ? this.mapWysiwymToMarkup()
+      : this.editorInstance.state.doc.toString();
+    const defaultPath = this.workspaceRootPath
+      ? await join(this.workspaceRootPath, `${tab.title ?? "Untitled"}.typ`)
+      : `${tab.title ?? "Untitled"}.typ`;
+    const savePath = await save({
+      defaultPath,
+      filters: [{ name: "Typst Document", extensions: ["typ"] }],
+    });
+    if (typeof savePath !== "string") return;
+    if (filePathKey(savePath) === filePathKey(tab.path)) return;
+    const existing = this.openTabs.find(candidate =>
+      candidate !== tab && filePathKey(candidate.path) === filePathKey(savePath));
+    if (existing) {
+      await message("That file is already open. Close it before saving this buffer there.", {
+        title: "Save As",
+        kind: "warning",
+      });
+      return;
+    }
+
+    try {
+      await invoke("save_workspace_file", { path: savePath, contents: content });
+      await this.recoveryController.discardTab(tab);
+      tab.path = savePath;
+      tab.untitled = false;
+      tab.untitledId = undefined;
+      tab.title = undefined;
+      tab.content = content;
+      tab.savedContent = content;
+      tab.contentLoaded = true;
+      tab.isDirty = false;
+      tab.recoveredUnsaved = undefined;
+      tab.externalContent = undefined;
+      tab.previewDisabled = false;
+      tab.offProject = this.workspaceRootPath !== null
+        && relativeFilePath(this.workspaceRootPath, savePath) === null;
+      if (tab.offProject) {
+        const folder = this.folderOfPath(savePath);
+        const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
+        if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
+      }
+      tab.version += 1;
+      tab.latestVersion = tab.version;
+      this.activeFilePath = savePath;
+      this.documentLanguageController.activate(savePath);
+      this.scheduleDocumentOutlineUpdate(savePath, 0);
+      if (this.workspaceRootPath) await this.explorer.loadWorkspace(this.workspaceRootPath);
+      this.explorer.setActiveFile(savePath);
+      this.renderEditorTabs();
+      this.persistActiveTabState();
+      await this.saveWorkspaceState();
+      this.setLspStatus({ kind: "preview-ready", message: "File saved as a new document" });
+      if (this.lspReady && this.lspClient) {
+        await this.lspDocumentController.recheckActiveAfterPin(content);
+        const resolved = await this.getLspUriAndContent(savePath, content);
+        if (resolved) await this.lspClient.notifyTextSave(resolved.uri, resolved.content);
+      }
+      void this.refreshActivePreviewRoot(true);
+    } catch (error) {
+      const failure = `Save As failed: ${String(error)}`;
+      console.error(failure);
+      this.setLspStatus({ kind: "error", message: failure });
+      alert(failure);
+    }
+  }
+
   private formatActiveDocument(options: { silent?: boolean } = {}): Promise<boolean> {
     return this.documentFormattingController.formatActiveDocument(options);
   }
@@ -3816,6 +3918,7 @@ export class TypsastraWorkspaceController {
 
   private async recompilePreviewManually(): Promise<void> {
     if (this.previewFreshness.state.lspErrors || this.previewFreshness.state.status === "compiling") return;
+    if (this.getActiveTab()?.untitled) return;
     const activePath = this.activeFilePath;
     if (!activePath?.toLowerCase().endsWith(".typ")) return;
     const previewSessionKey = this.previewFrame.currentSessionKey;
@@ -4379,6 +4482,10 @@ export class TypsastraWorkspaceController {
     return this.previewContentController.disabledPreviewMessage();
   }
 
+  private untitledPreviewMessage(): string {
+    return `<div style="padding: 20px; color: var(--ui-header-text); font-family: var(--font-family-sans);">Save this untitled document to enable preview.</div>`;
+  }
+
   private renderNonTextEditorPlaceholder(path: string, unsupported: boolean, source?: string): void {
     this.editorFileGuardController.renderNonTextPlaceholder(path, unsupported, source);
   }
@@ -4867,10 +4974,7 @@ export class TypsastraWorkspaceController {
       restartWorkspace: () => this.restartWorkspace(),
       closeProject: () => this.closeProject(),
       workspaceRootPath: () => this.workspaceRootPath,
-      onNewFileCreated: async path => {
-        if (this.workspaceRootPath) await this.explorer.loadWorkspace(this.workspaceRootPath);
-        await this.loadFile(path);
-      },
+      createUntitledFile: () => this.createUntitledFile(),
       zoomOut: () => this.zoomOut(),
       zoomIn: () => this.zoomIn(),
       zoomToFit: () => this.zoomToFit(),
@@ -4982,8 +5086,12 @@ export class TypsastraWorkspaceController {
    * directory instead of the folder-keyed workspace cache.
    */
   private async restoreRecoveryRecord(record: RecoveryRecord): Promise<boolean> {
+    const untitledId = untitledIdFromRecoveryDocumentId(record.documentId);
+    const untitled = untitledId !== null;
     const path = record.path;
-    if (!path) return false;
+    const displayName = record.title?.trim()
+      || (path ? fileNameFromPath(path) : untitled ? "Untitled" : "Recovery record");
+    if (!path && !untitled) return false;
     try {
       if (
         record.workspaceRoot
@@ -4994,7 +5102,7 @@ export class TypsastraWorkspaceController {
         });
         if (!workspaceExists) {
           this.reportRecoveryWarning(
-            `Could not restore ${fileNameFromPath(path)}: its workspace no longer exists.`,
+            `Could not restore ${displayName}: its workspace no longer exists.`,
           );
           return false;
         }
@@ -5006,68 +5114,98 @@ export class TypsastraWorkspaceController {
           return false;
         }
       }
+      if (untitled && !record.workspaceRoot && !this.workspaceRootPath) {
+        this.reportRecoveryWarning(`Could not restore ${displayName}: open a project first.`);
+        return false;
+      }
 
-      const diskExists = await invoke<boolean>("workspace_path_exists", { path });
-      const diskText = diskExists
-        ? await invoke<string>("read_workspace_file", { path }).catch(() => null)
-        : null;
-      if (!record.workspaceRoot) {
-        const folder = this.folderOfPath(path);
-        if (this.workspaceRootPath === null) {
-          this.standaloneFilePath = path;
-          this.workspaceRootPath = folder;
-          this.workspaceMetadata = null;
-          this.renderCacheRootPath = await this.prepareStandaloneCacheRoot(folder);
-          this.sidebarController.reset();
-          this.updateWorkspaceViewportVisibility();
-        } else {
-          const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
-          if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
+      let diskText: string | null = null;
+      if (!untitled) {
+        const diskExists = await invoke<boolean>("workspace_path_exists", { path: path! });
+        diskText = diskExists
+          ? await invoke<string>("read_workspace_file", { path: path! }).catch(() => null)
+          : null;
+        if (!record.workspaceRoot) {
+          const folder = this.folderOfPath(path!);
+          if (this.workspaceRootPath === null) {
+            this.standaloneFilePath = path!;
+            this.workspaceRootPath = folder;
+            this.workspaceMetadata = null;
+            this.renderCacheRootPath = await this.prepareStandaloneCacheRoot(folder);
+            this.sidebarController.reset();
+            this.updateWorkspaceViewportVisibility();
+          } else {
+            const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
+            if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
+          }
         }
       }
 
-      let tab = this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path));
+      let tab = untitled
+        ? this.openTabs.find(candidate => candidate.untitledId === untitledId)
+        : this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path!));
       if (tab?.isDirty && tab.content !== record.text) {
         const proceed = await confirm(
-          `Replace the current unsaved changes in ${fileNameFromPath(path)} with the recovered snapshot?`,
+          `Replace the current unsaved changes in ${tab.title ?? displayName} with the recovered snapshot?`,
           { title: "Recover Unsaved Work", kind: "warning" },
         );
         if (!proceed) return false;
       }
       if (!tab) {
-        tab = {
-          path,
-          content: "",
-          savedContent: "",
-          contentLoaded: true,
-          isDirty: false,
-          previewRootPath: null,
-          previewMainPath: null,
-          previewTaskId: null,
-          previewSessionKey: null,
-          previewImported: false,
-          previewStandalone: true,
-          previewDisabled: false,
-          version: 1,
-          latestVersion: 1,
-          selectionAnchor: record.selectionAnchor,
-          selectionHead: record.selectionHead,
-          scrollTop: record.scrollTop,
-          scrollLeft: record.scrollLeft,
-          foldRanges: [],
-          foldStateExplicit: false,
-          temporary: false,
-          offProject: !record.workspaceRoot
-            && this.standaloneFilePath === null
-            && this.workspaceRootPath !== null,
-        };
+        if (untitled) {
+          tab = createUntitledTab({
+            id: untitledId!,
+            title: displayName,
+            content: record.text,
+            savedContent: "",
+            dirty: true,
+            recoveredUnsaved: true,
+            selectionAnchor: record.selectionAnchor,
+            selectionHead: record.selectionHead,
+            scrollTop: record.scrollTop,
+            scrollLeft: record.scrollLeft,
+          });
+        } else {
+          tab = {
+            path: path!,
+            content: "",
+            savedContent: "",
+            contentLoaded: true,
+            isDirty: false,
+            previewRootPath: null,
+            previewMainPath: null,
+            previewTaskId: null,
+            previewSessionKey: null,
+            previewImported: false,
+            previewStandalone: true,
+            previewDisabled: false,
+            version: 1,
+            latestVersion: 1,
+            selectionAnchor: record.selectionAnchor,
+            selectionHead: record.selectionHead,
+            scrollTop: record.scrollTop,
+            scrollLeft: record.scrollLeft,
+            foldRanges: [],
+            foldStateExplicit: false,
+            temporary: false,
+            offProject: !record.workspaceRoot
+              && this.standaloneFilePath === null
+              && this.workspaceRootPath !== null,
+          };
+        }
         this.openTabs.push(tab);
       }
       tab.content = record.text;
-      tab.savedContent = diskText ?? "";
+      tab.savedContent = untitled ? "" : diskText ?? "";
       tab.contentLoaded = true;
       tab.recoveredUnsaved = true;
-      tab.isDirty = record.text !== tab.savedContent;
+      tab.isDirty = untitled ? true : record.text !== tab.savedContent;
+      if (untitled) {
+        tab.untitled = true;
+        tab.untitledId = untitledId!;
+        tab.title = displayName;
+        tab.previewDisabled = true;
+      }
       tab.selectionAnchor = record.selectionAnchor;
       tab.selectionHead = record.selectionHead;
       tab.scrollTop = record.scrollTop;
@@ -5076,8 +5214,8 @@ export class TypsastraWorkspaceController {
       tab.foldStateExplicit ??= false;
       this.renderEditorTabs();
 
-      await this.activateEditorTab(path, false, { skipPreviewActivation: true });
-      if (filePathKey(this.activeFilePath ?? "") === filePathKey(path)) {
+      await this.activateEditorTab(tab.path, false, { skipPreviewActivation: true });
+      if (filePathKey(this.activeFilePath ?? "") === filePathKey(tab.path)) {
         const doc = this.editorInstance.state.doc;
         const anchor = Math.max(0, Math.min(record.selectionAnchor, doc.length));
         const head = Math.max(0, Math.min(record.selectionHead, doc.length));
@@ -5088,12 +5226,14 @@ export class TypsastraWorkspaceController {
       }
       this.setLspStatus({
         kind: "preview-ready",
-        message: `Recovered unsaved changes from ${fileNameFromPath(path)}`,
+        message: untitled
+          ? `Recovered ${displayName}. Use Save As to choose a file path.`
+          : `Recovered unsaved changes from ${displayName}`,
       });
       return true;
     } catch (error) {
       this.reportRecoveryWarning(
-        `Could not restore ${fileNameFromPath(path)}: ${String(error)}`,
+        `Could not restore ${displayName}: ${String(error)}`,
       );
       return false;
     }

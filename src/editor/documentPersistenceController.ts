@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { LspStatus } from "../compiler/lsp";
 import { fileExtension, isBinaryImagePath, isTypstDocumentPath } from "../platform/fileTypes";
-import { filePathKey } from "../platform/paths";
+import { filePathKey, isUntitledDocumentPath } from "../platform/paths";
 import type { PreviewRenderMode } from "../settings";
 import type { EditorTab } from "./editorTab";
 
@@ -32,6 +32,8 @@ type DocumentPersistenceDependencies = {
   logMemoryDiagnostics: (reason: string) => Promise<void>;
   clearExternalConflict: (path: string) => void;
   autoSaveAllowed: () => boolean;
+  activeTab: () => EditorTab | null;
+  saveUntitledDocumentAs: () => Promise<void>;
   recoveryRevision: (tab: EditorTab) => number;
   recoverySaved: (tab: EditorTab, revision: number) => Promise<void> | void;
   renderEditorTabs: () => void;
@@ -57,6 +59,10 @@ export class DocumentPersistenceController {
       if (intent === "manual" && inProgressIntent === "automatic") {
         await this.saveActiveFile("manual");
       }
+      return;
+    }
+    if (this.deps.activeTab()?.untitled) {
+      await this.deps.saveUntitledDocumentAs();
       return;
     }
     this.deps.flushEditorContentMutation();
@@ -87,6 +93,10 @@ export class DocumentPersistenceController {
   }
 
   async saveActiveFileAs(): Promise<void> {
+    if (this.deps.activeTab()?.untitled) {
+      await this.deps.saveUntitledDocumentAs();
+      return;
+    }
     const activeFilePath = this.deps.activeFilePath();
     if (!activeFilePath || !this.canPersistPath(activeFilePath)) return;
 
@@ -130,6 +140,7 @@ export class DocumentPersistenceController {
     const dirtyTabs = this.deps.openTabs().filter(tab =>
       tab.contentLoaded
       && tab.isDirty
+      && !tab.untitled
       && !tab.recoveredUnsaved
       && this.canPersistPath(tab.path)
     );
@@ -269,7 +280,8 @@ export class DocumentPersistenceController {
   }
 
   private canPersistPath(path: string): boolean {
-    return this.deps.isInternallySupportedPath(path)
+    return !isUntitledDocumentPath(path)
+      && this.deps.isInternallySupportedPath(path)
       && !isBinaryImagePath(path)
       && fileExtension(path) !== "pdf";
   }

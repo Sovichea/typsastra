@@ -5,6 +5,8 @@ import { fileNameFromPath, filePathKey, remapFilePath } from "../platform/paths"
 import {
   canRecoverTab,
   recoveryDocumentId,
+  recoveryDocumentIdForTab,
+  recoveryTabName,
   sha256Hex,
 } from "./recoveryIdentity";
 
@@ -16,6 +18,8 @@ export type RecoveryRecord = {
   documentId: string;
   workspaceRoot: string | null;
   path: string | null;
+  /** Display title for pathless untitled buffers. */
+  title: string | null;
   text: string;
   savedTextHash: string;
   revision: number;
@@ -31,6 +35,7 @@ export type RecoveryRecordSummary = {
   documentId: string;
   workspaceRoot: string | null;
   path: string | null;
+  title: string | null;
   revision: number;
   timestampMs: number;
   bytes: number;
@@ -169,7 +174,7 @@ export class RecoveryController {
       await this.deleteRecord(documentId, expectedRevision);
     } catch (error) {
       this.deps.logWarning(
-        `Could not clear the recovery snapshot for ${fileNameFromPath(tab.path)} after saving: ${String(error)}`,
+        `Could not clear the recovery snapshot for ${recoveryTabName(tab)} after saving: ${String(error)}`,
         true,
       );
     }
@@ -192,7 +197,7 @@ export class RecoveryController {
       }
     } catch (error) {
       this.deps.logWarning(
-        `Could not discard the recovery snapshot for ${fileNameFromPath(tab.path)}: ${String(error)}`,
+        `Could not discard the recovery snapshot for ${recoveryTabName(tab)}: ${String(error)}`,
         true,
       );
     }
@@ -260,7 +265,7 @@ export class RecoveryController {
   }
 
   private documentIdFor(tab: EditorTab): string {
-    return recoveryDocumentId(this.deps.workspaceRootPath(), tab.path);
+    return recoveryDocumentIdForTab(this.deps.workspaceRootPath(), tab);
   }
 
   private stateFor(documentId: string, existingRevision = 0): DocumentState {
@@ -326,7 +331,8 @@ export class RecoveryController {
       version: 1,
       documentId,
       workspaceRoot: this.deps.workspaceRootPath(),
-      path: tab.path,
+      path: tab.untitled ? null : tab.path,
+      title: tab.untitled ? (tab.title ?? "Untitled") : null,
       text: useLiveEditor ? editor!.state.doc.toString() : tab.content,
       revision,
       timestampMs: Date.now(),
@@ -353,7 +359,7 @@ export class RecoveryController {
       ? `the ${Math.round(result.totalBytes / (1024 * 1024))} MiB recovery limit is full`
       : reason;
     this.deps.logWarning(
-      `Recovery snapshot for ${fileNameFromPath(tab.path)} could not be written: ${detail}. The previous valid snapshot was kept and will be offered when its project is opened.`,
+      `Recovery snapshot for ${recoveryTabName(tab)} could not be written: ${detail}. The previous valid snapshot was kept and will be offered when its project is opened.`,
       true,
     );
   }

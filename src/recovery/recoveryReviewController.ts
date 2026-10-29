@@ -5,19 +5,20 @@ import type {
   RecoveryRecord,
   RecoveryRecordSummary,
 } from "./recoveryController";
-import { sha256Hex } from "./recoveryIdentity";
+import { sha256Hex, untitledIdFromRecoveryDocumentId } from "./recoveryIdentity";
 import {
   createUnifiedTextDiff,
   splitDiffHunk,
   type TextDiffSide,
 } from "./textDiff";
 
-type RecoveryReviewStatus = "unchanged" | "changed" | "missing" | "error";
+type RecoveryReviewStatus = "unchanged" | "changed" | "missing" | "untitled" | "error";
 
 type RecoveryReviewRow = {
   documentId: string;
   revision: number;
   path: string | null;
+  untitled: boolean;
   title: string;
   timestampMs: number;
   bytes: number;
@@ -130,7 +131,9 @@ export class RecoveryReviewController {
           documentId: summary.documentId,
           revision: summary.revision,
           path: summary.path,
-          title: summary.path ? fileNameFromPath(summary.path) : "Recovery record",
+          untitled: untitledIdFromRecoveryDocumentId(summary.documentId) !== null,
+          title: summary.title?.trim()
+            || (summary.path ? fileNameFromPath(summary.path) : "Recovery record"),
           timestampMs: summary.timestampMs,
           bytes: summary.bytes,
           status: "error",
@@ -143,7 +146,17 @@ export class RecoveryReviewController {
       if (!record) continue;
       const path = record.path;
       if (!path) {
-        rows.push(this.rowFrom(record, summary.bytes, "missing", "This snapshot has no file path.", null));
+        if (untitledIdFromRecoveryDocumentId(record.documentId)) {
+          rows.push(this.rowFrom(
+            record,
+            summary.bytes,
+            "untitled",
+            "Untitled buffer with unsaved text. Restore it as an unsaved tab and use Save As.",
+            null,
+          ));
+        } else {
+          rows.push(this.rowFrom(record, summary.bytes, "missing", "This snapshot has no file path.", null));
+        }
         continue;
       }
       if (!await this.deps.pathExists(path).catch(() => false)) {
@@ -207,11 +220,14 @@ export class RecoveryReviewController {
     message: string,
     diskText: string | null,
   ): RecoveryReviewRow {
+    const untitled = untitledIdFromRecoveryDocumentId(record.documentId) !== null;
     return {
       documentId: record.documentId,
       revision: record.revision,
       path: record.path,
-      title: record.path ? fileNameFromPath(record.path) : "Recovery record",
+      untitled,
+      title: record.title?.trim()
+        || (record.path ? fileNameFromPath(record.path) : untitled ? "Untitled" : "Recovery record"),
       timestampMs: record.timestampMs,
       bytes,
       status,
@@ -246,11 +262,12 @@ export class RecoveryReviewController {
     badge.textContent = row.status === "unchanged" ? "unchanged on disk"
       : row.status === "changed" ? "disk changed"
       : row.status === "missing" ? "file missing"
+      : row.status === "untitled" ? "untitled buffer"
       : "needs attention";
     title.appendChild(badge);
     const meta = document.createElement("div");
     meta.className = "recovery-row-meta";
-    meta.textContent = `${row.path ?? "No path"} · ${formatTimestamp(row.timestampMs)} · ${formatBytes(row.bytes)}`;
+    meta.textContent = `${row.untitled ? "Untitled buffer" : row.path ?? "No path"} · ${formatTimestamp(row.timestampMs)} · ${formatBytes(row.bytes)}`;
     const status = document.createElement("div");
     status.className = "recovery-row-status";
     status.textContent = row.message;
@@ -263,7 +280,7 @@ export class RecoveryReviewController {
       if (row.status === "changed") void this.openReview(row);
       else void this.restoreRow(row);
     }, "settings-primary");
-    restore.disabled = row.record === null || !row.path;
+    restore.disabled = row.record === null || (!row.path && !row.untitled);
     const discard = this.actionButton("Discard", () => void this.discardRow(row), "settings-danger-button");
     actions.append(review, restore, discard);
     element.append(main, actions);
@@ -312,7 +329,7 @@ export class RecoveryReviewController {
     this.empty.classList.add("hidden");
     this.review.classList.remove("hidden");
     const restore = document.getElementById("recovery-review-restore") as HTMLButtonElement | null;
-    if (restore) restore.disabled = !row.path;
+    if (restore) restore.disabled = !row.path && !row.untitled;
     document.getElementById("recovery-review-back")?.focus();
   }
 
@@ -320,6 +337,12 @@ export class RecoveryReviewController {
     this.diff.replaceChildren();
     this.diffNote.classList.add("hidden");
     this.diffNote.textContent = "";
+    if (row.untitled) {
+      this.setDiffNote(
+        "Untitled buffers have no disk revision. Restore the complete unsaved text, then use Save As to choose a file path.",
+      );
+      return;
+    }
     if (row.diskText === null) {
       this.setDiffNote(
         "The file no longer exists, so there is no disk revision to compare. Restore to recover the full unsaved text.",
