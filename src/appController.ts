@@ -428,6 +428,7 @@ export class TypsastraWorkspaceController {
     readText: path => invoke<string>("read_workspace_file", { path }),
     readImage: path => invoke<string>("read_workspace_file_as_base64", { path }),
     closeTab: path => this.closeEditorTab(path, true),
+    discardRecoverySnapshot: tab => this.recoveryController.discardTab(tab),
     loadPdfPath: path => { void this.loadPdfPath(path, path); },
     renderTabs: () => this.renderEditorTabs(),
     sourceChanged: tab => this.handleExternalSourceChange(tab),

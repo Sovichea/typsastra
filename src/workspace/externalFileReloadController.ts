@@ -16,6 +16,7 @@ export interface ExternalFileReloadDependencies {
   readText(path: string): Promise<string>;
   readImage(path: string): Promise<string>;
   closeTab(path: string): Promise<void>;
+  discardRecoverySnapshot(tab: EditorTab): Promise<void> | void;
   loadPdfPath(path: string): void;
   renderTabs(): void;
   sourceChanged(tab: EditorTab): void;
@@ -64,8 +65,12 @@ export class ExternalFileReloadController {
         this.deps.flushEditorContentMutation();
         if (!isCurrent()) continue;
         if (!exists) {
-          if (tab.isDirty) this.reportConflict(path, "was removed outside Typsastra");
-          else await this.deps.closeTab(path);
+          if (tab.isDirty) {
+            this.reportConflict(path, "was removed outside Typsastra");
+          } else {
+            await this.deps.discardRecoverySnapshot(tab);
+            await this.deps.closeTab(path);
+          }
           continue;
         }
         if (!tab.contentLoaded) {
@@ -101,6 +106,10 @@ export class ExternalFileReloadController {
           if (!reload || !isCurrent()) continue;
         }
         this.clearConflict(path);
+        // Adopting the disk revision explicitly discards local edits, either
+        // because the tab was clean or because the user chose the external
+        // version in the conflict prompt. Its crash snapshot is now stale.
+        await this.deps.discardRecoverySnapshot(tab);
         tab.content = contents;
         tab.contentLoaded = true;
         tab.externalContent = undefined;
