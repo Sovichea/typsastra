@@ -88,17 +88,14 @@ export class DocumentLanguageController {
         || !activeTab
         || filePathKey(activeTab.path) !== filePathKey(path)
       ) return;
-      const mainPath = this.mainOutlinePath(path);
-      let outlinePath = path;
+      const target = this.outlineTarget(path);
+      let outlinePath = target.path;
       let source = activeTab.content;
-      if (mainPath) {
-        outlinePath = mainPath;
-        if (filePathKey(mainPath) !== filePathKey(path)) {
-          const mainSource = await this.readWorkspaceFile(mainPath);
-          if (generation !== this.outlineUpdateGeneration) return;
-          if (mainSource === null) outlinePath = path;
-          else source = mainSource;
-        }
+      if (filePathKey(target.path) !== filePathKey(path)) {
+        const targetSource = await this.readWorkspaceFile(target.path);
+        if (generation !== this.outlineUpdateGeneration) return;
+        if (targetSource === null) outlinePath = path;
+        else source = targetSource;
       }
       await this.deps.outline().update(
         outlinePath,
@@ -106,6 +103,7 @@ export class DocumentLanguageController {
         this.deps.workspaceRootPath() || "",
         candidatePath => this.readWorkspaceFile(candidatePath),
         () => generation === this.outlineUpdateGeneration,
+        target.followIncludes,
       );
       if (generation !== this.outlineUpdateGeneration) return;
       this.deps.outline().setCursorPosition(
@@ -117,22 +115,21 @@ export class DocumentLanguageController {
 
   updateOutlineNow(path: string, contents: string): void {
     void (async () => {
-      const mainPath = this.mainOutlinePath(path);
-      let outlinePath = path;
+      const target = this.outlineTarget(path);
+      let outlinePath = target.path;
       let source = contents;
-      if (mainPath) {
-        outlinePath = mainPath;
-        if (filePathKey(mainPath) !== filePathKey(path)) {
-          const mainSource = await this.readWorkspaceFile(mainPath);
-          if (mainSource === null) outlinePath = path;
-          else source = mainSource;
-        }
+      if (filePathKey(target.path) !== filePathKey(path)) {
+        const targetSource = await this.readWorkspaceFile(target.path);
+        if (targetSource === null) outlinePath = path;
+        else source = targetSource;
       }
       await this.deps.outline().update(
         outlinePath,
         source,
         this.deps.workspaceRootPath() || "",
         candidatePath => this.readWorkspaceFile(candidatePath),
+        () => true,
+        target.followIncludes,
       );
       this.deps.outline().setCursorPosition(
         this.deps.editorCursorPosition(),
@@ -141,18 +138,26 @@ export class DocumentLanguageController {
     })();
   }
 
-  private mainOutlinePath(path: string): string | null {
+  private outlineTarget(path: string): { path: string; followIncludes: boolean } {
     const mainPath = this.deps.pinnedMainFilePath();
     const workspaceRoot = this.deps.workspaceRootPath();
+    const isWorkspaceTypst = !!workspaceRoot
+      && path.toLowerCase().endsWith(".typ")
+      && relativeFilePath(workspaceRoot, path) !== null;
+    const hasWorkspaceMain = !!mainPath
+      && !!workspaceRoot
+      && mainPath.toLowerCase().endsWith(".typ")
+      && relativeFilePath(workspaceRoot, mainPath) !== null;
+    if (!isWorkspaceTypst || !hasWorkspaceMain) {
+      return { path, followIncludes: true };
+    }
     if (
-      !mainPath
-      || !workspaceRoot
-      || !path.toLowerCase().endsWith(".typ")
-      || !mainPath.toLowerCase().endsWith(".typ")
-      || relativeFilePath(workspaceRoot, path) === null
-      || relativeFilePath(workspaceRoot, mainPath) === null
-    ) return null;
-    return mainPath;
+      filePathKey(path) === filePathKey(mainPath!)
+      || this.deps.outline().hasProjectFile(path)
+    ) {
+      return { path: mainPath!, followIncludes: true };
+    }
+    return { path, followIncludes: false };
   }
 
   clearOutline(): void {

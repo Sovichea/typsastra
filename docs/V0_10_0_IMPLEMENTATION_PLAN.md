@@ -99,13 +99,15 @@ Implemented:
 - Unsaved open buffers take precedence for the main document and includes.
   Source edits, external changes, and main-file changes schedule a rebuild.
 - Late parse results are discarded when a newer outline update supersedes them.
+- Included files keep the main-document outline. Other project Typst documents
+  use a file-only outline for editor navigation; their own includes are not
+  expanded until the file is pinned as the main document.
 - Standalone documents keep the active-file outline workflow. Standalone PDF
   bookmark navigation is unchanged.
 
 Deferred:
 
 - The File/Project scope selector and per-workspace remembered scope.
-- A separate File-only outline mode for project Typst documents.
 
 ### V010-B.2 — Include handling and navigation
 
@@ -231,9 +233,10 @@ Deferred:
 - Verify all-file revision preflight prevents partial application; test mixed
   open/closed files, conflicts, per-file undo, guarded batch undo, auto-save
   coordination, and one scheduled compilation per batch.
-- Verify main-rooted outline consistency across main/include tabs, active-heading
-  sync, exact PDF heading scroll, repeated heading clicks, unsaved buffers, main
-  changes, and rapid tab switching.
+- Verify main-rooted outline consistency across main/include tabs, file-only
+  outlines for non-main documents, active-heading sync, exact PDF heading scroll,
+  repeated heading clicks, unsaved buffers, main changes, and rapid tab
+  switching.
 - Deferred outline gates: File/Project scope, repeated include occurrences,
   dynamic-include notices, file-based heading identities, and a separate Reveal
   in Preview command.

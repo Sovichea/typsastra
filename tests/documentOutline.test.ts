@@ -52,6 +52,22 @@ describe("document outline", () => {
     expect(outline[0]?.children[0]?.line).toBe(1);
   });
 
+  test("can list only the active file's headings", async () => {
+    const files = new Map<string, string>([
+      ["C:/workspace/chapters/one.typ", "== Chapter One\nText\n"],
+    ]);
+    const outline = await parseDocumentOutline(
+      "C:/workspace/main.typ",
+      "= Main\n#include \"chapters/one.typ\"\n= Conclusion\n",
+      "C:/workspace",
+      async path => files.get(path) ?? null,
+      new Set(),
+      false,
+    );
+
+    expect(outline.map(heading => heading.title)).toEqual(["Main", "Conclusion"]);
+  });
+
   test("keeps duplicate headings independently addressable", async () => {
     const outline = await parse("= Same\n= Same\n");
 
@@ -67,17 +83,20 @@ describe("document outline", () => {
     const navigationSource = await Bun.file(
       new URL("../src/navigation/outlineNavigationController.ts", import.meta.url),
     ).text();
-
-    expect(language).toContain("private mainOutlinePath(path: string): string | null");
-    expect(language).toContain("const mainPath = this.mainOutlinePath(path)");
-    expect(language).toContain("const mainSource = await this.readWorkspaceFile(mainPath)");
-    expect(language).toContain("outlinePath = mainPath");
-    expect(language).toContain("relativeFilePath(workspaceRoot, path) === null");
-    expect(language).toContain("this.deps.outline().setCursorPosition(");
-
     const outlineSource = await Bun.file(
       new URL("../src/outline/documentOutline.ts", import.meta.url),
     ).text();
+
+    expect(language).toContain("private outlineTarget(path: string): { path: string; followIncludes: boolean }");
+    expect(language).toContain("const target = this.outlineTarget(path)");
+    expect(language).toContain("const targetSource = await this.readWorkspaceFile(target.path)");
+    expect(language).toContain("this.deps.outline().hasProjectFile(path)");
+    expect(language).toContain("followIncludes: false");
+    expect(language).toContain("target.followIncludes");
+    expect(language).toContain("this.deps.outline().setCursorPosition(");
+    expect(outlineSource).toContain("private projectFiles = new Set<string>()");
+    expect(outlineSource).toContain("public hasProjectFile(path: string): boolean");
+    expect(outlineSource).toContain("this.projectFiles = new Set([...visited].map(filePathKey))");
     expect(outlineSource).toContain("private previewOutlineItems: readonly OutlinePreviewItem[] = []");
     expect(outlineSource).toContain("matchOutlinePreviewPositions(this.headings, this.previewOutlineItems)");
     expect(outlineSource).toContain("const activePathKey = activePath ? filePathKey(activePath) : null");
