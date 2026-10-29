@@ -496,7 +496,10 @@ fn validate_workspace_dependency_boundary(
     Ok(())
 }
 
-fn collect_reachable_typst_files(project_root: &Path, entry_file: &Path) -> HashSet<PathBuf> {
+pub(crate) fn collect_reachable_typst_files(
+    project_root: &Path,
+    entry_file: &Path,
+) -> HashSet<PathBuf> {
     let project_root = canonical_or_original(project_root);
     let entry_file = canonical_or_original(entry_file);
     let mut reachable = HashSet::new();
@@ -531,7 +534,7 @@ fn collect_reachable_typst_files(project_root: &Path, entry_file: &Path) -> Hash
     reachable
 }
 
-fn collect_preview_dependency_files(
+pub(crate) fn collect_preview_dependency_files(
     project_root: &Path,
     reachable_sources: &[PathBuf],
 ) -> Vec<PathBuf> {

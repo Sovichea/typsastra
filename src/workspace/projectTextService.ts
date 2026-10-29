@@ -126,6 +126,10 @@ export interface ProjectTextNativePort {
     workspaceRootPath: string;
     path: string;
   }): Promise<NativeProjectTextRevisionInfo>;
+  relatedFiles(args: {
+    workspaceRootPath: string;
+    mainFilePath: string;
+  }): Promise<string[]>;
   cancel(requestId: string): Promise<void>;
 }
 
@@ -140,6 +144,7 @@ const tauriProjectTextNative: ProjectTextNativePort = {
   inventory: args => invoke<NativeProjectTextInventory>("project_text_inventory", args),
   read: args => invoke<NativeProjectTextReadResult>("project_text_read", args),
   revision: args => invoke<NativeProjectTextRevisionInfo>("project_text_revision", args),
+  relatedFiles: args => invoke<string[]>("project_search_related_files", args),
   cancel: requestId => invoke("cancel_project_text_request", { requestId }).then(() => {}),
 };
 
@@ -289,6 +294,12 @@ export class ProjectTextService {
       snapshots: resolved.flatMap(outcome => outcome.kind === "snapshot" ? [outcome.snapshot] : []),
       skipped: resolved.flatMap(outcome => outcome.kind === "skipped" ? [outcome.skipped] : []),
     };
+  }
+
+  public async relatedFiles(mainFilePath: string): Promise<string[]> {
+    const rootPath = this.deps.workspaceRootPath();
+    if (!rootPath) return [];
+    return this.native.relatedFiles({ workspaceRootPath: rootPath, mainFilePath });
   }
 
   public async currentRevision(path: string): Promise<string | null> {

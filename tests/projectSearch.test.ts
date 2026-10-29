@@ -27,6 +27,7 @@ function options(overrides: Partial<ProjectSearchOptions> = {}): ProjectSearchOp
     wholeWord: false,
     matchDiacritics: true,
     includeIgnored: false,
+    mainDocumentOnly: true,
     includeGlobs: [],
     excludeGlobs: [],
     ...overrides,

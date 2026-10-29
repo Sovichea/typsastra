@@ -270,6 +270,7 @@ export class TypsastraWorkspaceController {
   });
   private readonly projectSearchController = new ProjectSearchController({
     workspaceRootPath: () => this.workspaceRootPath,
+    pinnedMainFilePath: () => this.pinnedMainFilePath,
     projectText: () => this.projectTextService,
     openResult: target => this.navigateToProjectSearchResult(target),
   });

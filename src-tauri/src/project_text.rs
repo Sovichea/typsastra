@@ -151,6 +151,35 @@ pub async fn project_text_revision(
         .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub async fn project_search_related_files(
+    workspace_root_path: String,
+    main_file_path: String,
+) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        project_search_related_files_blocking(&workspace_root_path, &main_file_path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+pub fn project_search_related_files_blocking(
+    workspace_root_path: &str,
+    main_file_path: &str,
+) -> Result<Vec<String>, String> {
+    let (root, main_file) = canonical_workspace_file(workspace_root_path, main_file_path)?;
+    let reachable = crate::render_prepare::mirror::collect_reachable_typst_files(&root, &main_file)
+        .into_iter()
+        .collect::<Vec<_>>();
+    let mut files =
+        crate::render_prepare::mirror::collect_preview_dependency_files(&root, &reachable)
+            .into_iter()
+            .map(|path| path.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+    files.sort();
+    Ok(files)
+}
+
 fn canonical_root(workspace_root_path: &str) -> Result<PathBuf, String> {
     let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Failed to resolve the workspace: {error}"))?;
@@ -652,6 +681,44 @@ mod tests {
         assert_eq!(result.line_ending, ProjectTextLineEnding::Crlf);
         assert_eq!(result.revision.as_deref().map(str::len), Some(64));
         assert!(result.skip_reason.is_none());
+    }
+
+    #[test]
+    fn related_files_follow_the_main_document_include_graph() {
+        let workspace = tempdir().unwrap();
+        let root = workspace.path();
+        fs::create_dir_all(root.join("chapters")).unwrap();
+        fs::write(
+            root.join("main.typ"),
+            "#include \"chapters/one.typ\"\n#bibliography(\"refs.bib\")\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("chapters/one.typ"),
+            "#include \"../shared.typ\"\n",
+        )
+        .unwrap();
+        fs::write(root.join("shared.typ"), "= Shared\n").unwrap();
+        fs::write(root.join("refs.bib"), "@book{example}\n").unwrap();
+        fs::write(root.join("other.typ"), "= Other\n").unwrap();
+
+        let files = project_search_related_files_blocking(
+            root.to_str().unwrap(),
+            root.join("main.typ").to_str().unwrap(),
+        )
+        .unwrap();
+        let normalized = files
+            .iter()
+            .map(|path| path.replace('\\', "/"))
+            .collect::<Vec<_>>();
+        assert_eq!(normalized.len(), 4);
+        assert!(normalized.iter().any(|path| path.ends_with("/main.typ")));
+        assert!(normalized
+            .iter()
+            .any(|path| path.ends_with("/chapters/one.typ")));
+        assert!(normalized.iter().any(|path| path.ends_with("/shared.typ")));
+        assert!(normalized.iter().any(|path| path.ends_with("/refs.bib")));
+        assert!(!normalized.iter().any(|path| path.ends_with("/other.typ")));
     }
 
     #[test]

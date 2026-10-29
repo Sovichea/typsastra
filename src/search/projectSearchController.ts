@@ -31,6 +31,7 @@ export type ProjectSearchNavigationTarget = {
 
 export interface ProjectSearchControllerDependencies {
   workspaceRootPath(): string | null;
+  pinnedMainFilePath(): string | null;
   projectText(): ProjectTextService;
   openResult(target: ProjectSearchNavigationTarget): Promise<void> | void;
 }
@@ -41,6 +42,7 @@ type SearchState = {
   truncated: boolean;
   incomplete: boolean;
   error: string | null;
+  notice: string | null;
 };
 
 const DEFAULT_OPTIONS: ProjectSearchOptions = {
@@ -50,6 +52,7 @@ const DEFAULT_OPTIONS: ProjectSearchOptions = {
   wholeWord: false,
   matchDiacritics: true,
   includeIgnored: false,
+  mainDocumentOnly: true,
   includeGlobs: [],
   excludeGlobs: [],
 };
@@ -72,6 +75,7 @@ export class ProjectSearchController {
     truncated: false,
     incomplete: false,
     error: null,
+    notice: null,
   };
 
   constructor(private readonly deps: ProjectSearchControllerDependencies) {}
@@ -96,6 +100,7 @@ export class ProjectSearchController {
       truncated: false,
       incomplete: false,
       error: null,
+      notice: null,
     };
     const input = this.queryInput();
     if (input) input.value = "";
@@ -129,6 +134,7 @@ export class ProjectSearchController {
       this.wholeWordCheckbox(),
       this.diacriticsCheckbox(),
       this.includeIgnoredCheckbox(),
+      this.mainDocumentOnlyCheckbox(),
     ]) {
       element?.addEventListener("change", () => this.scheduleSearch(0));
     }
@@ -146,6 +152,7 @@ export class ProjectSearchController {
       this.state.error = null;
       this.state.truncated = false;
       this.state.incomplete = false;
+      this.state.notice = null;
       this.scheduleRender();
       field?.focus();
     });
@@ -170,6 +177,7 @@ export class ProjectSearchController {
       truncated: false,
       incomplete: false,
       error: null,
+      notice: null,
     };
     this.fileResults.clear();
     this.skippedFiles = [];
@@ -194,6 +202,7 @@ export class ProjectSearchController {
       truncated: false,
       incomplete: false,
       error: null,
+      notice: null,
     };
     if (options.mode === "regex") {
       try {
@@ -216,11 +225,35 @@ export class ProjectSearchController {
     try {
       const inventory = await this.deps.projectText().inventory({ includeIgnored: options.includeIgnored });
       if (generation !== this.generation || this.deps.workspaceRootPath() !== rootPath) return;
+      let relatedPaths: Set<string> | null = null;
+      if (options.mainDocumentOnly) {
+        const mainPath = this.deps.pinnedMainFilePath();
+        if (!mainPath) {
+          this.state.notice = "No main document is pinned; searching the whole project.";
+        } else {
+          try {
+            const related = await this.deps.projectText().relatedFiles(mainPath);
+            if (generation !== this.generation || this.deps.workspaceRootPath() !== rootPath) return;
+            relatedPaths = new Set(related.map(filePathKey));
+            if (relatedPaths.size === 0) {
+              this.state.notice = "The pinned main document has no reachable source files.";
+              this.finishSearch(false);
+              return;
+            }
+          } catch (error) {
+            if (generation !== this.generation) return;
+            this.state.notice = `Could not resolve the pinned main document; searching the whole project. ${String(error)}`;
+          }
+        }
+      }
+      const allowed = (path: string) => !relatedPaths || relatedPaths.has(filePathKey(path));
       const files = inventory.files.filter(file =>
-        projectSearchFileMatchesFilters(file.relativePath, options.includeGlobs, options.excludeGlobs)
+        allowed(file.path)
+        && projectSearchFileMatchesFilters(file.relativePath, options.includeGlobs, options.excludeGlobs)
       );
       this.skippedFiles = inventory.skipped.filter(file =>
-        projectSearchFileMatchesFilters(file.relativePath, options.includeGlobs, options.excludeGlobs)
+        allowed(file.path)
+        && projectSearchFileMatchesFilters(file.relativePath, options.includeGlobs, options.excludeGlobs)
       );
       if (files.length === 0) {
         this.finishSearch(false);
@@ -383,6 +416,7 @@ export class ProjectSearchController {
     const pathMatches = files.filter(file => file.pathMatch);
     const contentFiles = files.filter(file => file.contentMatchCount > 0);
     const nodes: HTMLElement[] = [];
+    if (this.state.notice) nodes.push(this.notice(this.state.notice, "info"));
     if (this.state.error) nodes.push(this.notice(this.state.error, "error"));
     if (this.state.truncated) {
       nodes.push(this.notice(
@@ -598,6 +632,7 @@ export class ProjectSearchController {
       wholeWord: this.wholeWordCheckbox()?.checked ?? false,
       matchDiacritics: this.diacriticsCheckbox()?.checked ?? true,
       includeIgnored: this.includeIgnoredCheckbox()?.checked ?? false,
+      mainDocumentOnly: this.mainDocumentOnlyCheckbox()?.checked ?? true,
       includeGlobs: parseProjectSearchGlobs(this.includeGlobsInput()?.value ?? ""),
       excludeGlobs: parseProjectSearchGlobs(this.excludeGlobsInput()?.value ?? ""),
     };
@@ -629,6 +664,8 @@ export class ProjectSearchController {
     if (diacritics) diacritics.checked = true;
     const ignored = this.includeIgnoredCheckbox();
     if (ignored) ignored.checked = false;
+    const mainOnly = this.mainDocumentOnlyCheckbox();
+    if (mainOnly) mainOnly.checked = true;
     const include = this.includeGlobsInput();
     if (include) include.value = "";
     const exclude = this.excludeGlobsInput();
@@ -658,6 +695,10 @@ export class ProjectSearchController {
 
   private includeIgnoredCheckbox(): HTMLInputElement | null {
     return document.getElementById("project-search-include-ignored") as HTMLInputElement | null;
+  }
+
+  private mainDocumentOnlyCheckbox(): HTMLInputElement | null {
+    return document.getElementById("project-search-main-only") as HTMLInputElement | null;
   }
 
   private includeGlobsInput(): HTMLInputElement | null {

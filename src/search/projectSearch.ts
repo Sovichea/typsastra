@@ -13,6 +13,7 @@ export type ProjectSearchOptions = {
   wholeWord: boolean;
   matchDiacritics: boolean;
   includeIgnored: boolean;
+  mainDocumentOnly: boolean;
   includeGlobs: string[];
   excludeGlobs: string[];
 };

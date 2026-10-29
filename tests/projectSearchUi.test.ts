@@ -12,6 +12,7 @@ describe("project search sidebar", () => {
     expect(html).toContain('id="project-search-sidebar-content"');
     expect(html).toContain('id="project-search-input"');
     expect(html).toContain('id="project-search-mode"');
+    expect(html).toContain('id="project-search-main-only" type="checkbox" checked');
     expect(html).toContain('id="project-search-results"');
     expect(html).toContain('id="action-search-project"');
     expect(html).toContain('id="action-replace-project"');
@@ -39,6 +40,8 @@ describe("project search sidebar", () => {
     expect(controller).toContain("PROJECT_SEARCH_REGEX_TIMEOUT_MS");
     expect(controller).toContain("startRegexWatchdog");
     expect(controller).toContain("textRevisionToken");
+    expect(controller).toContain("mainDocumentOnly: this.mainDocumentOnlyCheckbox()?.checked ?? true");
+    expect(controller).toContain("relatedFiles(mainPath)");
     expect(controller).toContain("for (const range of match.ranges)");
     expect(controller).toContain("anchor.from - 24");
     expect(controller).toContain("anchor.to + 36");

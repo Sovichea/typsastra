@@ -39,7 +39,8 @@ use pdfium_preview::{
     PdfiumPreviewState,
 };
 use project_text::{
-    cancel_project_text_request, project_text_inventory, project_text_read, project_text_revision,
+    cancel_project_text_request, project_search_related_files, project_text_inventory,
+    project_text_read, project_text_revision,
 };
 use render_prepare::{
     cancel_draft_thumbnail_generation, cancel_render_preparation, get_draft_thumbnail_status,
@@ -8336,6 +8337,7 @@ pub fn run() {
             project_text_inventory,
             project_text_read,
             project_text_revision,
+            project_search_related_files,
             cancel_project_text_request,
             is_probably_plain_text_file,
             read_binary_file,

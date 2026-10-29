@@ -21,6 +21,13 @@ content; the editor and PDF preview stay visible.
 
 ## Filters
 
+**Main document only** is enabled by default. It limits results to the pinned
+main document, the `.typ` files reachable through its `#include` and `#import`
+graph, and local text files it references, such as bibliography files. Clear the
+option to search every eligible file in the workspace. If no main document is
+pinned, Typsastra searches the whole project and explains that fallback in the
+result status.
+
 Use **Filters** to add comma- or newline-separated include and exclude globs:
 
 ```text

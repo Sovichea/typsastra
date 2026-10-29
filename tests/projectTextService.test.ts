@@ -104,6 +104,7 @@ describe("project text service", () => {
         skipReason: null,
         message: null,
       }),
+      relatedFiles: async () => [],
       cancel: async () => {},
     });
 
@@ -135,6 +136,7 @@ describe("project text service", () => {
         skipReason: null,
         message: null,
       }),
+      relatedFiles: async () => [],
       cancel: async () => {},
     };
     const controller = service([], native);
@@ -159,6 +161,7 @@ describe("project text service", () => {
         skipReason: null,
         message: null,
       }),
+      relatedFiles: async () => [],
       cancel: async () => {},
     });
     const result = await controller.readFiles([
@@ -186,6 +189,7 @@ describe("project text service", () => {
         skipReason: null,
         message: null,
       }),
+      relatedFiles: async () => [],
       cancel: async () => {},
     }, marked);
 
@@ -230,6 +234,7 @@ describe("project text service", () => {
         skipReason: null,
         message: null,
       }),
+      relatedFiles: async () => [],
       cancel: async () => {},
     });
 
@@ -251,6 +256,7 @@ describe("project text service", () => {
         skipReason: null,
         message: null,
       }),
+      relatedFiles: async () => [],
       cancel: async () => {},
     });
 
@@ -259,6 +265,31 @@ describe("project text service", () => {
     if (outcome.kind !== "snapshot") return;
     expect(await controller.isCurrent(outcome.snapshot)).toBe(true);
     expect(await controller.currentRevision(mainPath)).toBe("disk-revision");
+  });
+
+  test("delegates main-document related files to the native port", async () => {
+    let request: { workspaceRootPath: string; mainFilePath: string } | null = null;
+    const controller = service([], {
+      inventory: async args => nativeInventory(args),
+      read: async args => nativeRead(args.path),
+      revision: async args => ({
+        ...file(args.path, "main.typ"),
+        revision: "disk-revision",
+        skipReason: null,
+        message: null,
+      }),
+      relatedFiles: async args => {
+        request = args;
+        return [mainPath, String.raw`C:\project\chapter.typ`];
+      },
+      cancel: async () => {},
+    });
+
+    expect(await controller.relatedFiles(mainPath)).toEqual([
+      mainPath,
+      String.raw`C:\project\chapter.typ`,
+    ]);
+    expect(request).toEqual({ workspaceRootPath: root, mainFilePath: mainPath });
   });
 
   test("exposes stable text revision tokens", () => {
