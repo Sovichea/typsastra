@@ -209,6 +209,7 @@ describe("WorkspaceLifecycleController behavior", () => {
       saveWorkspaceState: async () => { calls.push("save-workspace"); },
       stopTinymistSession: async () => { calls.push("stop-lsp"); },
       sidebarController: { activeTool: "explorer", restore: () => {}, reset: () => {} },
+      projectSearchController: { reset: () => {} },
       imageToolsController: { setWorkspace: async () => {}, show: () => {} },
       tableToolController: { setWorkspace: () => {}, show: () => {} },
       settingsController: {

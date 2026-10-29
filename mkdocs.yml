@@ -76,6 +76,7 @@ nav:
       - Writing and editing:
           - Editor and PDF preview: tutorials/EDITOR_AND_PREVIEW.md
           - Editor productivity: tutorials/EDITOR_PRODUCTIVITY.md
+          - Search a project: tutorials/PROJECT_SEARCH.md
           - Document typography: tutorials/DOCUMENT_TYPOGRAPHY.md
           - Markdown live preview: tutorials/MARKDOWN_PREVIEW.md
       - Preview and PDFs:

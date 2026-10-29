@@ -163,6 +163,10 @@ import { EditorFileGuardController } from "./editor/editorFileGuardController";
 import { EditorFileContentController } from "./editor/editorFileContentController";
 import { WorkspaceTextController } from "./workspace/workspaceTextController";
 import { ProjectTextService } from "./workspace/projectTextService";
+import {
+  ProjectSearchController,
+  type ProjectSearchNavigationTarget,
+} from "./search/projectSearchController";
 import { DocumentTypographyApplicationController } from "./typography/documentTypographyApplicationController";
 import { SourceLocationController } from "./navigation/sourceLocationController";
 import { OutlineNavigationController } from "./navigation/outlineNavigationController";
@@ -263,6 +267,11 @@ export class TypsastraWorkspaceController {
     workspaceRootPath: () => this.workspaceRootPath,
     openTabs: () => this.openTabs,
     markPlainTextPath: path => this.editorFileContentController.markPlainTextPath(path),
+  });
+  private readonly projectSearchController = new ProjectSearchController({
+    workspaceRootPath: () => this.workspaceRootPath,
+    projectText: () => this.projectTextService,
+    openResult: target => this.navigateToProjectSearchResult(target),
   });
   private readonly previewSessionController = new PreviewSessionController({
     workspaceRootPath: () => this.workspaceRootPath,
@@ -1084,6 +1093,8 @@ export class TypsastraWorkspaceController {
       );
     },
     invalidatePreview: reason => this.invalidatePreviewWork(reason),
+    showSearch: () => this.projectSearchController.show(),
+    hideSearch: () => {},
     showImageTools: () => {
       // Project tools stay closed for a standalone file.
       if (this.standaloneFilePath !== null) return;
@@ -2398,6 +2409,29 @@ export class TypsastraWorkspaceController {
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),
     });
+  }
+
+  private openProjectSearch(replace = false): void {
+    if (!this.workspaceRootPath || this.standaloneFilePath !== null) return;
+    this.sidebarController.setVisible(true);
+    this.sidebarController.setTool("search");
+    if (replace) this.projectSearchController.focusQuery();
+  }
+
+  private async navigateToProjectSearchResult(target: ProjectSearchNavigationTarget): Promise<void> {
+    if (!this.workspaceRootPath || this.standaloneFilePath !== null) return;
+    if (filePathKey(target.path) !== filePathKey(this.activeFilePath ?? "")) {
+      await this.loadFile(target.path, { focusEditor: false });
+    }
+    if (!this.getActiveTab()?.contentLoaded) return;
+    const doc = this.editorInstance.state.doc;
+    const from = target.kind === "path" ? 0 : Math.max(0, Math.min(target.from, doc.length));
+    const to = target.kind === "path" ? 0 : Math.max(from, Math.min(target.to, doc.length));
+    this.editorInstance.dispatch({
+      selection: { anchor: from, head: to },
+      effects: EditorView.scrollIntoView(from, { y: "center" }),
+    });
+    this.editorInstance.focus();
   }
 
   private async navigateToImageTool(imagePath: string): Promise<void> {
@@ -4243,6 +4277,7 @@ export class TypsastraWorkspaceController {
       },
       foldCurrentFile: () => this.foldCurrentFile(),
       unfoldCurrentFile: () => this.unfoldCurrentFile(),
+      openProjectSearch: replace => this.openProjectSearch(replace),
       toggleSidebar: () => this.sidebarController.toggle(),
       setSidebarTool: tool => this.sidebarController.setTool(tool),
       restoreDefaultLayout: () => this.restoreDefaultLayout(),

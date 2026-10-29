@@ -71,6 +71,14 @@ describe("workspace state store", () => {
     });
   });
 
+  test("preserves the project search sidebar tool", () => {
+    const metadata = normalizeWorkspaceMetadata({
+      project: { projectId: "project-search" },
+      workspace: { layout: { activeSidebarTool: "search" } },
+    });
+    expect(metadata.workspace.layout.activeSidebarTool).toBe("search");
+  });
+
   test("normalizes portable script-language assignments", () => {
     const metadata = normalizeWorkspaceMetadata({
       project: {

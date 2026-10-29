@@ -28,6 +28,8 @@ const expectedWorkspaceScoped = [
   "action-export-source-zip",
   "action-restart-workspace",
   "action-close-project",
+  "action-search-project",
+  "action-replace-project",
   "action-format-document",
   "action-fold-file",
   "action-unfold-file",
@@ -75,7 +77,7 @@ describe("native application menu spec", () => {
     }
   });
 
-  test("scopes exactly the fourteen workspace-dependent menu ids", () => {
+  test("scopes exactly the sixteen workspace-dependent menu ids", () => {
     expect(workspaceScopedMenuIds(spec)).toEqual(expectedWorkspaceScoped);
   });
 

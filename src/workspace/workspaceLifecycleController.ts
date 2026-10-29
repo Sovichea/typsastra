@@ -97,9 +97,10 @@ export interface WorkspaceLifecycleServices {
   };
   sidebarController: {
     activeTool: string;
-    restore(state: { visible: boolean; activeTool: "explorer" | "images" | "tables" }): void;
+    restore(state: { visible: boolean; activeTool: "explorer" | "search" | "images" | "tables" }): void;
     reset(): void;
   };
+  projectSearchController: { reset(): void };
   workspaceController: {
     absolutePath(root: string, path: string | null): Promise<string | null>;
     loadMetadata(root: string): Promise<WorkspaceMetadata>;
@@ -719,6 +720,7 @@ export class WorkspaceLifecycleController {
 
     app.workspaceRootPath = null;
     app.renderCacheRootPath = null;
+    app.projectSearchController.reset();
     app.sidebarController.reset();
     app.restoreDocumentSidebarPane("outline");
     app.spellcheckSidebarPane.clear();

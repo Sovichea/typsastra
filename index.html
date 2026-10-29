@@ -124,12 +124,19 @@
                                     Select All <span class="hotkey" data-shortcut="Mod+A">Ctrl+A</span>
                                 </div>
                                 <div class="dropdown-separator"></div>
+                                <div class="dropdown-item" id="action-search-project">
+                                    Search Project <span class="hotkey" data-shortcut="Mod+Shift+F">Ctrl+Shift+F</span>
+                                </div>
+                                <div class="dropdown-item" id="action-replace-project">
+                                    Replace in Project <span class="hotkey" data-shortcut="Mod+Shift+H">Ctrl+Shift+H</span>
+                                </div>
+                                <div class="dropdown-separator"></div>
                                 <div
                                     class="dropdown-item"
                                     id="action-format-document"
                                 >
                                     Format Document
-                                    <span class="hotkey" data-shortcut="Mod+Shift+F">Ctrl+Shift+F</span>
+                                    <span class="hotkey" data-shortcut="Alt+Shift+F">Alt+Shift+F</span>
                                 </div>
                                 <div class="dropdown-separator"></div>
                                 <div class="dropdown-item" id="action-fold-file">
@@ -288,6 +295,9 @@
                     <button type="button" id="sidebar-explorer-button" class="sidebar-activity-button active" title="Explorer" aria-label="Show Explorer" aria-pressed="true">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h6l2 2h10v11H3z"/></svg>
                     </button>
+                    <button type="button" id="sidebar-search-button" class="sidebar-activity-button" title="Search project" aria-label="Show project search" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+                    </button>
                     <button type="button" id="sidebar-images-button" class="sidebar-activity-button" title="Images" aria-label="Show Images" aria-pressed="false">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16"/><circle cx="9" cy="10" r="2"/><path d="m21 15-5-5L5 20"/></svg>
                     </button>
@@ -360,6 +370,35 @@
                             class="sidebar-section-content spellcheck-list"
                         ></div>
                     </section>
+                    </div>
+                    <div id="project-search-sidebar-content" class="sidebar-tool-content hidden">
+                        <div class="sidebar-section-header">
+                            <span>SEARCH</span>
+                            <button type="button" id="project-search-clear" class="sidebar-section-action" title="Clear project search">Clear</button>
+                        </div>
+                        <div class="project-search-controls">
+                            <input id="project-search-input" class="sidebar-tool-search project-search-input" type="search" placeholder="Search project" aria-label="Search project" autocomplete="off" spellcheck="false" />
+                            <div class="project-search-control-row">
+                                <select id="project-search-mode" class="sidebar-tool-filter project-search-mode" aria-label="Project search mode">
+                                    <option value="literal">Literal</option>
+                                    <option value="regex">Regex</option>
+                                    <option value="fuzzy">Fuzzy</option>
+                                </select>
+                            </div>
+                            <div class="project-search-toggles" role="group" aria-label="Project search options">
+                                <label class="project-search-toggle"><input id="project-search-case" type="checkbox" /><span>Case</span></label>
+                                <label class="project-search-toggle"><input id="project-search-whole-word" type="checkbox" /><span>Whole word</span></label>
+                                <label class="project-search-toggle"><input id="project-search-diacritics" type="checkbox" checked /><span>Diacritics</span></label>
+                            </div>
+                            <details class="project-search-filters">
+                                <summary>Filters</summary>
+                                <label>Include globs <input id="project-search-include" type="text" placeholder="e.g. chapters/**, *.typ" autocomplete="off" spellcheck="false" /></label>
+                                <label>Exclude globs <input id="project-search-exclude" type="text" placeholder="e.g. build/**, *.bib" autocomplete="off" spellcheck="false" /></label>
+                                <label class="project-search-toggle"><input id="project-search-include-ignored" type="checkbox" /><span>Include ignored files</span></label>
+                            </details>
+                            <div id="project-search-status" class="project-search-status" role="status" aria-live="polite">Type to search the project.</div>
+                        </div>
+                        <div id="project-search-results" class="project-search-results"></div>
                     </div>
                     <div id="image-tools-sidebar-content" class="sidebar-tool-content hidden">
                         <div class="sidebar-section-header"><span id="image-tools-sidebar-title">IMAGES</span></div>

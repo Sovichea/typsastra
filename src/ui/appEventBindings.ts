@@ -20,7 +20,7 @@ import { nativeAppMenuOwnsShortcuts } from "../platform/nativeAppMenuSpec";
 export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 
 export type DevUiAction =
-  | { action: "sidebar-tool"; tool: "explorer" | "images" | "tables" }
+  | { action: "sidebar-tool"; tool: "explorer" | "search" | "images" | "tables" }
   | { action: "preview-recompile" }
   | { action: "preview-color-mode"; mode: PreviewColorMode }
   | { action: "preview-zoom"; direction: "in" | "out" | "fit" }
@@ -108,8 +108,9 @@ export interface AppEventActions {
   selectAllActiveSurface: () => void;
   foldCurrentFile: () => void;
   unfoldCurrentFile: () => void;
+  openProjectSearch: (replace?: boolean) => void;
   toggleSidebar: () => void;
-  setSidebarTool: (tool: "explorer" | "images" | "tables") => void;
+  setSidebarTool: (tool: "explorer" | "search" | "images" | "tables") => void;
   restoreDefaultLayout: () => void;
   toggleEditorToolbar: () => void;
   toggleLogConsole: () => void;
@@ -440,6 +441,8 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-undo")?.addEventListener("click", actions.undo);
   document.getElementById("action-redo")?.addEventListener("click", actions.redo);
   document.getElementById("action-select-all")?.addEventListener("click", actions.selectAllActiveSurface);
+  document.getElementById("action-search-project")?.addEventListener("click", () => actions.openProjectSearch(false));
+  document.getElementById("action-replace-project")?.addEventListener("click", () => actions.openProjectSearch(true));
   document.getElementById("action-format-document")?.addEventListener("click", () => void actions.formatActiveDocument());
   document.getElementById("action-fold-file")?.addEventListener("click", actions.foldCurrentFile);
   document.getElementById("action-unfold-file")?.addEventListener("click", actions.unfoldCurrentFile);
@@ -447,6 +450,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-toggle-sidebar")?.addEventListener("click", actions.toggleSidebar);
   document.getElementById("sidebar-toggle-button")?.addEventListener("click", actions.toggleSidebar);
   document.getElementById("sidebar-explorer-button")?.addEventListener("click", () => actions.setSidebarTool("explorer"));
+  document.getElementById("sidebar-search-button")?.addEventListener("click", () => actions.openProjectSearch(false));
   document.getElementById("sidebar-images-button")?.addEventListener("click", () => actions.setSidebarTool("images"));
   document.getElementById("sidebar-tables-button")?.addEventListener("click", () => actions.setSidebarTool("tables"));
   document.getElementById("action-restore-default-layout")?.addEventListener("click", actions.restoreDefaultLayout);

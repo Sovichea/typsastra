@@ -44,9 +44,11 @@ function createController(): { controller: SidebarController; elements: Map<stri
     ["explorer-resizer", fakeElement()],
     ["sidebar-toggle-button", fakeElement()],
     ["explorer-sidebar-content", fakeElement()],
+    ["project-search-sidebar-content", fakeElement()],
     ["image-tools-sidebar-content", fakeElement()],
     ["tables-sidebar-content", fakeElement()],
     ["sidebar-explorer-button", fakeElement()],
+    ["sidebar-search-button", fakeElement()],
     ["sidebar-images-button", fakeElement()],
     ["sidebar-tables-button", fakeElement()],
     ["image-viewer-pane", fakeElement()],
@@ -97,6 +99,20 @@ describe("sidebar visibility persistence", () => {
 
     expect(controller.visible).toBe(true);
     expect(elements.get("explorer-sidebar")!.classList.contains("hidden")).toBe(false);
+  });
+
+  test("activates project search without treating it as a preview-owning tool", () => {
+    const { controller, elements } = createController();
+
+    controller.setTool("search");
+
+    expect(controller.activeTool).toBe("search");
+    expect(elements.get("project-search-sidebar-content")!.classList.contains("hidden")).toBe(false);
+    expect(elements.get("explorer-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("image-tools-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("tables-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect((elements.get("sidebar-search-button") as HTMLButtonElement).classList.contains("active")).toBe(true);
+    expect((elements.get("sidebar-toggle-button") as HTMLButtonElement).disabled).toBe(false);
   });
 
   test("activates the Tables tool and hides the other tool content", () => {

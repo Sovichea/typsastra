@@ -17,6 +17,11 @@ are summarized along the editor scrollbar. Compiler diagnostics and spellcheck
 issues have their own gutter/scrollbar markers and can be navigated without
 moving the PDF unexpectedly.
 
+Use [Search a project](PROJECT_SEARCH.md) to search every UTF-8 source file in
+the workspace, including unsaved open buffers. Project search supports literal,
+regex, and fuzzy matching, include/exclude globs, and a separate activity-bar
+panel that leaves the editor and preview visible.
+
 The Outline pane is built from the active Typst document. Select a heading to
 navigate to its source. Pane focus and keyboard navigation let you move between
 the editor, preview, Explorer, Outline, and Spellcheck without reaching for the
