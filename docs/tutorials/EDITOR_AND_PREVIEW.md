@@ -34,9 +34,12 @@ type are reflected in the status and toolbar.
   color mode follow the document preview.
 
 Typsastra keeps the last clean live-preview PDF in the machine-local workspace
-cache. Reopening an unchanged project loads that PDF immediately instead of
-compiling again. If any workspace source changes outside Typsastra, the source
-signature no longer matches and the preview is compiled normally.
+cache for both Normal and Draft Preview. Reopening an unchanged project loads
+that PDF immediately instead of compiling again, and Draft Preview restores its
+image manifest so placeholder hover previews keep working. Draft thumbnails are
+stored in the same machine-local cache rather than inside the project. If any
+workspace source changes outside Typsastra, the source signature no longer
+matches and the preview is compiled normally.
 
 <video controls preload="none" playsinline width="100%">
   <source src="https://github.com/user-attachments/assets/c1278ad8-eca5-43c7-8aed-ba371ee8a14e" type="video/mp4">
