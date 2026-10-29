@@ -139,6 +139,7 @@ export interface WorkspaceLifecycleServices {
   sourceMapSessionController: { registeredTaskId: string | null; reset(): void };
   imagePreviewController: { clear(): void };
   documentOutlineController: { clear(): void };
+  navigationHistoryController: { clear(): void };
   spellcheckSidebarPane: { clear(): void };
   logConsoleController: { clearAllLogs(): void; setVisible(visible: boolean): void };
 }
@@ -777,6 +778,7 @@ export class WorkspaceLifecycleController {
     if (app.activeMode === "WYSIWYM") app.mapMarkupToWysiwym("");
     app.explorer.clearWorkspace();
     app.documentOutlineController.clear();
+    app.navigationHistoryController.clear();
     app.renderEditorTabs();
     app.setLspStatus({ kind: "stopped", message: "Project closed" });
     app.updateWorkspaceViewportVisibility();

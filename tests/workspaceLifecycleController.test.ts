@@ -245,6 +245,7 @@ describe("WorkspaceLifecycleController behavior", () => {
         clearWorkspace: () => {},
       },
       documentOutlineController: { clear: () => {} },
+      navigationHistoryController: { clear: () => calls.push("clear-navigation-history") },
       spellcheckSidebarPane: { clear: () => {} },
       restoreDocumentSidebarPane: () => {},
       renderEditorTabs: () => {},
@@ -264,6 +265,7 @@ describe("WorkspaceLifecycleController behavior", () => {
         "stop-watching",
         "stop-lsp",
       ]);
+      expect(calls).toContain("clear-navigation-history");
       expect(calls).toContain("update-viewport");
     } finally {
       Object.defineProperty(globalThis, "document", { configurable: true, value: previousDocument });

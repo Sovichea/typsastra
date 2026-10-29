@@ -33,6 +33,9 @@ export type EditorToolbarDependencies = {
   renderWysiwym: (markup: string) => void;
   save: () => Promise<void>;
   revealCursorInPreview: () => Promise<void> | void;
+  navigateBack: () => Promise<void> | void;
+  navigateForward: () => Promise<void> | void;
+  refreshHistoryControls: () => void;
   applyTypography: (config: DocumentTypography, target: "document" | "template") => Promise<boolean>;
   getWorkspaceRoot: () => string | null;
   onWorkspacePrivateFontDirectoriesChanged: () => void | Promise<void>;
@@ -809,6 +812,14 @@ export class EditorToolbarController {
   }
 
   private async run(tool: string): Promise<void> {
+    if (tool === "history-back") {
+      await this.dependencies.navigateBack();
+      return;
+    }
+    if (tool === "history-forward") {
+      await this.dependencies.navigateForward();
+      return;
+    }
     if (this.dependencies.getMode() === "WYSIWYM") {
       this.applyWysiwymTool(tool);
       const markup = this.dependencies.serializeWysiwym();
@@ -1017,6 +1028,9 @@ export class EditorToolbarController {
       });
       this.fallbackRows().forEach(row => this.updatePreparedFontRole(row));
       this.updateTypographyAvailability();
+      // The blanket enable above must not make Back/Forward available when the
+      // history stack is empty.
+      this.dependencies.refreshHistoryControls();
     }
   }
 

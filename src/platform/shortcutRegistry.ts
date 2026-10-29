@@ -84,11 +84,19 @@ function imported(group: ShortcutDefinition["group"], prefix: string, bindings: 
   });
 }
 
+/** Menu accelerators use "Left"; keyboard events use "ArrowLeft". */
+function defaultKeyFromAccelerator(accelerator: string): string {
+  return accelerator
+    .replace(/CmdOrCtrl/g, "Mod")
+    .replace(/\+/g, "-")
+    .replace(/-(Left|Right|Up|Down)$/, "-Arrow$1");
+}
+
 const appDefinitions: ShortcutDefinition[] = buildNativeMenuSpec("Typsastra")
   .flatMap(menu => menu.nodes.flatMap(node => node.kind === "item" || node.kind === "check"
     ? node.accelerator ? [{
       id: node.id, label: node.label, group: "Application" as const,
-      defaultKey: node.accelerator.replace(/CmdOrCtrl/g, "Mod").replace(/\+/g, "-"),
+      defaultKey: defaultKeyFromAccelerator(node.accelerator),
     }] : []
     : []));
 
@@ -153,7 +161,9 @@ function canonicalStroke(value: string, mac: boolean): string | null {
   const parts = value.split("-");
   if (parts.length === 0 || parts.length > 5) return null;
   const rawKey = parts.pop()!;
-  const key = rawKey === "`" ? "Backquote" : rawKey;
+  const key = rawKey === "`" ? "Backquote"
+    : /^(Left|Right|Up|Down)$/.test(rawKey) ? `Arrow${rawKey}`
+    : rawKey;
   if (!/^(?:[A-Za-z0-9]|F\d{1,2}|Arrow(?:Left|Right|Up|Down)|Page(?:Up|Down)|Home|End|Tab|Enter|Escape|Backspace|Delete|Space|Backquote|Comma|\/|\[|\]|\\|,|\.)$/.test(key)) return null;
   const modifiers = new Set<string>();
   for (const modifier of parts) {

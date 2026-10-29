@@ -13,12 +13,14 @@ export interface EditorTabLoadOptions {
   temporary?: boolean;
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  preservePreviewViewport?: boolean;
   focusEditor?: boolean;
 }
 
 interface ActivationOptions {
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  preservePreviewViewport?: boolean;
   focusEditor?: boolean;
 }
 
@@ -156,6 +158,7 @@ export class EditorTabLifecycleController {
     return {
       preservePreviewSession: options.preservePreviewSession,
       skipPreviewActivation: options.skipPreviewActivation,
+      preservePreviewViewport: options.preservePreviewViewport,
       focusEditor: options.focusEditor,
     };
   }

@@ -16,6 +16,7 @@ import type { EditorController } from "./editorController";
 export type ActivateEditorTabOptions = {
   preservePreviewSession?: PreviewSessionState;
   skipPreviewActivation?: boolean;
+  preservePreviewViewport?: boolean;
   focusEditor?: boolean;
   largeFileConfirmed?: boolean;
 };
@@ -201,7 +202,9 @@ export class EditorTabActivationController {
       const unsupportedFile = !deps.isInternallySupportedPath(path);
       const isPdf = fileExtension(path) === "pdf";
       if (unsupportedFile || isBinaryImagePath(path) || isPdf) {
-        if (!sameActivePath) deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab));
+        if (!sameActivePath && !options.preservePreviewViewport) {
+          deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab));
+        }
         deps.presentation.presentNonText(
           tab,
           path,
@@ -254,7 +257,11 @@ export class EditorTabActivationController {
     // already run defers that offset until the *next* tab activation, causing
     // include tabs to appear one position behind each other. Only seed an
     // offset when this activation is going to mount a different PDF session.
-    if (!sameActivePath && !previewActivation.presentationReused) {
+    if (
+      !sameActivePath
+      && !previewActivation.presentationReused
+      && !options.preservePreviewViewport
+    ) {
       deps.queuePreviewScrollPosition(deps.previewScrollTopForTab(tab));
     }
     // A large-file confirmation initially holds workspace services back. The

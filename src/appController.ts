@@ -143,7 +143,8 @@ import { WebviewStorageController } from "./webviewStorageController";
 import { SystemResumeMonitor } from "./platform/systemResume";
 import { WorkspaceResumeController } from "./platform/workspaceResumeController";
 import { installNativeAppMenu, type NativeAppMenuHandle } from "./platform/nativeAppMenu";
-import { setShortcutLabelOverrides } from "./platform/shortcuts";
+import { formatShortcut, setShortcutLabelOverrides } from "./platform/shortcuts";
+import { shortcutFor } from "./platform/shortcutRegistry";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
 import { createAppIcon } from "./ui/icons";
@@ -170,6 +171,7 @@ import {
 import { DocumentTypographyApplicationController } from "./typography/documentTypographyApplicationController";
 import { SourceLocationController } from "./navigation/sourceLocationController";
 import { OutlineNavigationController } from "./navigation/outlineNavigationController";
+import { NavigationHistoryController } from "./navigation/navigationHistoryController";
 import { TinymistIntegrationController } from "./session/tinymistIntegrationController";
 
 
@@ -737,6 +739,7 @@ export class TypsastraWorkspaceController {
     generatedPreviewText: path => this.pdfGeneratedPreviewText(path),
     resolveOpenTabPath: path =>
       this.openTabs.find(tab => filePathKey(tab.path) === filePathKey(path))?.path ?? null,
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly surroundWithDiscoveryController = new SurroundWithDiscoveryController({
     client: () => this.documentSessionController.hasClient ? this.lspClient : null,
@@ -1221,6 +1224,15 @@ export class TypsastraWorkspaceController {
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
   });
   private readonly logConsoleController = new LogConsoleController(entry => this.navigateToLogEntry(entry));
+  private readonly navigationHistoryController = new NavigationHistoryController({
+    activeFilePath: () => this.activeFilePath,
+    activeTabContentLoaded: () => this.getActiveTab()?.contentLoaded === true,
+    editor: () => this.editorInstance,
+    loadFile: (path, options) => this.loadFile(path, options),
+    pathExists: path => invoke<boolean>("workspace_path_exists", { path }),
+    showNotice: message => this.reportNavigationWarning(message),
+    onChanged: () => this.updateNavigationHistoryControls(),
+  });
   private readonly spellcheckSidebarPane = new SpellcheckSidebarPane(entry => this.navigateToLogEntry(entry));
   private activeDocumentPane: DocumentSidebarPane = "outline";
 
@@ -1295,6 +1307,7 @@ export class TypsastraWorkspaceController {
     },
     setActiveSpellcheckLocation: (filePath, offset, toOffset) =>
       this.spellcheckSidebarPane.setActiveLocation(filePath, offset, toOffset),
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly previewFailureController = new PreviewFailureController(this.logConsoleController, {
     mapToOriginalPath: path => this.mapToOriginalPath(path),
@@ -1410,6 +1423,7 @@ export class TypsastraWorkspaceController {
     prepareRenderProjectIfNeeded: () => this.prepareRenderProjectIfNeeded(),
     refreshActivePreviewRoot: force => this.refreshActivePreviewRoot(force),
     appendLog: entry => this.appendDeveloperLog(entry),
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly workspaceLifecycleController = new WorkspaceLifecycleController(
     this.createWorkspaceLifecycleDependencies(),
@@ -1568,6 +1582,9 @@ export class TypsastraWorkspaceController {
     renderWysiwym: markup => this.mapMarkupToWysiwym(markup),
     save: () => this.saveActiveFile(),
     revealCursorInPreview: () => this.revealCursorInPreviewManually(),
+    navigateBack: () => this.navigationHistoryController.back(),
+    navigateForward: () => this.navigationHistoryController.forward(),
+    refreshHistoryControls: () => this.updateNavigationHistoryControls(),
     applyTypography: (config, target) => this.applyTypography(config, target),
     getWorkspaceRoot: () => this.workspaceRootPath,
     onWorkspacePrivateFontDirectoriesChanged: () => this.typographyController.privateFontDirectoriesChanged()
@@ -1723,6 +1740,7 @@ export class TypsastraWorkspaceController {
     previewSync: () => this.previewSyncController,
     previewFrame: () => this.previewFrame,
     editor: () => this.editorInstance,
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly appDialogController = new AppDialogController();
   private readonly fileDropController = new FileDropController({
@@ -2030,6 +2048,7 @@ export class TypsastraWorkspaceController {
     lowMemorySync: this.lowMemorySyncIndexController,
     setPreviewReadyStatus: message => this.setLspStatus({ kind: "preview-ready", message }),
     log: (kind, source, message) => this.appendDeveloperLog({ kind, source, message }),
+    navigationHistory: () => this.navigationHistoryController,
   });
   private readonly previewUiController = new PreviewUiController({
     previewFrame: this.previewFrame,
@@ -2096,6 +2115,7 @@ export class TypsastraWorkspaceController {
     forwardSyncDebounceMs: () => this.settingsRuntimeController.forwardSyncDebounceMs,
     isDeveloperPerformanceLogEnabled: () => this.isDeveloperLogEnabled("performance"),
     shortcuts: () => this.settingsController.value.shortcuts,
+    navigationHistory: () => this.navigationHistoryController,
     insertExplorerImage: (path, position, view) => this.fileDropController.insertExplorerImage(path, position, view),
     pasteClipboardImages: (images, selection, view) => {
       this.fileDropController.pasteClipboardImages(images, selection, view);
@@ -2421,7 +2441,11 @@ export class TypsastraWorkspaceController {
     if (replace) this.projectSearchController.focusQuery();
   }
 
-  private async navigateToProjectSearchResult(target: ProjectSearchNavigationTarget): Promise<void> {
+  private navigateToProjectSearchResult(target: ProjectSearchNavigationTarget): Promise<void> {
+    return this.navigationHistoryController.run(() => this.navigateToProjectSearchResultInternal(target));
+  }
+
+  private async navigateToProjectSearchResultInternal(target: ProjectSearchNavigationTarget): Promise<void> {
     if (!this.workspaceRootPath || this.standaloneFilePath !== null) return;
     if (filePathKey(target.path) !== filePathKey(this.activeFilePath ?? "")) {
       await this.loadFile(target.path, { focusEditor: false });
@@ -2568,6 +2592,7 @@ export class TypsastraWorkspaceController {
   private applySettingsToRuntime(settings: AppSettings): void {
     const { editor } = settings;
     setShortcutLabelOverrides(settings.shortcuts);
+    this.updateNavigationHistoryControls();
     this.settingsRuntimeController.apply(settings);
     this.previewFrame.setColorMode(settings.preview.colorMode);
     this.updatePreviewColorModeButton(settings.preview.colorMode);
@@ -3701,6 +3726,56 @@ export class TypsastraWorkspaceController {
     return this.outlineNavigationController.navigate(heading);
   }
 
+  private navigateBack(): Promise<void> {
+    return this.navigationHistoryController.back();
+  }
+
+  private navigateForward(): Promise<void> {
+    return this.navigationHistoryController.forward();
+  }
+
+  private reportNavigationWarning(message: string): void {
+    this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "navigation",
+      message,
+      channel: "lsp",
+      counted: true,
+    });
+  }
+
+  private updateNavigationHistoryControls(): void {
+    const backAvailable = this.navigationHistoryController.canGoBack();
+    const forwardAvailable = this.navigationHistoryController.canGoForward();
+    const isMac = navigator.userAgent.toLowerCase().includes("mac");
+    const label = (id: string, fallback: string) => {
+      const shortcut = shortcutFor(id, this.settingsController.value.shortcuts, isMac);
+      return shortcut ? formatShortcut(shortcut.replace(/-/g, "+"), isMac) : fallback;
+    };
+    const backShortcut = label("action-navigation-back", isMac ? "Option+Left" : "Alt+Left");
+    const forwardShortcut = label("action-navigation-forward", isMac ? "Option+Right" : "Alt+Right");
+    for (const [tool, available, action, shortcut] of [
+      ["history-back", backAvailable, "Go Back", backShortcut],
+      ["history-forward", forwardAvailable, "Go Forward", forwardShortcut],
+    ] as const) {
+      const button = document.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
+      if (button) {
+        button.disabled = !available;
+        button.title = `${action} (${shortcut})`;
+        button.setAttribute("aria-label", action);
+      }
+    }
+    for (const [id, available] of [
+      ["action-navigation-back", backAvailable],
+      ["action-navigation-forward", forwardAvailable],
+    ] as const) {
+      const item = document.getElementById(id);
+      if (!item) continue;
+      item.classList.toggle("dropdown-item-disabled", !available);
+      item.setAttribute("aria-disabled", String(!available));
+    }
+  }
+
   private switchViewLayoutMode() {
     if (!this.wysiwymPane) return;
     if (this.activeMode === "CODE") {
@@ -4282,6 +4357,8 @@ export class TypsastraWorkspaceController {
       exportSourceZip: () => this.projectExportController.exportSourceZip(),
       undo: () => { undo({ state: this.editorInstance.state, dispatch: this.editorInstance.dispatch }); },
       redo: () => { redo({ state: this.editorInstance.state, dispatch: this.editorInstance.dispatch }); },
+      navigateBack: () => this.navigateBack(),
+      navigateForward: () => this.navigateForward(),
       selectAllActiveSurface: () => {
         const active = document.activeElement as HTMLElement | null;
         if (active === this.previewFrame.element) {

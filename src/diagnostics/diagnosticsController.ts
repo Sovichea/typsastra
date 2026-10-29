@@ -19,6 +19,7 @@ import {
   type LogConsoleEntryInput,
 } from "./logConsoleController";
 import { spellcheckSidebarEntries, type SpellcheckSidebarEntry } from "./spellcheckSidebarPane";
+import type { NavigationHistoryPort } from "../navigation/navigationHistoryController";
 
 export interface DiagnosticsControllerPort {
   editor(): EditorView | undefined;
@@ -41,6 +42,7 @@ export interface DiagnosticsControllerPort {
   editorPositionFromSourceLocation(line: number, column: number): number;
   setSpellcheckEntries(entries: SpellcheckSidebarEntry[]): void;
   setActiveSpellcheckLocation(filePath: string | null, offset?: number, toOffset?: number): void;
+  navigationHistory?(): NavigationHistoryPort;
 }
 
 /** Owns LSP/spellcheck diagnostics and routes them to their respective panes. */
@@ -339,6 +341,16 @@ export class DiagnosticsController {
   }
 
   async navigateToLogEntry(entry: LogConsoleEntryInput): Promise<void> {
+    if (!entry.line && entry.offset === undefined) return;
+    const history = this.port.navigationHistory?.();
+    if (history) {
+      await history.run(() => this.navigateToLogEntryInternal(entry));
+      return;
+    }
+    await this.navigateToLogEntryInternal(entry);
+  }
+
+  private async navigateToLogEntryInternal(entry: LogConsoleEntryInput): Promise<void> {
     if (!entry.line && entry.offset === undefined) return;
     const activePath = this.port.activeFilePath();
     if (entry.filePath && this.port.pathKey(entry.filePath) !== this.port.pathKey(activePath ?? "")) {

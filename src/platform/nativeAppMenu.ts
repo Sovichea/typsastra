@@ -46,7 +46,12 @@ type ActionMenuItem = MenuItem | CheckMenuItem;
 export function menuAccelerator(value: string): string | undefined {
   // Native menus only accept single strokes. Chords remain available through
   // the application key dispatcher even on macOS.
-  return value && !value.includes(" ") ? value.replace(/\bMod\b/g, "CmdOrCtrl").replace(/-/g, "+") : undefined;
+  return value && !value.includes(" ")
+    ? value
+      .replace(/\bMod\b/g, "CmdOrCtrl")
+      .replace(/-/g, "+")
+      .replace(/Arrow(Left|Right|Up|Down)\b/g, "$1")
+    : undefined;
 }
 
 export function nativeAppMenuSupported(input?: RuntimeTitlebarInput): boolean {

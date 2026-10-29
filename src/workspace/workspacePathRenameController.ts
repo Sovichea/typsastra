@@ -10,6 +10,7 @@ import type { DocumentSessionController } from "../session/documentSessionContro
 import type { LspDocumentController } from "../session/lspDocumentController";
 import type { TypographyController } from "../typography/typographyController";
 import type { WorkspaceController } from "./workspaceController";
+import type { NavigationHistoryController } from "../navigation/navigationHistoryController";
 
 export interface WorkspacePathRenameDependencies {
   workspaceRootPath(): string | null;
@@ -36,6 +37,7 @@ export interface WorkspacePathRenameDependencies {
   prepareRenderProjectIfNeeded(): Promise<void>;
   refreshActivePreviewRoot(force: boolean): Promise<void>;
   appendLog(entry: LspLogEntry): void;
+  navigationHistory?(): NavigationHistoryController;
 }
 
 /** Owns workspace-path rename propagation across open editor and preview sessions. */
@@ -54,6 +56,7 @@ export class WorkspacePathRenameController {
 
     try {
       await invoke("rename_workspace_file", { oldPath, newPath });
+      this.deps.navigationHistory?.().rename(oldPath, newPath);
 
       if (workspaceRoot && imageReferenceSourcePaths.length > 0) {
         try {

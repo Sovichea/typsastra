@@ -17,6 +17,7 @@ import type { EditorFontManager } from "./fontManager";
 import type { DraftPreviewController, DraftThumbnailQueueMetric } from "../preview/draftPreviewController";
 import type { ClipboardImageData } from "./imageDrop";
 import type { ShortcutOverrides } from "../platform/shortcutRegistry";
+import type { NavigationHistoryEditPort } from "../navigation/navigationHistoryController";
 
 export interface EditorInitializationDependencies {
   editorFontManager: EditorFontManager;
@@ -45,6 +46,7 @@ export interface EditorInitializationDependencies {
   forwardSyncDebounceMs(): number;
   isDeveloperPerformanceLogEnabled(): boolean;
   shortcuts(): ShortcutOverrides;
+  navigationHistory?(): NavigationHistoryEditPort;
   insertExplorerImage(path: string, position: number, view: EditorView): void;
   pasteClipboardImages(
     images: readonly ClipboardImageData[],
@@ -87,6 +89,11 @@ export class EditorInitializationController {
         this.isComposing = update.view.composing;
 
         if (update.docChanged && !deps.isLoadingFile()) {
+          deps.navigationHistory?.()?.documentChanged(
+            deps.activeFilePath() ?? "",
+            update.changes,
+            update.state.doc,
+          );
           deps.previewSync.clearForward();
           deps.markActiveTabDirty();
           if (!update.view.composing) {

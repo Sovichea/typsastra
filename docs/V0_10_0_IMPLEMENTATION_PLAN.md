@@ -145,26 +145,37 @@ Deferred:
 
 ### V010-C.1 — History controller
 
-- Add session-only history with at most 100 source locations.
-- Record explicit jumps from project search, outline, definitions, diagnostics,
-  and inverse sync. Exclude typing, ordinary scrolling, and routine tab switches.
-- Capture departure immediately before a jump and destination after successful
-  completion. New navigation after Back discards the forward branch.
-- Store file identity, selection, editor viewport, and a short source-context
-  anchor. Map locations through edits in open buffers. For changed closed files,
-  resolve context before falling back to a clamped source position.
-- Update entries after known renames. Skip missing destinations with a notice.
-  Clear history on workspace close; do not persist it across restarts.
+Implemented:
+
+- Session-only history stores at most 100 source locations and is cleared when
+  the workspace closes. It is not persisted across restarts.
+- Explicit jumps from project search, outline, LSP definitions, diagnostics/log
+  locations, and inverse sync record a departure before navigation and a
+  destination after successful completion. Typing, ordinary scrolling, and
+  routine tab switches do not add entries. Navigating after Back removes the
+  forward branch.
+- Entries store the source path, selection, editor viewport, and a short
+  source-context anchor. Replayed locations resolve that context against current
+  text, so edits before or inside the recorded location keep the selection on
+  the same source text. A clamped offset is only the final fallback.
+- Known workspace renames remap matching history entries. Missing destinations
+  are skipped with a Log console warning and the next available entry is used.
 
 ### V010-C.2 — Controls and integration
 
-- Add accessible Back/Forward controls and configurable commands defaulting to
-  `Alt+Left` and `Alt+Right`.
-- Connect history at existing navigation-controller boundaries rather than
-  scattering location bookkeeping throughout `appController`.
-- Replaying history must not create entries, compile a preview, or move the PDF.
-  Serialize/reject obsolete navigation so rapid requests cannot select the wrong
-  document or update history after workspace closure.
+Implemented:
+
+- Accessible Back/Forward toolbar controls and Edit menu commands default to
+  `Alt+Left` and `Alt+Right` and are configurable like other application
+  shortcuts. The reserved keys regain their CodeMirror meaning when the
+  application command is remapped.
+- History is recorded at existing navigation boundaries: search navigation,
+  outline navigation, LSP source navigation, diagnostics navigation, and
+  inverse sync.
+- Replaying history activates the target tab without compiling a preview or
+  queuing a PDF scroll. Navigation requests are serialized and obsolete requests
+  are rejected so rapid Back/Forward or workspace closure cannot update the
+  stack or select a stale document.
 
 ## D. Unsaved-text crash recovery
 

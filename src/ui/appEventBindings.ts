@@ -105,6 +105,8 @@ export interface AppEventActions {
   exportSourceZip: () => Promise<void> | void;
   undo: () => void;
   redo: () => void;
+  navigateBack: () => Promise<void> | void;
+  navigateForward: () => Promise<void> | void;
   selectAllActiveSurface: () => void;
   foldCurrentFile: () => void;
   unfoldCurrentFile: () => void;
@@ -440,6 +442,8 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-exit")?.addEventListener("click", () => void getCurrentWindow().close());
   document.getElementById("action-undo")?.addEventListener("click", actions.undo);
   document.getElementById("action-redo")?.addEventListener("click", actions.redo);
+  document.getElementById("action-navigation-back")?.addEventListener("click", () => void actions.navigateBack());
+  document.getElementById("action-navigation-forward")?.addEventListener("click", () => void actions.navigateForward());
   document.getElementById("action-select-all")?.addEventListener("click", actions.selectAllActiveSurface);
   document.getElementById("action-search-project")?.addEventListener("click", () => actions.openProjectSearch(false));
   document.getElementById("action-replace-project")?.addEventListener("click", () => actions.openProjectSearch(true));

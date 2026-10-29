@@ -41,7 +41,10 @@ export function formatShortcut(spec: string, mac: boolean): string {
   const names = mac ? macModifierNames : standardModifierNames;
   return spec.trim().split(/\s+/).filter(Boolean).map(chord =>
     chord.split("+").map(part => names[part]
-      ?? (part.length === 1 && /[a-z]/.test(part) ? part.toUpperCase() : part === "Backquote" ? "`" : part === "Comma" ? "," : part)).join("+")
+      ?? (part.length === 1 && /[a-z]/.test(part) ? part.toUpperCase()
+        : part === "Backquote" ? "`"
+        : part === "Comma" ? ","
+        : part.replace(/^Arrow(?=Left|Right|Up|Down$)/, ""))).join("+")
   ).join(", ");
 }
 

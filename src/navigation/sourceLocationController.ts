@@ -4,6 +4,7 @@ import type { TinymistLspClient, LspSourcePosition } from "../compiler/lsp";
 import { isTypstDocumentPath } from "../platform/fileTypes";
 import { filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath } from "../platform/paths";
 import { decodeRustUnicodeEscapes } from "../compiler/previewError";
+import type { NavigationHistoryPort } from "./navigationHistoryController";
 
 export interface SourceLocationDependencies {
   workspaceRootPath(): string | null;
@@ -15,6 +16,7 @@ export interface SourceLocationDependencies {
   activeTabContentLoaded(): boolean;
   generatedPreviewText(originalPath: string): Promise<string>;
   resolveOpenTabPath?(path: string): string | null;
+  navigationHistory?(): NavigationHistoryPort;
 }
 
 /** Owns workspace/cache source mapping and editor navigation for LSP locations. */
@@ -67,6 +69,19 @@ export class SourceLocationController {
   }
 
   async navigateToLspLocation(uri: string, line: number, character: number): Promise<void> {
+    const history = this.deps.navigationHistory?.();
+    if (history) {
+      await history.run(() => this.navigateToLspLocationInternal(uri, line, character));
+      return;
+    }
+    await this.navigateToLspLocationInternal(uri, line, character);
+  }
+
+  private async navigateToLspLocationInternal(
+    uri: string,
+    line: number,
+    character: number,
+  ): Promise<void> {
     const rawPath = filePathFromUri(uri);
     const mappedPath = this.mapToOriginalPath(rawPath);
     // LSP URIs are always forward-slash and may carry different drive-letter

@@ -5,6 +5,7 @@ import type { DocumentHeading, DocumentOutlineController } from "../outline/docu
 import type { EditorTab } from "../editor/editorTab";
 import type { PreviewFrame } from "../preview/previewFrame";
 import type { PreviewSyncController } from "../preview/previewSyncController";
+import type { NavigationHistoryPort } from "./navigationHistoryController";
 
 export interface OutlineNavigationDependencies {
   activeTab(): EditorTab | null;
@@ -18,6 +19,7 @@ export interface OutlineNavigationDependencies {
   previewSync(): PreviewSyncController;
   previewFrame(): PreviewFrame;
   editor(): EditorView;
+  navigationHistory?(): NavigationHistoryPort;
 }
 
 /** Owns editor/preview navigation when selecting a document outline heading. */
@@ -27,6 +29,15 @@ export class OutlineNavigationController {
   constructor(private readonly deps: OutlineNavigationDependencies) {}
 
   async navigate(heading: DocumentHeading): Promise<void> {
+    const history = this.deps.navigationHistory?.();
+    if (history) {
+      await history.run(() => this.navigateInternal(heading));
+      return;
+    }
+    await this.navigateInternal(heading);
+  }
+
+  private async navigateInternal(heading: DocumentHeading): Promise<void> {
     const activeTab = this.deps.activeTab();
     if (activeTab?.temporary) void this.deps.promoteToPermanent(activeTab);
 

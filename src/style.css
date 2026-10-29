@@ -1031,6 +1031,16 @@ html.native-app-menu #app-menus {
   color: var(--ui-text);
 }
 
+.toolbar-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolbar-button:disabled:hover {
+  background: transparent;
+  color: var(--ui-header-text);
+}
+
 .toolbar-button:active {
   background: var(--ui-select);
   transform: scale(0.96);

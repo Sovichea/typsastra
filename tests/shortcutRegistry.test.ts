@@ -46,6 +46,26 @@ describe("programmable shortcuts", () => {
     expect(applicationShortcutForEvent(key("Comma", { ctrlKey: true }), {}, false)).toBe("action-open-settings");
   });
 
+  test("reserves Alt+Left/Right for source Back/Forward", () => {
+    expect(shortcutFor("action-navigation-back", {}, false)).toBe("Alt-ArrowLeft");
+    expect(shortcutFor("action-navigation-forward", {}, false)).toBe("Alt-ArrowRight");
+    expect(applicationShortcutForEvent(key("ArrowLeft", { altKey: true }), {}, false))
+      .toBe("action-navigation-back");
+    expect(applicationShortcutForEvent(key("ArrowRight", { altKey: true }), {}, false))
+      .toBe("action-navigation-forward");
+
+    const configured = configuredEditorKeymap({}, false) as { value: KeyBinding[] };
+    expect(configured.value.some(binding => binding.key === "Alt-ArrowLeft")).toBe(false);
+    expect(configured.value.some(binding => binding.key === "Alt-ArrowRight")).toBe(false);
+
+    const remapped = configuredEditorKeymap(
+      { "action-navigation-back": "Mod-K B", "action-navigation-forward": "Mod-K F" },
+      false,
+    ) as { value: KeyBinding[] };
+    expect(remapped.value.some(binding => binding.key === "Alt-ArrowLeft")).toBe(true);
+    expect(remapped.value.some(binding => binding.key === "Alt-ArrowRight")).toBe(true);
+  });
+
   test("rejects collisions with other commands and preserves the previous binding", () => {
     expect(shortcutCollision("editor.unindent", "Mod-S", {}, false)?.id).toBe("action-save-file");
     expect(normalizeShortcutOverrides({ "editor.unindent": "Mod-S" })).toEqual({});

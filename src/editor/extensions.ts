@@ -247,6 +247,15 @@ export function configuredEditorKeymap(overrides: ShortcutOverrides, mac: boolea
     const run = chordCommands[entry.id];
     return run && key.includes(" ") ? [{ key: codeMirrorKey(key), run }] : [];
   });
+  // Application Back/Forward default to Alt+Left/Right, which CodeMirror's
+  // default keymap also uses for paragraph movement. The application command
+  // must win while it owns that binding; remapping it releases the key back to
+  // the editor.
+  const reservedApplicationKeys = new Set(
+    ["action-navigation-back", "action-navigation-forward"]
+      .map(id => canonicalShortcut(shortcutFor(id, overrides, mac), mac))
+      .filter((key): key is string => key !== null),
+  );
   const upstream = shortcutDefinitions.flatMap(entry => {
     if (!entry.binding || !entry.id.startsWith("editor.")) return [];
     const key = shortcutFor(entry.id, overrides, mac);
@@ -254,6 +263,10 @@ export function configuredEditorKeymap(overrides: ShortcutOverrides, mac: boolea
     if (Object.prototype.hasOwnProperty.call(overrides, entry.id)) {
       return [{ ...entry.binding, key: codeMirrorKey(key), mac: undefined, win: undefined, linux: undefined }];
     }
+    if (
+      entry.binding.key
+      && reservedApplicationKeys.has(canonicalShortcut(entry.binding.key, mac) ?? "")
+    ) return [];
     return [entry.binding];
   });
   return keymap.of([...highPriority, ...chords, ...upstream, ...historyKeymap.slice(0, 3)]);
