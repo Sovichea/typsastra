@@ -6670,7 +6670,7 @@ async fn hash_cached_preview_file(path: String) -> Result<String, String> {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LowMemoryPreviewCacheManifest {
+struct PreviewPdfCacheManifest {
     version: u8,
     root_path: String,
     source_signature: String,
@@ -6685,7 +6685,7 @@ struct LowMemoryPreviewCacheEntry {
     source_signature: String,
 }
 
-fn low_memory_preview_cache_key(root: &Path, preview_root: &Path) -> Result<String, String> {
+fn preview_cache_key(root: &Path, preview_root: &Path) -> Result<String, String> {
     use sha2::{Digest, Sha256};
     let relative = preview_root
         .strip_prefix(root)
@@ -6707,7 +6707,12 @@ fn collect_workspace_signature_files(
         let entry = entry.map_err(|error| format!("Unable to inspect workspace entry: {error}"))?;
         let path = entry.path();
         let file_name = entry.file_name();
-        if file_name == ".typsastra" {
+        let name = file_name.to_string_lossy();
+        if name == ".typsastra"
+            || name == ".git"
+            || (name.starts_with('.')
+                && (name.contains("typsastra-preview") || name.contains("typsastra-check")))
+        {
             continue;
         }
         let metadata = entry
@@ -6762,7 +6767,7 @@ fn low_memory_sync_index_path(
 ) -> Result<PathBuf, String> {
     Ok(low_memory_preview_cache_directory(cache_root).join(format!(
         "{}-sync-index-v1.json",
-        low_memory_preview_cache_key(root, preview_root)?
+        preview_cache_key(root, preview_root)?
     )))
 }
 
@@ -6783,12 +6788,12 @@ async fn restore_low_memory_preview_cache(
         resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
     let preview_root = dunce::canonicalize(preview_root_path)
         .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
-    let key = low_memory_preview_cache_key(&root, &preview_root)?;
+    let key = preview_cache_key(&root, &preview_root)?;
     let directory = low_memory_preview_cache_directory(&cache_root);
     let manifest_path = directory.join(format!("{key}.json"));
     let manifest = match tokio::fs::read_to_string(manifest_path).await {
         Ok(contents) => {
-            serde_json::from_str::<LowMemoryPreviewCacheManifest>(&contents).map_err(|error| {
+            serde_json::from_str::<PreviewPdfCacheManifest>(&contents).map_err(|error| {
                 format!("Unable to parse low-memory preview cache manifest: {error}")
             })?
         }
@@ -6855,7 +6860,7 @@ async fn persist_low_memory_preview_cache(
             return Err("Workspace changed while the low-memory preview was compiling; its cache was not persisted.".into());
         }
     }
-    let key = low_memory_preview_cache_key(&root, &preview_root)?;
+    let key = preview_cache_key(&root, &preview_root)?;
     let directory = low_memory_preview_cache_directory(&cache_root);
     tokio::fs::create_dir_all(&directory)
         .await
@@ -6868,10 +6873,11 @@ async fn persist_low_memory_preview_cache(
             .await
             .map_err(|error| format!("Unable to copy low-memory preview cache: {error}"))?;
     }
+    let _ = tokio::fs::remove_file(&destination).await;
     tokio::fs::rename(&temporary, &destination)
         .await
         .map_err(|error| format!("Unable to activate low-memory preview cache: {error}"))?;
-    let manifest = LowMemoryPreviewCacheManifest {
+    let manifest = PreviewPdfCacheManifest {
         version: 1,
         root_path: preview_root.to_string_lossy().into_owned(),
         source_signature: current_source_signature,
@@ -6885,11 +6891,141 @@ async fn persist_low_memory_preview_cache(
     )
     .await
     .map_err(|error| format!("Unable to save low-memory preview cache manifest: {error}"))?;
+    let _ = tokio::fs::remove_file(&manifest_destination).await;
     tokio::fs::rename(manifest_temporary, manifest_destination)
         .await
         .map_err(|error| {
             format!("Unable to activate low-memory preview cache manifest: {error}")
         })?;
+    Ok(destination.to_string_lossy().into_owned())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviewPdfCacheEntry {
+    pdf_path: String,
+    source_signature: String,
+}
+
+fn preview_pdf_cache_directory(cache_root: &Path) -> PathBuf {
+    cache_root.join("preview-pdf-cache")
+}
+
+#[tauri::command]
+async fn restore_preview_pdf_cache(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+    cache_root_path: String,
+    preview_root_path: String,
+) -> Result<Option<PreviewPdfCacheEntry>, String> {
+    let root = dunce::canonicalize(workspace_root_path)
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let preview_root = dunce::canonicalize(preview_root_path)
+        .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
+    let key = preview_cache_key(&root, &preview_root)?;
+    let directory = preview_pdf_cache_directory(&cache_root);
+    let manifest_path = directory.join(format!("{key}.json"));
+    let manifest = match tokio::fs::read_to_string(manifest_path).await {
+        Ok(contents) => serde_json::from_str::<PreviewPdfCacheManifest>(&contents)
+            .map_err(|error| format!("Unable to parse preview PDF cache manifest: {error}"))?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "Unable to load preview PDF cache manifest: {error}"
+            ))
+        }
+    };
+    if manifest.version != 1 || manifest.root_path != preview_root.to_string_lossy() {
+        return Ok(None);
+    }
+    if calculate_workspace_preview_signature(&root)? != manifest.source_signature {
+        return Ok(None);
+    }
+    let pdf_path = PathBuf::from(&manifest.pdf_path);
+    if !pdf_path.is_file() {
+        return Ok(None);
+    }
+    Ok(Some(PreviewPdfCacheEntry {
+        pdf_path: pdf_path.to_string_lossy().into_owned(),
+        source_signature: manifest.source_signature,
+    }))
+}
+
+#[tauri::command]
+async fn persist_preview_pdf_cache(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+    cache_root_path: String,
+    preview_root_path: String,
+    pdf_path: String,
+    source_signature: String,
+) -> Result<String, String> {
+    let root = dunce::canonicalize(workspace_root_path)
+        .map_err(|error| format!("Unable to resolve workspace root: {error}"))?;
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root =
+        resolve_managed_workspace_cache_root(&app_local_data_dir, &root, &cache_root_path)?;
+    let preview_root = dunce::canonicalize(preview_root_path)
+        .map_err(|error| format!("Unable to resolve preview root: {error}"))?;
+    let current_source_signature = calculate_workspace_preview_signature(&root)?;
+    if source_signature != current_source_signature {
+        return Err(
+            "Workspace changed after the preview was compiled; its PDF cache was not persisted."
+                .into(),
+        );
+    }
+    let source = PathBuf::from(pdf_path)
+        .canonicalize()
+        .map_err(|error| format!("Unable to resolve generated preview PDF: {error}"))?;
+    let key = preview_cache_key(&root, &preview_root)?;
+    let directory = preview_pdf_cache_directory(&cache_root);
+    tokio::fs::create_dir_all(&directory)
+        .await
+        .map_err(|error| format!("Unable to create preview PDF cache: {error}"))?;
+    let destination = directory.join(format!("{key}.pdf"));
+    let source_is_destination = std::fs::canonicalize(&destination)
+        .map(|path| path == source)
+        .unwrap_or(false);
+    if !source_is_destination {
+        let temporary = directory.join(format!("{key}.pdf.tmp"));
+        let _ = std::fs::remove_file(&temporary);
+        if std::fs::hard_link(&source, &temporary).is_err() {
+            tokio::fs::copy(&source, &temporary)
+                .await
+                .map_err(|error| format!("Unable to copy preview PDF cache: {error}"))?;
+        }
+        let _ = tokio::fs::remove_file(&destination).await;
+        tokio::fs::rename(&temporary, &destination)
+            .await
+            .map_err(|error| format!("Unable to activate preview PDF cache: {error}"))?;
+    }
+    let manifest = PreviewPdfCacheManifest {
+        version: 1,
+        root_path: preview_root.to_string_lossy().into_owned(),
+        source_signature: current_source_signature,
+        pdf_path: destination.to_string_lossy().into_owned(),
+    };
+    let manifest_temporary = directory.join(format!("{key}.json.tmp"));
+    let manifest_destination = directory.join(format!("{key}.json"));
+    tokio::fs::write(
+        &manifest_temporary,
+        serde_json::to_string(&manifest).unwrap(),
+    )
+    .await
+    .map_err(|error| format!("Unable to save preview PDF cache manifest: {error}"))?;
+    let _ = tokio::fs::remove_file(&manifest_destination).await;
+    tokio::fs::rename(&manifest_temporary, &manifest_destination)
+        .await
+        .map_err(|error| format!("Unable to activate preview PDF cache manifest: {error}"))?;
     Ok(destination.to_string_lossy().into_owned())
 }
 
@@ -6954,9 +7090,36 @@ async fn load_low_memory_sync_index(
 #[cfg(test)]
 mod low_memory_cache_root_tests {
     use super::{
-        resolve_managed_workspace_cache_root, standalone_preview_cache_root,
-        workspace_render_cache_root,
+        calculate_workspace_preview_signature, resolve_managed_workspace_cache_root,
+        standalone_preview_cache_root, workspace_render_cache_root,
     };
+
+    #[test]
+    fn preview_signature_ignores_git_and_generated_preview_files() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        std::fs::write(workspace.path().join("main.typ"), "= Original").expect("write source");
+        let baseline =
+            calculate_workspace_preview_signature(workspace.path()).expect("sign workspace");
+        std::fs::create_dir(workspace.path().join(".git")).expect("create git directory");
+        std::fs::write(workspace.path().join(".git/HEAD"), "ref: refs/heads/main")
+            .expect("write git metadata");
+        std::fs::write(
+            workspace
+                .path()
+                .join(".main.typsastra-preview-abc.typsastra-preview.typ"),
+            "= Generated",
+        )
+        .expect("write generated preview");
+        assert_eq!(
+            calculate_workspace_preview_signature(workspace.path()).expect("sign unchanged"),
+            baseline
+        );
+        std::fs::write(workspace.path().join("main.typ"), "= Changed").expect("change source");
+        assert_ne!(
+            calculate_workspace_preview_signature(workspace.path()).expect("sign changed"),
+            baseline
+        );
+    }
 
     #[test]
     fn accepts_a_standalone_cache_before_the_workspace_cache_exists() {
@@ -8526,6 +8689,8 @@ pub fn run() {
             workspace_preview_signature,
             restore_low_memory_preview_cache,
             persist_low_memory_preview_cache,
+            restore_preview_pdf_cache,
+            persist_preview_pdf_cache,
             save_low_memory_sync_index,
             load_low_memory_sync_index,
             send_lsp_message,
