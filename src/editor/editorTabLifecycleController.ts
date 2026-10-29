@@ -32,6 +32,7 @@ export interface EditorTabLifecycleDependencies {
   typography(): TypographyController;
   pinnedMainFilePath(): string | null;
   persistActiveTabState(): void;
+  discardRecoverySnapshot(tab: EditorTab): void | Promise<void>;
   promoteToPermanent(tab: EditorTab): void | Promise<void>;
   activateTab(path: string, persistCurrent: boolean, options?: ActivationOptions): Promise<void>;
   classifyUnknownTextPath(path: string): Promise<boolean>;
@@ -68,6 +69,7 @@ export class EditorTabLifecycleController {
         { title: "Unsaved Changes", kind: "warning" },
       );
       if (!shouldClose) return;
+      await this.dependencies.discardRecoverySnapshot(tab);
     }
 
     const wasActive = this.dependencies.session.activeFilePath === path;

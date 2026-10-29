@@ -31,6 +31,8 @@ type DocumentPersistenceDependencies = {
   notifyLspSave: (path: string, content: string) => Promise<void>;
   logMemoryDiagnostics: (reason: string) => Promise<void>;
   clearExternalConflict: (path: string) => void;
+  recoveryRevision: (tab: EditorTab) => number;
+  recoverySaved: (tab: EditorTab, revision: number) => Promise<void> | void;
   renderEditorTabs: () => void;
   refreshPreviewAfterSave: (path: string, content: string) => Promise<void>;
   setLspStatus: (status: LspStatus) => void;
@@ -127,6 +129,7 @@ export class DocumentPersistenceController {
     const dirtyTabs = this.deps.openTabs().filter(tab =>
       tab.contentLoaded
       && tab.isDirty
+      && !tab.recoveredUnsaved
       && this.canPersistPath(tab.path)
     );
     if (dirtyTabs.length === 0) return;
@@ -149,12 +152,15 @@ export class DocumentPersistenceController {
     try {
       for (const tab of tabs) {
         const content = tab.content;
+        const recoveryRevision = this.deps.recoveryRevision(tab);
         await invoke("save_workspace_file", { path: tab.path, contents: content });
         if (tab.content !== content) continue;
         tab.savedContent = content;
         tab.isDirty = false;
+        tab.recoveredUnsaved = undefined;
         tab.externalContent = undefined;
         this.deps.clearExternalConflict(tab.path);
+        await this.deps.recoverySaved(tab, recoveryRevision);
         savedTabs.push(tab);
       }
     } catch (error) {
@@ -219,6 +225,7 @@ export class DocumentPersistenceController {
       ));
       const pendingExternalContents = pendingExternalTabs.map(tab => ({ tab, content: tab.content }));
       const contentChanged = pendingExternalTabs.length > 0 || activeTab?.externalContent !== undefined || content !== savedContentBeforeSave;
+      const recoveryRevision = activeTab ? this.deps.recoveryRevision(activeTab) : 0;
       await invoke("save_workspace_file", { path: activeFilePath, contents: content });
       await this.deps.logMemoryDiagnostics(`save ${saveDiagnosticId}: after workspace write`);
 
@@ -232,8 +239,10 @@ export class DocumentPersistenceController {
         activeTab.content = content;
         activeTab.savedContent = content;
         activeTab.isDirty = false;
+        activeTab.recoveredUnsaved = undefined;
         activeTab.externalContent = undefined;
         this.deps.clearExternalConflict(activeTab.path);
+        await this.deps.recoverySaved(activeTab, recoveryRevision);
         this.deps.renderEditorTabs();
       }
       this.deps.setLspStatus({ kind: "preview-ready", message: "File saved" });

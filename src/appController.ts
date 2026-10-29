@@ -172,6 +172,7 @@ import { DocumentTypographyApplicationController } from "./typography/documentTy
 import { SourceLocationController } from "./navigation/sourceLocationController";
 import { OutlineNavigationController } from "./navigation/outlineNavigationController";
 import { NavigationHistoryController } from "./navigation/navigationHistoryController";
+import { RecoveryController } from "./recovery/recoveryController";
 import { TinymistIntegrationController } from "./session/tinymistIntegrationController";
 
 
@@ -372,6 +373,7 @@ export class TypsastraWorkspaceController {
     typography: () => this.typographyController,
     pinnedMainFilePath: () => this.pinnedMainFilePath,
     persistActiveTabState: () => this.persistActiveTabState(),
+    discardRecoverySnapshot: tab => this.recoveryController.discardTab(tab),
     promoteToPermanent: tab => this.promoteToPermanent(tab),
     activateTab: (path, persistCurrent, options) => this.activateEditorTab(path, persistCurrent, options),
     classifyUnknownTextPath: path => this.classifyUnknownTextPath(path),
@@ -1239,6 +1241,21 @@ export class TypsastraWorkspaceController {
     showNotice: message => this.reportNavigationWarning(message),
     onChanged: () => this.updateNavigationHistoryControls(),
   });
+  private readonly recoveryController = new RecoveryController({
+    activeTab: () => this.getActiveTab(),
+    openTabs: () => this.openTabs,
+    activeFilePath: () => this.activeFilePath,
+    workspaceRootPath: () => this.workspaceRootPath,
+    editor: () => this.editorInstance,
+    logWarning: (message, persistent) => this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "recovery",
+      message,
+      channel: "lsp",
+      counted: true,
+      persistent,
+    }),
+  });
   private readonly spellcheckSidebarPane = new SpellcheckSidebarPane(entry => this.navigateToLogEntry(entry));
   private activeDocumentPane: DocumentSidebarPane = "outline";
 
@@ -1430,6 +1447,7 @@ export class TypsastraWorkspaceController {
     refreshActivePreviewRoot: force => this.refreshActivePreviewRoot(force),
     appendLog: entry => this.appendDeveloperLog(entry),
     navigationHistory: () => this.navigationHistoryController,
+    recovery: () => this.recoveryController,
   });
   private readonly workspaceLifecycleController = new WorkspaceLifecycleController(
     this.createWorkspaceLifecycleDependencies(),
@@ -1841,6 +1859,8 @@ export class TypsastraWorkspaceController {
     },
     logMemoryDiagnostics: reason => this.performanceController.logMemoryDiagnostics(reason),
     clearExternalConflict: path => this.externalFileReloadController.clearConflict(path),
+    recoveryRevision: tab => this.recoveryController.recoveryRevision(tab),
+    recoverySaved: (tab, revision) => this.recoveryController.handleTabSaved(tab, revision),
     renderEditorTabs: () => this.renderEditorTabs(),
     refreshPreviewAfterSave: async () => {
       // Resolve the effective preview root at save time instead of relying on
@@ -2356,6 +2376,15 @@ export class TypsastraWorkspaceController {
     this.performanceController.timeStartupSync("initialize toolchain UI", () => this.toolchainController.initialize());
     this.performanceController.timeStartupSync("initialize context menu", () => this.contextMenuController.initialize());
     this.performanceController.timeStartupSync("initialize log console", () => this.logConsoleController.initialize());
+    try {
+      await this.performanceController.timeStartup("initialize recovery", () => this.recoveryController.initialize());
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "recovery",
+        message: `Could not inventory recovery snapshots: ${String(error)}`,
+      });
+    }
     this.performanceController.timeStartupSync("update workspace visibility", () => this.updateWorkspaceViewportVisibility());
 
     await this.performanceController.timeStartup("show main window", () => getCurrentWindow().show());
@@ -2740,6 +2769,9 @@ export class TypsastraWorkspaceController {
 
   private persistActiveTabState(): void {
     this.editorTabStateController.persistActive();
+    if (this.workspaceLoading) return;
+    const tab = this.getActiveTab();
+    if (tab?.isDirty) void this.recoveryController.flushTab(tab);
   }
 
   private restoreEditorTabViewport(tab: EditorTab, path: string): Promise<void> {
@@ -2863,6 +2895,7 @@ export class TypsastraWorkspaceController {
 
   private scheduleEditorContentMutation(doc: Text): void {
     if (!this.activeFilePath) return;
+    this.recoveryController.noteActiveDocumentChanged();
     this.editorController.scheduleContentMutation(this.activeFilePath, doc);
   }
 

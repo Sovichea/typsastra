@@ -15,6 +15,8 @@ export type EditorTab = {
   externalContent?: string;
   /** External revision still awaiting an explicit On save preview compilation. */
   externalPreviewPending?: boolean;
+  /** Restored from crash recovery; never auto-save it without an explicit Save. */
+  recoveredUnsaved?: boolean;
   previewRootPath: string | null;
   previewMainPath: string | null;
   previewTaskId: string | null;

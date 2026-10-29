@@ -246,6 +246,11 @@ describe("WorkspaceLifecycleController behavior", () => {
       },
       documentOutlineController: { clear: () => {} },
       navigationHistoryController: { clear: () => calls.push("clear-navigation-history") },
+      recoveryController: {
+        discardAllTabs: async (tabs: readonly { path: string }[]) => {
+          calls.push(`discard-recovery:${tabs.map(tab => tab.path).join(",")}`);
+        },
+      },
       spellcheckSidebarPane: { clear: () => {} },
       restoreDocumentSidebarPane: () => {},
       renderEditorTabs: () => {},

@@ -55,6 +55,8 @@ function createController(options: {
     notifyLspSave: async () => {},
     logMemoryDiagnostics: async () => {},
     clearExternalConflict: () => {},
+    recoveryRevision: () => 0,
+    recoverySaved: async () => {},
     renderEditorTabs: () => {},
     refreshPreviewAfterSave: async () => { refreshCalls += 1; },
     setLspStatus: () => {},
