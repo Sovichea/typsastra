@@ -15,7 +15,8 @@ walkthrough.
 - [Editor productivity](tutorials/EDITOR_PRODUCTIVITY.md) — search, shortcuts,
   Typst-aware editing, drag/drop and paste, and save/recompile behavior.
 - [Search a project](tutorials/PROJECT_SEARCH.md) — search literal, regex, or
-  fuzzy matches across project files with glob filters and stale-safe navigation.
+  fuzzy matches across project files and review replacements across files with
+  glob filters and stale-safe navigation.
 - [Standalone files and PDFs](tutorials/STANDALONE_FILES_AND_PDFS.md) — open
   individual documents and use PDF reading, search, selection, and copy tools;
   opt into the experimental Unicode export engine when needed.

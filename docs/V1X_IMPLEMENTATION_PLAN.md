@@ -169,7 +169,7 @@ The removed editor-side transformation is preserved only as historical context i
 
 ## Later v1.x candidates
 
-- Global Unicode/grapheme-aware project search and replace.
+- Cross-workspace Unicode/grapheme-aware search and replace.
 - Typst package inventory, compatibility checks, and lock/export assistance.
 - Citation and bibliography workflow improvements.
 - Project health reports and one-click support bundles.

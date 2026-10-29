@@ -53,8 +53,40 @@ truncated or incomplete results. Changed files are checked before navigation. If
 a file changed since the result was produced, the search refreshes instead of
 applying stale offsets.
 
+## Replace across files
+
+Literal and Regex searches can replace selected matches across the project. Open
+the replace field with **Edit → Replace in Project** or `Ctrl+Shift+H`
+(`Cmd+Shift+H` on macOS), or type a replacement directly in the Search sidebar.
+
+1. Run a search and wait for it to finish. Replacement is unavailable while a
+   search is still running, incomplete, truncated, or errored.
+2. Type the replacement text.
+3. Select **Replace All** to replace every safe match immediately and skip the
+   review step.
+4. To replace only some matches, clear the checkbox beside any match you want to
+   keep, use a file checkbox to include or exclude all safe matches in that file,
+   then select **Review**. Inspect each changed line as a before/after pair and
+   select **Apply Replacement**.
+
+Typsastra applies one undoable edit per file and opens previously closed files
+as unsaved tabs. The source files are not written during replacement. Review the
+unsaved tabs and use normal **Save** or Auto-save when the changes are ready.
+
+Matches that would split a grapheme cluster are marked non-replaceable and are
+skipped. If any selected file changed after the search, nothing is applied and
+the results refresh.
+
+Use **Undo Replace** in the Search sidebar to restore every file from the latest
+replacement. The button appears after a replacement and is only offered while
+all affected buffers still match the batch output. Normal per-file **Undo** is
+always available; editing any affected buffer also disables the batch undo so it
+cannot overwrite newer work. With On-type preview, the batch produces one preview
+update after it completes rather than one update per file.
+
 ## Limits and privacy
 
 Project search stays inside the workspace. It does not search generated app
 caches, project archives, binary files, or paths outside the workspace. Query
-text and results are session-only; they are not written to project settings.
+and replacement text, results, and the latest undo batch are session-only; they
+are not written to project settings.

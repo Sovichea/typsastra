@@ -44,7 +44,8 @@ This file serves as a consolidated reference for the architectural decisions, pa
   - `src/workspace/projectTextService.ts`: Shared buffer-over-disk text snapshots, workspace-relative identities, opaque revisions, inventory invalidation, and a four-file read limit for project search.
   - `src/search/projectSearch.ts`: Pure project-search matching, glob filters, fuzzy ranking, worker contracts, and result caps.
   - `src/search/projectSearchWorker.ts`: Background matching worker with incremental file results and cancellation by termination.
-  - `src/search/projectSearchController.ts`: Search sidebar state, debounced requests, regex watchdog, result rendering, and stale-result navigation guards.
+  - `src/search/projectReplacement.ts`: Typed replacement requests, grapheme-safe range checks, regex capture previews, and non-overlapping text-edit application.
+  - `src/search/projectSearchController.ts`: Search sidebar state, debounced requests, regex watchdog, result rendering, selection/review UI, stale-result navigation guards, and replacement/undo orchestration.
   - `src/wysiwym/adapter.ts`: WYSIWYM block parsing, DOM rendering, and Typst serialization.
   - `src/diagnostics/logConsoleController.ts`, `src/editor/fontManager.ts`, `src/editor/toolbarController.ts`, `src/layout/layoutController.ts`: Feature-local DOM/state controllers. `fontCatalog.ts` defines the selectable code and Unicode font engines; `documentTypography.ts` generates managed document font rules.
   - `src/editor/templateTypography.ts`: Pure parsing/edit helpers for local `#show: function.with(...)` templates, managed typography blocks, standalone chapter preview entries, and external-reference placeholders.

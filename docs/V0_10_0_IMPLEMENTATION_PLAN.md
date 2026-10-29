@@ -6,9 +6,9 @@ Improve multi-file navigation, editing, and recovery through four connected
 features: project search and reviewed replacement, a shared main-document
 outline, Back/Forward source navigation, and unsaved-text crash recovery.
 
-This is an approved implementation plan, not a record of completed features.
-Tasks use stable IDs. Application code, tests, and user documentation should
-land together. All four features are required for the planned release.
+This plan records approved scope and implementation status. Tasks use stable IDs.
+Application code, tests, and user documentation should land together. All four
+features are required for the planned release.
 
 ## Release rules
 
@@ -26,64 +26,77 @@ land together. All four features are required for the planned release.
 
 ### V010-A.1 — Shared project-text service
 
-- Introduce a service providing canonical file identity, workspace-relative
-  paths, buffer-over-disk snapshots, revision tokens, and invalidation.
-- Search UTF-8 text inside the workspace. Unsaved open buffers take precedence
-  over disk. Make searchable text files openable in the generic text editor.
-- Respect `.gitignore` by default; expose an option to include ignored files.
-  Always exclude binary files, `.git`, `.typsastra`, generated application caches,
-  and paths outside the workspace. Do not traverse directory symlinks.
-- Enumerate files through a cancellable native service. Read at most four files
-  concurrently and skip files larger than 10 MiB with a visible explanation.
-- Preserve original source text, BOM, and line endings. Use UTF-16 offsets at
-  frontend boundaries and explicit conversion at native boundaries.
+Implemented:
+
+- `ProjectTextService` provides canonical file identity, workspace-relative
+  paths, buffer-over-disk snapshots, revision tokens, and path/all invalidation.
+- Search covers UTF-8 text inside the workspace. Unsaved open buffers take
+  precedence over disk, and searchable text files can be opened in the generic
+  text editor.
+- `.gitignore` is respected by default with an option to include ignored files.
+  Binary files, `.git`, `.typsastra`, generated application caches, and paths
+  outside the workspace are excluded. Directory symlinks are not traversed.
+- Files are enumerated through a cancellable native service. At most four files
+  are read concurrently, and files larger than 10 MiB are skipped with a visible
+  explanation.
+- Snapshots preserve original source text, BOM, and line endings. Frontend
+  boundaries use UTF-16 offsets and convert explicitly at native boundaries.
 
 ### V010-A.2 — Search sidebar and matching
 
-- Add Search to the activity bar. It replaces sidebar content while leaving the
-  editor and preview visible; it does not own the preview like Image/Table Tools.
-- Keep editor Find. Register configurable Search Project and Replace in Project
-  commands, defaulting to `Ctrl/Cmd+Shift+F` and `Ctrl/Cmd+Shift+H`.
-- Provide mutually exclusive Literal, Regex, and Fuzzy modes with include/exclude
-  glob filters.
+Implemented:
+
+- Search is available from the activity bar. It replaces sidebar content while
+  leaving the editor and preview visible; it does not own the preview like
+  Image/Table Tools.
+- Editor Find remains. Configurable Search Project and Replace in Project
+  commands default to `Ctrl/Cmd+Shift+F` and `Ctrl/Cmd+Shift+H`.
+- Mutually exclusive Literal, Regex, and Fuzzy modes share include/exclude glob
+  filters.
 - Literal mode reuses editor behavior for case sensitivity, whole words,
   diacritics, and Unicode. Regex mode shares editor regex syntax and capture
-  replacement semantics. Extract reusable matching logic from
-  `src/editor/search.ts` rather than implementing a second interpretation.
+  replacement semantics through the extracted `searchMatcher` module.
 - Fuzzy mode ranks subsequence matches in relative file paths and individual
-  source lines. Show path matches separately from content matches and highlight
-  matched characters. Disable replacement, whole-word, regex, and diacritic
-  controls in this mode.
-- Group content matches by relative file path, showing line numbers, highlighted
-  excerpts, and counts. Clicking opens and selects source without moving the PDF.
-- Debounce query changes by 200 ms. Run matching in a Web Worker and cap displayed
-  results at 20,000. Explicitly label truncated, skipped, or incomplete results.
-- Terminate regex work exceeding one second per file using a worker watchdog;
-  report incomplete results without blocking editor input.
-- Tag requests/results with workspace, query, and source revisions. Cancel old
-  work and reject late responses after query changes or workspace closure.
-- Revalidate changed files before navigating to a result; refresh stale results
-  instead of trusting old offsets.
+  source lines. Path matches are shown separately from content matches with
+  highlighted characters. Replacement, whole-word, regex, and diacritic controls
+  are disabled in this mode.
+- Content matches are grouped by relative file path with line numbers,
+  highlighted excerpts, and counts. Clicking opens and selects source without
+  moving the PDF.
+- Query changes are debounced by 200 ms. Matching runs in a Web Worker, results
+  are capped at 20,000, and truncated, skipped, or incomplete results are
+  explicitly labelled.
+- Regex work exceeding one second per file is terminated by a worker watchdog;
+  incomplete results are reported without blocking editor input.
+- Requests and results are tagged with workspace, query, and source revisions.
+  Old work is cancelled and late responses are rejected after query changes or
+  workspace closure.
+- Changed files are revalidated before navigating to a result; stale results
+  refresh instead of trusting old offsets.
 
 ### V010-A.3 — Reviewed multi-file replacement
 
-- Literal and regex modes provide per-match/per-file selection and before/after
-  review. Disable application while results are incomplete or truncated; require
-  narrowing the query and completing the search first.
-- Reject replacement ranges that split grapheme clusters. Show unsafe matches as
-  non-replaceable instead of silently expanding their ranges.
-- Preflight every selected file against its reviewed revision. If any changed,
-  apply nothing and refresh affected results.
-- Apply one undoable CodeMirror transaction per affected file. Open previously
-  closed files as permanent unsaved tabs; preserve existing selection and scroll
-  state where possible. Do not write source files during application.
-- Suppress intermediate preview scheduling. On type schedules one update after
-  the complete batch; On save waits for saving. Auto-save must not observe a
+Implemented:
+
+- Literal and regex modes provide a one-click Replace All for every safe match,
+  plus per-match/per-file selection and before/after review for narrower changes.
+  Replacement is disabled while results are searching, incomplete, truncated, or
+  errored, and requires a completed search.
+- Ranges that split grapheme clusters are rejected. Unsafe matches are shown as
+  non-selectable and cannot be applied.
+- Every selected file is preflighted against its reviewed revision and open
+  buffer content. If any file changed, nothing is applied and the results
+  refresh.
+- Replacement applies one undoable CodeMirror transaction per affected file.
+  Previously closed files open as permanent unsaved tabs; selection and scroll
+  state are restored where possible. Source files are not written.
+- Intermediate preview scheduling is suppressed. On type schedules one update
+  after the complete batch; On save waits for saving. Auto-save cannot observe a
   partially applied batch.
-- Retain the latest batch's before/after revisions. Offer Undo Replace Batch only
-  while every affected buffer still matches its output. Preflight the entire
-  undo before making changes; otherwise explain why it is unavailable and retain
-  normal per-file Undo.
+- The latest batch's before/after text is retained. Undo Replace is available
+  only while every affected buffer still matches its output, checks the entire
+  batch before changing anything, and otherwise explains why it is unavailable
+  so normal per-file Undo remains usable.
 
 ## B. Shared main-document outline
 
@@ -231,19 +244,22 @@ Implemented:
 
 ## E. Interfaces and compatibility
 
-- Keep search requests/results and replacement plans typed and separate from
+Implemented:
+
+- Search requests/results and replacement plans stay typed and separate from
   editor mutation. Each result identifies its query, file revision, match range,
   and replacement eligibility.
-- Make the shared text service the source of buffer/disk revision checks for
-  search and outline. Use existing editor sessions and save policies for edits.
-- Add optional workspace preferences for Search-sidebar state. Outline scope
-  preferences are deferred until a File/Project selector is implemented. Do not
-  persist query results or navigation history.
-- Version recovery records independently of project archives. Validate records
-  before restoration and keep unsupported versions available for explicit review
-  rather than silently deleting them.
-- Use existing shortcut customization, icon, theme, context-menu, and accessibility
-  conventions. No hardcoded platform-specific storage paths.
+- The shared text service supplies buffer-over-disk snapshots and revision
+  checks for search and replacement. Outline reads prefer open buffers through
+  the workspace text controller. Edits use existing editor sessions and save
+  policies.
+- The active sidebar tool is remembered in workspace layout state. Search
+  queries, replacement text, results, and navigation history are session-only.
+- Recovery records are versioned independently of project archives, validated
+  before restoration, and unsupported versions remain available for explicit
+  review rather than being silently deleted.
+- Shortcut customization, icons, themes, context menus, and accessibility follow
+  existing conventions. No platform-specific storage paths are hardcoded.
 
 ## F. Delivery sequence
 
@@ -276,9 +292,8 @@ Implemented:
   outlines for non-main documents, active-heading sync, exact PDF heading scroll,
   repeated heading clicks, unsaved buffers, main changes, and rapid tab
   switching.
-- Deferred outline gates: File/Project scope, repeated include occurrences,
-  dynamic-include notices, file-based heading identities, and a separate Reveal
-  in Preview command.
+- Deferred outline gates: File/Project scope and a separate Reveal in Preview
+  command.
 - Verify history branching, replay suppression, changed source contexts,
   missing/renamed destinations, and workspace-close cancellation.
 - Confirm all navigation paths preserve preview freshness, viewport, and the
@@ -287,8 +302,8 @@ Implemented:
 ### Recovery
 
 - Exercise forced termination, interrupted atomic writes, continuous editing,
-  inactive buffers, standalone/off-project/untitled files, deleted files, disk
-  conflicts, corrupt records, storage limits, and permission/disk-write failures.
+  inactive buffers, standalone/off-project files, missing files, disk conflicts,
+  corrupt records, storage limits, and permission/disk-write failures.
 - Verify newer snapshots survive older saves and that recovery data survives
   disposable-cache maintenance.
 - Confirm review and restoration never overwrite source files automatically.
