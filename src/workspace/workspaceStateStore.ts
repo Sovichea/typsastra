@@ -399,13 +399,17 @@ function normalizeScriptLanguages(value: unknown): StoredScriptLanguageAssignmen
     const record = objectValue(value[index]);
     if (typeof record.script !== "string" || !/^[A-Z][a-z]{3}$/.test(record.script)) continue;
     if (assignments.has(record.script) || typeof record.languageTag !== "string") continue;
-    const languageTag = /^([A-Za-z]{2,3})(?:-([A-Za-z]{2}|[0-9]{3}))?$/.exec(record.languageTag);
+    const languageTag = /^([A-Za-z]{2,3})(?:-([A-Za-z]{4}))?(?:-([A-Za-z]{2}|[0-9]{3}))?(?:-([A-Za-z0-9]{5,8}))?$/.exec(record.languageTag);
     if (!languageTag) continue;
+    const [, language, script, region, variant] = languageTag;
     assignments.set(record.script, {
       script: record.script,
-      languageTag: languageTag[2]
-        ? `${languageTag[1].toLowerCase()}-${languageTag[2].toUpperCase()}`
-        : languageTag[1].toLowerCase()
+      languageTag: [
+        language!.toLowerCase(),
+        script ? `${script[0]!.toUpperCase()}${script.slice(1).toLowerCase()}` : null,
+        region ? (/^\d{3}$/.test(region) ? region : region.toUpperCase()) : null,
+        variant ? variant.toLowerCase() : null,
+      ].filter((part): part is string => part !== null).join("-")
     });
   }
   return [...assignments.values()].reverse();

@@ -304,9 +304,20 @@ describe("editor settings presentation", () => {
     expect(catalogMarkup).not.toContain("hidden");
     expect(settingsHtml).toContain('aria-expanded="true"');
     expect(settingsController).toContain('if (name === "editor") void this.ensureLanguageCatalogPopulated();');
-    expect(ensureMethod).toContain("await this.populateLanguageCatalog();");
+    expect(ensureMethod).toContain("this.languageCatalogLoad = this.populateLanguageCatalog();");
     expect(ensureMethod).not.toContain(".focus()");
     expect(settingsController).toContain('button.textContent = visible ? "Hide languages" : "Show languages"');
+  });
+
+  test("reveals and filters the language provider catalog on request", () => {
+    expect(settingsHtml).toContain('id="settings-language-providers"');
+    expect(settingsController).toContain("private async revealLanguageProviders(languageTag?: string)");
+    expect(settingsController).toContain("this.setLanguageCatalogVisibility(catalog, true)");
+    expect(settingsController).toContain('this.languageCatalogQuery = languageTag ?? ""');
+    expect(settingsController).toContain('search.dispatchEvent(new Event("input"))');
+    expect(settingsController).toContain('scrollIntoView({ block: "center", behavior: "smooth" })');
+    expect(settingsController).toContain("revealLanguageProviders?: boolean");
+    expect(settingsController).toContain("languageTag?: string");
   });
 
   test("gives the provider catalog wider, consistently inset rows", () => {
@@ -314,5 +325,37 @@ describe("editor settings presentation", () => {
     expect(settingsStyles).toContain("padding: 0 12px 8px");
     expect(settingsStyles).toContain("scrollbar-gutter: stable");
     expect(settingsStyles).toContain("padding: 12px 2px");
+  });
+
+  test("keeps the downloading provider action label inside its row", () => {
+    const rowStart = settingsStyles.indexOf(".settings-language-catalog-row {");
+    const rowEnd = settingsStyles.indexOf("}", rowStart);
+    const rowCss = settingsStyles.slice(rowStart, rowEnd);
+    const buttonStart = settingsStyles.indexOf(".settings-language-catalog-row > button {");
+    const buttonEnd = settingsStyles.indexOf("}", buttonStart);
+    const buttonCss = settingsStyles.slice(buttonStart, buttonEnd);
+
+    expect(rowCss).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(settingsStyles).toContain(".settings-language-catalog-row > div:first-child { min-width: 0; }");
+    expect(settingsStyles).toContain(".settings-language-tools > .settings-secondary-button {");
+    expect(settingsStyles).not.toContain(".settings-language-tools .settings-secondary-button {");
+    expect(buttonCss).toContain("align-self: start");
+    expect(buttonCss).toContain("min-width: 104px");
+    expect(buttonCss).toContain("white-space: nowrap");
+  });
+
+  test("places provider badges on a second row below the title", () => {
+    const titleRowStart = settingsStyles.indexOf(".settings-language-provider-title-row {");
+    const titleRowEnd = settingsStyles.indexOf("}", titleRowStart);
+    const titleRowCss = settingsStyles.slice(titleRowStart, titleRowEnd);
+    const titleStart = settingsStyles.indexOf(".settings-language-catalog-title {");
+    const titleEnd = settingsStyles.indexOf("}", titleStart);
+    const titleCss = settingsStyles.slice(titleStart, titleEnd);
+
+    expect(titleRowCss).toContain("flex-wrap: wrap");
+    expect(titleRowCss).toContain("row-gap: 4px");
+    expect(titleCss).toContain("flex: 0 0 100%");
+    expect(titleCss).toContain("text-overflow: ellipsis");
+    expect(titleCss).toContain("white-space: nowrap");
   });
 });

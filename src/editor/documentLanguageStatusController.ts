@@ -24,6 +24,7 @@ export interface DocumentLanguageStatusDependencies {
 
 export class DocumentLanguageStatusController {
   private returnFocus: HTMLElement | null = null;
+  private pendingProviderLanguageTag: string | null = null;
 
   constructor(private readonly deps: DocumentLanguageStatusDependencies) {}
 
@@ -44,8 +45,16 @@ export class DocumentLanguageStatusController {
       this.updateFeatureToggles();
     });
     document.getElementById("document-language-manage")?.addEventListener("click", () => {
+      const languageTag = this.missingProviderLanguageTag();
+      this.applySelections();
       this.close(false);
-      document.dispatchEvent(new CustomEvent("typsastra:open-settings", { detail: { panel: "editor" } }));
+      document.dispatchEvent(new CustomEvent("typsastra:open-settings", {
+        detail: {
+          panel: "editor",
+          revealLanguageProviders: true,
+          languageTag: languageTag ?? undefined,
+        },
+      }));
     });
     this.overlay()?.addEventListener("mousedown", event => {
       if (event.target === this.overlay()) this.close();
@@ -104,6 +113,7 @@ export class DocumentLanguageStatusController {
 
   private open(trigger: HTMLElement): void {
     this.returnFocus = trigger;
+    this.pendingProviderLanguageTag = null;
     this.renderModal();
     const overlay = this.overlay();
     if (!overlay) return;
@@ -145,6 +155,7 @@ export class DocumentLanguageStatusController {
           ? option.displayName
           : displayLanguageTag(option.languageTag, option.displayName);
         item.textContent = `${label}${option.installed ? "" : " · no provider"}`;
+        if (!option.installed) item.dataset.noProvider = "true";
         return item;
       }));
       const assigned = current.find(entry => entry.script.toLowerCase() === script.iso15924.toLowerCase())?.languageTag ?? "";
@@ -155,10 +166,33 @@ export class DocumentLanguageStatusController {
         select.append(unavailable);
       }
       select.value = assigned;
+      select.addEventListener("change", () => {
+        this.pendingProviderLanguageTag =
+          select.options[select.selectedIndex]?.dataset.noProvider === "true"
+            ? select.value
+            : null;
+      });
       row.append(name, select);
       return row;
     }));
     empty.hidden = configurable.length > 0;
+  }
+
+  private missingProviderLanguageTag(): string | null {
+    if (this.pendingProviderLanguageTag) return this.pendingProviderLanguageTag;
+    const editor = this.deps.editor();
+    const selection = this.deps.languageService().languageAt(
+      editor.state.doc,
+      editor.state.selection.main.head,
+    );
+    if (selection?.state === "missing" && selection.languageTag) return selection.languageTag;
+    for (const select of document.querySelectorAll<HTMLSelectElement>(
+      "#document-language-assignments [data-script-language]",
+    )) {
+      const option = select.options[select.selectedIndex];
+      if (option?.value && option.dataset.noProvider === "true") return option.value;
+    }
+    return null;
   }
 
   private updateFeatureToggles(): void {
@@ -176,6 +210,12 @@ export class DocumentLanguageStatusController {
   }
 
   private apply(): void {
+    this.applySelections();
+    this.close();
+    this.update();
+  }
+
+  private applySelections(): void {
     const selects = [...document.querySelectorAll<HTMLSelectElement>("#document-language-assignments [data-script-language]")];
     const visibleScripts = new Set(selects.map(select => select.dataset.scriptLanguage!.toLowerCase()));
     const assignments = [
@@ -185,8 +225,6 @@ export class DocumentLanguageStatusController {
         : []),
     ];
     this.deps.applyAssignments(assignments);
-    this.close();
-    this.update();
   }
 
   private overlay(): HTMLElement | null {

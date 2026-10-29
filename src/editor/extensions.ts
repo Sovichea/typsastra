@@ -1,6 +1,6 @@
 import { Extension, Compartment, EditorSelection, EditorState, StateEffect, RangeSetBuilder, Prec } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, RectangleMarker, layer, tooltips } from "@codemirror/view";
 import { history, historyKeymap, indentLess, insertNewlineAndIndent, insertTab, toggleLineComment } from "@codemirror/commands";
 import {
@@ -319,6 +319,22 @@ function writeEditorClipboardText(event: ClipboardEvent, view: EditorView): bool
     console.error("Failed to write editor selection to the native clipboard:", error);
   });
   return true;
+}
+
+export function normalizePastedText(text: string): string {
+  return text.replace(/\r\n?/g, "\n");
+}
+
+function pasteNativeClipboardText(view: EditorView): void {
+  void readText()
+    .then(text => {
+      if (!text) return;
+      view.dispatch(view.state.replaceSelection(normalizePastedText(text)));
+      view.focus();
+    })
+    .catch(error => {
+      console.error("Failed to read text from the native clipboard:", error);
+    });
 }
 
 export function firstSearchMatch(
@@ -907,14 +923,22 @@ export function getEditorExtensions(
       },
       paste: (event, view) => {
         const files = clipboardImageFiles(event.clipboardData);
-        if (files.length === 0 || !onClipboardImagePaste) return false;
+        if (files.length > 0) {
+          if (!onClipboardImagePaste) return false;
+          event.preventDefault();
+          const selection = view.state.selection.main;
+          const document = view.state.doc;
+          void readClipboardImageFiles(files).then(images => {
+            if (view.state.doc !== document) return;
+            onClipboardImagePaste(images, { from: selection.from, to: selection.to }, view);
+          }).catch(error => console.error("Failed to read pasted clipboard image:", error));
+          return true;
+        }
+        if (event.clipboardData?.getData("text/plain")) return false;
+        // Windows clipboard history can deliver a paste event without a
+        // browser clipboard payload. Fall back to the native clipboard.
         event.preventDefault();
-        const selection = view.state.selection.main;
-        const document = view.state.doc;
-        void readClipboardImageFiles(files).then(images => {
-          if (view.state.doc !== document) return;
-          onClipboardImagePaste(images, { from: selection.from, to: selection.to }, view);
-        }).catch(error => console.error("Failed to read pasted clipboard image:", error));
+        pasteNativeClipboardText(view);
         return true;
       },
       copy: (event, view) => writeEditorClipboardText(event, view),

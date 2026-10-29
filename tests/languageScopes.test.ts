@@ -3,10 +3,11 @@ import { Text } from "@codemirror/state";
 import {
   detectedLanguageAtCaret,
   DocumentLanguageService,
+  sameLanguage,
   scriptAtCaret,
   selectDocumentLanguageProvider,
 } from "../src/editor/languageScopes/documentLanguage";
-import type { LanguageProviderCapabilities } from "../src/languageSupport";
+import type { LanguageCatalogCapabilities, LanguageProviderCapabilities } from "../src/languageSupport";
 
 const provider = (id: string, languageTag: string, scripts: string[]): LanguageProviderCapabilities => ({
   schemaVersion: 1,
@@ -30,6 +31,20 @@ const provider = (id: string, languageTag: string, scripts: string[]): LanguageP
   providerType: "dictionary-only",
   version: "1",
   license: "test",
+});
+
+const catalogEntry = (
+  id: string,
+  languageTag: string,
+  scripts: string[],
+): LanguageCatalogCapabilities => ({
+  ...provider(id, languageTag, scripts),
+  locale: id.replace(/-/g, "_"),
+  installed: false,
+  bundled: false,
+  source: "test",
+  downloadSize: 1,
+  checksum: "",
 });
 
 const installed = [
@@ -58,6 +73,24 @@ describe("document language routing", () => {
     expect(service.configurableScripts().map(entry => entry.script.iso15924)).toEqual(["Latn", "Hani"]);
   });
 
+  test("does not assume Serbian for every Cyrillic document", () => {
+    const catalog = [catalogEntry("sr-cyrl", "sr-Cyrl", ["Cyrl"])];
+    const serbian = provider("sr-cyrl", "sr-Cyrl", ["Cyrl"]);
+    const service = new DocumentLanguageService();
+
+    service.configure([], catalog, []);
+    expect(service.resolvedLanguageTag("Cyrl")).toBeNull();
+    expect(service.configurableScripts().map(entry => entry.script.iso15924)).toContain("Cyrl");
+
+    service.configure([], catalog, [serbian]);
+    const detected = service.languageAt(Text.of(["Русский"]), 0);
+    expect(detected?.languageTag).toBeNull();
+    expect(detected?.state).toBe("unconfigured");
+
+    service.configure([{ script: "Cyrl", languageTag: "sr-Cyrl" }], catalog, [serbian]);
+    expect(service.languageAt(Text.of(["Српски"]), 0)?.provider?.id).toBe("sr-cyrl");
+  });
+
   test("does not fall through from an unavailable French provider to English", () => {
     expect(selectDocumentLanguageProvider([installed[0]!], {
       script: "Latn",
@@ -82,6 +115,46 @@ describe("document language routing", () => {
       script: "Latn",
       languageTag: "en",
     })).toBeNull();
+  });
+
+  test("keeps regional, script, and variant choices explicit", () => {
+    const esMx = provider("es-mx", "es-MX", ["Latn"]);
+    const ca = provider("ca", "ca-ES", ["Latn"]);
+    const valencia = provider("ca-valencia", "ca-ES-valencia", ["Latn"]);
+    const serbianCyrillic = provider("sr-cyrl", "sr-Cyrl", ["Cyrl"]);
+    const serbianLatin = provider("sr-latn", "sr-Latn", ["Latn"]);
+
+    expect(selectDocumentLanguageProvider([esMx], {
+      script: "Latn",
+      languageTag: "es-MX",
+    })?.id).toBe("es-mx");
+    expect(selectDocumentLanguageProvider([esMx], {
+      script: "Latn",
+      languageTag: "es-ES",
+    })).toBeNull();
+
+    expect(selectDocumentLanguageProvider([ca, valencia], {
+      script: "Latn",
+      languageTag: "ca-ES-valencia",
+    })?.id).toBe("ca-valencia");
+    expect(selectDocumentLanguageProvider([valencia], {
+      script: "Latn",
+      languageTag: "ca-ES",
+    })).toBeNull();
+
+    expect(selectDocumentLanguageProvider([serbianCyrillic, serbianLatin], {
+      script: "Cyrl",
+      languageTag: "sr-Cyrl",
+    })?.id).toBe("sr-cyrl");
+    expect(selectDocumentLanguageProvider([serbianLatin], {
+      script: "Latn",
+      languageTag: "sr-Cyrl",
+    })).toBeNull();
+
+    expect(sameLanguage("ca-ES-valencia", "ca-ES-valencia")).toBe(true);
+    expect(sameLanguage("ca-ES-valencia", "ca-ES")).toBe(false);
+    expect(sameLanguage("sr-Cyrl", "sr-Latn")).toBe(false);
+    expect(sameLanguage("en-US", "en")).toBe(true);
   });
 
   test("reports the resolved script-language pair under the caret", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { EditorSelection, EditorState } from "@codemirror/state";
-import { selectedEditorClipboardText } from "../src/editor/extensions";
+import { normalizePastedText, selectedEditorClipboardText } from "../src/editor/extensions";
 
 describe("editor clipboard", () => {
   test("returns selected text as a standard plain-text clipboard payload", () => {
@@ -32,5 +32,17 @@ describe("editor clipboard", () => {
     });
 
     expect(selectedEditorClipboardText(state)).toBeNull();
+  });
+
+  test("normalizes Windows line endings when pasting native clipboard text", () => {
+    expect(normalizePastedText("alpha\r\nbeta\rgamma")).toBe("alpha\nbeta\ngamma");
+  });
+
+  test("falls back to the native clipboard when paste has no browser text payload", async () => {
+    const source = await Bun.file(new URL("../src/editor/extensions.ts", import.meta.url)).text();
+
+    expect(source).toContain('import { readText, writeText }');
+    expect(source).toContain('if (event.clipboardData?.getData("text/plain")) return false;');
+    expect(source).toContain("pasteNativeClipboardText(view)");
   });
 });

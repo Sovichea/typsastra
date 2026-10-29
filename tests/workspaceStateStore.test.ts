@@ -91,6 +91,23 @@ describe("workspace state store", () => {
     ]);
   });
 
+  test("normalizes script and variant language subtags", () => {
+    const metadata = normalizeWorkspaceMetadata({
+      project: {
+        scriptLanguages: [
+          { script: "Cyrl", languageTag: "sr-cyrl" },
+          { script: "Latn", languageTag: "ca-ES-valencia" },
+        ],
+      },
+      workspace: null,
+    });
+
+    expect(metadata.project.scriptLanguages).toEqual([
+      { script: "Cyrl", languageTag: "sr-Cyrl" },
+      { script: "Latn", languageTag: "ca-ES-valencia" },
+    ]);
+  });
+
   test("persists the undocked preview window size and maximized state", () => {
     const stored = normalizeWorkspaceMetadata({
       workspace: {

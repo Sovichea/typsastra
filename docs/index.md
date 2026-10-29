@@ -6,13 +6,13 @@ technical documentation, theses, books, and multilingual long-form writing.
 This site brings together step-by-step workflows, tool references, language
 guides, and contributor documentation.
 
-## New in v0.9.5
+## New in v0.9.6
 
-This update focuses on UX and app performance: faster file and tab switching,
-fewer unnecessary preview compilations, more reliable rendering and viewport
-restoration, live-preview search, and clearer source-status feedback.
+This update improves Hunspell dictionary compatibility, adds LibreOffice
+spelling variants, streamlines language-provider management, and fixes selection
+wrapping, paste, preview freshness, and stale diagnostic behavior.
 
-Read the [v0.9.5 release notes](RELEASE_NOTES_V0.9.5.md), or explore the
+Read the [v0.9.6 release notes](RELEASE_NOTES_V0.9.6.md), or explore the
 [preview settings](SETTINGS.md#preview) and
 [PDF navigation guide](tutorials/PDF_PREVIEW_AND_SYNC.md).
 

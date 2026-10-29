@@ -1,6 +1,6 @@
 [package]
 name = "typsastra"
-version = "0.9.5"
+version = "0.9.6"
 edition = "2021"
 
 [lib]
@@ -33,6 +33,7 @@ base64 = "0.22"
 fontdb = "0.23"
 dunce = "1.0"
 ignore = "0.4"
+encoding_rs = "0.8"
 ttf-parser = "0.25"
 khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-features = false }
 spellbook = "0.4.2"

@@ -2152,8 +2152,10 @@ body.typsastra-resizing #input-container-wrapper::after {
 .settings-language-provider-text { min-width: 0; }
 .settings-language-provider-title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
+  row-gap: 4px;
   min-width: 0;
 }
 .settings-language-provider-title {
@@ -2167,6 +2169,8 @@ body.typsastra-resizing #input-container-wrapper::after {
 }
 .settings-language-support-badge {
   flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
   border: 1px solid var(--ui-border);
   border-radius: 999px;
   padding: 1px 6px;
@@ -2174,7 +2178,9 @@ body.typsastra-resizing #input-container-wrapper::after {
   font-weight: 700;
   line-height: 1.45;
   letter-spacing: 0.02em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .settings-language-support-badge.support-basic {
   color: var(--ui-header-text);
@@ -2215,7 +2221,7 @@ body.typsastra-resizing #input-container-wrapper::after {
   font-size: 10px;
   line-height: 1.35;
 }
-.settings-language-tools .settings-secondary-button {
+.settings-language-tools > .settings-secondary-button {
   align-self: flex-start;
 }
 .settings-language-catalog {
@@ -2378,26 +2384,33 @@ body.typsastra-resizing #input-container-wrapper::after {
 }
 .settings-language-catalog-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: 12px 2px;
   border-bottom: 1px solid var(--ui-border);
 }
+.settings-language-catalog-row > div:first-child { min-width: 0; }
 .settings-language-catalog-row:last-child { border-bottom: 0; }
 .settings-language-catalog-title {
+  flex: 0 0 100%;
   font-size: 12px;
   font-weight: 600;
   color: var(--ui-text);
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .settings-language-catalog-meta {
   margin-top: 2px;
   font-size: 11px;
   color: var(--ui-header-text);
 }
-.settings-language-catalog-row button {
-  min-width: 74px;
+.settings-language-catalog-row > button {
+  align-self: start;
+  min-width: 104px;
+  white-space: nowrap;
 }
 .settings-file-meta { min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ui-header-text); }
 .settings-file-meta code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 430px; }

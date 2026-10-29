@@ -13,7 +13,7 @@ This only clears the history; project files stay on disk.
 
 To learn without changing your own files, choose **Open Examples**. Typsastra
 installs writable copies in a versioned Documents folder such as
-`Typsastra Examples v0.9.5` and opens `START-HERE.typ`. Every release uses a new
+`Typsastra Examples v0.9.6` and opens `START-HERE.typ`. Every release uses a new
 folder, so upgrading never overwrites or silently reuses an older example copy.
 
 To follow the documentation walkthroughs, open the repository's

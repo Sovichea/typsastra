@@ -123,7 +123,9 @@ export class DocumentLanguageService {
   configurableScripts(): Array<{ script: DocumentScript; options: ScriptLanguageOption[] }> {
     return typographyScripts.flatMap((script) => {
       const options = this.optionsForScript(script.iso15924);
-      return options.length > 1 ? [{ script, options }] : [];
+      return options.length > 1 || (options.length === 1 && isSpecificLanguageTag(options[0]!.languageTag))
+        ? [{ script, options }]
+        : [];
     });
   }
 
@@ -131,7 +133,8 @@ export class DocumentLanguageService {
     const explicit = this.assignments.find((entry) => sameScript(entry.script, scriptCode));
     if (explicit) return explicit.languageTag;
     const options = this.optionsForScript(scriptCode);
-    return options.length === 1 ? options[0]!.languageTag : null;
+    if (options.length !== 1) return null;
+    return isSpecificLanguageTag(options[0]!.languageTag) ? null : options[0]!.languageTag;
   }
 
   languageAt(doc: Text, position: number): CaretLanguageSelection | null {
@@ -150,7 +153,9 @@ export class DocumentLanguageService {
         automatic: Boolean(detected),
       };
     }
-    const automatic = !explicit && options.length === 1;
+    const automatic = !explicit
+      && options.length === 1
+      && !isSpecificLanguageTag(options[0]!.languageTag);
     const languageTag = explicit?.languageTag ?? (automatic ? options[0]!.languageTag : null);
     if (!languageTag) {
       const detected = detectedLanguageAtCaret(doc, position, script.iso15924);
@@ -203,8 +208,11 @@ export function selectDocumentLanguageProvider(
   );
   const exact = candidates.find((provider) => normalizeTag(provider.languageTag) === normalizeTag(entry.languageTag));
   if (exact) return exact;
-  if (requested.region) return null;
-  const languageOnly = candidates.find((provider) => !localeParts(provider.languageTag)?.region);
+  if (requested.script || requested.region || requested.variant) return null;
+  const languageOnly = candidates.find((provider) => {
+    const locale = localeParts(provider.languageTag);
+    return Boolean(locale && !locale.script && !locale.region && !locale.variant);
+  });
   return languageOnly ?? (candidates.length === 1 ? candidates[0]! : null);
 }
 
@@ -219,6 +227,12 @@ export function sameLanguage(left: string, right: string): boolean {
   const leftLocale = localeParts(left);
   const rightLocale = localeParts(right);
   if (!leftLocale || !rightLocale || leftLocale.language !== rightLocale.language) return false;
+  if (leftLocale.script || rightLocale.script) {
+    if (leftLocale.script !== rightLocale.script) return false;
+  }
+  if (leftLocale.variant || rightLocale.variant) {
+    if (leftLocale.variant !== rightLocale.variant) return false;
+  }
   return !rightLocale.region || !leftLocale.region || leftLocale.region === rightLocale.region;
 }
 
@@ -326,19 +340,54 @@ function sameScript(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
 
-function normalizeTag(tag: string): string {
+function isSpecificLanguageTag(tag: string): boolean {
   const locale = localeParts(tag);
-  return locale ? `${locale.language}${locale.region ? `-${locale.region}` : ""}` : "";
+  return Boolean(locale && (locale.script || locale.variant));
 }
 
-function localeParts(tag: string): { language: string; region: string | null } | null {
+function normalizeTag(tag: string): string {
+  const locale = localeParts(tag);
+  if (!locale) return "";
+  return [
+    locale.language,
+    locale.script,
+    locale.region,
+    locale.variant,
+  ].filter((part): part is string => part !== null).join("-");
+}
+
+function localeParts(tag: string): {
+  language: string;
+  script: string | null;
+  region: string | null;
+  variant: string | null;
+} | null {
   const parts = tag.trim().replace(/_/g, "-").split("-");
-  if (parts.length > 2) return null;
-  const [rawLanguage, rawRegion] = parts;
+  if (parts.length < 1 || parts.length > 4) return null;
+  const [rawLanguage, ...subtags] = parts;
   if (!rawLanguage || !/^[A-Za-z]{2,3}$/.test(rawLanguage)) return null;
-  if (rawRegion && !/^(?:[A-Za-z]{2}|\d{3})$/.test(rawRegion)) return null;
+  let script: string | null = null;
+  let region: string | null = null;
+  let variant: string | null = null;
+  for (const subtag of subtags) {
+    if (!script && /^[A-Za-z]{4}$/.test(subtag)) {
+      script = `${subtag[0]!.toUpperCase()}${subtag.slice(1).toLowerCase()}`;
+      continue;
+    }
+    if (!region && /^(?:[A-Za-z]{2}|\d{3})$/.test(subtag)) {
+      region = /^\d{3}$/.test(subtag) ? subtag : subtag.toUpperCase();
+      continue;
+    }
+    if (!variant && /^[A-Za-z0-9]{5,8}$/.test(subtag)) {
+      variant = subtag.toLowerCase();
+      continue;
+    }
+    return null;
+  }
   return {
     language: rawLanguage.toLowerCase(),
-    region: rawRegion ? (/^\d{3}$/.test(rawRegion) ? rawRegion : rawRegion.toUpperCase()) : null,
+    script,
+    region,
+    variant,
   };
 }

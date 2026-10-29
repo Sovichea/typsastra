@@ -92,7 +92,8 @@ describe("editor image drag and drop", () => {
     expect(explorer).toContain("if (this.onImageDragStart && isSupportedImageReferencePath(node.path))");
     expect(extensions).toContain("event.dataTransfer?.types.includes(EXPLORER_IMAGE_DRAG_TYPE)");
     expect(extensions).toContain("const files = clipboardImageFiles(event.clipboardData)");
-    expect(extensions).toContain("if (files.length === 0 || !onClipboardImagePaste) return false");
+    expect(extensions).toContain("if (files.length > 0) {");
+    expect(extensions).toContain("if (!onClipboardImagePaste) return false;");
     expect(extensions).toContain("if (view.state.doc !== document) return");
     expect(extensions).toContain("moveImageDropCaret(view, { x: event.clientX, y: event.clientY })");
     expect(controller).toContain("startExplorerImageDrag(path: string, event: PointerEvent, source: HTMLElement)");

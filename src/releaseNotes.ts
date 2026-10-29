@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.9.6": {
+    version: "0.9.6",
+    title: "Language providers and editing reliability",
+    highlights: [
+      "Language providers support legacy-encoded Hunspell dictionaries and additional LibreOffice spelling variants.",
+      "Missing language providers can be found directly from document-language settings. Provider selection and download/remove controls behave more consistently.",
+      "Selection wrapping covers the whole selection, bracket auto-closing is more restrained, and text paste works when the browser clipboard payload is unavailable.",
+      "Preview freshness and synchronization stay scoped to the main document, and stale LSP errors clear when source revisions change."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.9.6"
+  },
   "0.9.5": {
     version: "0.9.5",
     title: "Smoother workflows and faster previews",

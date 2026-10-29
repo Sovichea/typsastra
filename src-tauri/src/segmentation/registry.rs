@@ -298,6 +298,48 @@ const HUNSPELL_CATALOG: &[HunspellCatalogSpec] = &[
         version: "2022.06.01",
     },
     HunspellCatalogSpec {
+        locale: "en_AU",
+        display_name: "English (Australia)",
+        language_tag: "en-AU",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "en/en_AU.aff",
+        dic_path: "en/en_AU.dic",
+        aff_size: 3205,
+        aff_hash: "e746c882dd6f303c2c46e7452804b9201115a6942cfeb15f18f8edf774d2e24e",
+        dic_size: 554336,
+        dic_hash: "aa07c46571f306b79fc1bc534357ed357af15687381b26f891ba66e8a2caed89",
+        license: "LGPL-2.1 or BSD-3-Clause",
+        version: "2025.04.01",
+    },
+    HunspellCatalogSpec {
+        locale: "en_CA",
+        display_name: "English (Canada)",
+        language_tag: "en-CA",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "en/en_CA.aff",
+        dic_path: "en/en_CA.dic",
+        aff_size: 3205,
+        aff_hash: "e746c882dd6f303c2c46e7452804b9201115a6942cfeb15f18f8edf774d2e24e",
+        dic_size: 551583,
+        dic_hash: "53096689870246a78fa408b1e7a8c49bc140bd466a84a384cfb509445fff7173",
+        license: "LGPL-2.1 or BSD-3-Clause",
+        version: "2025.04.01",
+    },
+    HunspellCatalogSpec {
+        locale: "en_ZA",
+        display_name: "English (South Africa)",
+        language_tag: "en-ZA",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "en/en_ZA.aff",
+        dic_path: "en/en_ZA.dic",
+        aff_size: 43842,
+        aff_hash: "5ddaf2bd123df16cbb887adf7dd835593200d0454703c461714886833c9ddec9",
+        dic_size: 998279,
+        dic_hash: "a438af6c6bfa9b25208d72c6ebf53507e178d6e6d285895e97870c36193433b1",
+        license: "LGPL-2.1 or GPL-2.0 or MPL-1.1",
+        version: "2025.04.01",
+    },
+    HunspellCatalogSpec {
         locale: "es_ES",
         display_name: "Spanish (Spain)",
         language_tag: "es-ES",
@@ -308,8 +350,316 @@ const HUNSPELL_CATALOG: &[HunspellCatalogSpec] = &[
         aff_hash: "e73a9bf8e1383f4986a5dc9e2fbed49371c0c61f511c626d15586bd433c1cad9",
         dic_size: 715989,
         dic_hash: "6975dddec3d5d2c676069537bc67b4b5f786c65c5d4cf6703a82acf779ac9ec1",
-        license: "GPL-3.0 or MPL-2.0 or LGPL-3.0",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
         version: "2022.08.01",
+    },
+    HunspellCatalogSpec {
+        locale: "es_AR",
+        display_name: "Spanish (Argentina)",
+        language_tag: "es-AR",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_AR.aff",
+        dic_path: "es/es_AR.dic",
+        aff_size: 171527,
+        aff_hash: "e9a96514295f8664db270d024c345700ccb9410a384eb71aec0fe5f0931d8c70",
+        dic_size: 707817,
+        dic_hash: "4fe3e193425bb3841ee218d36a9fc95d85b8daa8909363bdbba55a2f9f4e3d1d",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_BO",
+        display_name: "Spanish (Bolivia)",
+        language_tag: "es-BO",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_BO.aff",
+        dic_path: "es/es_BO.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 702886,
+        dic_hash: "c882b993a0ae83c94ab94c4b84a8f8300979e0e44fc4dceb2f15eaba521a30e7",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_CL",
+        display_name: "Spanish (Chile)",
+        language_tag: "es-CL",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_CL.aff",
+        dic_path: "es/es_CL.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 705568,
+        dic_hash: "e249a50ed9c9b939801bd2ba12099c9decb59217782c59fc65e7f72831b0b401",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_CO",
+        display_name: "Spanish (Colombia)",
+        language_tag: "es-CO",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_CO.aff",
+        dic_path: "es/es_CO.dic",
+        aff_size: 160081,
+        aff_hash: "243d5dc50b68261dd10118799724beb95a6c19d4f9d6848ebfc977430bf2f8e2",
+        dic_size: 751422,
+        dic_hash: "10f5e38e1c6898194cd860c237b1569725f721eb5eb0705e3a7158c69652c226",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_CR",
+        display_name: "Spanish (Costa Rica)",
+        language_tag: "es-CR",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_CR.aff",
+        dic_path: "es/es_CR.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 700936,
+        dic_hash: "073b27663394a297eb1c896419b5b5518bd5b345acfe244d00968433ad9709bd",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_CU",
+        display_name: "Spanish (Cuba)",
+        language_tag: "es-CU",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_CU.aff",
+        dic_path: "es/es_CU.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 702808,
+        dic_hash: "3fc1bb0eeffdb99ec8851166453b8d32745da51e9d1036c689f2512dd22c887c",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_DO",
+        display_name: "Spanish (Dominican Republic)",
+        language_tag: "es-DO",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_DO.aff",
+        dic_path: "es/es_DO.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 699651,
+        dic_hash: "194293e1785b2a0ce9b8166cdc4164afebc1ef57db92305786b32350fcb13832",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_EC",
+        display_name: "Spanish (Ecuador)",
+        language_tag: "es-EC",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_EC.aff",
+        dic_path: "es/es_EC.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 701539,
+        dic_hash: "caeea1b6bb09c80ca1ff36c81a02ca868fe709f330ac4303806cbf1cd7a6bc0b",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_GQ",
+        display_name: "Spanish (Equatorial Guinea)",
+        language_tag: "es-GQ",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_GQ.aff",
+        dic_path: "es/es_GQ.dic",
+        aff_size: 171524,
+        aff_hash: "674c5a4b4d39fd3b4452f045a4e6e0649db4a2ce23f5903df8c311e21f1a757c",
+        dic_size: 835304,
+        dic_hash: "967175eb16b2cccd8f1ed327098c279848840fff6fe0f729fcf614ec77c54380",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_GT",
+        display_name: "Spanish (Guatemala)",
+        language_tag: "es-GT",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_GT.aff",
+        dic_path: "es/es_GT.dic",
+        aff_size: 162395,
+        aff_hash: "2cdfcb8d86b70090b3f23f2fe2b6d9d6cfa5f76c803fa8229c674af2b87e6adc",
+        dic_size: 700565,
+        dic_hash: "f424e3546db88d36b38bbc735fd01126296a4f7500ca1368d7017fac561107e7",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_HN",
+        display_name: "Spanish (Honduras)",
+        language_tag: "es-HN",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_HN.aff",
+        dic_path: "es/es_HN.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 702581,
+        dic_hash: "a1fa7c74a68cb4e7746bae221dd53a27467c320a1cdc2d712cf55926896ee28d",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_MX",
+        display_name: "Spanish (Mexico)",
+        language_tag: "es-MX",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_MX.aff",
+        dic_path: "es/es_MX.dic",
+        aff_size: 160081,
+        aff_hash: "d966cb748e4a688ed75ec84b50c0835ac438e5325ee4fce703a093794f9cba7e",
+        dic_size: 723507,
+        dic_hash: "44ce35af220962c68f97962776639bef271f7d90a85ba924b539a36e33315f82",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_NI",
+        display_name: "Spanish (Nicaragua)",
+        language_tag: "es-NI",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_NI.aff",
+        dic_path: "es/es_NI.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 701487,
+        dic_hash: "4d7ecc54d369aab904733e64729fffa42413412e14e6a27a32f7fbd56e9161b9",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_PA",
+        display_name: "Spanish (Panama)",
+        language_tag: "es-PA",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_PA.aff",
+        dic_path: "es/es_PA.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 700221,
+        dic_hash: "bd87e7e25b776d8fe96c4197360909b41d45289ec91c7c47eb000948c04a3ae2",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_PE",
+        display_name: "Spanish (Peru)",
+        language_tag: "es-PE",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_PE.aff",
+        dic_path: "es/es_PE.dic",
+        aff_size: 160081,
+        aff_hash: "d966cb748e4a688ed75ec84b50c0835ac438e5325ee4fce703a093794f9cba7e",
+        dic_size: 715404,
+        dic_hash: "1d810a0a319fee329000538cf4df76621bb71228172558b87490f8b9c19b9d75",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_PH",
+        display_name: "Spanish (Philippines)",
+        language_tag: "es-PH",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_PH.aff",
+        dic_path: "es/es_PH.dic",
+        aff_size: 171524,
+        aff_hash: "674c5a4b4d39fd3b4452f045a4e6e0649db4a2ce23f5903df8c311e21f1a757c",
+        dic_size: 797554,
+        dic_hash: "ce05ef779b88e398b9949cb873ee3cf0827685884116d48250d157f50faeb9b3",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_PR",
+        display_name: "Spanish (Puerto Rico)",
+        language_tag: "es-PR",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_PR.aff",
+        dic_path: "es/es_PR.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 699760,
+        dic_hash: "11e0815f41a25aac5d6871a13767b1c14a1c6ad5a7c40b359fc4c22f8297ff7f",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_PY",
+        display_name: "Spanish (Paraguay)",
+        language_tag: "es-PY",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_PY.aff",
+        dic_path: "es/es_PY.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 700375,
+        dic_hash: "f9a18929f9e5234bc4aba83df1744351156932cb47b77b2ed3358c3170bb41ff",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_SV",
+        display_name: "Spanish (El Salvador)",
+        language_tag: "es-SV",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_SV.aff",
+        dic_path: "es/es_SV.dic",
+        aff_size: 162395,
+        aff_hash: "dc8213bb8fb08e51dd5869b348d873de23f89e3315656396ca3031fe1d7ffcea",
+        dic_size: 700941,
+        dic_hash: "3a015f4469046d37806bf374c4d88149cdf570f467a60732f50d736f23d9cac5",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_US",
+        display_name: "Spanish (United States)",
+        language_tag: "es-US",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_US.aff",
+        dic_path: "es/es_US.dic",
+        aff_size: 171524,
+        aff_hash: "674c5a4b4d39fd3b4452f045a4e6e0649db4a2ce23f5903df8c311e21f1a757c",
+        dic_size: 696235,
+        dic_hash: "d46932a5c0ec3881fdf265333df4de45a73de51741baedcb5bb54d37b03979c8",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_UY",
+        display_name: "Spanish (Uruguay)",
+        language_tag: "es-UY",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_UY.aff",
+        dic_path: "es/es_UY.dic",
+        aff_size: 162371,
+        aff_hash: "d7ace3a7ef1fdf6dc89701d37f109730c0bc19aeaeda0ecf59fc67a1c5c28232",
+        dic_size: 702491,
+        dic_hash: "9f05b75265a78bcd394993b7fee5f9f0e4031c41ce8915828c6fce8ee6579e13",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
+    },
+    HunspellCatalogSpec {
+        locale: "es_VE",
+        display_name: "Spanish (Venezuela)",
+        language_tag: "es-VE",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "es/es_VE.aff",
+        dic_path: "es/es_VE.dic",
+        aff_size: 160081,
+        aff_hash: "d966cb748e4a688ed75ec84b50c0835ac438e5325ee4fce703a093794f9cba7e",
+        dic_size: 704472,
+        dic_hash: "57eb3aa695c24e1f8f469ac86367b952194c08ee25bc2b761ba4681686ccc723",
+        license: "GPL-3.0 or LGPL-3.0 or MPL-1.1",
+        version: "2.9",
     },
     HunspellCatalogSpec {
         locale: "fr_FR",
@@ -336,7 +686,35 @@ const HUNSPELL_CATALOG: &[HunspellCatalogSpec] = &[
         aff_hash: "646bf3333ac69c23e9d794533ee5241d6f755c359e8fe10a648f87613743d594",
         dic_size: 4356903,
         dic_hash: "4ca3c958b0e5545910999bc246f668840bf8ede3df8e5e6790d05edd5a586c38",
-        license: "GPL-2.0 or LGPL-2.1",
+        license: "GPL-2.0 or GPL-3.0",
+        version: "2021.12.01",
+    },
+    HunspellCatalogSpec {
+        locale: "de_AT",
+        display_name: "German (Austria)",
+        language_tag: "de-AT",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "de/de_AT_frami.aff",
+        dic_path: "de/de_AT_frami.dic",
+        aff_size: 19068,
+        aff_hash: "8b428f6215e36e145626e3d150cd0ffe273e1ad9a9ec0a1bbd31ee468ee39edc",
+        dic_size: 4359309,
+        dic_hash: "d821e0a5a029b66df696c982a4cd55eb792139c33716ccbde364941db2448cbb",
+        license: "GPL-2.0 or GPL-3.0",
+        version: "2021.12.01",
+    },
+    HunspellCatalogSpec {
+        locale: "de_CH",
+        display_name: "German (Switzerland)",
+        language_tag: "de-CH",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "de/de_CH_frami.aff",
+        dic_path: "de/de_CH_frami.dic",
+        aff_size: 19068,
+        aff_hash: "d86884be4c3f07e5e08057884856feabf2872b4e2f90a587a11376082bc4126b",
+        dic_size: 4358308,
+        dic_hash: "80a4df38cdc3e16d2f042f8eba4a99668ab9c075662e4262c62f8bba46c7bd16",
+        license: "GPL-2.0 or GPL-3.0",
         version: "2021.12.01",
     },
     HunspellCatalogSpec {
@@ -367,6 +745,133 @@ const HUNSPELL_CATALOG: &[HunspellCatalogSpec] = &[
         license: "GPL-2.0 or LGPL-2.1",
         version: "2022.04.01",
     },
+    HunspellCatalogSpec {
+        locale: "pt_PT",
+        display_name: "Portuguese (Portugal)",
+        language_tag: "pt-PT",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "pt_PT/pt_PT.aff",
+        dic_path: "pt_PT/pt_PT.dic",
+        aff_size: 95089,
+        aff_hash: "975a209fcc892cb382fa5f34a28c391a39668661ce373ae071287809c5fcae24",
+        dic_size: 1485977,
+        dic_hash: "e29ba2d7aa8a2ad43e9cb46ac6473064b661545c87002aea90e18899d98d3cc9",
+        license: "GPL-2.0 or LGPL-2.1 or MPL-1.1",
+        version: "20.10.5.1",
+    },
+    HunspellCatalogSpec {
+        locale: "ca",
+        display_name: "Catalan",
+        language_tag: "ca-ES",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "ca/dictionaries/ca.aff",
+        dic_path: "ca/dictionaries/ca.dic",
+        aff_size: 52471,
+        aff_hash: "abcca353b16af2d91be51d68899f47e5076a47489d08f696717fbac44074ddb8",
+        dic_size: 3086130,
+        dic_hash: "4838bb46776f5d82a3823aa7abb17cd00b9dc0c301d1b6d002e1ab6558fa07ca",
+        license: "GPL-2.0 or LGPL-2.1",
+        version: "3.0.8",
+    },
+    HunspellCatalogSpec {
+        locale: "ca_valencia",
+        display_name: "Catalan (Valencia)",
+        language_tag: "ca-ES-valencia",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "ca/dictionaries/ca-valencia.aff",
+        dic_path: "ca/dictionaries/ca-valencia.dic",
+        aff_size: 52680,
+        aff_hash: "2e0b44b5dffd1b9b2f1af432f7db43f847f32e0103a91ba961e8652128dc9fad",
+        dic_size: 3091032,
+        dic_hash: "8f65e295eac2ae5ef8ed6b4d584b1acde0d1d353cadde67aefe8dadd1632b47b",
+        license: "GPL-2.0 or LGPL-2.1",
+        version: "3.0.8",
+    },
+    HunspellCatalogSpec {
+        locale: "nb_NO",
+        display_name: "Norwegian Bokmål",
+        language_tag: "nb-NO",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "no/nb_NO.aff",
+        dic_path: "no/nb_NO.dic",
+        aff_size: 17382,
+        aff_hash: "b9e828538222b3580d8adb4660d5bae9bc1fbe42e7c21fd3e01970efed96b4f8",
+        dic_size: 9336265,
+        dic_hash: "aadaf9ea6b437b4edada54a2084e1c8dc00029addc6dfb4e15637f8e798dacc1",
+        license: "CC BY 4.0 / CLARIN PUB+BY / GPL-2.0",
+        version: "3.0",
+    },
+    HunspellCatalogSpec {
+        locale: "nn_NO",
+        display_name: "Norwegian Nynorsk",
+        language_tag: "nn-NO",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "no/nn_NO.aff",
+        dic_path: "no/nn_NO.dic",
+        aff_size: 13616,
+        aff_hash: "454f0bf09e6581ca8e153c245a6136bec15e954f752d930ad32fedeb012ce5de",
+        dic_size: 6467674,
+        dic_hash: "9173f6b9e943cea8e3a2097b7c1cd67e09a0839cb85dfaad9114d7fc2c313c81",
+        license: "CC BY 4.0 / CLARIN PUB+BY / GPL-2.0",
+        version: "3.0",
+    },
+    HunspellCatalogSpec {
+        locale: "sr",
+        display_name: "Serbian (Cyrillic)",
+        language_tag: "sr-Cyrl",
+        pattern: "[\\p{Script=Cyrillic}][\\p{Script=Cyrillic}\\p{M}'’\\-]*",
+        aff_path: "sr/sr.aff",
+        dic_path: "sr/sr.dic",
+        aff_size: 901060,
+        aff_hash: "068bd94a48136ceb577a5a794097024af6ab7fbd82a6f75cad0531cc3bb92e0a",
+        dic_size: 5878745,
+        dic_hash: "48f4590eb63c2337a53c5a3b89b9071a80ee0d13d786c639a66744ce53803c20",
+        license: "LGPL-3.0 or MPL-2.0 or GPL-3.0",
+        version: "2019.04.19",
+    },
+    HunspellCatalogSpec {
+        locale: "sr_Latn",
+        display_name: "Serbian (Latin)",
+        language_tag: "sr-Latn",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "sr/sr-Latn.aff",
+        dic_path: "sr/sr-Latn.dic",
+        aff_size: 684540,
+        aff_hash: "38b99cae0005ff20b015d829580a0f3533ffabc1f889a54144a74e90069548e6",
+        dic_size: 3817505,
+        dic_hash: "f51950195e5bd0aaf155d3488517d4dbc4c8fbc772ecbafbf9131e69a257b1ff",
+        license: "LGPL-3.0 or MPL-2.0 or GPL-3.0",
+        version: "2019.04.19",
+    },
+    HunspellCatalogSpec {
+        locale: "sv_SE",
+        display_name: "Swedish (Sweden)",
+        language_tag: "sv-SE",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "sv_SE/dictionaries/sv_SE.aff",
+        dic_path: "sv_SE/dictionaries/sv_SE.dic",
+        aff_size: 18582,
+        aff_hash: "97fc1a3cd998f62ba48366ac13398b919a17e991cb69115fa60bb861093406b9",
+        dic_size: 3938932,
+        dic_hash: "bd44b19cd8c061fb1d2504dc676adc3a68d41a866c99d10c8163fc396049fcad",
+        license: "LGPL-3.0",
+        version: "2.42",
+    },
+    HunspellCatalogSpec {
+        locale: "sv_FI",
+        display_name: "Swedish (Finland)",
+        language_tag: "sv-FI",
+        pattern: "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+        aff_path: "sv_SE/dictionaries/sv_FI.aff",
+        dic_path: "sv_SE/dictionaries/sv_FI.dic",
+        aff_size: 18583,
+        aff_hash: "cf50fb4860a4b839011e08c580459bb45fe018ca5a4e1c3b80ac69d9e47d31a8",
+        dic_size: 2339367,
+        dic_hash: "3a2ee52ff2d9cbac633cf2400b3a0afef1804d0c75894b273ee18a8fd397b9d3",
+        license: "LGPL-3.0",
+        version: "2.42",
+    },
+
 ];
 
 struct KhmerProvider {
@@ -1312,6 +1817,9 @@ fn character_matches_language_tag(character: char, language_tag: &str) -> bool {
         "ta" => ('\u{0b80}'..='\u{0bff}').contains(&character),
         "te" => ('\u{0c00}'..='\u{0c7f}').contains(&character),
         "th" => ('\u{0e00}'..='\u{0e7f}').contains(&character),
+        "sr" if script_for_language_tag(language_tag) == "Cyrl" => {
+            ('\u{0400}'..='\u{04ff}').contains(&character)
+        }
         _ => {
             character.is_alphabetic()
                 && (character.is_ascii()
@@ -1322,7 +1830,17 @@ fn character_matches_language_tag(character: char, language_tag: &str) -> bool {
 }
 
 fn script_for_language_tag(language_tag: &str) -> &'static str {
-    match language_tag.split('-').next().unwrap_or(language_tag) {
+    let mut parts = language_tag.split('-');
+    let language = parts.next().unwrap_or(language_tag);
+    if let Some(script) = parts.next() {
+        if script.eq_ignore_ascii_case("Latn") {
+            return "Latn";
+        }
+        if script.eq_ignore_ascii_case("Cyrl") {
+            return "Cyrl";
+        }
+    }
+    match language {
         "ar" => "Arab",
         "bn" => "Beng",
         "bo" => "Tibt",
@@ -1332,6 +1850,7 @@ fn script_for_language_tag(language_tag: &str) -> &'static str {
         "lo" => "Laoo",
         "pa" => "Guru",
         "si" => "Sinh",
+        "sr" => "Cyrl",
         "ta" => "Taml",
         "te" => "Telu",
         "th" => "Thai",
@@ -1539,7 +2058,7 @@ fn catalog_entry(data_dir: Option<&Path>, spec: &HunspellCatalogSpec) -> Hunspel
     }
 }
 
-async fn download_text(url: &str, max_bytes: usize) -> Result<String, String> {
+async fn download_bytes(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
     let response = reqwest::get(url)
         .await
         .map_err(|error| format!("Failed to download {url}: {error}"))?;
@@ -1554,7 +2073,7 @@ async fn download_text(url: &str, max_bytes: usize) -> Result<String, String> {
     if bytes.len() > max_bytes {
         return Err(format!("{url} is too large."));
     }
-    String::from_utf8(bytes.to_vec()).map_err(|error| format!("{url} is not UTF-8: {error}"))
+    Ok(bytes.to_vec())
 }
 
 fn is_english_token_char(character: char) -> bool {
@@ -1777,10 +2296,7 @@ impl SegmentationRegistry {
                 if !aff_path.exists() || !dic_path.exists() {
                     return Ok(None);
                 }
-                let aff = std::fs::read_to_string(&aff_path)
-                    .map_err(|error| format!("Failed to read {}: {error}", aff_path.display()))?;
-                let dic = std::fs::read_to_string(&dic_path)
-                    .map_err(|error| format!("Failed to read {}: {error}", dic_path.display()))?;
+                let (aff, dic) = read_hunspell_dictionary(&locale_dir)?;
                 Arc::new(GenericHunspellProvider::new(
                     spec.locale,
                     spec.display_name,
@@ -2187,9 +2703,9 @@ pub fn list_hunspell_catalog(
     Ok(entries)
 }
 
-fn verify_sha256(content: &str, expected_hash: &str) -> Result<(), String> {
+fn verify_sha256(content: &[u8], expected_hash: &str) -> Result<(), String> {
     let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
+    hasher.update(content);
     let result = hasher.finalize();
     let actual_hash = format!("{:x}", result);
     if actual_hash == expected_hash {
@@ -2202,6 +2718,66 @@ fn verify_sha256(content: &str, expected_hash: &str) -> Result<(), String> {
     }
 }
 
+fn hunspell_encoding(aff: &[u8]) -> &'static encoding_rs::Encoding {
+    let header = String::from_utf8_lossy(aff);
+    for line in header.lines() {
+        let Some(value) = line.strip_prefix("SET ") else {
+            continue;
+        };
+        let label = value.trim();
+        if let Some(encoding) = encoding_rs::Encoding::for_label(label.as_bytes()) {
+            return encoding;
+        }
+        if label.eq_ignore_ascii_case("ISO8859-1") || label.eq_ignore_ascii_case("ISO-8859-1") {
+            return encoding_rs::WINDOWS_1252;
+        }
+    }
+    encoding_rs::UTF_8
+}
+
+fn decode_hunspell_bytes(
+    bytes: &[u8],
+    encoding: &'static encoding_rs::Encoding,
+    name: &str,
+) -> Result<String, String> {
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return Ok(text.to_string());
+    }
+    let (text, _, had_errors) = encoding.decode(bytes);
+    if had_errors {
+        return Err(format!("{name} is not valid {} text.", encoding.name()));
+    }
+    Ok(text.into_owned())
+}
+
+fn decode_hunspell_dictionary(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
+    let encoding = hunspell_encoding(aff);
+    Ok((
+        decode_hunspell_bytes(aff, encoding, "The Hunspell .aff file")?,
+        decode_hunspell_bytes(dic, encoding, "The Hunspell .dic file")?,
+    ))
+}
+
+fn read_hunspell_dictionary(path: &Path) -> Result<(String, String), String> {
+    let aff_path = path.join(format!(
+        "{}.aff",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+    ));
+    let dic_path = path.join(format!(
+        "{}.dic",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+    ));
+    let aff = std::fs::read(&aff_path)
+        .map_err(|error| format!("Failed to read {}: {error}", aff_path.display()))?;
+    let dic = std::fs::read(&dic_path)
+        .map_err(|error| format!("Failed to read {}: {error}", dic_path.display()))?;
+    decode_hunspell_dictionary(&aff, &dic)
+}
+
 #[tauri::command]
 pub async fn install_hunspell_dictionary(
     app_handle: tauri::AppHandle,
@@ -2212,16 +2788,17 @@ pub async fn install_hunspell_dictionary(
         .ok_or_else(|| format!("{locale} is not in Typsastra's Hunspell catalog."))?;
     let aff_url = format!("{LIBREOFFICE_RAW_BASE}/{}", spec.aff_path);
     let dic_url = format!("{LIBREOFFICE_RAW_BASE}/{}", spec.dic_path);
-    let (aff, dic) = tokio::try_join!(
-        download_text(&aff_url, 8 * 1024 * 1024),
-        download_text(&dic_url, 32 * 1024 * 1024)
+    let (aff_bytes, dic_bytes) = tokio::try_join!(
+        download_bytes(&aff_url, 8 * 1024 * 1024),
+        download_bytes(&dic_url, 32 * 1024 * 1024)
     )?;
 
-    verify_sha256(&aff, spec.aff_hash)
+    verify_sha256(&aff_bytes, spec.aff_hash)
         .map_err(|e| format!("Verification failed for {}.aff: {}", spec.locale, e))?;
-    verify_sha256(&dic, spec.dic_hash)
+    verify_sha256(&dic_bytes, spec.dic_hash)
         .map_err(|e| format!("Verification failed for {}.dic: {}", spec.locale, e))?;
 
+    let (aff, dic) = decode_hunspell_dictionary(&aff_bytes, &dic_bytes)?;
     GenericHunspellProvider::new(
         spec.locale,
         spec.display_name,
@@ -2245,7 +2822,7 @@ pub async fn install_hunspell_dictionary(
     let mut temp_aff = tempfile::NamedTempFile::new_in(&locale_dir)
         .map_err(|error| format!("Failed to create temp aff file: {error}"))?;
     temp_aff
-        .write_all(aff.as_bytes())
+        .write_all(&aff_bytes)
         .map_err(|error| format!("Failed to write to temp aff file: {error}"))?;
     temp_aff
         .persist(&aff_path)
@@ -2255,7 +2832,7 @@ pub async fn install_hunspell_dictionary(
     let mut temp_dic = tempfile::NamedTempFile::new_in(&locale_dir)
         .map_err(|error| format!("Failed to create temp dic file: {error}"))?;
     temp_dic
-        .write_all(dic.as_bytes())
+        .write_all(&dic_bytes)
         .map_err(|error| format!("Failed to write to temp dic file: {error}"))?;
     temp_dic
         .persist(&dic_path)
@@ -2483,6 +3060,30 @@ mod tests {
         let map = utf16_to_byte_boundaries(text);
         let range = utf16_byte_range(&map, from, to, text.len()).expect("valid fixture range");
         text[range].to_string()
+    }
+
+    #[test]
+    fn decodes_hunspell_dictionaries_declared_as_iso8859_1() {
+        let aff = b"SET ISO8859-1\nTRY \xE4\xF6\xFC\n";
+        let dic = b"2\nWetter\nM\xE4dchen\n";
+        let (aff_text, dic_text) =
+            decode_hunspell_dictionary(aff, dic).expect("decode German dictionary bytes");
+        assert!(aff_text.contains("TRY äöü"));
+        assert!(dic_text.contains("Mädchen"));
+
+        let provider = GenericHunspellProvider::new(
+            "de_DE",
+            "German (Germany)",
+            "de-DE",
+            "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+            &aff_text,
+            &dic_text,
+            "test",
+            "test",
+        )
+        .expect("load decoded dictionary");
+        assert!(provider.is_known_word("Mädchen"));
+        assert!(!provider.is_known_word("Mädchn"));
     }
 
     #[test]
@@ -3479,6 +4080,75 @@ mod tests {
         assert_eq!(english_uk.support_level, "enhanced");
         assert!(english_uk.supports_completion);
         assert!(!english_uk.supports_segmentation);
+    }
+
+    #[test]
+    fn catalog_exposes_explicit_regional_and_orthographic_variants() {
+        let expected = [
+            ("de_AT", "de-AT"),
+            ("de_CH", "de-CH"),
+            ("en_AU", "en-AU"),
+            ("en_CA", "en-CA"),
+            ("en_ZA", "en-ZA"),
+            ("es_AR", "es-AR"),
+            ("es_MX", "es-MX"),
+            ("es_US", "es-US"),
+            ("pt_PT", "pt-PT"),
+            ("ca", "ca-ES"),
+            ("ca_valencia", "ca-ES-valencia"),
+            ("nb_NO", "nb-NO"),
+            ("nn_NO", "nn-NO"),
+            ("sr", "sr-Cyrl"),
+            ("sr_Latn", "sr-Latn"),
+            ("sv_SE", "sv-SE"),
+            ("sv_FI", "sv-FI"),
+        ];
+        for (locale, language_tag) in expected {
+            let spec = find_hunspell_spec(locale)
+                .unwrap_or_else(|| panic!("missing catalog locale {locale}"));
+            assert_eq!(spec.language_tag, language_tag);
+            assert_eq!(catalog_entry(None, spec).id, format!("hunspell:{locale}"));
+        }
+
+        let mut locales = HashSet::new();
+        let mut language_tags = HashSet::new();
+        for spec in HUNSPELL_CATALOG {
+            assert!(
+                locales.insert(spec.locale),
+                "duplicate locale {}",
+                spec.locale
+            );
+            assert!(
+                language_tags.insert(spec.language_tag),
+                "duplicate language tag {}",
+                spec.language_tag
+            );
+            assert_eq!(spec.aff_hash.len(), 64, "{} affix checksum", spec.locale);
+            assert_eq!(
+                spec.dic_hash.len(),
+                64,
+                "{} dictionary checksum",
+                spec.locale
+            );
+            assert!(spec.aff_size > 0, "{} affix size", spec.locale);
+            assert!(spec.dic_size > 0, "{} dictionary size", spec.locale);
+            assert!(
+                spec.aff_path.ends_with(".aff"),
+                "{} affix path",
+                spec.locale
+            );
+            assert!(
+                spec.dic_path.ends_with(".dic"),
+                "{} dictionary path",
+                spec.locale
+            );
+        }
+
+        assert_eq!(script_for_language_tag("sr-Cyrl"), "Cyrl");
+        assert_eq!(script_for_language_tag("sr-Latn"), "Latn");
+        assert!(character_matches_language_tag('С', "sr-Cyrl"));
+        assert!(!character_matches_language_tag('С', "sr-Latn"));
+        assert!(character_matches_language_tag('a', "sr-Latn"));
     }
 
     #[test]

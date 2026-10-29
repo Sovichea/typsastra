@@ -100,6 +100,8 @@ The catalog uses verified raw dictionary paths from the LibreOffice dictionaries
 - Write downloads utilizing atomic named temporary files inside the target locale directory to prevent corrupted files from partial downloads.
 - Create a self-contained `metadata.json` storing display name, language tag, size, license, version, and type metadata to keep capabilities visible offline without network access.
 
+Regional, script, and orthographic spelling variants remain separate catalog entries and provider IDs. For example, German exposes `de_DE`, `de_AT`, and `de_CH`; English exposes `en_GB`, `en_AU`, `en_CA`, and `en_ZA`; Spanish exposes every regional dictionary published by LibreOffice; and Portuguese exposes `pt_BR` and `pt_PT`. Serbian Cyrillic (`sr-Cyrl`) and Serbian Latin (`sr-Latn`), Catalan and Valencian, Norwegian Bokmål and Nynorsk, and Swedish Sweden/Finland are also distinct choices. Typsastra never substitutes one region, script, or variant for another. Hyphenation (`hyph_*.dic`) and thesaurus files are excluded because they are not Hunspell spelling dictionaries.
+
 To clean up downloaded dictionaries, the frontend exposes a red "Remove" button that cleanly deletes the locale directory and calls `reload_installed` in the backend provider registry to dynamically unregister the provider.
 
 ### Robust Affix Preprocessing
@@ -107,6 +109,8 @@ To clean up downloaded dictionaries, the frontend exposes a red "Remove" button 
 To handle quirks in upstream `.aff` files (such as counts with trailing comments, non-numeric qualifiers like `2$`, and mismatched/truncated suffix rule row counts), the Rust backend implements a `preprocess_aff` parser helper before passing the content to the strict `spellbook` library.
 
 The preprocessor also dynamically heals condition syntax typos in rule lines (such as a closing bracket without an opening bracket, e.g. `^য়া]া` which is automatically corrected to the valid character class `[^য়া]া`), ensuring that upstream dictionary bugs do not cause backend parsing panics.
+
+Hunspell `.aff` files may declare a legacy encoding with `SET`, such as German's `SET ISO8859-1`. Typsastra downloads and stores the original dictionary bytes so catalog checksums remain valid, then decodes the `.aff`/`.dic` pair through the declared encoding before loading `spellbook`. UTF-8 remains the default when no encoding is declared.
 
 The provider registry instantiates one provider per installed language ID, e.g. `hunspell:fr_FR`, and refreshes provider capabilities after installation without requiring an app restart.
 
