@@ -1614,8 +1614,8 @@ body.typsastra-resizing #input-container-wrapper::after {
 .recovery-diff {
   min-width: 100%;
   color: var(--ui-text);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
+  font-family: var(--editor-code-font), monospace;
+  font-size: var(--editor-font-size, 14px);
   line-height: 1.5;
   tab-size: 4;
 }
