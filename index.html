@@ -2565,15 +2565,18 @@
                                 <p id="recovery-review-status"></p>
                             </div>
                         </div>
-                        <div class="recovery-compare">
-                            <div class="recovery-compare-pane">
-                                <h4>Recovered</h4>
-                                <pre id="recovery-recovered-text"></pre>
-                            </div>
-                            <div class="recovery-compare-pane">
-                                <h4>On disk</h4>
-                                <pre id="recovery-disk-text"></pre>
-                            </div>
+                        <div class="recovery-diff-columns" aria-hidden="true">
+                            <div>On disk</div>
+                            <div>Recovered</div>
+                        </div>
+                        <div id="recovery-diff-note" class="recovery-diff-note hidden"></div>
+                        <div class="recovery-diff-scroll">
+                            <div
+                                id="recovery-diff"
+                                class="recovery-diff"
+                                role="region"
+                                aria-label="Changes from disk to recovered text"
+                            ></div>
                         </div>
                         <div class="recovery-review-actions">
                             <button

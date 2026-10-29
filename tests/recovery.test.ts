@@ -109,8 +109,14 @@ describe("recovery snapshots", () => {
     expect(html).toContain('id="action-recovery-review"');
     expect(review).toContain("if (text === record.text)");
     expect(review).toContain('changed ? "changed" : "unchanged"');
+    expect(review).toContain("createUnifiedTextDiff");
+    expect(review).toContain("private renderDiff(");
     expect(html).toContain("Restore Unsaved Copy");
+    expect(html).toContain('id="recovery-diff"');
+    expect(html).not.toContain('id="recovery-recovered-text"');
     expect(styles).toContain(".recovery-dialog");
-    expect(styles).toContain(".recovery-compare");
+    expect(styles).toContain(".recovery-diff-added");
+    expect(styles).toContain(".recovery-diff-removed");
+    expect(styles).toContain(".recovery-diff-word-changed");
   });
 });

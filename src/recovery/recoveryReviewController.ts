@@ -6,6 +6,11 @@ import type {
   RecoveryRecordSummary,
 } from "./recoveryController";
 import { sha256Hex } from "./recoveryIdentity";
+import {
+  createUnifiedTextDiff,
+  splitDiffHunk,
+  type TextDiffSide,
+} from "./textDiff";
 
 type RecoveryReviewStatus = "unchanged" | "changed" | "missing" | "error";
 
@@ -42,12 +47,7 @@ function formatTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toLocaleString();
 }
 
-function previewText(text: string): string {
-  const limit = 200_000;
-  return text.length <= limit ? text : `${text.slice(0, limit)}\n\n… preview truncated …`;
-}
-
-/** Owns the startup recovery list, comparison view, and restore/discard actions. */
+/** Owns the recovery list, unified diff view, and restore/discard actions. */
 export class RecoveryReviewController {
   private readonly overlay = document.getElementById("recovery-overlay")!;
   private readonly list = document.getElementById("recovery-list")!;
@@ -56,8 +56,8 @@ export class RecoveryReviewController {
   private readonly review = document.getElementById("recovery-review")!;
   private readonly reviewTitle = document.getElementById("recovery-review-title")!;
   private readonly reviewStatus = document.getElementById("recovery-review-status")!;
-  private readonly recoveredText = document.getElementById("recovery-recovered-text") as HTMLElement;
-  private readonly diskText = document.getElementById("recovery-disk-text") as HTMLElement;
+  private readonly diff = document.getElementById("recovery-diff")!;
+  private readonly diffNote = document.getElementById("recovery-diff-note")!;
   private rows: RecoveryReviewRow[] = [];
   private corruptRows: CorruptRow[] = [];
   private selectedRow: RecoveryReviewRow | null = null;
@@ -307,16 +307,98 @@ export class RecoveryReviewController {
     this.selectedRow = row;
     this.reviewTitle.textContent = row.title;
     this.reviewStatus.textContent = row.message;
-    this.recoveredText.textContent = previewText(row.record.text);
-    this.diskText.textContent = row.diskText === null
-      ? "(file no longer exists)"
-      : previewText(row.diskText);
+    this.renderDiff(row, row.record.text);
     this.list.classList.add("hidden");
     this.empty.classList.add("hidden");
     this.review.classList.remove("hidden");
     const restore = document.getElementById("recovery-review-restore") as HTMLButtonElement | null;
     if (restore) restore.disabled = !row.path;
     document.getElementById("recovery-review-back")?.focus();
+  }
+
+  private renderDiff(row: RecoveryReviewRow, recoveredText: string): void {
+    this.diff.replaceChildren();
+    this.diffNote.classList.add("hidden");
+    this.diffNote.textContent = "";
+    if (row.diskText === null) {
+      this.setDiffNote(
+        "The file no longer exists, so there is no disk revision to compare. Restore to recover the full unsaved text.",
+      );
+      return;
+    }
+    const diff = createUnifiedTextDiff(row.diskText, recoveredText, {
+      context: 3,
+      maxLines: 3_000,
+    });
+    if (diff.hunks.length === 0) {
+      this.setDiffNote(diff.lineEndingOnly
+        ? "The recovered text differs only in line endings."
+        : "No textual differences were found.");
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    for (const hunk of diff.hunks) {
+      const header = document.createElement("div");
+      header.className = "recovery-diff-hunk";
+      header.textContent = hunk.header;
+      fragment.appendChild(header);
+      for (const row of splitDiffHunk(hunk)) {
+        const element = document.createElement("div");
+        element.className = "recovery-diff-row";
+        element.append(
+          this.renderDiffSide(row.old, "old", row.type),
+          this.renderDiffSide(row.new, "new", row.type),
+        );
+        fragment.appendChild(element);
+      }
+    }
+    this.diff.appendChild(fragment);
+    if (diff.truncated) {
+      this.setDiffNote(
+        `Diff truncated to ${diff.shownLines} of ${diff.totalLines} changed/context lines. Restore still applies the complete recovered text.`,
+      );
+    }
+  }
+
+  private renderDiffSide(
+    side: TextDiffSide,
+    kind: "old" | "new",
+    rowType: "context" | "change",
+  ): HTMLElement {
+    const cell = document.createElement("div");
+    const state = rowType === "context"
+      ? "context"
+      : !side.line
+        ? "empty"
+        : kind === "old" ? "removed" : "added";
+    cell.className = `recovery-diff-side recovery-diff-side-${kind} recovery-diff-${state}`;
+    const number = document.createElement("span");
+    number.className = "recovery-diff-line-number";
+    number.textContent = side.line === null ? "" : String(side.line);
+    number.setAttribute("aria-hidden", "true");
+    const sign = document.createElement("span");
+    sign.className = "recovery-diff-sign";
+    sign.textContent = rowType === "context" || !side.line ? " " : kind === "old" ? "-" : "+";
+    sign.setAttribute("aria-hidden", "true");
+    const content = document.createElement("span");
+    content.className = "recovery-diff-content";
+    if (side.segments.length === 0) {
+      content.textContent = " ";
+    } else {
+      for (const segment of side.segments) {
+        const span = document.createElement("span");
+        if (segment.changed) span.className = "recovery-diff-word-changed";
+        span.textContent = segment.text;
+        content.appendChild(span);
+      }
+    }
+    cell.append(number, sign, content);
+    return cell;
+  }
+
+  private setDiffNote(message: string): void {
+    this.diffNote.textContent = message;
+    this.diffNote.classList.remove("hidden");
   }
 
   private closeReview(): void {

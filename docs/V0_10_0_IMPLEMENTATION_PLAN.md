@@ -220,7 +220,8 @@ Implemented:
   **File → Recover Unsaved Work…** shows all records explicitly.
 - If disk already matches the recovered text, the record is resolved
   automatically. If disk differs from the saved baseline, Restore opens a
-  side-by-side comparison first.
+  git-style unified diff first, rendering only changed hunks with context
+  rather than the complete files.
 - Restore opens an unsaved buffer without writing disk. Missing files restore as
   dirty buffers and can be kept with Save As.
 - Saving deletes the matching snapshot revision only when no newer revision
