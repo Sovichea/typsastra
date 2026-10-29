@@ -24,6 +24,7 @@ mod formatted_clipboard;
 mod pdfium_preview;
 mod project_archive;
 mod project_text;
+mod recovery;
 mod render_prepare;
 mod scaled_fonts;
 mod segmentation;
@@ -42,6 +43,7 @@ use project_text::{
     cancel_project_text_request, project_search_related_files, project_text_inventory,
     project_text_read, project_text_revision,
 };
+use recovery::{RecoveryDeleteResult, RecoveryListing, RecoveryRecord, RecoveryWriteResult};
 use render_prepare::{
     cancel_draft_thumbnail_generation, cancel_render_preparation, get_draft_thumbnail_status,
     map_generated_to_source, map_source_to_generated, prepare_render_file, prepare_render_project,
@@ -668,6 +670,73 @@ fn save_app_settings(
     std::fs::write(&path, format!("{}\n", contents))
         .map_err(|error| format!("Failed to write settings.json: {}", error))?;
     Ok(path.to_string_lossy().to_string())
+}
+
+fn recovery_root_for(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to resolve recovery storage: {error}"))?;
+    Ok(recovery::recovery_root(&data_dir))
+}
+
+#[tauri::command]
+async fn list_recovery_records(app_handle: tauri::AppHandle) -> Result<RecoveryListing, String> {
+    let root = recovery_root_for(&app_handle)?;
+    tauri::async_runtime::spawn_blocking(move || recovery::list_recovery_records(&root))
+        .await
+        .map_err(|error| format!("Recovery listing task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn read_recovery_record(
+    app_handle: tauri::AppHandle,
+    document_id: String,
+) -> Result<Option<RecoveryRecord>, String> {
+    let root = recovery_root_for(&app_handle)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        recovery::read_recovery_record(&root, &document_id)
+    })
+    .await
+    .map_err(|error| format!("Recovery read task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn write_recovery_record(
+    app_handle: tauri::AppHandle,
+    record: RecoveryRecord,
+) -> Result<RecoveryWriteResult, String> {
+    let root = recovery_root_for(&app_handle)?;
+    tauri::async_runtime::spawn_blocking(move || recovery::write_recovery_record(&root, record))
+        .await
+        .map_err(|error| format!("Recovery write task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn delete_recovery_record(
+    app_handle: tauri::AppHandle,
+    document_id: String,
+    expected_revision: Option<u64>,
+) -> Result<RecoveryDeleteResult, String> {
+    let root = recovery_root_for(&app_handle)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        recovery::delete_recovery_record(&root, &document_id, expected_revision)
+    })
+    .await
+    .map_err(|error| format!("Recovery delete task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn delete_corrupt_recovery_record(
+    app_handle: tauri::AppHandle,
+    file_name: String,
+) -> Result<(), String> {
+    let root = recovery_root_for(&app_handle)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        recovery::delete_corrupt_recovery_record(&root, &file_name)
+    })
+    .await
+    .map_err(|error| format!("Recovery cleanup task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -8321,6 +8390,11 @@ pub fn run() {
             finish_startup_initialization,
             load_app_settings,
             save_app_settings,
+            list_recovery_records,
+            read_recovery_record,
+            write_recovery_record,
+            delete_recovery_record,
+            delete_corrupt_recovery_record,
             get_webview_storage_status,
             scan_webview_storage,
             load_workspace_metadata,
