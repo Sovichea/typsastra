@@ -50,6 +50,21 @@ wheel or trackpad; the chevron at its right edge opens a list of every open tab.
 Pane focus and keyboard navigation let you move between the editor, preview,
 Explorer, Outline, and Spellcheck without reaching for the mouse.
 
+## Unsaved-work recovery
+
+Typsastra snapshots unsaved text while you edit, including dirty tabs that are
+not currently active. Snapshots are written after a short idle pause and at
+least every five seconds during continuous typing. They live outside the
+project and are separate from preview caches.
+
+After an unexpected shutdown, **File → Recover Unsaved Work…** lists the
+available snapshots. Each file can be reviewed, restored as an unsaved buffer,
+or discarded. If the file changed on disk, review the side-by-side comparison
+before restoring. Deleted files reopen as dirty buffers so they can be kept with
+Save As. Saving removes only the matching snapshot revision; newer unsaved edits
+are retained. Corrupt records are reported separately and do not block other
+files.
+
 ## Typst-aware editing
 
 - **Surround With** discovers available functions and wrappers from Typst

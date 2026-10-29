@@ -172,7 +172,8 @@ import { DocumentTypographyApplicationController } from "./typography/documentTy
 import { SourceLocationController } from "./navigation/sourceLocationController";
 import { OutlineNavigationController } from "./navigation/outlineNavigationController";
 import { NavigationHistoryController } from "./navigation/navigationHistoryController";
-import { RecoveryController } from "./recovery/recoveryController";
+import { RecoveryController, type RecoveryRecord } from "./recovery/recoveryController";
+import { RecoveryReviewController } from "./recovery/recoveryReviewController";
 import { TinymistIntegrationController } from "./session/tinymistIntegrationController";
 
 
@@ -1254,6 +1255,20 @@ export class TypsastraWorkspaceController {
       channel: "lsp",
       counted: true,
       persistent,
+    }),
+  });
+  private readonly recoveryReviewController = new RecoveryReviewController({
+    recovery: () => this.recoveryController,
+    pathExists: path => invoke<boolean>("workspace_path_exists", { path }),
+    readText: path => invoke<string>("read_workspace_file", { path }),
+    restoreRecord: record => this.restoreRecoveryRecord(record),
+    logWarning: message => this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "recovery",
+      message,
+      channel: "lsp",
+      counted: true,
+      persistent: true,
     }),
   });
   private readonly spellcheckSidebarPane = new SpellcheckSidebarPane(entry => this.navigateToLogEntry(entry));
@@ -2385,6 +2400,7 @@ export class TypsastraWorkspaceController {
         message: `Could not inventory recovery snapshots: ${String(error)}`,
       });
     }
+    this.recoveryReviewController.initialize();
     this.performanceController.timeStartupSync("update workspace visibility", () => this.updateWorkspaceViewportVisibility());
 
     await this.performanceController.timeStartup("show main window", () => getCurrentWindow().show());
@@ -2420,6 +2436,10 @@ export class TypsastraWorkspaceController {
     ));
     this.pruneStandaloneCaches();
     await this.drainPendingLaunchRequests();
+    await this.performanceController.timeStartup(
+      "review recovery snapshots",
+      () => this.recoveryReviewController.showIfNeeded(),
+    );
     this.performanceController.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
   }
 
@@ -4094,10 +4114,16 @@ export class TypsastraWorkspaceController {
     this.appendLspLog({ kind: "error", source: "workspace", message: `Workspace watcher failed: ${String(error)}` });
   }
 
-  private openWorkspace(selected: string): Promise<void> {
+  private openWorkspace(
+    selected: string,
+    options: { showRecovery?: boolean } = {},
+  ): Promise<void> {
     // Opening a project leaves standalone-file mode and drops its temp cache.
     this.discardStandaloneCache();
-    return this.workspaceLifecycleController.open(selected).then(() => this.syncDevProjectContext());
+    return this.workspaceLifecycleController.open(selected).then(async () => {
+      await this.syncDevProjectContext();
+      if (options.showRecovery !== false) void this.recoveryReviewController.showIfNeeded();
+    });
   }
 
   private async openProjectDocumentFromDevApi(request: {
@@ -4379,6 +4405,11 @@ export class TypsastraWorkspaceController {
       shortcuts: () => this.settingsController.value.shortcuts,
       openWorkspace: path => this.openWorkspace(path),
       importProject: () => this.importTypsastraProject(),
+      showRecoveryReview: async () => {
+        if (!await this.recoveryReviewController.showIfNeeded()) {
+          this.setLspStatus({ kind: "preview-ready", message: "No unsaved recovery snapshots" });
+        }
+      },
       createProjectFromTemplate: () => this.createProjectFromTemplate(),
       restartWorkspace: () => this.restartWorkspace(),
       closeProject: () => this.closeProject(),
@@ -4444,6 +4475,9 @@ export class TypsastraWorkspaceController {
       openExamplesWorkspace: () => this.openExamplesWorkspace(),
       startWindowStateMonitor: () => this.windowStateController.start(),
       hasUnsavedChanges: () => this.openTabs.some(tab => tab.isDirty),
+      discardRecoverySnapshots: () => this.recoveryController.discardAllTabs(
+        this.openTabs.filter(tab => tab.isDirty),
+      ),
       prepareForClose: () => this.appUpdateController.prepareForClose(),
       persistWorkspaceState: () => this.saveWorkspaceState(),
       persistWindowState: () => this.windowStateController.persistNow(),
@@ -4494,6 +4528,135 @@ export class TypsastraWorkspaceController {
    * and the preview cache uses a temporary directory under the application data
    * directory instead of the folder-keyed workspace cache.
    */
+  private async restoreRecoveryRecord(record: RecoveryRecord): Promise<boolean> {
+    const path = record.path;
+    if (!path) return false;
+    try {
+      if (
+        record.workspaceRoot
+        && (!this.workspaceRootPath || filePathKey(this.workspaceRootPath) !== filePathKey(record.workspaceRoot))
+      ) {
+        const workspaceExists = await invoke<boolean>("workspace_path_exists", {
+          path: record.workspaceRoot,
+        });
+        if (!workspaceExists) {
+          this.reportRecoveryWarning(
+            `Could not restore ${fileNameFromPath(path)}: its workspace no longer exists.`,
+          );
+          return false;
+        }
+        await this.openWorkspace(record.workspaceRoot, { showRecovery: false });
+        if (
+          !this.workspaceRootPath
+          || filePathKey(this.workspaceRootPath) !== filePathKey(record.workspaceRoot)
+        ) {
+          return false;
+        }
+      }
+
+      const diskExists = await invoke<boolean>("workspace_path_exists", { path });
+      const diskText = diskExists
+        ? await invoke<string>("read_workspace_file", { path }).catch(() => null)
+        : null;
+      if (!record.workspaceRoot) {
+        const folder = this.folderOfPath(path);
+        if (this.workspaceRootPath === null) {
+          this.standaloneFilePath = path;
+          this.workspaceRootPath = folder;
+          this.workspaceMetadata = null;
+          this.renderCacheRootPath = await this.prepareStandaloneCacheRoot(folder);
+          this.sidebarController.reset();
+          this.updateWorkspaceViewportVisibility();
+        } else {
+          const cacheRoot = await this.prepareStandaloneCacheRoot(folder);
+          if (cacheRoot) this.offProjectPreviewRoots.set(folder, cacheRoot);
+        }
+      }
+
+      let tab = this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path));
+      if (tab?.isDirty && tab.content !== record.text) {
+        const proceed = await confirm(
+          `Replace the current unsaved changes in ${fileNameFromPath(path)} with the recovered snapshot?`,
+          { title: "Recover Unsaved Work", kind: "warning" },
+        );
+        if (!proceed) return false;
+      }
+      if (!tab) {
+        tab = {
+          path,
+          content: "",
+          savedContent: "",
+          contentLoaded: true,
+          isDirty: false,
+          previewRootPath: null,
+          previewMainPath: null,
+          previewTaskId: null,
+          previewSessionKey: null,
+          previewImported: false,
+          previewStandalone: true,
+          previewDisabled: false,
+          version: 1,
+          latestVersion: 1,
+          selectionAnchor: record.selectionAnchor,
+          selectionHead: record.selectionHead,
+          scrollTop: record.scrollTop,
+          scrollLeft: record.scrollLeft,
+          foldRanges: [],
+          foldStateExplicit: false,
+          temporary: false,
+          offProject: !record.workspaceRoot
+            && this.standaloneFilePath === null
+            && this.workspaceRootPath !== null,
+        };
+        this.openTabs.push(tab);
+      }
+      tab.content = record.text;
+      tab.savedContent = diskText ?? "";
+      tab.contentLoaded = true;
+      tab.recoveredUnsaved = true;
+      tab.isDirty = record.text !== tab.savedContent;
+      tab.selectionAnchor = record.selectionAnchor;
+      tab.selectionHead = record.selectionHead;
+      tab.scrollTop = record.scrollTop;
+      tab.scrollLeft = record.scrollLeft;
+      tab.foldRanges ??= [];
+      tab.foldStateExplicit ??= false;
+      this.renderEditorTabs();
+
+      await this.activateEditorTab(path, false, { skipPreviewActivation: true });
+      if (filePathKey(this.activeFilePath ?? "") === filePathKey(path)) {
+        const doc = this.editorInstance.state.doc;
+        const anchor = Math.max(0, Math.min(record.selectionAnchor, doc.length));
+        const head = Math.max(0, Math.min(record.selectionHead, doc.length));
+        this.editorInstance.dispatch({ selection: { anchor, head } });
+        this.editorInstance.scrollDOM.scrollTop = record.scrollTop;
+        this.editorInstance.scrollDOM.scrollLeft = record.scrollLeft;
+        this.editorInstance.focus();
+      }
+      this.setLspStatus({
+        kind: "preview-ready",
+        message: `Recovered unsaved changes from ${fileNameFromPath(path)}`,
+      });
+      return true;
+    } catch (error) {
+      this.reportRecoveryWarning(
+        `Could not restore ${fileNameFromPath(path)}: ${String(error)}`,
+      );
+      return false;
+    }
+  }
+
+  private reportRecoveryWarning(message: string): void {
+    this.logConsoleController.appendLog({
+      kind: "warning",
+      source: "recovery",
+      message,
+      channel: "lsp",
+      counted: true,
+      persistent: true,
+    });
+  }
+
   private async openStandaloneFile(path: string): Promise<void> {
     const folder = this.folderOfPath(path);
     // A project is already open: add the file as an off-project tab beside it

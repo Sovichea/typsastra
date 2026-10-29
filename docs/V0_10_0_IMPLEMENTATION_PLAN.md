@@ -184,35 +184,47 @@ Implemented:
 
 ### V010-D.1 — Persistent snapshots
 
-- Protect project, standalone, off-project, and untitled text buffers, including
-  inactive dirty tabs. Image/Table Tool models and historical versions are deferred.
-- Use a dedicated application-local persistent recovery directory, separate from
-  disposable caches. Exclude it from cache cleanup and project archives.
-- Add versioned native list/read/write/delete operations. Record document ID,
-  workspace/path identity, unsaved text, saved-content hash, revision, timestamp,
+Implemented:
+
+- Text buffers are snapshotted for project, standalone, off-project, and
+  missing-file restoration cases, including dirty inactive tabs. Image/Table
+  Tool models and historical versions remain deferred.
+- Snapshots live in a dedicated application-local `recovery/` store, separate
+  from render caches and project sources.
+- Versioned native list/read/write/delete commands record document identity,
+  workspace/path, unsaved text, saved-content hash, revision, timestamp,
   selection, and editor scroll state.
-- Write atomically after one second idle and at least every five seconds during
-  continuous editing. Serialize writes per document and reject older revisions.
-- Keep the previous valid snapshot if writing fails and show a persistent,
-  actionable warning. Recovery does not start Tinymist or compile documents.
-- Limit storage to 100 MiB without silently deleting unresolved snapshots.
-  Explain which snapshots could not be written and let users review/discard old
-  records.
+- Snapshots write after one second of idle editing and at least every five
+  seconds during continuous editing. Writes are serialized per document and
+  older revisions are rejected.
+- Writes use an atomic temporary file and keep the previous valid snapshot if
+  publishing fails. Storage is capped at 100 MiB without silently deleting
+  records. Failures produce a persistent Log warning that points to
+  **File → Recover Unsaved Work…**.
+- Snapshotting does not start Tinymist or request a compile.
+
+Deferred:
+
+- Pathless untitled buffers. The editor currently creates files with a path;
+  missing-file recovery uses a dirty buffer with Save As.
+- Image/Table Tool model recovery and historical snapshot timelines.
 
 ### V010-D.2 — Review and restore
 
-- At startup/workspace opening, offer a recovery list with Review, Restore, and
-  Discard per file.
-- If disk matches recovered text, resolve the record. If disk differs from the
-  saved baseline, require comparison before restoration.
-- Restore into unsaved buffers without changing disk. Recover deleted files into
-  untitled buffers offering Save As.
-- Delete snapshots only after their exact revision is saved, explicitly
-  discarded, or intentionally closed through the unsaved-changes discard flow.
-  A completed save must not delete a newer edit snapshot.
-- Preserve unresolved snapshots during normal shutdown until the existing
-  save/discard flow resolves them. Corrupt records must not prevent other files
-  from being recovered; report the affected record.
+Implemented:
+
+- A startup review dialog lists recoverable files with Review, Restore, and
+  Discard controls, storage usage, and corrupt-record reporting. It can be
+  reopened from **File → Recover Unsaved Work…**.
+- If disk already matches the recovered text, the record is resolved
+  automatically. If disk differs from the saved baseline, Restore opens a
+  side-by-side comparison first.
+- Restore opens an unsaved buffer without writing disk. Missing files restore as
+  dirty buffers and can be kept with Save As.
+- Saving deletes the matching snapshot revision only when no newer revision
+  exists. Explicit tab/project/window discard flows also remove their records.
+- Unresolved snapshots remain after normal shutdown; corrupt records are listed
+  independently and cannot block valid recovery records.
 
 ## E. Interfaces and compatibility
 

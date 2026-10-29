@@ -84,6 +84,7 @@ export interface AppEventActions {
 
   openWorkspace: (path: string) => Promise<void> | void;
   importProject: () => Promise<void> | void;
+  showRecoveryReview: () => Promise<void> | void;
   createProjectFromTemplate: () => Promise<void> | void;
   restartWorkspace: () => Promise<void> | void;
   closeProject: () => Promise<boolean> | void;
@@ -122,6 +123,7 @@ export interface AppEventActions {
 
   startWindowStateMonitor: () => Promise<void> | void;
   hasUnsavedChanges: () => boolean;
+  discardRecoverySnapshots: () => Promise<void> | void;
   prepareForClose: () => Promise<boolean>;
   persistWorkspaceState: () => Promise<void>;
   persistWindowState: () => Promise<void>;
@@ -285,6 +287,7 @@ function bindWindowControls(actions: AppEventActions): void {
     if (closeRequestInProgress) return;
     closeRequestInProgress = true;
     let proceed = true;
+    let discardRecovery = false;
     if (actions.hasUnsavedChanges()) {
       proceed = await confirm("You have unsaved changes. Are you sure you want to close Typsastra?", {
         title: "Unsaved Changes",
@@ -292,11 +295,13 @@ function bindWindowControls(actions: AppEventActions): void {
         okLabel: "Close Without Saving",
         cancelLabel: "Cancel"
       });
+      discardRecovery = proceed;
     }
     if (proceed) proceed = await actions.prepareForClose();
     if (proceed) {
       await actions.persistWorkspaceState();
       await actions.persistWindowState();
+      if (discardRecovery) await actions.discardRecoverySnapshots();
       try {
         const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
         const previewWin = await WebviewWindow.getByLabel("preview");
@@ -436,6 +441,7 @@ export function bindAppEvents(actions: AppEventActions): void {
 
   document.getElementById("action-save-file")?.addEventListener("click", () => void actions.saveActiveFile());
   document.getElementById("action-save-file-as")?.addEventListener("click", () => void actions.saveActiveFileAs());
+  document.getElementById("action-recovery-review")?.addEventListener("click", () => void actions.showRecoveryReview());
   document.getElementById("action-export-pdf")?.addEventListener("click", () => void actions.exportPdf());
   document.getElementById("action-export-project")?.addEventListener("click", () => void actions.exportProject());
   document.getElementById("action-export-source-zip")?.addEventListener("click", () => void actions.exportSourceZip());

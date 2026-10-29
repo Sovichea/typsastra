@@ -37,6 +37,12 @@
                                 >
                                     Import Typsastra Project...
                                 </div>
+                                <div
+                                    class="dropdown-item"
+                                    id="action-recovery-review"
+                                >
+                                    Recover Unsaved Work...
+                                </div>
                                 <div class="dropdown-submenu">
                                     <div
                                         class="dropdown-item dropdown-submenu-trigger"
@@ -2512,6 +2518,83 @@
                         class="settings-primary"
                         type="button"
                     >Done</button>
+                </footer>
+            </section>
+        </div>
+
+        <div
+            id="recovery-overlay"
+            class="settings-overlay hidden"
+            role="presentation"
+        >
+            <section
+                class="settings-dialog recovery-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="recovery-title"
+            >
+                <header class="settings-header">
+                    <div>
+                        <h2 id="recovery-title">Recover unsaved work</h2>
+                        <p>Typsastra found unsaved snapshots from a previous session.</p>
+                    </div>
+                    <button
+                        id="recovery-close"
+                        class="settings-icon-button"
+                        type="button"
+                        aria-label="Close recovery review"
+                    >
+                        x
+                    </button>
+                </header>
+                <div class="recovery-content">
+                    <div id="recovery-usage" class="recovery-usage"></div>
+                    <div id="recovery-list" class="recovery-list"></div>
+                    <div id="recovery-empty" class="recovery-empty hidden">
+                        No recoverable snapshots.
+                    </div>
+                    <div id="recovery-review" class="recovery-review hidden">
+                        <div class="recovery-review-header">
+                            <button
+                                id="recovery-review-back"
+                                class="settings-secondary-button"
+                                type="button"
+                            >Back</button>
+                            <div>
+                                <h3 id="recovery-review-title"></h3>
+                                <p id="recovery-review-status"></p>
+                            </div>
+                        </div>
+                        <div class="recovery-compare">
+                            <div class="recovery-compare-pane">
+                                <h4>Recovered</h4>
+                                <pre id="recovery-recovered-text"></pre>
+                            </div>
+                            <div class="recovery-compare-pane">
+                                <h4>On disk</h4>
+                                <pre id="recovery-disk-text"></pre>
+                            </div>
+                        </div>
+                        <div class="recovery-review-actions">
+                            <button
+                                id="recovery-review-discard"
+                                class="settings-danger-button"
+                                type="button"
+                            >Discard</button>
+                            <button
+                                id="recovery-review-restore"
+                                class="settings-primary"
+                                type="button"
+                            >Restore Unsaved Copy</button>
+                        </div>
+                    </div>
+                </div>
+                <footer class="settings-footer">
+                    <button
+                        id="recovery-dismiss"
+                        class="settings-secondary-button"
+                        type="button"
+                    >Close</button>
                 </footer>
             </section>
         </div>

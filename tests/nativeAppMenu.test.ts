@@ -83,7 +83,8 @@ describe("native application menu spec", () => {
 
   test("keeps the dynamic recent projects entry accelerator-free", () => {
     const fileMenu = spec.find(submenu => submenu.label === "File");
-    expect(fileMenu?.nodes[3]).toEqual({ kind: "recent-placeholder" });
+    expect(fileMenu?.nodes.find(node => node.kind === "recent-placeholder"))
+      .toEqual({ kind: "recent-placeholder" });
     for (const submenu of spec) {
       for (const node of submenu.nodes) {
         if (node.kind === "recent-placeholder") {

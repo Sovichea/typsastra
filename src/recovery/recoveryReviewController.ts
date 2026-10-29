@@ -1,0 +1,369 @@
+import { fileNameFromPath } from "../platform/paths";
+import type {
+  RecoveryController,
+  RecoveryCorruptRecord,
+  RecoveryRecord,
+  RecoveryRecordSummary,
+} from "./recoveryController";
+import { sha256Hex } from "./recoveryIdentity";
+
+type RecoveryReviewStatus = "unchanged" | "changed" | "missing" | "error";
+
+type RecoveryReviewRow = {
+  documentId: string;
+  revision: number;
+  path: string | null;
+  title: string;
+  timestampMs: number;
+  bytes: number;
+  status: RecoveryReviewStatus;
+  message: string;
+  record: RecoveryRecord | null;
+  diskText: string | null;
+};
+
+type CorruptRow = RecoveryCorruptRecord;
+
+type RecoveryReviewDependencies = {
+  recovery(): RecoveryController;
+  pathExists(path: string): Promise<boolean>;
+  readText(path: string): Promise<string>;
+  restoreRecord(record: RecoveryRecord): Promise<boolean>;
+  logWarning(message: string): void;
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function formatTimestamp(timestampMs: number): string {
+  return new Date(timestampMs).toLocaleString();
+}
+
+function previewText(text: string): string {
+  const limit = 200_000;
+  return text.length <= limit ? text : `${text.slice(0, limit)}\n\n… preview truncated …`;
+}
+
+/** Owns the startup recovery list, comparison view, and restore/discard actions. */
+export class RecoveryReviewController {
+  private readonly overlay = document.getElementById("recovery-overlay")!;
+  private readonly list = document.getElementById("recovery-list")!;
+  private readonly empty = document.getElementById("recovery-empty")!;
+  private readonly usage = document.getElementById("recovery-usage")!;
+  private readonly review = document.getElementById("recovery-review")!;
+  private readonly reviewTitle = document.getElementById("recovery-review-title")!;
+  private readonly reviewStatus = document.getElementById("recovery-review-status")!;
+  private readonly recoveredText = document.getElementById("recovery-recovered-text") as HTMLElement;
+  private readonly diskText = document.getElementById("recovery-disk-text") as HTMLElement;
+  private rows: RecoveryReviewRow[] = [];
+  private corruptRows: CorruptRow[] = [];
+  private selectedRow: RecoveryReviewRow | null = null;
+  private showing = false;
+
+  constructor(private readonly deps: RecoveryReviewDependencies) {}
+
+  public initialize(): void {
+    document.getElementById("recovery-close")?.addEventListener("click", () => this.hide());
+    document.getElementById("recovery-dismiss")?.addEventListener("click", () => this.hide());
+    document.getElementById("recovery-review-back")?.addEventListener("click", () => this.closeReview());
+    document.getElementById("recovery-review-discard")?.addEventListener("click", () => {
+      if (this.selectedRow) void this.discardRow(this.selectedRow);
+    });
+    document.getElementById("recovery-review-restore")?.addEventListener("click", () => {
+      if (this.selectedRow) void this.restoreRow(this.selectedRow);
+    });
+    this.overlay.addEventListener("click", event => {
+      if (event.target === this.overlay) this.hide();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || this.overlay.classList.contains("hidden")) return;
+      if (!this.review.classList.contains("hidden")) this.closeReview();
+      else this.hide();
+    });
+  }
+
+  public async showIfNeeded(): Promise<boolean> {
+    if (this.showing) return false;
+    this.showing = true;
+    try {
+      const listing = await this.deps.recovery().refreshListing();
+      if (listing.records.length === 0 && listing.corrupt.length === 0) return false;
+      await this.scanRecords(listing.records);
+      const refreshed = await this.deps.recovery().refreshListing();
+      this.corruptRows = refreshed.corrupt;
+      if (this.rows.length === 0 && this.corruptRows.length === 0) {
+        this.hide();
+        return false;
+      }
+      this.overlay.classList.remove("hidden");
+      this.review.classList.add("hidden");
+      this.render();
+      this.list.querySelector<HTMLButtonElement>("button")?.focus();
+      return true;
+    } catch (error) {
+      this.deps.logWarning(`Could not review recovery snapshots: ${String(error)}`);
+      return false;
+    } finally {
+      this.showing = false;
+    }
+  }
+
+  private async scanRecords(summaries: readonly RecoveryRecordSummary[]): Promise<void> {
+    const rows: RecoveryReviewRow[] = [];
+    for (const summary of summaries) {
+      let record: RecoveryRecord | null = null;
+      try {
+        record = await this.deps.recovery().readRecord(summary.documentId);
+      } catch (error) {
+        rows.push({
+          documentId: summary.documentId,
+          revision: summary.revision,
+          path: summary.path,
+          title: summary.path ? fileNameFromPath(summary.path) : "Recovery record",
+          timestampMs: summary.timestampMs,
+          bytes: summary.bytes,
+          status: "error",
+          message: `Could not read this snapshot: ${String(error)}`,
+          record: null,
+          diskText: null,
+        });
+        continue;
+      }
+      if (!record) continue;
+      const path = record.path;
+      if (!path) {
+        rows.push(this.rowFrom(record, summary.bytes, "missing", "This snapshot has no file path.", null));
+        continue;
+      }
+      if (!await this.deps.pathExists(path).catch(() => false)) {
+        rows.push(this.rowFrom(
+          record,
+          summary.bytes,
+          "missing",
+          "The file no longer exists. Restore it as an unsaved buffer and use Save As.",
+          null,
+        ));
+        continue;
+      }
+      let text = "";
+      try {
+        text = await this.deps.readText(path);
+      } catch (error) {
+        rows.push(this.rowFrom(record, summary.bytes, "error", `Could not read the file on disk: ${String(error)}`, null));
+        continue;
+      }
+      if (text === record.text) {
+        try {
+          const result = await this.deps.recovery().discardRecord(record.documentId, record.revision);
+          if (result.deleted || result.reason === "missing") continue;
+          rows.push(this.rowFrom(
+            record,
+            summary.bytes,
+            "error",
+            `The disk file already matches this snapshot, but a newer recovery revision was kept.`,
+            text,
+          ));
+          continue;
+        } catch (error) {
+          rows.push(this.rowFrom(
+            record,
+            summary.bytes,
+            "error",
+            `The disk file already matches this snapshot, but the record could not be cleared: ${String(error)}`,
+            text,
+          ));
+          continue;
+        }
+      }
+      const changed = await sha256Hex(text) !== record.savedTextHash;
+      rows.push(this.rowFrom(
+        record,
+        summary.bytes,
+        changed ? "changed" : "unchanged",
+        changed
+          ? "The file changed on disk since it was saved. Review the differences before restoring."
+          : "The file on disk still matches its saved baseline.",
+        text,
+      ));
+    }
+    this.rows = rows;
+  }
+
+  private rowFrom(
+    record: RecoveryRecord,
+    bytes: number,
+    status: RecoveryReviewStatus,
+    message: string,
+    diskText: string | null,
+  ): RecoveryReviewRow {
+    return {
+      documentId: record.documentId,
+      revision: record.revision,
+      path: record.path,
+      title: record.path ? fileNameFromPath(record.path) : "Recovery record",
+      timestampMs: record.timestampMs,
+      bytes,
+      status,
+      message,
+      record,
+      diskText,
+    };
+  }
+
+  private render(): void {
+    const listing = this.deps.recovery().currentListing();
+    this.usage.textContent = `${formatBytes(listing.totalBytes)} of ${formatBytes(listing.limitBytes)} recovery storage used.`;
+    this.usage.classList.toggle("warning", listing.totalBytes > listing.limitBytes * 0.8);
+    this.list.replaceChildren(
+      ...this.rows.map(row => this.renderRow(row)),
+      ...this.corruptRows.map(row => this.renderCorruptRow(row)),
+    );
+    this.empty.classList.toggle("hidden", this.rows.length + this.corruptRows.length > 0);
+  }
+
+  private renderRow(row: RecoveryReviewRow): HTMLElement {
+    const element = document.createElement("div");
+    element.className = "recovery-row";
+    element.dataset.recoveryId = row.documentId;
+    const main = document.createElement("div");
+    main.className = "recovery-row-main";
+    const title = document.createElement("div");
+    title.className = "recovery-row-title";
+    title.textContent = row.title;
+    const badge = document.createElement("span");
+    badge.className = `recovery-status recovery-status-${row.status}`;
+    badge.textContent = row.status === "unchanged" ? "unchanged on disk"
+      : row.status === "changed" ? "disk changed"
+      : row.status === "missing" ? "file missing"
+      : "needs attention";
+    title.appendChild(badge);
+    const meta = document.createElement("div");
+    meta.className = "recovery-row-meta";
+    meta.textContent = `${row.path ?? "No path"} · ${formatTimestamp(row.timestampMs)} · ${formatBytes(row.bytes)}`;
+    const status = document.createElement("div");
+    status.className = "recovery-row-status";
+    status.textContent = row.message;
+    main.append(title, meta, status);
+
+    const actions = document.createElement("div");
+    actions.className = "recovery-row-actions";
+    const review = this.actionButton("Review", () => void this.openReview(row));
+    const restore = this.actionButton("Restore", () => {
+      if (row.status === "changed") void this.openReview(row);
+      else void this.restoreRow(row);
+    }, "settings-primary");
+    restore.disabled = row.record === null || !row.path;
+    const discard = this.actionButton("Discard", () => void this.discardRow(row), "settings-danger-button");
+    actions.append(review, restore, discard);
+    element.append(main, actions);
+    return element;
+  }
+
+  private renderCorruptRow(row: CorruptRow): HTMLElement {
+    const element = document.createElement("div");
+    element.className = "recovery-row recovery-row-corrupt";
+    const main = document.createElement("div");
+    main.className = "recovery-row-main";
+    const title = document.createElement("div");
+    title.className = "recovery-row-title";
+    title.textContent = row.fileName;
+    const badge = document.createElement("span");
+    badge.className = "recovery-status recovery-status-error";
+    badge.textContent = "corrupt record";
+    title.appendChild(badge);
+    const status = document.createElement("div");
+    status.className = "recovery-row-status";
+    status.textContent = `${row.error} · ${formatBytes(row.bytes)}`;
+    main.append(title, status);
+    const actions = document.createElement("div");
+    actions.className = "recovery-row-actions";
+    actions.append(this.actionButton("Discard", () => void this.discardCorrupt(row), "settings-danger-button"));
+    element.append(main, actions);
+    return element;
+  }
+
+  private actionButton(label: string, action: () => void, className = ""): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `settings-secondary-button ${className}`.trim();
+    button.textContent = label;
+    button.addEventListener("click", action);
+    return button;
+  }
+
+  private async openReview(row: RecoveryReviewRow): Promise<void> {
+    if (!row.record) return;
+    this.selectedRow = row;
+    this.reviewTitle.textContent = row.title;
+    this.reviewStatus.textContent = row.message;
+    this.recoveredText.textContent = previewText(row.record.text);
+    this.diskText.textContent = row.diskText === null
+      ? "(file no longer exists)"
+      : previewText(row.diskText);
+    this.list.classList.add("hidden");
+    this.empty.classList.add("hidden");
+    this.review.classList.remove("hidden");
+    const restore = document.getElementById("recovery-review-restore") as HTMLButtonElement | null;
+    if (restore) restore.disabled = !row.path;
+    document.getElementById("recovery-review-back")?.focus();
+  }
+
+  private closeReview(): void {
+    this.selectedRow = null;
+    this.review.classList.add("hidden");
+    this.list.classList.remove("hidden");
+    this.empty.classList.toggle("hidden", this.rows.length + this.corruptRows.length > 0);
+  }
+
+  private async restoreRow(row: RecoveryReviewRow): Promise<void> {
+    if (!row.record) return;
+    const restored = await this.deps.restoreRecord(row.record);
+    if (!restored) return;
+    this.rows = this.rows.filter(candidate => candidate.documentId !== row.documentId);
+    this.closeReview();
+    this.render();
+    if (this.rows.length === 0 && this.corruptRows.length === 0) this.hide();
+  }
+
+  private async discardRow(row: RecoveryReviewRow): Promise<void> {
+    try {
+      const result = await this.deps.recovery().discardRecord(row.documentId, row.revision);
+      if (!result.deleted && result.reason === "newer-revision") {
+        this.deps.logWarning(
+          `${row.title} has a newer recovery snapshot. Reopen recovery review to see the latest revision.`,
+        );
+        await this.showIfNeeded();
+        return;
+      }
+      this.rows = this.rows.filter(candidate => candidate.documentId !== row.documentId);
+      const listing = await this.deps.recovery().refreshListing();
+      this.corruptRows = listing.corrupt;
+      if (this.selectedRow?.documentId === row.documentId) this.closeReview();
+      this.render();
+      if (this.rows.length === 0 && this.corruptRows.length === 0) this.hide();
+    } catch (error) {
+      this.deps.logWarning(`Could not discard ${row.title} from recovery storage: ${String(error)}`);
+    }
+  }
+
+  private async discardCorrupt(row: CorruptRow): Promise<void> {
+    try {
+      await this.deps.recovery().deleteCorruptRecord(row.fileName);
+      this.corruptRows = this.corruptRows.filter(candidate => candidate.fileName !== row.fileName);
+      this.render();
+      if (this.rows.length === 0 && this.corruptRows.length === 0) this.hide();
+    } catch (error) {
+      this.deps.logWarning(`Could not discard corrupt recovery record ${row.fileName}: ${String(error)}`);
+    }
+  }
+
+  private hide(): void {
+    this.overlay.classList.add("hidden");
+    this.review.classList.add("hidden");
+    this.list.classList.remove("hidden");
+    this.selectedRow = null;
+  }
+}
