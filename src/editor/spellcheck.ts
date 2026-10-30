@@ -128,6 +128,50 @@ function matchesTerminology(word: string, entries: readonly TerminologyEntry[]):
     : entry.term.localeCompare(word, undefined, { sensitivity: "base" }) === 0);
 }
 
+/** Return the saved terminology spelling for a case-insensitive match. */
+export function preferredTerminologyTerm(
+  suggestion: string,
+  terminology: readonly TerminologyEntry[],
+): string | null {
+  const preferred = terminology.find(entry =>
+    entry.term.localeCompare(suggestion, undefined, { sensitivity: "base" }) === 0
+  );
+  return preferred?.term ?? null;
+}
+
+function isCasedLetter(character: string): boolean {
+  return character.toLowerCase() !== character.toUpperCase();
+}
+
+/** Exact mixed-case user words only match their saved spelling. */
+export function matchesUserDictionaryWord(
+  sourceText: string,
+  normalizedText: string,
+  exactWords: ReadonlySet<string>,
+  foldedWords: ReadonlySet<string>,
+): boolean {
+  return exactWords.has(sourceText) || foldedWords.has(normalizedText);
+}
+
+/** Keep correction replacements in the capitalization used by the source word. */
+export function applySpellingSuggestionCasing(sourceWord: string, suggestion: string): string {
+  const cased = [...sourceWord].filter(isCasedLetter);
+  const first = cased[0];
+  const second = cased[1];
+  if (first && second && first === first.toUpperCase() && second === second.toUpperCase()) {
+    return suggestion.toLocaleUpperCase();
+  }
+  if (first && first === first.toUpperCase()
+    && (!second || second === second.toLowerCase())) {
+    const characters = [...suggestion];
+    const index = characters.findIndex(isCasedLetter);
+    if (index < 0) return suggestion;
+    characters[index] = characters[index].toLocaleUpperCase();
+    return characters.join("");
+  }
+  return suggestion;
+}
+
 function terminologyKeys(
   global: readonly TerminologyEntry[],
   project: readonly TerminologyEntry[],
@@ -223,6 +267,7 @@ export class SpellcheckController {
   private activeTypingPosition: number | null = null;
   private readonly warnedFailures = new Set<string>();
   private userDictionary = new Set<string>();
+  private userDictionaryFolded = new Set<string>();
   private ignoredWords = new Set<string>();
   private globalTerminology: TerminologyEntry[] = [];
   private projectTerminology: TerminologyEntry[] = [];
@@ -341,6 +386,10 @@ export class SpellcheckController {
     if (next.size === this.userDictionary.size
       && [...next].every(word => this.userDictionary.has(word))) return;
     this.userDictionary = next;
+    this.userDictionaryFolded = new Set(
+      [...next].filter(word => word === word.toLowerCase()),
+    );
+    this.suggestionCache.clear();
     this.invalidate(true);
     const doc = this.getEditor()?.state.doc;
     if (doc) {
@@ -366,6 +415,7 @@ export class SpellcheckController {
     this.projectTerminology = [...project];
     this.languageTerminology = [...language];
     this.scopedIgnoredWords = [...ignored];
+    this.suggestionCache.clear();
     const editor = this.getEditor?.();
     if (!editor) return;
     this.invalidate(false);
@@ -542,7 +592,8 @@ export class SpellcheckController {
     const provider = this.providers.find(candidate => candidate.id === issue.provider);
     if (provider?.supportsCorrections !== true) return [];
     const request = ++this.suggestionRequestGeneration;
-    const cached = this.suggestionCache.get(issue.word);
+    const cacheKey = `${issue.provider}\u0000${issue.sourceText}`;
+    const cached = this.suggestionCache.get(cacheKey);
     if (cached) return this.suggestionRequestIsCurrent(request, issue) ? cached : [];
     try {
       const response = await invoke<{ suggestions: string[] }>("language_suggestions", {
@@ -552,9 +603,20 @@ export class SpellcheckController {
           limit: 5
         }
       });
-      const suggestions = response.suggestions;
+      const terminology = [
+        ...this.globalTerminology,
+        ...this.projectTerminology,
+        ...this.languageTerminology.filter(entry =>
+          issue.languageFamily !== undefined && entry.languageFamily === issue.languageFamily
+        ),
+        ...[...this.userDictionary].map(term => ({ term, exactCase: true })),
+      ];
+      const suggestions = response.suggestions.map(suggestion => {
+        const preferred = preferredTerminologyTerm(suggestion, terminology);
+        return preferred ?? applySpellingSuggestionCasing(issue.sourceText, suggestion);
+      });
       if (!this.suggestionRequestIsCurrent(request, issue)) return [];
-      this.suggestionCache.set(issue.word, suggestions);
+      this.suggestionCache.set(cacheKey, suggestions);
       return suggestions;
     } catch (error) {
       this.warnOnce("language_suggestions", error);
@@ -765,7 +827,7 @@ export class SpellcheckController {
     });
     const newIssues = response.tokens
       .filter(token => !token.known
-        && !this.userDictionary.has(token.normalizedText)
+        && !this.isUserDictionaryWord(token.sourceText, token.normalizedText)
         && !this.acceptsTerminology(token)
         && this.providerMatchesDocumentScripts(
           token.provider,
@@ -803,6 +865,15 @@ export class SpellcheckController {
 
   private isProvenProse(state: EditorState, from: number, to: number): boolean {
     return isTypstProseRange(state, from, to);
+  }
+
+  private isUserDictionaryWord(sourceText: string, normalizedText: string): boolean {
+    return matchesUserDictionaryWord(
+      sourceText,
+      normalizedText,
+      this.userDictionary,
+      this.userDictionaryFolded,
+    );
   }
 
   private acceptsTerminology(token: EditorToken): boolean {
