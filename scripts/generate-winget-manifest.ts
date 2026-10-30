@@ -248,6 +248,9 @@ function installerYaml(entries: InstallerEntry[], releaseDate: string): string {
     "Platform:",
     "  - Windows.Desktop",
     "InstallerType: wix",
+    // WiX installers can leave the previous version registered unless WinGet
+    // removes it before running the upgrade.
+    "UpgradeBehavior: uninstallPrevious",
     "Installers:",
   ];
   for (const entry of entries) {

@@ -148,6 +148,10 @@ makes it a per-machine install writing to Program Files, so administrator rights
 are unavoidable. winget validates installers first as a standard user and
 fails without this declaration.
 
+The manifest also sets `UpgradeBehavior: uninstallPrevious` so WinGet removes
+the previous MSI before installing a major upgrade, rather than leaving both
+versions registered in Apps & Features.
+
 ## Code signing
 
 Windows installers are not code signed, so SmartScreen shows a warning on

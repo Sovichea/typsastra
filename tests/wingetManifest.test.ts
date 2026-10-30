@@ -139,6 +139,7 @@ describe("winget manifests", () => {
 
       test("publishes x64 and arm64 installers from the official release", () => {
         expect(installerManifest.get("InstallerType")).toBe("wix");
+        expect(installerManifest.get("UpgradeBehavior")).toBe("uninstallPrevious");
         const architectures = ["x64", "arm64"];
         architectures.forEach((architecture, index) => {
           const prefix = `Installers.${index}`;
