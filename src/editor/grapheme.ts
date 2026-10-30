@@ -3,6 +3,7 @@ import { EditorView, type MouseSelectionStyle, type ViewUpdate } from "@codemirr
 import { deleteBracketPair } from "@codemirror/autocomplete";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
 import { analyzeKhmerWordAt } from "./khmerWordSelection";
+import { deleteContextualDoubleQuotePair } from "./quoteEditing";
 
 function getTemporaryEditingBoundary(state: EditorState): number | null {
   return editingPolicyRegistry.temporaryBoundary(state);
@@ -80,11 +81,11 @@ export function deletePreviousGrapheme(view: EditorView): boolean {
 }
 
 export function deletePreviousGraphemeOrPair(view: EditorView): boolean {
-  return deleteBracketPair(view) || deletePreviousGrapheme(view);
+  return deleteContextualDoubleQuotePair(view) || deleteBracketPair(view) || deletePreviousGrapheme(view);
 }
 
 export function deleteNextGrapheme(view: EditorView): boolean {
-  return deleteByPolicy(view, "forward");
+  return deleteContextualDoubleQuotePair(view) || deleteByPolicy(view, "forward");
 }
 
 export function movePreviousGrapheme(view: EditorView): boolean {

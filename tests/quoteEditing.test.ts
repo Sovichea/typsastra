@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { doubleQuoteAction, insertContextualDoubleQuote } from "../src/editor/quoteEditing";
+import { doubleQuoteAction, deleteContextualDoubleQuotePair, insertContextualDoubleQuote } from "../src/editor/quoteEditing";
 
 function applyQuote(doc: string, anchor: number, head = anchor): EditorState {
   let state = EditorState.create({
@@ -14,6 +14,19 @@ function applyQuote(doc: string, anchor: number, head = anchor): EditorState {
   } as unknown as EditorView;
   expect(insertContextualDoubleQuote(view)).toBe(true);
   return state;
+}
+
+function deleteQuotePair(doc: string, anchor: number, head = anchor): { state: EditorState; handled: boolean } {
+  let state = EditorState.create({
+    doc,
+    selection: EditorSelection.range(anchor, head),
+  });
+  const view = {
+    get state() { return state; },
+    dispatch(transaction: ReturnType<EditorState["update"]>) { state = transaction.state; },
+  } as unknown as EditorView;
+  const handled = deleteContextualDoubleQuotePair(view);
+  return { state, handled };
 }
 
 describe("contextual double-quote editing", () => {
@@ -101,5 +114,32 @@ describe("contextual double-quote editing", () => {
     const skipped = applyQuote('""', 1);
     expect(skipped.doc.toString()).toBe('""');
     expect(skipped.selection.main.head).toBe(2);
+  });
+
+  test("deletes both sides of an empty quote pair", () => {
+    const empty = deleteQuotePair('""', 1);
+    expect(empty.handled).toBe(true);
+    expect(empty.state.doc.toString()).toBe("");
+    expect(empty.state.selection.main.head).toBe(0);
+
+    const surrounded = deleteQuotePair('a""b', 2);
+    expect(surrounded.handled).toBe(true);
+    expect(surrounded.state.doc.toString()).toBe("ab");
+    expect(surrounded.state.selection.main.head).toBe(1);
+
+    const forward = deleteQuotePair('ab""cd', 3);
+    expect(forward.handled).toBe(true);
+    expect(forward.state.doc.toString()).toBe("abcd");
+    expect(forward.state.selection.main.head).toBe(2);
+  });
+
+  test("does not delete an escaped quote or a selection", () => {
+    const escaped = deleteQuotePair('\\""', 2);
+    expect(escaped.handled).toBe(false);
+    expect(escaped.state.doc.toString()).toBe('\\""');
+
+    const selected = deleteQuotePair('"abc"', 0, 5);
+    expect(selected.handled).toBe(false);
+    expect(selected.state.doc.toString()).toBe('"abc"');
   });
 });

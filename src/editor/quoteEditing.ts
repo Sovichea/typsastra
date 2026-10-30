@@ -50,6 +50,38 @@ export function doubleQuoteAction(before: string, after: string, hasSelection = 
   return "pair";
 }
 
+/**
+ * Deletes both sides of an empty auto-paired quote when the caret sits directly
+ * between them. Backspace and Delete both use this so an empty pair behaves like
+ * an empty bracket pair.
+ */
+export const deleteContextualDoubleQuotePair: Command = view => {
+  if (view.state.readOnly) return false;
+  let changed = false;
+  const transaction = view.state.changeByRange(range => {
+    if (!range.empty || range.from <= 0 || range.from >= view.state.doc.length) {
+      return { range };
+    }
+    const before = view.state.doc.sliceString(range.from - 1, range.from);
+    const after = view.state.doc.sliceString(range.from, range.from + 1);
+    if (before !== '"' || after !== '"') return { range };
+    if (hasOddTrailingBackslashes(view.state.doc.sliceString(0, range.from - 1))) {
+      return { range };
+    }
+    changed = true;
+    return {
+      changes: { from: range.from - 1, to: range.from + 1 },
+      range: EditorSelection.cursor(range.from - 1),
+    };
+  });
+  if (!changed) return false;
+  view.dispatch(view.state.update(transaction, {
+    scrollIntoView: true,
+    userEvent: "delete",
+  }));
+  return true;
+};
+
 export const insertContextualDoubleQuote: Command = view => {
   if (view.state.readOnly) return false;
   if (view.state.selection.ranges.every(range => !range.empty)) {
