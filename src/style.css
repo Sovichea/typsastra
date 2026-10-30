@@ -2445,6 +2445,10 @@ body.typsastra-resizing #input-container-wrapper::after {
   border-bottom: 1px solid var(--ui-border);
 }
 
+.settings-field[hidden] {
+  display: none;
+}
+
 .settings-toggle {
   display: grid;
   grid-template-columns: 20px 1fr;

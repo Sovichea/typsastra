@@ -39,6 +39,7 @@ import {
   type LanguageCatalogCapabilities,
   type LanguageProviderCapabilities
 } from "./languageSupport";
+import { availableLocales, getLocale, setLocale, t } from "./i18n";
 
 type SettingsPayload = { path: string; settings: unknown | null };
 type SystemFontCatalog = { all: string[]; monospace: string[] };
@@ -372,8 +373,8 @@ export class SettingsController {
       if (status) {
         status.classList.remove("error");
         status.textContent = (document.getElementById("shortcut-capture-chord") as HTMLInputElement).checked
-          ? "Waiting for the first key…"
-          : "Waiting for a key press…";
+          ? t("Waiting for the first key…")
+          : t("Waiting for a key press…");
       }
     });
     document.addEventListener("typsastra:open-settings", event => {
@@ -507,8 +508,17 @@ export class SettingsController {
       void this.deleteUnusedScaledFontVariants();
     });
 
+    document.getElementById("settings-ui-locale")?.addEventListener("change", event => {
+      const select = event.target as HTMLSelectElement;
+      try {
+        setLocale(select.value);
+        this.populatePanel();
+      } catch (error) {
+        console.warn("Failed to change the interface language.", error);
+      }
+    });
     document.getElementById("settings-reset")?.addEventListener("click", async () => {
-      if (await confirm("Reset all application settings to their defaults?", { title: "Reset Settings", kind: "warning" })) {
+      if (await confirm(t("Reset all application settings to their defaults?"), { title: t("Reset Settings"), kind: "warning" })) {
         this.settings = cloneDefaultAppSettings();
         this.applySettings(this.settings);
         this.populatePanel();
@@ -545,7 +555,7 @@ export class SettingsController {
     if (this.scaledFontCacheLoading) return;
     this.scaledFontCacheLoading = true;
     const status = document.getElementById("settings-scaled-font-status");
-    if (status) status.textContent = "Inspecting the global scaled-font cache...";
+    if (status) status.textContent = t("Inspecting the global scaled-font cache...");
     try {
       this.scaledFontCacheReport = await invoke<ScaledFontCacheReport>("inspect_scaled_font_cache");
       const available = new Set(this.scaledFontCacheReport.variants.map(variant => this.scaledFontVariantKey(variant)));
@@ -555,7 +565,7 @@ export class SettingsController {
       this.renderScaledFontCache();
     } catch (error) {
       this.scaledFontCacheReport = null;
-      if (status) status.textContent = `Could not inspect the scaled-font cache: ${String(error)}`;
+      if (status) status.textContent = t`Could not inspect the scaled-font cache: ${String(error)}`;
       const list = document.getElementById("settings-scaled-font-cache");
       if (list) list.replaceChildren();
     } finally {
@@ -572,7 +582,7 @@ export class SettingsController {
     const reveal = document.getElementById("settings-scaled-font-reveal") as HTMLButtonElement | null;
     const deleteSelected = document.getElementById("settings-scaled-font-delete-selected") as HTMLButtonElement | null;
     const deleteUnused = document.getElementById("settings-scaled-font-delete-unused") as HTMLButtonElement | null;
-    if (status) status.textContent = `${report.variants.length} variant${report.variants.length === 1 ? "" : "s"} · ${formatBytes(report.totalBytes)}`;
+    if (status) status.textContent = t`${report.variants.length} variant${report.variants.length === 1 ? "" : "s"} · ${formatBytes(report.totalBytes)}`;
     if (root) root.textContent = report.root;
     if (reveal) reveal.disabled = !report.root;
     if (deleteSelected) deleteSelected.disabled = this.scaledFontCacheSelection.size === 0;
@@ -582,7 +592,7 @@ export class SettingsController {
     if (report.variants.length === 0) {
       const empty = document.createElement("p");
       empty.className = "settings-scaled-font-empty";
-      empty.textContent = "No generated scaled-font variants are cached.";
+      empty.textContent = t("No generated scaled-font variants are cached.");
       list.append(empty);
       return;
     }
@@ -610,7 +620,7 @@ export class SettingsController {
         row.className = "settings-scaled-font-variant";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.setAttribute("aria-label", `Select ${family} at ${variant.scale.toFixed(2)} times scale`);
+        checkbox.setAttribute("aria-label", t`Select ${family} at ${variant.scale.toFixed(2)} times scale`);
         const key = this.scaledFontVariantKey(variant);
         checkbox.checked = this.scaledFontCacheSelection.has(key);
         checkbox.addEventListener("change", () => {
@@ -620,27 +630,27 @@ export class SettingsController {
         });
         const scale = document.createElement("span");
         scale.className = "settings-scaled-font-scale";
-        scale.textContent = `${variant.scale.toFixed(2)}×`;
+        scale.textContent = t`${variant.scale.toFixed(2)}×`;
         const details = document.createElement("div");
         details.className = "settings-scaled-font-details";
         const usage = document.createElement("span");
-        usage.textContent = `${formatBytes(variant.bytes)} · ${variant.fileCount} file${variant.fileCount === 1 ? "" : "s"} · ${variant.workspaceReferences} workspace reference${variant.workspaceReferences === 1 ? "" : "s"}`;
+        usage.textContent = t`${formatBytes(variant.bytes)} · ${variant.fileCount} file${variant.fileCount === 1 ? "" : "s"} · ${variant.workspaceReferences} workspace reference${variant.workspaceReferences === 1 ? "" : "s"}`;
         const source = document.createElement("span");
         source.className = `settings-scaled-font-source-${variant.sourceStatus}`;
-        const lastUsed = variant.lastUsedAtMs ? new Date(variant.lastUsedAtMs).toLocaleString() : "not recorded";
-        source.textContent = `${statusLabels[variant.sourceStatus]} · Last used ${lastUsed}`;
+        const lastUsed = variant.lastUsedAtMs ? new Date(variant.lastUsedAtMs).toLocaleString() : t("not recorded");
+        source.textContent = t`${t(statusLabels[variant.sourceStatus])} · Last used ${lastUsed}`;
         details.append(usage, source);
         const actions = document.createElement("div");
         actions.className = "settings-scaled-font-variant-actions";
         const renew = document.createElement("button");
         renew.type = "button";
         renew.className = "settings-secondary-button";
-        renew.textContent = "Renew";
+        renew.textContent = t("Renew");
         renew.addEventListener("click", () => void this.renewScaledFontVariant(variant));
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "settings-secondary-button";
-        remove.textContent = "Delete";
+        remove.textContent = t("Delete");
         remove.addEventListener("click", () => void this.deleteScaledFontVariants([variant]));
         actions.append(renew, remove);
         row.append(checkbox, scale, details, actions);
@@ -662,8 +672,8 @@ export class SettingsController {
     const detail = referenced > 0
       ? ` ${referenced} saved workspace reference${referenced === 1 ? "" : "s"} will require the variant to be generated again when used.`
       : "";
-    if (!await confirm(`Delete ${variants.length} scaled-font variant${variants.length === 1 ? "" : "s"}?${detail}`, {
-      title: "Delete Scaled Fonts",
+    if (!await confirm(t`Delete ${variants.length} scaled-font variant${variants.length === 1 ? "" : "s"}?${detail}`, {
+      title: t("Delete Scaled Fonts"),
       kind: "warning",
     })) return;
     try {
@@ -674,15 +684,15 @@ export class SettingsController {
       await this.onScaledFontCacheChanged();
       await this.refreshScaledFontCache();
     } catch (error) {
-      await message(String(error), { title: "Could Not Delete Scaled Fonts", kind: "error" });
+      await message(String(error), { title: t("Could Not Delete Scaled Fonts"), kind: "error" });
     }
   }
 
   private async deleteUnusedScaledFontVariants(): Promise<void> {
     const unused = this.scaledFontCacheReport?.variants.filter(variant => variant.workspaceReferences === 0) ?? [];
     if (unused.length === 0) return;
-    if (!await confirm(`Delete ${unused.length} unused scaled-font variant${unused.length === 1 ? "" : "s"}?`, {
-      title: "Delete Unused Scaled Fonts",
+    if (!await confirm(t`Delete ${unused.length} unused scaled-font variant${unused.length === 1 ? "" : "s"}?`, {
+      title: t("Delete Unused Scaled Fonts"),
       kind: "warning",
     })) return;
     try {
@@ -690,13 +700,13 @@ export class SettingsController {
       this.scaledFontCacheSelection.clear();
       await this.refreshScaledFontCache();
     } catch (error) {
-      await message(String(error), { title: "Could Not Delete Scaled Fonts", kind: "error" });
+      await message(String(error), { title: t("Could Not Delete Scaled Fonts"), kind: "error" });
     }
   }
 
   private async renewScaledFontVariant(variant: ScaledFontCacheVariant): Promise<void> {
-    if (!await confirm(`Regenerate ${variant.family} at ${variant.scale.toFixed(2)}× from its current source font?`, {
-      title: "Renew Scaled Font",
+    if (!await confirm(t`Regenerate ${variant.family} at ${variant.scale.toFixed(2)}× from its current source font?`, {
+      title: t("Renew Scaled Font"),
       kind: "info",
     })) return;
     try {
@@ -704,27 +714,27 @@ export class SettingsController {
       await this.onScaledFontCacheChanged();
       await this.refreshScaledFontCache();
     } catch (error) {
-      await message(String(error), { title: "Could Not Renew Scaled Font", kind: "error" });
+      await message(String(error), { title: t("Could Not Renew Scaled Font"), kind: "error" });
     }
   }
 
   private async persist(): Promise<boolean> {
     const status = document.getElementById("settings-save-status");
-    if (status) status.textContent = "Saving...";
+    if (status) status.textContent = t("Saving...");
     try {
       await this.persistLexiconFiles();
       this.filePath = await invoke<string>("save_app_settings", { settings: this.settings });
       this.loadError = null;
       localStorage.removeItem("typsastra-theme");
       localStorage.removeItem("typsastra-word-wrap");
-      if (status) status.textContent = "Saved";
+      if (status) status.textContent = t("Saved");
       const path = document.getElementById("settings-file-path");
       if (path) path.textContent = this.filePath;
       this.updateTerminologyStoragePaths();
       return true;
     } catch (error) {
       console.error("Failed to save settings.json", error);
-      if (status) status.textContent = `Save failed: ${String(error)}`;
+      if (status) status.textContent = t`Save failed: ${String(error)}`;
       return false;
     }
   }
@@ -732,7 +742,7 @@ export class SettingsController {
   private scheduleSave() {
     if (this.saveTimer) window.clearTimeout(this.saveTimer);
     const status = document.getElementById("settings-save-status");
-    if (status) status.textContent = "Unsaved changes";
+    if (status) status.textContent = t("Unsaved changes");
     this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
       void this.persist();
@@ -741,6 +751,7 @@ export class SettingsController {
 
   private populatePanel() {
     const { appearance, editor, preview } = this.settings;
+    this.populateUiLocales();
     const setValue = (id: string, value: string) => {
       const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
       if (control) control.value = value;
@@ -785,8 +796,8 @@ export class SettingsController {
     if (autoSaveInterval) {
       autoSaveInterval.disabled = !editor.autoSave;
       autoSaveInterval.title = editor.autoSave
-        ? "Automatically save dirty files at this interval."
-        : "Enable Auto save to configure its interval.";
+        ? t("Automatically save dirty files at this interval.")
+        : t("Enable Auto save to configure its interval.");
     }
     this.populatePrivateFontDirectories();
     setChecked("settings-cursor-sync", preview.cursorSync);
@@ -795,28 +806,28 @@ export class SettingsController {
     const cursorSync = document.getElementById("settings-cursor-sync") as HTMLInputElement | null;
     if (cursorSync) {
       cursorSync.disabled = true;
-      cursorSync.title = "Forward sync is disabled until the v0.9.0 prerelease reliability work.";
+      cursorSync.title = t("Forward sync is disabled until the v0.9.0 prerelease reliability work.");
     }
     const previewRenderMode = document.getElementById("settings-preview-render-mode") as HTMLSelectElement | null;
     if (previewRenderMode) {
       previewRenderMode.value = effectivePreviewRenderMode;
       previewRenderMode.disabled = preview.lowMemoryMode || this.workspacePreviewRenderMode === null;
       previewRenderMode.title = preview.lowMemoryMode
-        ? "Low memory mode limits preview rendering to explicit saves."
+        ? t("Low memory mode limits preview rendering to explicit saves.")
         : this.workspacePreviewRenderMode === null
-        ? "Open a project to configure its preview render mode."
+        ? t("Open a project to configure its preview render mode.")
         : effectivePreviewRenderMode === "on-type"
-          ? "Update the PDF preview after typing pauses. This preference is stored in the current project."
-          : "Update the PDF preview after saving. This preference is stored in the current project.";
+          ? t("Update the PDF preview after typing pauses. This preference is stored in the current project.")
+          : t("Update the PDF preview after saving. This preference is stored in the current project.");
     }
     const previewDebounce = document.getElementById("settings-sync-debounce") as HTMLInputElement | null;
     if (previewDebounce) {
       previewDebounce.disabled = effectivePreviewRenderMode !== "on-type";
       previewDebounce.title = preview.lowMemoryMode
-        ? "Low memory mode disables on-type preview rendering."
+        ? t("Low memory mode disables on-type preview rendering.")
         : effectivePreviewRenderMode === "on-type"
-        ? "Wait this long after the latest edit before updating the preview."
-        : "Available when Render preview is set to On type.";
+        ? t("Wait this long after the latest edit before updating the preview.")
+        : t("Available when Render preview is set to On type.");
     }
     setChecked("settings-disable-webkit-dmabuf", this.settings.compatibility.disableWebkitDmabufRenderer);
     setChecked("settings-developer-mode", this.settings.developerMode);
@@ -840,12 +851,12 @@ export class SettingsController {
 
     const path = document.getElementById("settings-file-path");
     if (path) {
-      path.textContent = this.filePath || "settings.json path unavailable";
+      path.textContent = this.filePath || t("settings.json path unavailable");
       path.title = this.filePath;
     }
     this.updateTerminologyStoragePaths();
     const status = document.getElementById("settings-save-status");
-    if (status && this.loadError) status.textContent = `Using defaults: ${this.loadError}`;
+    if (status && this.loadError) status.textContent = t`Using defaults: ${this.loadError}`;
   }
 
   private async openShortcutRecorder(entry: ShortcutDefinition, trigger: HTMLButtonElement): Promise<void> {
@@ -863,7 +874,7 @@ export class SettingsController {
     } catch (error) {
       void this.onShortcutCaptureChange(false);
       const message = document.getElementById("settings-shortcut-error");
-      if (message) message.textContent = `Could not start shortcut recording: ${String(error)}`;
+      if (message) message.textContent = t`Could not start shortcut recording: ${String(error)}`;
       return;
     } finally {
       this.shortcutCaptureOpening = false;
@@ -877,10 +888,10 @@ export class SettingsController {
     const chord = document.getElementById("shortcut-capture-chord") as HTMLInputElement | null;
     if (chord) chord.checked = false;
     const title = document.getElementById("shortcut-capture-title");
-    if (title) title.textContent = `Shortcut for ${entry.label}`;
+    if (title) title.textContent = t`Shortcut for ${t(entry.label)}`;
     const status = document.getElementById("shortcut-capture-status");
     if (status) {
-      status.textContent = "Waiting for a key press…";
+      status.textContent = t("Waiting for a key press…");
       status.classList.remove("error");
     }
     overlay.classList.remove("hidden");
@@ -927,17 +938,17 @@ export class SettingsController {
       const first = shortcutFromEvent(event, mac);
       if (!first) {
         if (!["Alt", "Control", "Meta", "Shift"].includes(event.key)) {
-          showError("Start with a key combination such as Ctrl+K, then press the second key.");
+          showError(t("Start with a key combination such as Ctrl+K, then press the second key."));
         }
         return;
       }
       if (!validShortcut(`${first} O`)) {
-        showError("Start a two-key shortcut with a modified key such as Ctrl+K.");
+        showError(t("Start a two-key shortcut with a modified key such as Ctrl+K."));
         return;
       }
       this.shortcutChordPrefix = first;
       if (status) {
-        status.textContent = `${shortcutLabel(first.replace(/-/g, "+"), undefined, mac)}, … — waiting for the second key`;
+        status.textContent = t`${shortcutLabel(first.replace(/-/g, "+"), undefined, mac)}, … — waiting for the second key`;
         status.classList.remove("error");
       }
       return;
@@ -946,13 +957,13 @@ export class SettingsController {
     if (result.kind === "waiting") return;
     if (result.kind === "invalid") {
       showError(result.reason === "application"
-        ? "Application shortcuts need a modifier or a function key."
-        : "Press a key combination (not just a printable letter). Try again or press Escape to cancel.");
+        ? t("Application shortcuts need a modifier or a function key.")
+        : t("Press a key combination (not just a printable letter). Try again or press Escape to cancel."));
       return;
     }
     if (result.kind === "conflict") {
       const label = shortcutLabel(result.key.replace(/-/g, "+"), undefined, result.platform === "macOS");
-      showError(`${label} conflicts with ${result.command.label} (${result.platform}). Try another shortcut.`);
+      showError(t`${label} conflicts with ${t(result.command.label)} (${result.platform}). Try another shortcut.`);
       return;
     }
     this.update(settings => { settings.shortcuts[capture.entry.id] = result.key; });
@@ -962,11 +973,11 @@ export class SettingsController {
   private async resetAllShortcuts(): Promise<void> {
     const count = shortcutDefinitions.filter(entry => entry.group !== "System" && isCustomizedShortcut(entry.id, this.settings.shortcuts)).length;
     if (!count) return;
-    if (!await confirm(`Reset all ${count} customized shortcut${count === 1 ? "" : "s"} to their defaults?`, {
-      title: "Reset Keyboard Shortcuts",
+    if (!await confirm(t`Reset all ${count} customized shortcut${count === 1 ? "" : "s"} to their defaults?`, {
+      title: t("Reset Keyboard Shortcuts"),
       kind: "warning",
-      okLabel: "Reset all",
-      cancelLabel: "Cancel",
+      okLabel: t("Reset all"),
+      cancelLabel: t("Cancel"),
     })) return;
     this.update(settings => { settings.shortcuts = {}; });
     const error = document.getElementById("settings-shortcut-error");
@@ -983,7 +994,7 @@ export class SettingsController {
     const resetAll = document.getElementById("settings-shortcut-reset-all") as HTMLButtonElement | null;
     if (resetAll) resetAll.disabled = customizedCount === 0;
     const count = document.getElementById("settings-shortcut-custom-count");
-    if (count) count.textContent = `${customizedCount} customized`;
+    if (count) count.textContent = t`${customizedCount} customized`;
     const refreshRow = (entry: ShortcutDefinition, binding: HTMLButtonElement) => {
       const row = binding.closest<HTMLElement>(".settings-shortcut-row");
       const customized = isCustomizedShortcut(entry.id, this.settings.shortcuts);
@@ -996,7 +1007,7 @@ export class SettingsController {
     const matching = shortcutDefinitions.filter(entry => {
       if (entry.group === "System") return false;
       const key = shortcutFor(entry.id, this.settings.shortcuts, mac);
-      return key && `${entry.group} ${entry.label} ${key}`.toLocaleLowerCase().includes(query);
+      return key && `${t(entry.group)} ${t(entry.label)} ${key}`.toLocaleLowerCase().includes(query);
     });
     // Applying a shortcut re-renders Settings. Retain the buttons, their focus,
     // and the search query when the visible command list is unchanged.
@@ -1017,16 +1028,16 @@ export class SettingsController {
         previousGroup = entry.group;
         const heading = document.createElement("h4");
         heading.className = "settings-shortcut-group";
-        heading.textContent = entry.group;
+        heading.textContent = t(entry.group);
         list.appendChild(heading);
       }
       const row = document.createElement("div");
       row.className = "settings-shortcut-row";
       const label = document.createElement("label");
-      label.textContent = entry.label;
+      label.textContent = t(entry.label);
       const customizedTag = document.createElement("small");
       customizedTag.className = "settings-shortcut-custom-tag";
-      customizedTag.textContent = "Customized";
+      customizedTag.textContent = t("Customized");
       label.appendChild(customizedTag);
       const binding = document.createElement("button");
       binding.type = "button";
@@ -1034,17 +1045,17 @@ export class SettingsController {
       binding.dataset.shortcutId = entry.id;
       binding.textContent = labelForShortcut(shortcutFor(entry.id, this.settings.shortcuts, mac));
       label.htmlFor = binding.id = `shortcut-${entry.id.replace(/[^a-zA-Z0-9]/g, "-")}`;
-      binding.setAttribute("aria-label", `Change shortcut for ${entry.label}`);
+      binding.setAttribute("aria-label", t`Change shortcut for ${t(entry.label)}`);
       binding.addEventListener("click", () => void this.openShortcutRecorder(entry, binding));
       const reset = document.createElement("button");
       reset.type = "button";
       reset.className = "settings-secondary-button settings-shortcut-reset";
-      reset.textContent = "Reset";
-      reset.setAttribute("aria-label", `Reset ${entry.label} shortcut`);
+      reset.textContent = t("Reset");
+      reset.setAttribute("aria-label", t`Reset ${t(entry.label)} shortcut`);
       reset.addEventListener("click", () => {
         const fallback = shortcutFor(entry.id, {}, mac);
         const conflicting = [false, true].some(platform => shortcutCollision(entry.id, shortcutFor(entry.id, {}, platform), this.settings.shortcuts, platform));
-        if (conflicting) { if (error) error.textContent = `Another shortcut uses the default for ${entry.label}. Reset that one first.`; return; }
+        if (conflicting) { if (error) error.textContent = t`Another shortcut uses the default for ${t(entry.label)}. Reset that one first.`; return; }
         this.update(settings => { delete settings.shortcuts[entry.id]; });
         binding.textContent = labelForShortcut(fallback);
         if (error) error.textContent = "";
@@ -1071,32 +1082,32 @@ export class SettingsController {
         || this.settings.toolchain.enhancedUnicodeEngineEnabled;
       toggle.disabled = !available || this.enhancedUnicodeEngineInstalling;
       toggle.title = !available
-        ? "Enable Developer mode to configure the experimental export engine."
+        ? t("Enable Developer mode to configure the experimental export engine.")
         : this.enhancedUnicodeEngineInstalling
-          ? "Installing the managed Enhanced Unicode Engine."
+          ? t("Installing the managed Enhanced Unicode Engine.")
           : configuredPath
-            ? "Use this compiler only for explicit PDF exports."
-            : "Download and install the Enhanced Unicode Engine for this platform.";
+            ? t("Use this compiler only for explicit PDF exports.")
+            : t("Download and install the Enhanced Unicode Engine for this platform.");
     }
     if (choose) choose.disabled = !available || this.enhancedUnicodeEngineInstalling;
     if (clear) clear.disabled = !available || !configuredPath || this.enhancedUnicodeEngineInstalling;
     if (path) {
-      path.textContent = configuredPath ?? "Not installed";
+      path.textContent = configuredPath ?? t("Not installed");
       path.title = configuredPath ?? "";
     }
     if (status) {
       status.textContent = this.enhancedUnicodeEngineInstallStatus ?? (configuredPath
         ? this.settings.toolchain.enhancedUnicodeEngineEnabled
-          ? "Enabled for explicit PDF exports. Live preview and language services continue to use Tinymist."
-          : "Executable validated. Enable the option to use it for PDF exports."
-        : "Enable to download the verified engine release into Typsastra's managed toolchain directory.");
+          ? t("Enabled for explicit PDF exports. Live preview and language services continue to use Tinymist.")
+          : t("Executable validated. Enable the option to use it for PDF exports.")
+        : t("Enable to download the verified engine release into Typsastra's managed toolchain directory."));
     }
   }
 
   private async installEnhancedUnicodeEngine(): Promise<void> {
     if (this.enhancedUnicodeEngineInstalling) return;
     this.enhancedUnicodeEngineInstalling = true;
-    this.enhancedUnicodeEngineInstallStatus = "Resolving the Enhanced Unicode Engine release...";
+    this.enhancedUnicodeEngineInstallStatus = t("Resolving the Enhanced Unicode Engine release...");
     this.populatePanel();
 
     const progress = new Channel<ToolchainInstallProgress>();
@@ -1105,16 +1116,16 @@ export class SettingsController {
       if (update.phase === "downloading") {
         const downloaded = formatBytes(update.downloadedBytes);
         this.enhancedUnicodeEngineInstallStatus = update.totalBytes
-          ? `Downloading Enhanced Unicode Engine... ${downloaded} / ${formatBytes(update.totalBytes)}`
-          : `Downloading Enhanced Unicode Engine... ${downloaded}`;
+          ? t`Downloading Enhanced Unicode Engine... ${downloaded} / ${formatBytes(update.totalBytes)}`
+          : t`Downloading Enhanced Unicode Engine... ${downloaded}`;
       } else if (update.phase === "verifying") {
-        this.enhancedUnicodeEngineInstallStatus = "Verifying the pinned release archive...";
+        this.enhancedUnicodeEngineInstallStatus = t("Verifying the pinned release archive...");
       } else if (update.phase === "installing") {
-        this.enhancedUnicodeEngineInstallStatus = "Installing into Typsastra's managed toolchain directory...";
+        this.enhancedUnicodeEngineInstallStatus = t("Installing into Typsastra's managed toolchain directory...");
       } else if (update.phase === "complete") {
-        this.enhancedUnicodeEngineInstallStatus = "Enhanced Unicode Engine is ready.";
+        this.enhancedUnicodeEngineInstallStatus = t("Enhanced Unicode Engine is ready.");
       } else {
-        this.enhancedUnicodeEngineInstallStatus = "Resolving the Enhanced Unicode Engine release...";
+        this.enhancedUnicodeEngineInstallStatus = t("Resolving the Enhanced Unicode Engine release...");
       }
       this.populateEnhancedUnicodeEngine();
     };
@@ -1136,7 +1147,7 @@ export class SettingsController {
         settings.toolchain.enhancedUnicodeEngineEnabled = false;
       });
       await message(String(error), {
-        title: "Enhanced Unicode Engine installation failed",
+        title: t("Enhanced Unicode Engine installation failed"),
         kind: "error",
       });
     }
@@ -1146,7 +1157,7 @@ export class SettingsController {
     const selected = await open({
       directory: false,
       multiple: false,
-      title: "Choose Enhanced Unicode Typst Executable",
+      title: t("Choose Enhanced Unicode Typst Executable"),
     });
     if (typeof selected !== "string") return;
 
@@ -1157,12 +1168,12 @@ export class SettingsController {
         settings.toolchain.enhancedUnicodeEngineEnabled = true;
       });
       await message(
-        `Typsastra validated ${inspection.version}.\n\nThis local compiler will be used only for explicit PDF exports while Developer mode remains enabled.`,
-        { title: "Enhanced Unicode Engine Selected", kind: "info" },
+        t`Typsastra validated ${inspection.version}.\n\nThis local compiler will be used only for explicit PDF exports while Developer mode remains enabled.`,
+        { title: t("Enhanced Unicode Engine Selected"), kind: "info" },
       );
     } catch (error) {
       await message(String(error), {
-        title: "Invalid Enhanced Unicode Engine",
+        title: t("Invalid Enhanced Unicode Engine"),
         kind: "error",
       });
     }
@@ -1171,7 +1182,7 @@ export class SettingsController {
   private async refreshRendererCompatibility(): Promise<void> {
     this.rendererCompatibilityError = null;
     const status = document.getElementById("settings-renderer-status");
-    if (status) status.textContent = "Checking Linux display and WebKitGTK compatibility...";
+    if (status) status.textContent = t("Checking Linux display and WebKitGTK compatibility...");
     try {
       this.rendererCompatibility = await invoke<LinuxRendererCompatibility>("get_linux_renderer_compatibility");
     } catch (error) {
@@ -1194,8 +1205,8 @@ export class SettingsController {
 
     if (this.rendererCompatibilityError) {
       status.classList.add("error");
-      status.textContent = `Compatibility check failed: ${this.rendererCompatibilityError}`;
-      details.textContent = "You can still set the renderer override; it will be applied on the next Linux startup.";
+      status.textContent = t`Compatibility check failed: ${this.rendererCompatibilityError}`;
+      details.textContent = t("You can still set the renderer override; it will be applied on the next Linux startup.");
       restart.classList.add("hidden");
       return;
     }
@@ -1209,18 +1220,18 @@ export class SettingsController {
 
     if (restartRequired) {
       status.classList.add("warning");
-      status.textContent = "Renderer setting changed. Restart Typsastra to apply it before WebKitGTK starts.";
+      status.textContent = t("Renderer setting changed. Restart Typsastra to apply it before WebKitGTK starts.");
     } else if (externallyDisabled) {
-      status.textContent = "The DMA-BUF renderer is disabled for this run by an external environment variable.";
+      status.textContent = t("The DMA-BUF renderer is disabled for this run by an external environment variable.");
     } else if (compatibility.dmabufDisabled) {
-      status.textContent = "The WebKitGTK DMA-BUF renderer is disabled for this run.";
+      status.textContent = t("The WebKitGTK DMA-BUF renderer is disabled for this run.");
     } else if (compatibility.riskLevel === "reported") {
       status.classList.add("warning");
-      status.textContent = "This Wayland, AMD, and WebKitGTK 2.52.x profile has a reported white-preview issue.";
+      status.textContent = t("This Wayland, AMD, and WebKitGTK 2.52.x profile has a reported white-preview issue.");
     } else if (compatibility.riskLevel === "possible") {
-      status.textContent = "Wayland is active. Use this workaround only if the PDF preview is white or flashes while resizing.";
+      status.textContent = t("Wayland is active. Use this workaround only if the PDF preview is white or flashes while resizing.");
     } else {
-      status.textContent = "No reported DMA-BUF preview compatibility profile was detected.";
+      status.textContent = t("No reported DMA-BUF preview compatibility profile was detected.");
     }
 
     const platform = [
@@ -1236,8 +1247,8 @@ export class SettingsController {
 
   private async restartForRendererCompatibility(): Promise<void> {
     if (!await confirm(
-      "Restart Typsastra now to apply the WebKitGTK renderer setting?",
-      { title: "Restart Typsastra", kind: "warning" },
+      t("Restart Typsastra now to apply the WebKitGTK renderer setting?"),
+      { title: t("Restart Typsastra"), kind: "warning" },
     )) return;
 
     if (this.saveTimer) {
@@ -1251,11 +1262,28 @@ export class SettingsController {
       });
       await relaunch();
     } catch (error) {
-      await message(`Typsastra could not restart automatically: ${String(error)}`, {
-        title: "Restart failed",
+      await message(t`Typsastra could not restart automatically: ${String(error)}`, {
+        title: t("Restart failed"),
         kind: "error",
       });
     }
+  }
+
+  private populateUiLocales(): void {
+    const select = document.getElementById("settings-ui-locale") as HTMLSelectElement | null;
+    if (!select) return;
+    const field = document.getElementById("settings-ui-locale-field");
+    const locales = availableLocales();
+    if (field) field.hidden = locales.length < 2;
+    select.replaceChildren(...locales.map(locale => {
+      const option = document.createElement("option");
+      option.value = locale.id;
+      option.textContent = locale.label;
+      option.lang = locale.id;
+      return option;
+    }));
+    select.value = getLocale();
+    select.disabled = locales.length < 2;
   }
 
   private populateFontOptions() {
@@ -1281,7 +1309,7 @@ export class SettingsController {
     }
     populate("settings-code-font", [...codeFamilies].sort().map(family => ({ id: family, label: family })));
     populate("settings-unicode-font", [
-      ...unicodeFontPreferenceOptions,
+      ...unicodeFontPreferenceOptions.map(option => ({ ...option, label: t(option.label) })),
       ...[...fallbackFamilies].sort().map(family => ({ id: family, label: family }))
     ]);
     this.populateUnicodeFontOverrides([...fallbackFamilies].sort());
@@ -1299,8 +1327,8 @@ export class SettingsController {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "settings-secondary-button";
-      remove.textContent = "Remove";
-      remove.setAttribute("aria-label", `Remove private font directory ${path}`);
+      remove.textContent = t("Remove");
+      remove.setAttribute("aria-label", t`Remove private font directory ${path}`);
       remove.addEventListener("click", () => void this.removePrivateFontDirectory(path));
 
       const row = document.createElement("div");
@@ -1312,7 +1340,7 @@ export class SettingsController {
     if (rows.length === 0) {
       const empty = document.createElement("small");
       empty.className = "settings-private-font-empty";
-      empty.textContent = "No private local font directory configured.";
+      empty.textContent = t("No private local font directory configured.");
       container.replaceChildren(empty);
       return;
     }
@@ -1323,7 +1351,7 @@ export class SettingsController {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose Private Local Font Directory"
+      title: t("Choose Private Local Font Directory")
     });
     if (typeof selected !== "string") return;
 
@@ -1334,8 +1362,8 @@ export class SettingsController {
       );
       if (inspection.collisions.length > 0) {
         await message(
-          `This directory contains font families that are already available from the system or another private directory:\n\n${inspection.collisions.join("\n")}\n\nTypsastra does not add ambiguous font families because the compiler could select a different file between sessions.`,
-          { title: "Ambiguous Font Families", kind: "error" }
+          t`This directory contains font families that are already available from the system or another private directory:\n\n${inspection.collisions.join("\n")}\n\nTypsastra does not add ambiguous font families because the compiler could select a different file between sessions.`,
+          { title: t("Ambiguous Font Families"), kind: "error" }
         );
         return;
       }
@@ -1344,18 +1372,18 @@ export class SettingsController {
         inspection.path
       ]);
     } catch (error) {
-      await message(String(error), { title: "Unable to Add Font Directory", kind: "error" });
+      await message(String(error), { title: t("Unable to Add Font Directory"), kind: "error" });
     }
   }
 
   private async removePrivateFontDirectory(path: string): Promise<void> {
     const accepted = await confirm(
-      `Remove this private font directory from Typsastra?\n\n${path}\n\nThe font files will not be deleted. Documents using these fonts may no longer compile.`,
+      t`Remove this private font directory from Typsastra?\n\n${path}\n\nThe font files will not be deleted. Documents using these fonts may no longer compile.`,
       {
-        title: "Remove Private Font Directory?",
+        title: t("Remove Private Font Directory?"),
         kind: "warning",
-        okLabel: "Remove",
-        cancelLabel: "Cancel"
+        okLabel: t("Remove"),
+        cancelLabel: t("Cancel")
       }
     );
     if (!accepted) return;
@@ -1387,8 +1415,8 @@ export class SettingsController {
       await this.onPrivateFontDirectoriesChanged();
     } catch (error) {
       await message(
-        `The font directory setting was saved, but the active compiler session could not be restarted: ${String(error)}\n\nRestart the workspace before using the updated font catalog.`,
-        { title: "Font Directory Saved", kind: "warning" }
+        t`The font directory setting was saved, but the active compiler session could not be restarted: ${String(error)}\n\nRestart the workspace before using the updated font catalog.`,
+        { title: t("Font Directory Saved"), kind: "warning" }
       );
     }
   }
@@ -1398,14 +1426,14 @@ export class SettingsController {
     if (!container) return;
     const rows = unicodeEditorFonts.map(candidate => {
       const label = document.createElement("label");
-      label.textContent = candidate.language;
+      label.textContent = t(candidate.language);
       const select = document.createElement("select");
-      select.setAttribute("aria-label", `${candidate.language} editor fallback`);
+      select.setAttribute("aria-label", t`${t(candidate.language)} editor fallback`);
       select.replaceChildren(
         ...[
-          { id: "", label: "Use default policy" },
-          { id: "auto", label: `Automatic (${candidate.label})` },
-          { id: "none", label: "No fallback" },
+          { id: "", label: t("Use default policy") },
+          { id: "auto", label: t`Automatic (${candidate.label})` },
+          { id: "none", label: t("No fallback") },
           ...families.map(family => ({ id: family, label: family }))
         ].map(option => {
           const element = document.createElement("option");
@@ -1455,7 +1483,7 @@ export class SettingsController {
     ];
     if (!entries.length) {
       const empty = document.createElement("small");
-      empty.textContent = "No accepted terminology has been added.";
+      empty.textContent = t("No accepted terminology has been added.");
       container.replaceChildren(empty);
       return;
     }
@@ -1465,15 +1493,15 @@ export class SettingsController {
       const term = document.createElement("span");
       term.textContent = entry.term;
       const meta = document.createElement("small");
-      meta.textContent = `${scope} · ${entry.exactCase ? "exact case" : "case insensitive"}`;
+      meta.textContent = t`${t(scope)} · ${entry.exactCase ? t("exact case") : t("case insensitive")}`;
       const text = document.createElement("span");
       text.className = "settings-language-provider-text";
       text.append(term, meta);
       const button = document.createElement("button");
       button.type = "button";
       button.className = "settings-secondary-button";
-      button.textContent = "Remove";
-      button.setAttribute("aria-label", `Remove ${entry.term} from ${scope} terminology`);
+      button.textContent = t("Remove");
+      button.setAttribute("aria-label", t`Remove ${entry.term} from ${t(scope)} terminology`);
       button.addEventListener("click", remove);
       row.append(text, button);
       return row;
@@ -1503,7 +1531,7 @@ export class SettingsController {
     const projectButton =
       document.getElementById("settings-open-project-terminology") as HTMLButtonElement | null;
     if (projectPath) {
-      projectPath.textContent = this.projectTerminologyPath || "Open a project to edit project terminology.";
+      projectPath.textContent = this.projectTerminologyPath || t("Open a project to edit project terminology.");
       projectPath.title = this.projectTerminologyPath;
     }
     if (projectButton) projectButton.disabled = !this.projectTerminologyPath;
@@ -1514,8 +1542,8 @@ export class SettingsController {
     try {
       await invoke("open_file_externally", { path });
     } catch (error) {
-      await message(`Could not open ${label}: ${String(error)}`, {
-        title: "Open File",
+      await message(t`Could not open ${label}: ${String(error)}`, {
+        title: t("Open File"),
         kind: "error",
       });
     }
@@ -1535,14 +1563,14 @@ export class SettingsController {
     catalog.classList.toggle("hidden", !visible);
     const button = document.getElementById("settings-add-language");
     button?.setAttribute("aria-expanded", String(visible));
-    if (button) button.textContent = visible ? "Hide languages" : "Show languages";
+    if (button) button.textContent = visible ? t("Hide languages") : t("Show languages");
   }
 
   private async ensureLanguageCatalogPopulated(): Promise<void> {
     if (!this.languageCatalogInitialized) {
       this.languageCatalogInitialized = true;
       const catalog = document.getElementById("settings-language-catalog");
-      if (catalog) catalog.textContent = "Loading language catalog...";
+      if (catalog) catalog.textContent = t("Loading language catalog...");
       this.languageCatalogLoad = this.populateLanguageCatalog();
     }
     await this.languageCatalogLoad;
@@ -1575,7 +1603,7 @@ export class SettingsController {
     try {
       entries = parseLanguageCatalog(await invoke<unknown>("list_hunspell_catalog"));
     } catch (error) {
-      catalog.textContent = `Failed to load language catalog: ${String(error)}`;
+      catalog.textContent = t`Failed to load language catalog: ${String(error)}`;
       return;
     }
     let installedProviders: LanguageProviderCapabilities[] = [];
@@ -1590,12 +1618,12 @@ export class SettingsController {
 
     const header = document.createElement("div");
     header.className = "settings-language-catalog-header";
-    header.textContent = "Downloadable dictionaries provide Basic support unless Typsastra has a tested language-specific provider. Basic support does not imply reliable segmentation or word completion.";
+    header.textContent = t("Downloadable dictionaries provide Basic support unless Typsastra has a tested language-specific provider. Basic support does not imply reliable segmentation or word completion.");
     const search = document.createElement("input");
     search.type = "search";
     search.className = "settings-language-catalog-search";
-    search.placeholder = "Search languages...";
-    search.setAttribute("aria-label", "Search language providers");
+    search.placeholder = t("Search languages...");
+    search.setAttribute("aria-label", t("Search language providers"));
     search.autocomplete = "off";
     search.spellcheck = false;
     search.value = this.languageCatalogQuery;
@@ -1626,7 +1654,7 @@ export class SettingsController {
       }
       const empty = document.createElement("div");
       empty.className = "settings-language-catalog-empty";
-      empty.textContent = "No languages match your search.";
+      empty.textContent = t("No languages match your search.");
       list.replaceChildren(empty);
     };
     search.addEventListener("input", () => {
@@ -1640,7 +1668,7 @@ export class SettingsController {
   private renderBundledLanguageProviderRow(entry: LanguageProviderCapabilities): HTMLElement {
     const title = document.createElement("div");
     title.className = "settings-language-catalog-title";
-    title.textContent = entry.displayName;
+    title.textContent = t(entry.displayName);
     const support = supportLevelPresentation(entry.supportLevel);
     const titleRow = document.createElement("div");
     titleRow.className = "settings-language-provider-title-row";
@@ -1652,32 +1680,32 @@ export class SettingsController {
 
     const meta = document.createElement("div");
     meta.className = "settings-language-catalog-meta";
-    const typeLabel = entry.providerType === "deep" ? "Deep provider" : "Installed provider";
+    const typeLabel = entry.providerType === "deep" ? t("Deep provider") : t("Installed provider");
     meta.textContent = [
       entry.languageTag,
-      "bundled",
+      t("bundled"),
       typeLabel,
       entry.engine,
       entry.version,
       entry.license,
-      "Bundled with Typsastra",
+      t("Bundled with Typsastra"),
     ].filter(Boolean).join(" · ");
 
     const features = document.createElement("div");
     features.className = "settings-language-provider-features";
-    features.textContent = providerFeatureLabels(entry).join(" · ") || "No active language-tool capabilities";
+    features.textContent = providerFeatureLabels(entry).map(label => t(label)).join(" · ") || t("No active language-tool capabilities");
     const text = document.createElement("div");
     text.append(titleRow, meta, features);
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "settings-secondary-button";
-    button.textContent = "Bundled";
+    button.textContent = t("Bundled");
     button.disabled = true;
 
     const row = document.createElement("div");
     row.className = "settings-language-catalog-row";
-    row.title = support.description;
+    row.title = t(support.description);
     row.append(text, button);
     return row;
   }
@@ -1685,7 +1713,7 @@ export class SettingsController {
   private renderLanguageCatalogRow(entry: HunspellCatalogEntry): HTMLElement {
     const title = document.createElement("div");
     title.className = "settings-language-catalog-title";
-    title.textContent = entry.displayName;
+    title.textContent = t(entry.displayName);
     const support = supportLevelPresentation(entry.supportLevel);
     const titleRow = document.createElement("div");
     titleRow.className = "settings-language-provider-title-row";
@@ -1695,11 +1723,11 @@ export class SettingsController {
     meta.className = "settings-language-catalog-meta";
 
     const sizeStr = entry.downloadSize > 0 ? formatBytes(entry.downloadSize) : "";
-    const typeLabel = entry.providerType === "deep" ? "Deep provider" : "Dictionary only";
+    const typeLabel = entry.providerType === "deep" ? t("Deep provider") : t("Dictionary only");
 
     meta.textContent = [
       entry.languageTag,
-      entry.bundled ? "bundled" : entry.installed ? "installed" : "Hunspell",
+      entry.bundled ? t("bundled") : entry.installed ? t("installed") : "Hunspell",
       typeLabel,
       sizeStr,
       entry.version,
@@ -1709,7 +1737,7 @@ export class SettingsController {
 
     const features = document.createElement("div");
     features.className = "settings-language-provider-features";
-    features.textContent = providerFeatureLabels(entry).join(" · ") || "No active language-tool capabilities";
+    features.textContent = providerFeatureLabels(entry).map(label => t(label)).join(" · ") || t("No active language-tool capabilities");
     const text = document.createElement("div");
     text.append(titleRow, meta, features);
 
@@ -1717,21 +1745,21 @@ export class SettingsController {
     button.type = "button";
     if (entry.bundled) {
       button.className = "settings-secondary-button";
-      button.textContent = "Bundled";
+      button.textContent = t("Bundled");
       button.disabled = true;
     } else if (entry.installed) {
       button.className = "settings-danger-button";
-      button.textContent = "Remove";
+      button.textContent = t("Remove");
       button.addEventListener("click", () => void this.uninstallLanguage(entry, button));
     } else {
       button.className = "settings-secondary-button";
-      button.textContent = "Download";
+      button.textContent = t("Download");
       button.addEventListener("click", () => void this.installLanguage(entry, button));
     }
 
     const row = document.createElement("div");
     row.className = "settings-language-catalog-row";
-    row.title = support.description;
+    row.title = t(support.description);
     row.append(text, button);
     return row;
   }
@@ -1739,8 +1767,8 @@ export class SettingsController {
   private createSupportBadge(level: "basic" | "enhanced" | "deep", label: string, description: string): HTMLSpanElement {
     const badge = document.createElement("span");
     badge.className = `settings-language-support-badge support-${level}`;
-    badge.textContent = label;
-    badge.title = description;
+    badge.textContent = t(label);
+    badge.title = t(description);
     return badge;
   }
 
@@ -1748,17 +1776,17 @@ export class SettingsController {
     const badge = document.createElement("span");
     const isExperimental = stability === "experimental";
     badge.className = `settings-language-support-badge stability-${isExperimental ? "experimental" : "stable"}`;
-    badge.textContent = isExperimental ? "Experimental" : "Stable";
+    badge.textContent = isExperimental ? t("Experimental") : t("Stable");
     badge.title = isExperimental
-      ? "This provider is still being validated and may have known limitations."
-      : "This provider is tested and considered reliable.";
+      ? t("This provider is still being validated and may have known limitations.")
+      : t("This provider is tested and considered reliable.");
     return badge;
   }
 
   private async installLanguage(entry: HunspellCatalogEntry, button: HTMLButtonElement): Promise<void> {
-    const original = button.textContent ?? "Download";
+    const original = button.textContent ?? t("Download");
     button.disabled = true;
-    button.textContent = "Downloading...";
+    button.textContent = t("Downloading...");
     this.languageProviderOperationInProgress = true;
     try {
       const providers = parseLanguageProviderCapabilitiesList(
@@ -1769,7 +1797,7 @@ export class SettingsController {
     } catch (error) {
       button.disabled = false;
       button.textContent = original;
-      await message(String(error), { title: `Install ${entry.displayName}`, kind: "error" });
+      await message(String(error), { title: t`Install ${entry.displayName}`, kind: "error" });
     } finally {
       this.languageProviderOperationInProgress = false;
     }
@@ -1778,7 +1806,7 @@ export class SettingsController {
   private async uninstallLanguage(entry: HunspellCatalogEntry, button: HTMLButtonElement): Promise<void> {
     const original = button.textContent ?? "Remove";
     button.disabled = true;
-    button.textContent = "Removing...";
+    button.textContent = t("Removing...");
     this.languageProviderOperationInProgress = true;
     try {
       const providers = parseLanguageProviderCapabilitiesList(
@@ -1789,7 +1817,7 @@ export class SettingsController {
     } catch (error) {
       button.disabled = false;
       button.textContent = original;
-      await message(String(error), { title: `Remove ${entry.displayName}`, kind: "error" });
+      await message(String(error), { title: t`Remove ${entry.displayName}`, kind: "error" });
     } finally {
       this.languageProviderOperationInProgress = false;
     }

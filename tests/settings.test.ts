@@ -332,7 +332,17 @@ describe("editor settings presentation", () => {
     expect(settingsController).toContain('if (name === "language") void this.ensureLanguageCatalogPopulated();');
     expect(ensureMethod).toContain("this.languageCatalogLoad = this.populateLanguageCatalog();");
     expect(ensureMethod).not.toContain(".focus()");
-    expect(settingsController).toContain('button.textContent = visible ? "Hide languages" : "Show languages"');
+    expect(settingsController).toContain('button.textContent = visible ? t("Hide languages") : t("Show languages")');
+  });
+
+  test("offers an interface locale selector when a translation is installed", () => {
+    expect(settingsHtml).toContain('id="settings-ui-locale-field"');
+    expect(settingsHtml).toContain('id="settings-ui-locale"');
+    expect(settingsController).toContain("private populateUiLocales(): void");
+    expect(settingsController).toContain("availableLocales()");
+    expect(settingsController).toContain("setLocale(select.value)");
+    expect(settingsController).toContain("field.hidden = locales.length < 2");
+    expect(settingsStyles).toContain(".settings-field[hidden]");
   });
 
   test("reveals and filters the language provider catalog on request", () => {
