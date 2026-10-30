@@ -123,7 +123,6 @@ export class SettingsController {
   private languageCatalogInitialized = false;
   private languageCatalogLoad: Promise<void> | null = null;
   private languageProviderOperationInProgress = false;
-  private updateProjectTerminology: (entries: TerminologyEntry[]) => void = () => {};
   private workspacePreviewRenderMode: PreviewRenderMode | null = null;
   private updateWorkspacePreviewRenderMode: (mode: PreviewRenderMode) => void = () => {};
   private scaledFontCacheReport: ScaledFontCacheReport | null = null;
@@ -267,7 +266,6 @@ export class SettingsController {
   public async loadProjectTerminology(
     path: string,
     fallback: readonly TerminologyEntry[],
-    update?: (entries: TerminologyEntry[]) => void,
   ): Promise<TerminologyEntry[]> {
     let entries: TerminologyEntry[] | null = null;
     try {
@@ -282,7 +280,7 @@ export class SettingsController {
       console.warn("Failed to load project terminology file; using project metadata.", error);
       entries = [...fallback];
     }
-    this.setProjectTerminology(entries, update, path);
+    this.setProjectTerminology(entries, path);
     return entries;
   }
 
@@ -304,13 +302,10 @@ export class SettingsController {
 
   public setProjectTerminology(
     entries: readonly TerminologyEntry[],
-    update?: (entries: TerminologyEntry[]) => void,
     path?: string,
   ): void {
     this.projectTerminology = [...entries];
-    if (update) this.updateProjectTerminology = update;
     if (path !== undefined) this.projectTerminologyPath = path;
-    this.populateTerminology();
     this.updateTerminologyStoragePaths();
     void this.persistProjectTerminology();
   }
@@ -847,7 +842,6 @@ export class SettingsController {
       control.disabled = !this.settings.developerMode;
     });
     this.populateEnhancedUnicodeEngine();
-    this.populateTerminology();
     this.populateRendererCompatibility();
 
     const path = document.getElementById("settings-file-path");
@@ -1454,59 +1448,6 @@ export class SettingsController {
       return row;
     });
     container.replaceChildren(...rows);
-  }
-
-  private populateTerminology(): void {
-    const container = document.getElementById("settings-terminology");
-    if (!container) return;
-    const entries = [
-      ...this.settings.editor.globalTerminology.map((entry, index) => ({
-        entry,
-        scope: "Global",
-        remove: () => this.update(settings => { settings.editor.globalTerminology.splice(index, 1); }),
-      })),
-      ...this.projectTerminology.map((entry, index) => ({
-        entry,
-        scope: "Project",
-        remove: () => {
-          const next = this.projectTerminology.filter((_, candidate) => candidate !== index);
-          this.projectTerminology = next;
-          this.updateProjectTerminology(next);
-          this.populateTerminology();
-          void this.persistProjectTerminology();
-        },
-      })),
-      ...this.settings.editor.languageTerminology.map((entry, index) => ({
-        entry,
-        scope: entry.languageFamily,
-        remove: () => this.update(settings => { settings.editor.languageTerminology.splice(index, 1); }),
-      })),
-    ];
-    if (!entries.length) {
-      const empty = document.createElement("small");
-      empty.textContent = t("No accepted terminology has been added.");
-      container.replaceChildren(empty);
-      return;
-    }
-    container.replaceChildren(...entries.map(({ entry, scope, remove }) => {
-      const row = document.createElement("div");
-      row.className = "settings-language-provider";
-      const term = document.createElement("span");
-      term.textContent = entry.term;
-      const meta = document.createElement("small");
-      meta.textContent = t`${t(scope)} · ${entry.exactCase ? t("exact case") : t("case insensitive")}`;
-      const text = document.createElement("span");
-      text.className = "settings-language-provider-text";
-      text.append(term, meta);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "settings-secondary-button";
-      button.textContent = t("Remove");
-      button.setAttribute("aria-label", t`Remove ${entry.term} from ${t(scope)} terminology`);
-      button.addEventListener("click", remove);
-      row.append(text, button);
-      return row;
-    }));
   }
 
   private updateTerminologyStoragePaths(): void {

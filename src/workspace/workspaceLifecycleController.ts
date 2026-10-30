@@ -119,11 +119,10 @@ export interface WorkspaceLifecycleServices {
       };
     };
     setWorkspacePreviewRenderMode(mode: PreviewRenderMode | null, changed?: (mode: PreviewRenderMode) => void): void;
-    setProjectTerminology(entries: TerminologyEntry[], changed?: (entries: TerminologyEntry[]) => void, path?: string): void;
+    setProjectTerminology(entries: TerminologyEntry[], path?: string): void;
     loadProjectTerminology(
       path: string,
       fallback: readonly TerminologyEntry[],
-      changed?: (entries: TerminologyEntry[]) => void,
     ): Promise<TerminologyEntry[]>;
   };
   draftPreviewController: { mode: unknown; setMode(mode: unknown, reason: string): void; reset(): void };
@@ -382,17 +381,6 @@ export class WorkspaceLifecycleController {
       const projectTerminology = await app.settingsController.loadProjectTerminology(
         await join(selected, ".typsastra", "terminology.txt"),
         app.workspaceMetadata.project.terminology,
-        (entries: TerminologyEntry[]) => {
-          if (!app.workspaceMetadata) return;
-          app.workspaceMetadata.project.terminology = entries;
-          app.spellcheckController.setTerminology(
-            app.settingsController.value.editor.globalTerminology,
-            entries,
-            app.settingsController.value.editor.languageTerminology,
-            app.settingsController.value.editor.scopedIgnoredWords,
-          );
-          void app.saveWorkspaceState();
-        },
       );
       app.workspaceMetadata.project.terminology = projectTerminology;
       app.spellcheckController.setTerminology(
@@ -748,7 +736,7 @@ export class WorkspaceLifecycleController {
     app.tableToolController.setWorkspace([]);
     app.workspaceMetadata = null;
     app.settingsController.setWorkspacePreviewRenderMode(null);
-    app.settingsController.setProjectTerminology([], undefined, "");
+    app.settingsController.setProjectTerminology([], "");
     app.lastPreviewRenderMode = app.settingsController.value.preview.renderMode;
     app.workspaceLoading = false;
     app.recommendedWorkspaceToolchain = null;

@@ -295,6 +295,9 @@ describe("application settings", () => {
     expect(html).toContain('id="settings-user-dictionary-path"');
     expect(html).toContain('id="settings-open-user-dictionary"');
     expect(html).toContain('id="settings-terminology-path"');
+    expect(html).not.toContain('id="settings-terminology"');
+    expect(html).not.toContain("Accepted terminology");
+    expect(controller).not.toContain("populateTerminology");
     expect(html).toContain('id="settings-open-terminology"');
     expect(html).toContain('id="settings-project-terminology-path"');
     expect(html).toContain('id="settings-open-project-terminology"');
