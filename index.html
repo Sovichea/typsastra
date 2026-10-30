@@ -2986,6 +2986,25 @@
                                 <div id="settings-terminology" class="settings-check-list" aria-live="polite"></div>
                                 <small>Global terms apply everywhere, project terms travel in <code>.typsastra/config.json</code>, and language terms remain isolated to one language family. Add terms from a spelling issue's context menu.</small>
                             </div>
+                            <div class="settings-field">
+                                <label>Dictionary and terminology files</label>
+                                <div class="settings-storage-row">
+                                    <span>User dictionary</span>
+                                    <code id="settings-user-dictionary-path"></code>
+                                    <button id="settings-open-user-dictionary" class="settings-secondary-button" type="button">Open</button>
+                                </div>
+                                <div class="settings-storage-row">
+                                    <span>Global/language terminology</span>
+                                    <code id="settings-terminology-path"></code>
+                                    <button id="settings-open-terminology" class="settings-secondary-button" type="button">Open</button>
+                                </div>
+                                <div class="settings-storage-row">
+                                    <span>Project terminology</span>
+                                    <code id="settings-project-terminology-path"></code>
+                                    <button id="settings-open-project-terminology" class="settings-secondary-button" type="button">Open</button>
+                                </div>
+                                <small>One entry per line. In terminology files, prefix a term with <code>~</code> for case-insensitive matching and use <code>[en]</code> sections for language-specific terms. A compatibility copy remains in settings metadata for older versions. Restart Typsastra after editing; reopen the project after editing its file.</small>
+                            </div>
                             <label class="settings-toggle"
                                 ><input
                                     id="settings-show-zws"

@@ -2846,6 +2846,9 @@ body.typsastra-resizing #input-container-wrapper::after {
 }
 .settings-file-meta { min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ui-header-text); }
 .settings-file-meta code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 430px; }
+.settings-storage-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--ui-header-text); }
+.settings-storage-row code { flex: 1 1 260px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-storage-row button { flex-shrink: 0; }
 .settings-footer-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 @media (max-width: 680px) {

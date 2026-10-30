@@ -277,6 +277,30 @@ describe("application settings", () => {
     expect(settings.editor.userDictionary).toEqual(["សាលា"]);
   });
 
+  test("exposes dictionary and terminology file locations", async () => {
+    const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
+    const controller = await Bun.file(
+      new URL("../src/settingsController.ts", import.meta.url),
+    ).text();
+    const lifecycle = await Bun.file(
+      new URL("../src/workspace/workspaceLifecycleController.ts", import.meta.url),
+    ).text();
+
+    expect(html).toContain('id="settings-user-dictionary-path"');
+    expect(html).toContain('id="settings-open-user-dictionary"');
+    expect(html).toContain('id="settings-terminology-path"');
+    expect(html).toContain('id="settings-open-terminology"');
+    expect(html).toContain('id="settings-project-terminology-path"');
+    expect(html).toContain('id="settings-open-project-terminology"');
+    expect(controller).toContain('this.openTerminologyFile(this.userDictionaryPath, USER_DICTIONARY_FILE)');
+    expect(controller).toContain('this.openTerminologyFile(this.terminologyPath, TERMINOLOGY_FILE)');
+    expect(controller).toContain(
+      'this.openTerminologyFile(this.projectTerminologyPath, PROJECT_TERMINOLOGY_FILE)',
+    );
+    expect(controller).toContain("this.lexiconFilesReady = true");
+    expect(lifecycle).toContain('await join(selected, ".typsastra", "terminology.txt")');
+  });
+
   test("normalizes and deduplicates ignored words", () => {
     const settings = normalizeAppSettings({
       editor: { ignoredWords: [" ខ្មេ ", "ខ្មេ", "", 42] }
