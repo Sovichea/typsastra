@@ -25,6 +25,7 @@ import {
   isTypstRuleTargetAt,
   languageCompletionRange,
   quotedValueCompletionEdit,
+  quotedPathCompletionCaretOffset,
   liveTypstCompletionEditOffsets,
   liveTypstMemberCompletionEditOffsets,
   lspCompletionEditOffsets,
@@ -562,6 +563,13 @@ describe("LSP autocomplete edits", () => {
       .toBe('"Times New Roman")');
   });
 
+  test("keeps the caret inside directory completions and after file completions", () => {
+    expect(quotedPathCompletionCaretOffset('"/images/"')).toBe('"/images/'.length);
+    expect(quotedPathCompletionCaretOffset('"/images/")')).toBe('"/images/'.length);
+    expect(quotedPathCompletionCaretOffset('"/images/main.typ"')).toBe('"/images/main.typ"'.length);
+    expect(quotedPathCompletionCaretOffset('"/images/main.typ")')).toBe('"/images/main.typ"'.length);
+  });
+
   test("recognizes any caret inside a string, not only argument values", () => {
     expect(isInsideQuotedValue(Text.of(['#import "qprev"']), 10)).toBe(true);
     expect(isInsideQuotedValue(Text.of(['#import "qprev']), 14)).toBe(true);
@@ -991,7 +999,7 @@ describe("LSP autocomplete edits", () => {
   test("places the caret after accepted non-callable argument values", async () => {
     const source = await Bun.file(new URL("../src/editor/autocomplete.ts", import.meta.url)).text();
     expect(source).toContain(
-      "if (isFunctionArgumentValue && !callableSnippet.opensArguments)"
+      "if (isFunctionArgumentValue && !callableSnippet.opensArguments && !isPathLikeCompletionValue(apply))"
     );
     expect(source).toContain("const documentLengthBeforeApply = view.state.doc.length");
     expect(source).toContain("const anchor = edit.from + insertedLength");

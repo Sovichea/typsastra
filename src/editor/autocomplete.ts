@@ -948,6 +948,22 @@ export function quotedValueCompletionEdit(
   return { from: start, to: end, insert: value };
 }
 
+/**
+ * Places the caret inside the quotes after a directory completion so the next
+ * path segment can be typed immediately. File completions keep the closing
+ * quote behind the caret.
+ */
+export function quotedPathCompletionCaretOffset(insert: string): number {
+  const closingQuote = insert.lastIndexOf('"');
+  if (closingQuote < 0) return insert.length;
+  const valueBeforeQuote = insert.slice(0, closingQuote);
+  return /[\\/]$/u.test(valueBeforeQuote) ? closingQuote : closingQuote + 1;
+}
+
+function isPathLikeCompletionValue(insert: string): boolean {
+  return /[\\/]/u.test(insert);
+}
+
 export function completionEditOffsets(
   doc: Text,
   cursorPosition: number,
@@ -1608,7 +1624,11 @@ export function createTypstAutocomplete(
                     );
                     view.dispatch({
                       changes: { from: quoted.from, to: quoted.to, insert: quoted.insert },
-                      selection: { anchor: quoted.from + quoted.insert.length },
+                      selection: {
+                        anchor: quoted.from + (isPathLikeCompletionValue(quoted.insert)
+                          ? quotedPathCompletionCaretOffset(quoted.insert)
+                          : quoted.insert.length),
+                      },
                       userEvent: "input.complete"
                     });
                   } else {
@@ -1620,7 +1640,7 @@ export function createTypstAutocomplete(
                       );
                     }
                   }
-                  if (isFunctionArgumentValue && !callableSnippet.opensArguments) {
+                  if (isFunctionArgumentValue && !callableSnippet.opensArguments && !isPathLikeCompletionValue(apply)) {
                     const insertedLength = view.state.doc.length
                       - (documentLengthBeforeApply - (edit.to - edit.from));
                     const anchor = edit.from + insertedLength;
@@ -1694,7 +1714,11 @@ export function createTypstAutocomplete(
                   : { from: replacement.from, to: replacement.to, insert: apply };
                 view.dispatch({
                   changes: { from: edit.from, to: edit.to, insert: edit.insert },
-                  selection: { anchor: edit.from + edit.insert.length },
+                  selection: {
+                    anchor: edit.from + (isQuotedValue && isPathLikeCompletionValue(edit.insert)
+                      ? quotedPathCompletionCaretOffset(edit.insert)
+                      : edit.insert.length),
+                  },
                   userEvent: "input.complete"
                 });
                 if (traceRelevant) {
