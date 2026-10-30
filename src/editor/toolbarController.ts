@@ -15,6 +15,7 @@ import {
   type DocumentScriptFont,
   type DocumentTypography
 } from "./documentTypography";
+import { t } from "../i18n";
 
 type EditorMode = "CODE" | "WYSIWYM";
 const typographyChoiceStorageKey = "typsastra-last-document-typography";
@@ -199,7 +200,7 @@ export class EditorToolbarController {
   private emptyFontOption(label: string): HTMLOptionElement {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = label;
+    option.textContent = t(label);
     return option;
   }
 
@@ -222,7 +223,7 @@ export class EditorToolbarController {
     );
     const group = (label: string, entries: readonly string[]) => {
       const element = document.createElement("optgroup");
-      element.label = label;
+      element.label = t(label);
       element.append(...this.fontOptions(entries));
       return element;
     };
@@ -260,8 +261,8 @@ export class EditorToolbarController {
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "settings-secondary-button";
-        remove.textContent = "Remove";
-        remove.setAttribute("aria-label", `Remove workspace private font directory ${path}`);
+        remove.textContent = t("Remove");
+        remove.setAttribute("aria-label", t`Remove workspace private font directory ${path}`);
         remove.addEventListener("click", () => void this.removeWorkspacePrivateFontDirectory(path));
 
         const row = document.createElement("div");
@@ -272,7 +273,7 @@ export class EditorToolbarController {
       if (rows.length === 0) {
         const empty = document.createElement("small");
         empty.className = "settings-private-font-empty";
-        empty.textContent = "No workspace private font directory configured.";
+        empty.textContent = t("No workspace private font directory configured.");
         container.replaceChildren(empty);
       } else {
         container.replaceChildren(...rows);
@@ -280,7 +281,7 @@ export class EditorToolbarController {
     } catch (error) {
       const empty = document.createElement("small");
       empty.className = "settings-private-font-empty";
-      empty.textContent = `Unable to load workspace private fonts: ${String(error)}`;
+      empty.textContent = t`Unable to load workspace private fonts: ${String(error)}`;
       container.replaceChildren(empty);
     }
   }
@@ -291,7 +292,7 @@ export class EditorToolbarController {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose Workspace Private Font Directory"
+      title: t("Choose Workspace Private Font Directory")
     });
     if (typeof selected !== "string") return;
     try {
@@ -301,26 +302,26 @@ export class EditorToolbarController {
       );
       if (inspection.collisions.length > 0) {
         await message(
-          `This directory contains font families that are already available from the system, global private folders, or another workspace folder:\n\n${inspection.collisions.join("\n")}\n\nTypsastra does not add ambiguous font families because the compiler could select a different file between sessions.`,
-          { title: "Ambiguous Font Families", kind: "error" }
+          t`This directory contains font families that are already available from the system, global private folders, or another workspace folder:\n\n${inspection.collisions.join("\n")}\n\nTypsastra does not add ambiguous font families because the compiler could select a different file between sessions.`,
+          { title: t("Ambiguous Font Families"), kind: "error" }
         );
         return;
       }
       const paths = await this.workspacePrivateFontDirectories();
       await this.saveWorkspacePrivateFontDirectories([...paths, inspection.path]);
     } catch (error) {
-      await message(String(error), { title: "Unable to Add Workspace Font Directory", kind: "error" });
+      await message(String(error), { title: t("Unable to Add Workspace Font Directory"), kind: "error" });
     }
   }
 
   private async removeWorkspacePrivateFontDirectory(path: string): Promise<void> {
     const accepted = await confirm(
-      `Remove this private font directory from this workspace?\n\n${path}\n\nThe font files will not be deleted. Documents using these fonts may no longer compile on this computer.`,
+      t`Remove this private font directory from this workspace?\n\n${path}\n\nThe font files will not be deleted. Documents using these fonts may no longer compile on this computer.`,
       {
-        title: "Remove Workspace Private Font Directory?",
+        title: t("Remove Workspace Private Font Directory?"),
         kind: "warning",
-        okLabel: "Remove",
-        cancelLabel: "Cancel"
+        okLabel: t("Remove"),
+        cancelLabel: t("Cancel")
       }
     );
     if (!accepted) return;
@@ -385,14 +386,14 @@ export class EditorToolbarController {
 
   private typographyScriptLabel(row: HTMLElement): string {
     const scriptId = this.rowScript(row).value;
-    return typographyScripts.find(script => script.id === scriptId)?.label ?? scriptId;
+    return t(typographyScripts.find(script => script.id === scriptId)?.label ?? scriptId);
   }
 
   private announceTypographyOrder(row: HTMLElement): void {
     const status = document.getElementById("document-typography-order-status");
     if (!status) return;
     const rows = this.fallbackRows();
-    status.textContent = `${this.typographyScriptLabel(row)} moved to position ${rows.indexOf(row) + 1} of ${rows.length}.`;
+    status.textContent = t`${this.typographyScriptLabel(row)} moved to position ${rows.indexOf(row) + 1} of ${rows.length}.`;
   }
 
   private moveTypographyRow(row: HTMLElement, direction: -1 | 1): void {
@@ -462,8 +463,8 @@ export class EditorToolbarController {
     select.disabled = false;
     const hint = row.querySelector<HTMLElement>("[data-fallback-hint]");
     if (hint) hint.textContent = supported.length > 0
-      ? `${supported.length} compatible Typst font${supported.length === 1 ? "" : "s"}.`
-      : "No compatible installed font.";
+      ? t`${supported.length} compatible Typst font${supported.length === 1 ? "" : "s"}.`
+      : t("No compatible installed font.");
     this.updateRowScaleAvailability(row);
     this.updateTypographyAvailability();
     return supported;
@@ -478,14 +479,14 @@ export class EditorToolbarController {
     dragHandle.dataset.typographyDragHandle = "";
     dragHandle.draggable = false;
     dragHandle.setAttribute("draggable", "false");
-    dragHandle.setAttribute("aria-label", `Reorder ${typographyScripts.find(candidate => candidate.id === fallback.script)?.label ?? fallback.script} script`);
-    dragHandle.title = "Drag to reorder; use Up or Down Arrow while focused";
+    dragHandle.setAttribute("aria-label", t`Reorder ${t(typographyScripts.find(candidate => candidate.id === fallback.script)?.label ?? fallback.script)} script`);
+    dragHandle.title = t("Drag to reorder; use Up or Down Arrow while focused");
     const script = document.createElement("select");
     script.dataset.fallbackScript = "";
     script.replaceChildren(...typographyScripts.map(candidate => {
       const option = document.createElement("option");
       option.value = candidate.id;
-      option.textContent = candidate.label;
+      option.textContent = t(candidate.label);
       return option;
     }));
     script.value = fallback.script;
@@ -498,7 +499,7 @@ export class EditorToolbarController {
     scale.max = "2";
     scale.step = "0.01";
     scale.value = String(fallback.scale);
-    scale.setAttribute("aria-label", "Script font scale");
+    scale.setAttribute("aria-label", t("Script font scale"));
 
     const defaultFont = document.createElement("input");
     defaultFont.type = "checkbox";
@@ -511,19 +512,19 @@ export class EditorToolbarController {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "toolbar-remove-fallback";
-    remove.textContent = "Remove";
+    remove.textContent = t("Remove");
     const hint = document.createElement("span");
     hint.dataset.fallbackHint = "";
     hint.className = "document-typography-field-hint";
     const scaleWarning = document.createElement("span");
     scaleWarning.className = "document-typography-scale-warning";
-    scaleWarning.textContent = "Fine adjustment only";
+    scaleWarning.textContent = t("Fine adjustment only");
     scaleWarning.hidden = true;
 
     const cell = (label: string, ...children: HTMLElement[]) => {
       const container = document.createElement("div");
       container.className = "document-typography-cell";
-      container.dataset.label = label;
+      container.dataset.label = t(label);
       container.append(...children);
       return container;
     };
@@ -552,7 +553,7 @@ export class EditorToolbarController {
       this.updatePreparedFontRole(row);
     };
     updateDefaultFontRole();
-    if (detected) hint.textContent = `Detected ${typographyScripts.find(item => item.id === fallback.script)?.label}. ${hint.textContent}`;
+    if (detected) hint.textContent = t`Detected ${t(typographyScripts.find(item => item.id === fallback.script)?.label ?? fallback.script)}. ${hint.textContent}`;
     script.addEventListener("change", () => {
       this.populateRowFonts(row, script.value);
       if (defaultFont.checked && this.fallbackRows().some(other =>
@@ -563,7 +564,7 @@ export class EditorToolbarController {
         defaultFont.checked = false;
       }
       updateDefaultFontRole();
-      dragHandle.setAttribute("aria-label", `Reorder ${this.typographyScriptLabel(row)} script`);
+      dragHandle.setAttribute("aria-label", t`Reorder ${this.typographyScriptLabel(row)} script`);
       this.updateTypographyAvailability();
     });
     font.addEventListener("change", () => {
@@ -598,7 +599,7 @@ export class EditorToolbarController {
   private updatePreparedFontRole(row: HTMLElement): void {
     const isDefault = row.querySelector<HTMLInputElement>("[data-default-text-font]")?.checked ?? true;
     const label = row.querySelector<HTMLElement>(".document-typography-default-font span");
-    if (label) label.textContent = isDefault ? "Default text font" : "Prepared font only";
+    if (label) label.textContent = isDefault ? t("Default text font") : t("Prepared font only");
   }
 
   private updateRowScaleAvailability(row: HTMLElement): void {
@@ -611,9 +612,9 @@ export class EditorToolbarController {
       scale.value = "1";
       scale.disabled = true;
       scale.setAttribute("aria-invalid", "false");
-      scale.title = "Typst built-in fonts cannot be scaled unless the font is installed locally.";
+      scale.title = t("Typst built-in fonts cannot be scaled unless the font is installed locally.");
       hint.dataset.state = "info";
-      hint.textContent = "Built-in font · install locally to scale";
+      hint.textContent = t("Built-in font · install locally to scale");
       hint.hidden = false;
       return;
     }
@@ -623,7 +624,7 @@ export class EditorToolbarController {
     const outsideFineAdjustment = Number.isFinite(value) && (value < 0.9 || value > 1.1);
     scale.setAttribute("aria-invalid", outsideFineAdjustment ? "true" : "false");
     hint.dataset.state = "warning";
-    hint.textContent = "Fine adjustment only";
+    hint.textContent = t("Fine adjustment only");
     hint.hidden = !outsideFineAdjustment;
   }
 
@@ -648,10 +649,10 @@ export class EditorToolbarController {
         const hint = row.querySelector<HTMLElement>("[data-fallback-hint]");
         const selectedFamily = row.querySelector<HTMLSelectElement>("[data-fallback-font]")?.value ?? "";
         if (hint) hint.textContent = isTypstInternalOnlyFont(selectedFamily, this.systemFontFamilies)
-          ? `${selectedFamily} is provided by the Typst compiler.`
+          ? t`${selectedFamily} is provided by the Typst compiler.`
           : families.length > 0
-            ? `${families.length} installed font${families.length === 1 ? "" : "s"} cover every ${script.label} character used.`
-            : `No installed font covers every ${script.label} character used.`;
+            ? t`${families.length} installed font${families.length === 1 ? "" : "s"} cover every ${t(script.label)} character used.`
+            : t`No installed font covers every ${t(script.label)} character used.`;
       } catch (error) {
         console.warn(`Unable to inspect ${script.label} font coverage.`, error);
       }

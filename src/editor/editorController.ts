@@ -16,6 +16,7 @@ import { cursorRowColumn } from "./verticalCursor";
 import { TYPSASTRA_GREEN } from "../ui/brandColors";
 import { isAltGraphKeyboardEvent } from "../ui/keyboardModifiers";
 import type { EditorFoldRange } from "./folding";
+import { t } from "../i18n";
 
 type EditorInputProfile = {
   sequence: number;
@@ -320,8 +321,8 @@ export class EditorController {
       editor.state.doc,
       editor.state.selection.main.head,
     );
-    label.textContent = `Ln ${row}, Col ${column}`;
-    status.setAttribute("aria-label", `Cursor at row ${row}, column ${column}`);
+    label.textContent = t`Ln ${row}, Col ${column}`;
+    status.setAttribute("aria-label", t`Cursor at row ${row}, column ${column}`);
   }
 
   refreshLayout(reason: string): void {
@@ -360,7 +361,7 @@ export class EditorController {
 
     marker.style.display = "";
     marker.style.top = `${top}px`;
-    marker.title = `Caret: line ${caretLine}`;
+    marker.title = t`Caret: line ${caretLine}`;
   }
 
   updateDiagnosticMarkers(): void {
@@ -449,7 +450,7 @@ export class EditorController {
         cursor: "pointer",
         pointerEvents: "auto",
       });
-      marker.title = `${severity === "info" ? "Search match" : `${severity[0].toUpperCase()}${severity.slice(1)}`}: line ${line}`;
+      marker.title = t`${severity === "info" ? "Search match" : `${severity[0].toUpperCase()}${severity.slice(1)}`}: line ${line}`;
       marker.addEventListener("pointerdown", event => {
         if (event.button !== 0) return;
         event.preventDefault();

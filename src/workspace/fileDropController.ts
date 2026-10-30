@@ -13,6 +13,7 @@ import {
   type ClipboardImageData,
   type ImageInsertionStyle,
 } from "../editor/imageDrop";
+import { t } from "../i18n";
 
 export interface FileDropDependencies {
   editor(): EditorView;
@@ -191,16 +192,16 @@ export class FileDropController {
   private async dropExternalImageIntoEditor(paths: readonly string[], point: DropPoint): Promise<void> {
     const activeFilePath = this.deps.activeFilePath();
     if (!activeFilePath || !isTypstDocumentPath(activeFilePath)) {
-      await message("Open a Typst document before dropping an image into the editor.", {
-        title: "Typst document required",
+      await message(t("Open a Typst document before dropping an image into the editor."), {
+        title: t("Typst document required"),
         kind: "info",
       });
       return;
     }
     const images = paths.filter(isSupportedImageReferencePath);
     if (images.length === 0) {
-      await message("Only supported image files can be dropped into a Typst editor.", {
-        title: "Image required",
+      await message(t("Only supported image files can be dropped into a Typst editor."), {
+        title: t("Image required"),
         kind: "info",
       });
       return;
@@ -312,7 +313,7 @@ export class FileDropController {
           ? `Images outside the project must be included in the project folder. Copy ${multiple ? "these images" : "this image"} into the project images folder?`
           : `Images outside the project must be included in the project folder. Create an images folder and copy ${multiple ? "these images" : "this image"} into it?`,
         actions: [
-          { id: "cancel", label: "Cancel" },
+          { id: "cancel", label: t("Cancel") },
           {
             id: "import",
             label: imagesDirectoryExists
@@ -380,13 +381,13 @@ export class FileDropController {
   private async chooseInsertionStyle(relativePaths: readonly string[]): Promise<ImageInsertionStyle | null> {
     const multiple = relativePaths.length > 1;
     const action = await this.deps.appDialog.show({
-      title: `Insert Image${multiple ? "s" : ""}`,
+      title: t`Insert Image${multiple ? "s" : ""}`,
       subtitle: multiple ? `${relativePaths.length} images` : relativePaths[0],
       description: multiple
         ? "Insert every image plainly, or wrap each image in a figure function with an editable caption?"
         : "Insert a plain image, or surround it with a figure function and an editable caption?",
       actions: [
-        { id: "cancel", label: "Cancel" },
+        { id: "cancel", label: t("Cancel") },
         { id: "image", label: multiple ? "Plain Images" : "Plain Image" },
         { id: "figure", label: multiple ? "Figures with Captions" : "Figure with Caption", primary: true },
       ],

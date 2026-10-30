@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 /** A template entry from the Typst Universe package index. */
 export type UniverseTemplate = {
   name: string;
@@ -45,12 +47,12 @@ export type TemplateCatalog = {
 export function templateCatalogStatus(catalog: TemplateCatalog): string {
   if (catalog.offline) {
     const when = catalog.cachedAt
-      ? ` (cached ${new Date(catalog.cachedAt * 1000).toLocaleDateString()})`
+      ? t` (cached ${new Date(catalog.cachedAt * 1000).toLocaleDateString()})`
       : "";
-    return `You are offline — showing cached templates${when}. Downloaded templates still work.`;
+    return t`You are offline — showing cached templates${when}. Downloaded templates still work.`;
   }
   if (catalog.fromCache && catalog.templates.length === 0) {
-    return "No Typst Universe templates are cached yet. Connect to the internet to load them.";
+    return t("No Typst Universe templates are cached yet. Connect to the internet to load them.");
   }
   return "";
 }

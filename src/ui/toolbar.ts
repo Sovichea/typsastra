@@ -1,4 +1,5 @@
 import { createAppIcon, type AppIconName } from "./icons";
+import { t } from "../i18n";
 
 /** A select option shared by toolbars. */
 export type ToolbarSelectOption = { value: string; label: string };
@@ -64,7 +65,7 @@ function buildMenuItem(entry: Extract<ToolbarMenuEntry, { kind: "item" | "toggle
   if (entry.icon) item.appendChild(createAppIcon(entry.icon, { size: 14, className: "app-menu-icon" }));
   const label = document.createElement("span");
   label.className = "app-menu-label";
-  label.textContent = entry.checked ? `✓ ${entry.label}` : entry.label;
+  label.textContent = entry.checked ? `✓ ${t(entry.label)}` : t(entry.label);
   item.appendChild(label);
   if (entry.kind !== "item" || !entry.disabled) {
     item.addEventListener("click", () => {
@@ -91,7 +92,7 @@ function buildMenu(
     if (entry.kind === "heading") {
       const heading = document.createElement("div");
       heading.className = "app-menu-heading";
-      heading.textContent = entry.label;
+      heading.textContent = t(entry.label);
       menu.appendChild(heading);
       return;
     }
@@ -101,7 +102,7 @@ function buildMenu(
       entry.values.forEach(value => {
         const button = document.createElement("button");
         button.type = "button";
-        button.textContent = (entry.format ?? String)(value);
+        button.textContent = t((entry.format ?? String)(value));
         if (entry.current() === value) button.classList.add("active");
         button.addEventListener("click", () => {
           entry.onSelect(value);
@@ -129,8 +130,8 @@ function buildMenu(
       const input = document.createElement("input");
       input.type = "text";
       input.value = entry.value;
-      if (entry.placeholder) input.placeholder = entry.placeholder;
-      input.setAttribute("aria-label", entry.ariaLabel ?? entry.placeholder ?? "Value");
+      if (entry.placeholder) input.placeholder = t(entry.placeholder);
+      input.setAttribute("aria-label", t(entry.ariaLabel ?? entry.placeholder ?? "Value"));
       let committed = false;
       const commit = () => {
         if (committed) return;
@@ -163,7 +164,7 @@ export function createToolbar(options: {
   const element = document.createElement("div");
   element.className = ["app-toolbar", options.className].filter(Boolean).join(" ");
   element.setAttribute("role", "toolbar");
-  if (options.ariaLabel) element.setAttribute("aria-label", options.ariaLabel);
+  if (options.ariaLabel) element.setAttribute("aria-label", t(options.ariaLabel));
 
   let activeMenu: HTMLElement | null = null;
   let activeAnchor: HTMLElement | null = null;
@@ -240,13 +241,13 @@ export function createToolbar(options: {
       const label = document.createElement("label");
       label.className = "app-toolbar-select";
       const caption = document.createElement("span");
-      caption.textContent = entry.label;
+      caption.textContent = t(entry.label);
       const select = document.createElement("select");
       select.setAttribute("data-toolbar-id", entry.id);
       entry.options.forEach(option => {
         const optionElement = document.createElement("option");
         optionElement.value = option.value;
-        optionElement.textContent = option.label;
+        optionElement.textContent = t(option.label);
         select.appendChild(optionElement);
       });
       select.value = entry.value;
@@ -262,11 +263,11 @@ export function createToolbar(options: {
     button.className = entry.kind === "menu" ? "toolbar-button app-toolbar-menu" : "toolbar-button app-toolbar-toggle";
     button.setAttribute("data-toolbar-id", entry.id);
     const title = entry.kind === "menu" ? entry.label : entry.title;
-    button.title = title;
-    button.setAttribute("aria-label", title);
+    button.title = t(title);
+    button.setAttribute("aria-label", t(title));
     if (entry.kind === "menu") {
       const caption = document.createElement("span");
-      caption.textContent = entry.label;
+      caption.textContent = t(entry.label);
       button.appendChild(caption);
       button.appendChild(createAppIcon("chevronDown", { size: 12, className: "app-toolbar-caret" }));
       button.addEventListener("click", event => {

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
+import { t } from "../i18n";
 
 export type ToolchainStatus = {
   typstVersion: string | null;
@@ -100,7 +101,7 @@ export class ToolchainController {
       this.options.setSelectedVersion(toolchain.tinymistVersion);
       await this.options.onToolchainChanged(status);
     } catch (error) {
-      await message(String(error), { title: "Toolchain selection failed", kind: "error" });
+      await message(String(error), { title: t("Toolchain selection failed"), kind: "error" });
     } finally {
       this.loading = false;
       this.render();
@@ -125,7 +126,7 @@ export class ToolchainController {
       } catch (statusError) {
         console.error("Failed to recover toolchain status after installation error", statusError);
       }
-      await message(String(error), { title: "Toolchain installation failed", kind: "error" });
+      await message(String(error), { title: t("Toolchain installation failed"), kind: "error" });
     } finally {
       this.loading = false;
       this.render();
@@ -143,23 +144,25 @@ export class ToolchainController {
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = this.loading && versions.length === 0
-        ? "Loading stable releases..."
-        : "Select a stable version";
+        ? t("Loading stable releases...")
+        : t("Select a stable version");
       const systemGroup = document.createElement("optgroup");
-      systemGroup.label = "System PATH";
+      systemGroup.label = t("System PATH");
       this.systemToolchains.forEach((toolchain, index) => {
         const option = document.createElement("option");
         option.value = `system:${index}`;
-        option.textContent = `${toolchain.tinymistVersion} · Typst ${toolchain.typstVersion}`;
+        option.textContent = t`${toolchain.tinymistVersion} · Typst ${toolchain.typstVersion}`;
         option.title = toolchain.path;
         systemGroup.appendChild(option);
       });
       const managedGroup = document.createElement("optgroup");
-      managedGroup.label = "Managed downloads";
+      managedGroup.label = t("Managed downloads");
       managedGroup.append(...versions.map(release => {
         const option = document.createElement("option");
         option.value = release.version;
-        option.textContent = `${release.version}${release.version === current ? " (current)" : ""}`;
+        option.textContent = release.version === current
+          ? t`${release.version} (current)`
+          : release.version;
         return option;
       }));
       select.replaceChildren(
@@ -177,14 +180,14 @@ export class ToolchainController {
     }
 
     const typstMeta = document.getElementById("settings-typst-current") as HTMLInputElement | null;
-    if (typstMeta) typstMeta.value = this.status?.typstVersion ?? "Not available";
+    if (typstMeta) typstMeta.value = this.status?.typstVersion ?? t("Not available");
     const tinymistMeta = document.getElementById("settings-tinymist-current");
     if (tinymistMeta) tinymistMeta.textContent = this.status?.tinymistVersion
-      ? `Current: ${this.status.tinymistVersion} · ${this.status.tinymistSource ?? "Unknown source"}`
-      : "Tinymist is not installed";
+      ? t`Current: ${this.status.tinymistVersion} · ${this.status.tinymistSource ?? t("Unknown source")}`
+      : t("Tinymist is not installed");
     const status = document.getElementById("settings-toolchain-status");
     if (status) {
-      status.textContent = overrideMessage ?? this.status?.message ?? "Open this panel to check tool versions.";
+      status.textContent = overrideMessage ?? (this.status?.message ? t(this.status.message) : t("Open this panel to check tool versions."));
       status.classList.toggle("error", isError);
       status.classList.toggle("warning", !isError && Boolean(this.status && !this.status.lspAvailable));
     }

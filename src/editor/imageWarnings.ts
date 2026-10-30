@@ -5,6 +5,7 @@ import { createAppIcon } from "../ui/icons";
 import { editorDiagnosticsStateField } from "./diagnostics";
 import { isStandaloneDocument } from "./standaloneDocument";
 import { UnusedBindingMarker, unusedBindingMarkerField } from "./unusedBindings";
+import { t } from "../i18n";
 
 export type ImageOptimizationWarning = {
   from: number;
@@ -57,7 +58,7 @@ export class ImageOptimizationMarker extends GutterMarker {
     marker.setAttribute("aria-label", this.message);
     if (this.imagePath) {
       marker.classList.add("clickable");
-      marker.title = `${this.message}\n\nClick to open this image in Image Tools.`;
+      marker.title = t`${this.message}\n\nClick to open this image in Image Tools.`;
       marker.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();

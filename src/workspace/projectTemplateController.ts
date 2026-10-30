@@ -14,6 +14,7 @@ import {
   type TemplateTab,
   type UniverseTemplate,
 } from "../projectTemplates";
+import { t } from "../i18n";
 
 export interface ProjectTemplateControllerPort {
   setStatus(status: LspStatus): void;
@@ -165,8 +166,8 @@ export class ProjectTemplateController {
     this.renderList();
     if (refresh || !this.loaded) {
       elements.status.textContent = refresh
-        ? "Refreshing Typst Universe templates…"
-        : "Loading Typst Universe templates…";
+        ? t("Refreshing Typst Universe templates…")
+        : t("Loading Typst Universe templates…");
       try {
         const catalog = await invoke<TemplateCatalog>("fetch_universe_templates", { refresh });
         this.universe = catalog.templates;
@@ -177,15 +178,15 @@ export class ProjectTemplateController {
         this.universeOffline = true;
         this.universeError = true;
         elements.status.textContent =
-          `Could not load Typst Universe templates: ${String(error)}. `
-          + "Downloaded and user templates are still available.";
+          t`Could not load Typst Universe templates: ${String(error)}. `
+          + t("Downloaded and user templates are still available.");
       }
     }
     try {
       this.offline = await invoke<LocalTemplate[]>("list_offline_templates");
       this.user = await invoke<LocalTemplate[]>("list_user_templates");
     } catch (error) {
-      this.port.setStatus({ kind: "error", message: `Could not read the template library: ${String(error)}` });
+      this.port.setStatus({ kind: "error", message: t`Could not read the template library: ${String(error)}` });
     }
     this.loaded = true;
     this.renderList();
@@ -212,12 +213,12 @@ export class ProjectTemplateController {
       const empty = document.createElement("p");
       empty.className = "project-template-empty";
       empty.textContent = this.activeTab === "offline"
-        ? "No templates downloaded yet. Create a project from the All templates tab to keep a downloaded copy."
+        ? t("No templates downloaded yet. Create a project from the All templates tab to keep a downloaded copy.")
         : this.activeTab === "user"
-          ? "No user templates yet. Add a .typsastra file to reuse it as a starting point."
+          ? t("No user templates yet. Add a .typsastra file to reuse it as a starting point.")
           : this.universe.length === 0 && (this.universeOffline || this.universeError)
-            ? "Typst Universe templates are unavailable offline. Downloaded templates still work."
-            : "No templates match your search.";
+            ? t("Typst Universe templates are unavailable offline. Downloaded templates still work.")
+            : t("No templates match your search.");
       elements.list.appendChild(empty);
       return;
     }
@@ -254,10 +255,10 @@ export class ProjectTemplateController {
     title.className = "project-template-name";
 
     if (selection.kind === "blank") {
-      title.textContent = "Blank project";
+      title.textContent = t("Blank project");
       const description = document.createElement("span");
       description.className = "project-template-description";
-      description.textContent = "Start with an empty main.typ.";
+      description.textContent = t("Start with an empty main.typ.");
       body.append(title, description);
       thumb.classList.add("is-blank");
       thumb.textContent = "＋";
@@ -266,7 +267,7 @@ export class ProjectTemplateController {
       title.textContent = item.version ? `${item.name}  ·  v${item.version}` : item.name;
       const description = document.createElement("span");
       description.className = "project-template-description";
-      description.textContent = item.description || "No description provided.";
+      description.textContent = item.description || t("No description provided.");
       const meta = document.createElement("span");
       meta.className = "project-template-meta";
       meta.textContent = [
@@ -278,7 +279,7 @@ export class ProjectTemplateController {
       if (findDownloadedTemplate(this.offline, item.name, item.version)) {
         const badge = document.createElement("span");
         badge.className = "project-template-badge";
-        badge.textContent = "Downloaded";
+        badge.textContent = t("Downloaded");
         body.appendChild(badge);
       }
       image.src = item.thumbnailUrl;
@@ -287,7 +288,7 @@ export class ProjectTemplateController {
       title.textContent = item.version ? `${item.name}  ·  v${item.version}` : item.name;
       const description = document.createElement("span");
       description.className = "project-template-description";
-      description.textContent = item.description || "No description provided.";
+      description.textContent = item.description || t("No description provided.");
       const meta = document.createElement("span");
       meta.className = "project-template-meta";
       meta.textContent = [
@@ -302,7 +303,7 @@ export class ProjectTemplateController {
       remove.className = "project-template-remove";
       remove.setAttribute("role", "button");
       remove.tabIndex = 0;
-      remove.textContent = "Remove";
+      remove.textContent = t("Remove");
       remove.addEventListener("click", event => {
         event.stopPropagation();
         void this.removeTemplate(item);
@@ -352,7 +353,7 @@ export class ProjectTemplateController {
     if (!elements) return;
     elements.create.disabled = this.selection === null || this.busy;
     if (this.step === "browse") {
-      elements.create.textContent = "Continue";
+      elements.create.textContent = t("Continue");
     }
   }
 
@@ -375,11 +376,11 @@ export class ProjectTemplateController {
     elements.destination.classList.remove("hidden");
     elements.back.classList.remove("hidden");
     elements.chosen.textContent = this.selection.kind === "blank"
-      ? "Blank project"
+      ? t("Blank project")
       : `${this.selection.item.name}${this.selection.kind === "universe" ? `  ·  v${this.selection.item.version}` : ""}`;
     elements.name.value = this.defaultName();
-    elements.parent.textContent = this.parentPath ? `In ${this.parentPath}` : "";
-    elements.create.textContent = "Create Project";
+    elements.parent.textContent = this.parentPath ? t`In ${this.parentPath}` : "";
+    elements.create.textContent = t("Create Project");
     this.validateName();
     requestAnimationFrame(() => {
       elements.name.focus();
@@ -388,7 +389,7 @@ export class ProjectTemplateController {
   }
 
   private defaultName(): string {
-    if (!this.selection || this.selection.kind === "blank") return "Untitled";
+    if (!this.selection || this.selection.kind === "blank") return t("Untitled");
     return this.selection.item.name;
   }
 
@@ -410,7 +411,7 @@ export class ProjectTemplateController {
     const chosen = await this.promptLocation();
     if (!chosen) return;
     const elements = this.elements;
-    if (elements) elements.parent.textContent = `In ${chosen}`;
+    if (elements) elements.parent.textContent = t`In ${chosen}`;
     this.validateName();
   }
 
@@ -418,7 +419,7 @@ export class ProjectTemplateController {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose where to create the project",
+      title: t("Choose where to create the project"),
     });
     if (typeof selected !== "string") return false;
     this.parentPath = selected;
@@ -510,14 +511,14 @@ export class ProjectTemplateController {
       const opened = await this.port.completeCreatedProject(project);
       this.close();
       if (!opened) {
-        await message(`The project was created at:\n\n${project.workspacePath}`, {
-          title: "Project Created",
+        await message(t`The project was created at:\n\n${project.workspacePath}`, {
+          title: t("Project Created"),
           kind: "info",
         });
       }
     } catch (error) {
-      this.port.setStatus({ kind: "error", message: `Project creation failed: ${error}` });
-      await message(String(error), { title: "Could Not Create Project", kind: "error" });
+      this.port.setStatus({ kind: "error", message: t`Project creation failed: ${error}` });
+      await message(String(error), { title: t("Could Not Create Project"), kind: "error" });
     } finally {
       this.setBusy(false, "");
     }
@@ -535,7 +536,7 @@ export class ProjectTemplateController {
     const selected = await open({
       directory: false,
       multiple: false,
-      filters: [{ name: "Typsastra Project", extensions: ["typsastra"] }],
+      filters: [{ name: t("Typsastra Project"), extensions: ["typsastra"] }],
     });
     if (typeof selected !== "string") return;
     const elements = this.elements;
@@ -547,8 +548,8 @@ export class ProjectTemplateController {
       this.renderTabs();
       this.renderList();
     } catch (error) {
-      if (elements) elements.status.textContent = `Could not add the template: ${String(error)}`;
-      await message(String(error), { title: "Could Not Add Template", kind: "error" });
+      if (elements) elements.status.textContent = t`Could not add the template: ${String(error)}`;
+      await message(String(error), { title: t("Could Not Add Template"), kind: "error" });
     } finally {
       this.setBusy(false, "");
     }
@@ -564,7 +565,7 @@ export class ProjectTemplateController {
       this.syncCreateButton();
     } catch (error) {
       const elements = this.elements;
-      if (elements) elements.status.textContent = `Could not remove the template: ${String(error)}`;
+      if (elements) elements.status.textContent = t`Could not remove the template: ${String(error)}`;
     }
   }
 }

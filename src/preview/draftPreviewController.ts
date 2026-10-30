@@ -8,6 +8,7 @@ import type { PreviewFrame, PreviewPageStatus } from "./previewFrame";
 import type { AppDialogController } from "../ui/appDialog";
 import type { ImageOptimizationWarning } from "../editor/imageWarnings";
 import type { LogConsoleEntryInput } from "../diagnostics/logConsoleController";
+import { t } from "../i18n";
 
 export type PreviewContentMode = "normal" | "draft";
 
@@ -308,12 +309,12 @@ export class DraftPreviewController {
       return;
     }
     const timing = this.port.renderMode() === "on-type"
-      ? "Live preview may update slowly while typing."
-      : "Preview may take longer to update after each save.";
-    const summary = `${timing} ${profile.uniqueImageCount.toLocaleString()} raster image${profile.uniqueImageCount === 1 ? "" : "s"} may use about ${formatFileSize(profile.estimatedTotalDecodedBytes)} when decoded. Click for details.`;
+      ? t("Live preview may update slowly while typing.")
+      : t("Preview may take longer to update after each save.");
+    const summary = t`${timing} ${profile.uniqueImageCount.toLocaleString()} raster image${profile.uniqueImageCount === 1 ? "" : "s"} may use about ${formatFileSize(profile.estimatedTotalDecodedBytes)} when decoded. Click for details.`;
     button.dataset.active = "true";
     button.title = summary;
-    button.setAttribute("aria-label", `Image-heavy document warning. ${summary}`);
+    button.setAttribute("aria-label", t`Image-heavy document warning. ${summary}`);
     button.classList.remove("hidden");
   }
 
@@ -326,16 +327,16 @@ export class DraftPreviewController {
     toggle.classList.toggle("active", draftActive);
     toggle.setAttribute("aria-checked", String(draftActive));
     const label = toggle.querySelector<HTMLElement>(".preview-content-mode-label");
-    if (label) label.textContent = draftActive ? "Draft" : "Normal";
+    if (label) label.textContent = draftActive ? t("Draft") : t("Normal");
     toggle.setAttribute("aria-label", draftActive
-      ? "Draft Preview active; switch to Normal Preview"
-      : "Normal Preview active; switch to Draft Preview");
+      ? t("Draft Preview active; switch to Normal Preview")
+      : t("Normal Preview active; switch to Draft Preview"));
     const mismatch = this.presentedModeValue !== this.modeValue;
     toggle.title = this.compiling || mismatch
-      ? `Preparing ${this.modeValue === "draft" ? "Draft" : "Normal"} Preview. The last successful ${this.presentedModeValue === "draft" ? "Draft" : "Normal"} Preview remains visible.`
+      ? t`Preparing ${t(this.modeValue === "draft" ? "Draft" : "Normal")} Preview. The last successful ${t(this.presentedModeValue === "draft" ? "Draft" : "Normal")} Preview remains visible.`
       : this.modeValue === "draft"
-        ? `Draft Preview is active. Click to return to Normal Preview. ${this.assetsValue.size} image asset(s) use ratio-preserving placeholders; ${this.diagnosticsValue.length} call(s) remain unchanged.`
-        : "Normal Preview is active. Click to switch to Draft Preview.";
+        ? t`Draft Preview is active. Click to return to Normal Preview. ${this.assetsValue.size} image asset(s) use ratio-preserving placeholders; ${this.diagnosticsValue.length} call(s) remain unchanged.`
+        : t("Normal Preview is active. Click to switch to Draft Preview.");
   }
 
   async changeMode(mode: PreviewContentMode): Promise<void> {
@@ -370,8 +371,8 @@ export class DraftPreviewController {
     }
     const action = await this.dialog.show({
       title: "Image-heavy Document",
-      subtitle: `${profile.uniqueImageCount} raster image${profile.uniqueImageCount === 1 ? "" : "s"} · ${formatFileSize(profile.estimatedTotalDecodedBytes)} estimated decoded`,
-      description: `This preview references ${profile.referenceCount.toLocaleString()} supported raster image${profile.referenceCount === 1 ? "" : "s"} across ${profile.uniqueImageCount.toLocaleString()} unique file${profile.uniqueImageCount === 1 ? "" : "s"}, totaling ${formatFileSize(profile.totalSourceBytes)} on disk.\n\nLargest assets: ${visibleItems.join("; ")}${additional}.\n\n${renderMode === "on-type" ? "Repeated on-type compilation may make editing less responsive." : "The preview may take longer to update after each save."} Compilation will continue normally, and Typsastra will not modify the images.`,
+      subtitle: t`${profile.uniqueImageCount} raster image${profile.uniqueImageCount === 1 ? "" : "s"} · ${formatFileSize(profile.estimatedTotalDecodedBytes)} estimated decoded`,
+      description: t`This preview references ${profile.referenceCount.toLocaleString()} supported raster image${profile.referenceCount === 1 ? "" : "s"} across ${profile.uniqueImageCount.toLocaleString()} unique file${profile.uniqueImageCount === 1 ? "" : "s"}, totaling ${formatFileSize(profile.totalSourceBytes)} on disk.\n\nLargest assets: ${visibleItems.join("; ")}${additional}.\n\n${renderMode === "on-type" ? "Repeated on-type compilation may make editing less responsive." : "The preview may take longer to update after each save."} Compilation will continue normally, and Typsastra will not modify the images.`,
       actions,
       cancelAction: "close",
     });
@@ -510,10 +511,10 @@ export class DraftPreviewController {
       ? "All statically detectable local image calls were replaced."
       : `${this.diagnosticsValue.length} image call(s) remain unchanged.\n\n${unresolved.join("\n")}${this.diagnosticsValue.length > unresolved.length ? `\n…and ${this.diagnosticsValue.length - unresolved.length} more.` : ""}`;
     await this.dialog.show({
-      title: "Draft Preview",
-      subtitle: `${assets.length.toLocaleString()} ratio-preserving placeholder${assets.length === 1 ? "" : "s"}`,
-      description: `Draft Preview keeps each source image's intrinsic aspect ratio and preserves the document's image sizing, fitting, and placement arguments. Hover or keyboard-focus a placeholder in the preview to inspect the original image.\n\nThe replaced images total ${formatFileSize(sourceBytes)} on disk and approximately ${formatFileSize(decodedBytes)} when decoded.\n\n${unresolvedSummary}\n\nPDF export always uses the original images.`,
-      actions: [{ id: "close", label: "Close", primary: true }],
+      title: t("Draft Preview"),
+      subtitle: t`${assets.length.toLocaleString()} ratio-preserving placeholder${assets.length === 1 ? "" : "s"}`,
+      description: t`Draft Preview keeps each source image's intrinsic aspect ratio and preserves the document's image sizing, fitting, and placement arguments. Hover or keyboard-focus a placeholder in the preview to inspect the original image.\n\nThe replaced images total ${formatFileSize(sourceBytes)} on disk and approximately ${formatFileSize(decodedBytes)} when decoded.\n\n${unresolvedSummary}\n\nPDF export always uses the original images.`,
+      actions: [{ id: "close", label: t("Close"), primary: true }],
       cancelAction: "close",
     });
   }

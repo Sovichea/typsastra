@@ -1,4 +1,5 @@
 import type { StoredUndockedPreviewWindow } from "../workspace/workspaceStateStore";
+import { t } from "../i18n";
 
 export function clampEditorPreviewSplitPct(
   requestedInputPct: number,
@@ -354,7 +355,7 @@ export class LayoutController {
         });
       } catch (error) {
         console.error("Failed to create WebviewWindow", error);
-        alert("Could not open external preview window.");
+        alert(t("Could not open external preview window."));
         restoreDock();
       }
     });

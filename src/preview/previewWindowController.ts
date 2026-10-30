@@ -12,6 +12,7 @@ import { PreviewOutlineNavigator, type PreviewSourceOutlineItem } from "./previe
 import type { PreviewFrame } from "./previewFrame";
 import type { PreviewViewportAnchor } from "./previewViewportAnchor";
 import type { StoredUndockedPreviewWindow } from "../workspace/workspaceStateStore";
+import { setLocalizedHtml, t } from "../i18n";
 
 const DEFAULT_UNDOCKED_PREVIEW_WIDTH = 800;
 const DEFAULT_UNDOCKED_PREVIEW_HEIGHT = 600;
@@ -99,7 +100,7 @@ export class PreviewWindowController {
 
     const undockBtn = document.getElementById("undock-preview-btn");
     if (undockBtn) {
-      undockBtn.title = "Dock Preview";
+      undockBtn.title = t("Dock Preview");
       undockBtn.addEventListener("click", () => {
         void Promise.all([
           this.publishCurrentScrollPosition(),
@@ -340,7 +341,7 @@ export class PreviewWindowController {
         <div class="dropdown-item preview-color-mode-item" data-preview-color-mode="${mode}" role="menuitemradio" aria-checked="${colorMode === mode}">
           <span>${label}</span><span class="preview-color-mode-check" aria-hidden="true">${colorMode === mode ? "✓" : ""}</span>
         </div>`;
-      menu.innerHTML = `
+      setLocalizedHtml(menu, `
         <div class="dropdown-item" data-preview-action="zoom-out">Zoom Out</div>
         <div class="dropdown-item" data-preview-action="zoom-fit">Fit to Width</div>
         <div class="dropdown-item" data-preview-action="zoom-in">Zoom In</div>
@@ -363,7 +364,7 @@ export class PreviewWindowController {
         <div class="dropdown-item" data-preview-action="export-pdf">Export PDF</div>
         <div class="dropdown-item" data-preview-action="open-external">Open in External Viewer</div>
         <div class="dropdown-separator"></div>
-        <div class="dropdown-item" data-preview-action="dock">Dock Preview</div>`;
+        <div class="dropdown-item" data-preview-action="dock">Dock Preview</div>`);
       menu.dataset.menuKind = "preview";
       menu.style.display = "block";
       const buttonRect = button.getBoundingClientRect();

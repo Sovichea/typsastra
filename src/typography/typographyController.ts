@@ -18,6 +18,7 @@ import {
 import { relativeFilePath } from "../platform/paths";
 import { filePathKey } from "../platform/paths";
 import { participatesInPreviewCompilation } from "../preview/previewPolicy";
+import { t } from "../i18n";
 
 export interface FontVariantLimitWarning {
   family: string;
@@ -152,7 +153,7 @@ export class TypographyController {
   public async confirmScaleRange(config: DocumentTypography): Promise<boolean> {
     const warning = this.scaleRangeWarning(config);
     if (!warning) return true;
-    return confirm(warning, { title: "Large Font Scale Adjustment", kind: "warning" });
+    return confirm(warning, { title: t("Large Font Scale Adjustment"), kind: "warning" });
   }
 
   public async unsupportedInternalScaleError(config: DocumentTypography): Promise<{
@@ -209,10 +210,10 @@ export class TypographyController {
     const warning = this.variantLimitWarning(await this.scaledFontSetStatus(config));
     if (!warning) return true;
     return confirm(warning, {
-      title: "Font Variant Cache Limit",
+      title: t("Font Variant Cache Limit"),
       kind: "warning",
-      okLabel: "Create Variant",
-      cancelLabel: "Cancel",
+      okLabel: t("Create Variant"),
+      cancelLabel: t("Cancel"),
     });
   }
 
@@ -362,7 +363,7 @@ export class TypographyController {
         this.lastInternalScaleError = errorKey;
         this.port.appendLog("error", "typography", unsupportedInternalScale.message);
         await message(unsupportedInternalScale.message, {
-          title: "Unsupported Built-in Font Scale",
+          title: t("Unsupported Built-in Font Scale"),
           kind: "error",
         });
       }
@@ -472,7 +473,7 @@ export class TypographyController {
         "typography",
         `Unable to prepare the manually selected font scale: ${String(error)}`,
       );
-      await message(String(error), { title: "Unable to Scale Font", kind: "error" });
+      await message(String(error), { title: t("Unable to Scale Font"), kind: "error" });
     }
   }
 }

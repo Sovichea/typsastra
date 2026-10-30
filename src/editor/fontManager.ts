@@ -11,6 +11,7 @@ import {
   type UnicodeFontPreference
 } from "./fontCatalog";
 import { editorFontTheme } from "./themes";
+import { t } from "../i18n";
 
 type UnicodeFontCandidate = typeof unicodeEditorFonts[number];
 type SystemFontCatalog = { all: string[]; monospace: string[] };
@@ -145,30 +146,30 @@ export class EditorFontManager {
     this.showSettingsAction = false;
     this.dismissDeclines = true;
     const languages = candidates.map(candidate => candidate.language).join(", ");
-    this.text.textContent = `${languages} text detected. Install ${candidates.length === 1 ? candidates[0].label : `${candidates.length} recommended fallback fonts`} for consistent Unicode rendering?`;
-    this.download.textContent = candidates.length === 1 ? `Install ${candidates[0].label}` : "Install recommended fonts";
+    this.text.textContent = t`${languages} text detected. Install ${candidates.length === 1 ? candidates[0].label : `${candidates.length} recommended fallback fonts`} for consistent Unicode rendering?`;
+    this.download.textContent = candidates.length === 1 ? t`Install ${candidates[0].label}` : t("Install recommended fonts");
     this.download.disabled = false;
     this.download.classList.remove("hidden");
-    this.dismiss.textContent = "Not now";
-    this.dismiss.setAttribute("aria-label", "Do not suggest this font again");
+    this.dismiss.textContent = t("Not now");
+    this.dismiss.setAttribute("aria-label", t("Do not suggest this font again"));
     this.breadcrumb.classList.remove("hidden");
   }
 
   private renderDeclined(): void {
     this.showSettingsAction = true;
     this.dismissDeclines = false;
-    this.text.textContent = "No font was downloaded. You can choose any installed Unicode fallback in Settings.";
-    this.download.textContent = "Open Settings";
+    this.text.textContent = t("No font was downloaded. You can choose any installed Unicode fallback in Settings.");
+    this.download.textContent = t("Open Settings");
     this.download.disabled = false;
     this.download.classList.remove("hidden");
-    this.dismiss.textContent = "Close";
-    this.dismiss.setAttribute("aria-label", "Close font notice");
+    this.dismiss.textContent = t("Close");
+    this.dismiss.setAttribute("aria-label", t("Close font notice"));
   }
 
   private renderDownloading(candidates: UnicodeFontCandidate[]): void {
     this.showSettingsAction = false;
     this.dismissDeclines = false;
-    this.text.textContent = `Downloading and installing ${candidates.length === 1 ? candidates[0].label : `${candidates.length} fallback fonts`} for the current user...`;
+    this.text.textContent = t`Downloading and installing ${candidates.length === 1 ? candidates[0].label : `${candidates.length} fallback fonts`} for the current user...`;
     this.download.classList.add("hidden");
     this.dismiss.classList.add("hidden");
     this.breadcrumb.classList.remove("hidden");
@@ -177,10 +178,10 @@ export class EditorFontManager {
   private renderApplied(candidates: UnicodeFontCandidate[]): void {
     this.showSettingsAction = false;
     this.dismissDeclines = false;
-    this.text.textContent = `${candidates.length === 1 ? candidates[0].label : `${candidates.length} fallback fonts`} ${candidates.length === 1 ? "was" : "were"} installed and selected automatically.`;
+    this.text.textContent = t`${candidates.length === 1 ? candidates[0].label : `${candidates.length} fallback fonts`} ${candidates.length === 1 ? "was" : "were"} installed and selected automatically.`;
     this.download.classList.add("hidden");
-    this.dismiss.textContent = "Close";
-    this.dismiss.setAttribute("aria-label", "Close font notice");
+    this.dismiss.textContent = t("Close");
+    this.dismiss.setAttribute("aria-label", t("Close font notice"));
     this.dismiss.classList.remove("hidden");
     this.breadcrumb.classList.remove("hidden");
   }
@@ -221,11 +222,11 @@ export class EditorFontManager {
     } catch (error) {
       this.showSettingsAction = false;
       this.dismissDeclines = false;
-      this.text.textContent = `Could not install the recommended fallback fonts: ${String(error)}`;
-      this.download.textContent = "Retry";
+      this.text.textContent = t`Could not install the recommended fallback fonts: ${String(error)}`;
+      this.download.textContent = t("Retry");
       this.download.disabled = false;
       this.download.classList.remove("hidden");
-      this.dismiss.textContent = "Close";
+      this.dismiss.textContent = t("Close");
       this.dismiss.classList.remove("hidden");
       this.breadcrumb.classList.remove("hidden");
     }

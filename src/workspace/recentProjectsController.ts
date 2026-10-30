@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { filePathKey } from "../platform/paths";
 import { shortcutLabel } from "../platform/shortcuts";
 import { createAppIcon } from "../ui/icons";
+import { t } from "../i18n";
 
 const storageKey = "typsastra-recent-projects";
 const maxRecentProjects = 32;
@@ -246,7 +247,7 @@ export class RecentProjectsController {
     menu.id = "recent-project-context-menu";
     menu.className = "recent-project-context-menu";
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Recent project actions");
+    menu.setAttribute("aria-label", t("Recent project actions"));
     const restoreFocus = () => {
       if (origin.isConnected) origin.focus();
       else if (this.popupOverlay && !this.popupOverlay.classList.contains("hidden")) this.popupSearch?.focus();
@@ -255,7 +256,7 @@ export class RecentProjectsController {
     const action = (label: string, run: () => void) => {
       const button = document.createElement("button");
       button.type = "button"; button.className = "dropdown-item";
-      button.setAttribute("role", "menuitem"); button.textContent = label;
+      button.setAttribute("role", "menuitem"); button.textContent = t(label);
       button.addEventListener("click", event => {
         event.stopPropagation(); this.closeContextMenu(); run(); restoreFocus();
       });
@@ -344,13 +345,13 @@ export class RecentProjectsController {
     section.replaceChildren();
     const title = document.createElement("div");
     title.className = "welcome-section-title";
-    title.textContent = "RECENT PROJECTS";
+    title.textContent = t("RECENT PROJECTS");
     section.appendChild(title);
 
     if (!projects.length) {
       const empty = document.createElement("div");
       empty.className = "welcome-empty";
-      empty.textContent = "No recent projects";
+      empty.textContent = t("No recent projects");
       section.appendChild(empty);
       return;
     }
@@ -409,7 +410,7 @@ export class RecentProjectsController {
     const showAll = document.createElement("button");
     showAll.type = "button";
     showAll.className = "dropdown-item";
-    showAll.textContent = "Show All Recent Projects…";
+    showAll.textContent = t("Show All Recent Projects…");
     showAll.addEventListener("click", event => {
       event.stopPropagation();
       this.showPopup();

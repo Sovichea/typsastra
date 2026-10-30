@@ -1,6 +1,7 @@
 import { createAppIcon } from "../ui/icons";
 import { filePathKey } from "../platform/paths";
 import { spellcheckConsoleGroupKey, type LogConsoleEntryInput } from "./logConsoleController";
+import { t } from "../i18n";
 
 export type SpellcheckSidebarEntry = {
   key: string;
@@ -103,7 +104,7 @@ export class SpellcheckSidebarPane {
     if (!this.entries.length) {
       const empty = document.createElement("div");
       empty.className = "outline-empty";
-      empty.textContent = "No unknown words in the active document.";
+      empty.textContent = t("No unknown words in the active document.");
       this.list.appendChild(empty);
       return;
     }
@@ -119,8 +120,8 @@ export class SpellcheckSidebarPane {
     word.className = "spellcheck-word";
     if (entry.ignored) word.classList.add("ignored");
     word.title = entry.ignored
-      ? `Ignored unknown word: “${entry.word}”`
-      : `Unknown word: “${entry.word}”`;
+      ? t`Ignored unknown word: “${entry.word}”`
+      : t`Unknown word: “${entry.word}”`;
     word.appendChild(createAppIcon(
       entry.ignored ? "info" : "triangleAlert",
       { size: 12, className: "spellcheck-word-icon" },
@@ -150,8 +151,8 @@ export class SpellcheckSidebarPane {
       item.dataset.offset = String(occurrence.offset);
       item.dataset.toOffset = String(occurrence.toOffset);
       item.classList.toggle("active", this.locationIsActive(item));
-      item.textContent = `${occurrence.fileName}:${occurrence.line}`;
-      item.title = `${occurrence.fileName}, line ${occurrence.line}, column ${occurrence.column}`;
+      item.textContent = t`${occurrence.fileName}:${occurrence.line}`;
+      item.title = t`${occurrence.fileName}, line ${occurrence.line}, column ${occurrence.column}`;
       item.addEventListener("click", () => {
         this.setActiveLocation(
           occurrence.filePath,
@@ -160,7 +161,7 @@ export class SpellcheckSidebarPane {
         );
         void this.onNavigate({
           kind: entry.ignored ? "info" : "warning",
-          message: `${entry.ignored ? "Ignored unknown word" : "Unknown word"}: “${entry.word}”`,
+          message: t`${entry.ignored ? t("Ignored unknown word") : t("Unknown word")}: “${entry.word}”`,
           source: entry.providers.join(", "),
           filePath: occurrence.filePath,
           fileName: occurrence.fileName,

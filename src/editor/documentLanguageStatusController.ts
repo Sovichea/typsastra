@@ -8,6 +8,7 @@ import type {
   DocumentLanguageService,
   ScriptLanguageAssignment,
 } from "./languageScopes";
+import { getLocale, t } from "../i18n";
 
 export interface DocumentLanguageStatusDependencies {
   editor(): EditorView;
@@ -87,28 +88,28 @@ export class DocumentLanguageStatusController {
       editor.state.doc,
       editor.state.selection.main.head,
     );
-    const text = selection ? this.selectionLabel(selection) : "No language context";
+    const text = selection ? this.selectionLabel(selection) : t("No language context");
     label.textContent = text;
     button.dataset.state = selection?.state ?? "none";
     button.title = selection?.state === "detected"
       ? selection.automatic
-        ? `${text} identified from Unicode script context. No Typst language setting or provider was used.`
-        : `${text} selected for ${selection.script.label} text. No language provider is available.`
+        ? t`${text} identified from Unicode script context. No Typst language setting or provider was used.`
+        : t`${text} selected for ${t(selection.script.label)} text. No language provider is available.`
       : selection
-        ? `${selection.script.label} script · ${text}. Used for spellcheck and word completion.`
-        : "Move the caret into text to see its spellcheck and word-completion language.";
-    button.setAttribute("aria-label", `Document language: ${text}`);
+        ? t`${t(selection.script.label)} script · ${text}. Used for spellcheck and word completion.`
+        : t("Move the caret into text to see its spellcheck and word-completion language.");
+    button.setAttribute("aria-label", t`Document language: ${text}`);
     if (!this.overlay()?.classList.contains("hidden")) this.renderModal();
   }
 
   private selectionLabel(selection: ReturnType<DocumentLanguageService["languageAt"]> & {}): string {
-    if (selection.state === "unavailable") return `${selection.script.label} — unavailable`;
-    if (selection.state === "unconfigured") return `${selection.script.label} — select language`;
-    if (!selection.languageTag) return selection.script.label;
+    if (selection.state === "unavailable") return t`${t(selection.script.label)} — unavailable`;
+    if (selection.state === "unconfigured") return t`${t(selection.script.label)} — select language`;
+    if (!selection.languageTag) return t(selection.script.label);
     const language = selection.displayName && ["Hani", "Bopo"].includes(selection.script.iso15924)
       ? selection.displayName
       : displayLanguageTag(selection.languageTag, selection.displayName ?? selection.script.label);
-    return selection.state === "missing" ? `${language} — not installed` : language;
+    return selection.state === "missing" ? t`${language} — not installed` : language;
   }
 
   private open(trigger: HTMLElement): void {
@@ -141,20 +142,20 @@ export class DocumentLanguageStatusController {
       row.className = "document-language-row";
       const name = document.createElement("span");
       name.className = "document-language-script";
-      name.textContent = script.label;
+      name.textContent = t(script.label);
       const select = document.createElement("select");
       select.dataset.scriptLanguage = script.iso15924;
-      select.setAttribute("aria-label", `${script.label} language`);
+      select.setAttribute("aria-label", t`${t(script.label)} language`);
       const prompt = document.createElement("option");
       prompt.value = "";
-      prompt.textContent = "Select language";
+      prompt.textContent = t("Select language");
       select.append(prompt, ...options.map(option => {
         const item = document.createElement("option");
         item.value = option.languageTag;
         const label = ["Hani", "Bopo"].includes(script.iso15924)
           ? option.displayName
           : displayLanguageTag(option.languageTag, option.displayName);
-        item.textContent = `${label}${option.installed ? "" : " · no provider"}`;
+        item.textContent = t`${label}${option.installed ? "" : " · no provider"}`;
         if (!option.installed) item.dataset.noProvider = "true";
         return item;
       }));
@@ -162,7 +163,7 @@ export class DocumentLanguageStatusController {
       if (assigned && !options.some(option => option.languageTag.toLowerCase() === assigned.toLowerCase())) {
         const unavailable = document.createElement("option");
         unavailable.value = assigned;
-        unavailable.textContent = `${displayLanguageTag(assigned, assigned)} · unavailable`;
+        unavailable.textContent = t`${displayLanguageTag(assigned, assigned)} · unavailable`;
         select.append(unavailable);
       }
       select.value = assigned;
@@ -196,17 +197,18 @@ export class DocumentLanguageStatusController {
   }
 
   private updateFeatureToggles(): void {
-    this.updateFeatureToggle("document-language-spellcheck", this.deps.spellcheckEnabled(), "Spellcheck");
-    this.updateFeatureToggle("document-language-completion", this.deps.wordCompletionEnabled(), "Word autocomplete");
+    this.updateFeatureToggle("document-language-spellcheck", this.deps.spellcheckEnabled(), t("Spellcheck"));
+    this.updateFeatureToggle("document-language-completion", this.deps.wordCompletionEnabled(), t("Word autocomplete"));
   }
 
   private updateFeatureToggle(id: string, enabled: boolean, label: string): void {
     const button = document.getElementById(id) as HTMLButtonElement | null;
     if (!button) return;
+    const state = enabled ? t("On") : t("Off");
     button.setAttribute("aria-pressed", String(enabled));
     button.dataset.enabled = String(enabled);
-    button.title = `${label}: ${enabled ? "On" : "Off"}`;
-    button.setAttribute("aria-label", `${label}: ${enabled ? "On" : "Off"}`);
+    button.title = t`${label}: ${state}`;
+    button.setAttribute("aria-label", t`${label}: ${state}`);
   }
 
   private apply(): void {
@@ -235,9 +237,10 @@ export class DocumentLanguageStatusController {
 export function displayLanguageTag(languageTag: string, fallback: string): string {
   try {
     const locale = new Intl.Locale(languageTag);
-    const language = new Intl.DisplayNames(["en"], { type: "language" }).of(locale.language) ?? fallback;
+    const displayLocale = getLocale();
+    const language = new Intl.DisplayNames([displayLocale], { type: "language" }).of(locale.language) ?? fallback;
     const region = locale.region
-      ? new Intl.DisplayNames(["en"], { type: "region" }).of(locale.region)
+      ? new Intl.DisplayNames([displayLocale], { type: "region" }).of(locale.region)
       : null;
     return region ? `${language} — ${region}` : language;
   } catch {

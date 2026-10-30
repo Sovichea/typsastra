@@ -22,18 +22,19 @@ import {
 import type { PreviewSyncController } from "./previewSyncController";
 import type { LowMemorySyncIndexController } from "./lowMemorySyncIndexController";
 import type { NavigationHistoryPort } from "../navigation/navigationHistoryController";
+import { t } from "../i18n";
 
 function ensureEditorCaretRippleStyle(): void {
   if (document.getElementById("typsastra-editor-caret-ripple-style")) return;
   const style = document.createElement("style");
   style.id = "typsastra-editor-caret-ripple-style";
-  style.textContent = `
+  style.textContent = t(`
     @keyframes typsastra-editor-caret-ripple {
       0% { opacity: 0; transform: scale(.55); box-shadow: 0 0 0 0 rgba(61,180,137,.38); }
       12% { opacity: 1; }
       100% { opacity: 0; transform: scale(3.1); box-shadow: 0 0 0 14px rgba(61,180,137,0); }
     }
-  `;
+  `);
   document.head.appendChild(style);
 }
 
@@ -200,10 +201,10 @@ export class PreviewSourceNavigationController {
     button.disabled = busy || !available;
     button.setAttribute("aria-busy", String(busy));
     const label = busy
-      ? "Locating cursor in preview..."
+      ? t("Locating cursor in preview...")
       : available
-        ? `Reveal Cursor in Preview (${shortcut})`
-        : "Reveal cursor is available when a compiled preview is ready";
+        ? t`Reveal Cursor in Preview (${shortcut})`
+        : t("Reveal cursor is available when a compiled preview is ready");
     button.title = label;
     button.setAttribute("aria-label", label);
   }

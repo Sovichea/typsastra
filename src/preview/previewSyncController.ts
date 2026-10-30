@@ -4,6 +4,7 @@ import { nativeFilePath } from "../platform/paths";
 import type { PreviewClickPoint } from "./previewFrame";
 import type { PreviewRefreshStyle } from "./previewPolicy";
 import type { SourceMapSessionController, SourceMapLogSource } from "./sourceMapSessionController";
+import { t } from "../i18n";
 
 export type PdfSyncContext = {
   rootPath: string | null;
@@ -184,13 +185,13 @@ export class PreviewSyncController {
     const request = { path, cursor };
     if (this.manualForwardGeneration !== null) {
       this.queuedManualForward = request;
-      this.dependencies.setStatus?.({ kind: "sync-pending", message: "Latest preview reveal queued" });
+      this.dependencies.setStatus?.({ kind: "sync-pending", message: t("Latest preview reveal queued") });
       return;
     }
     if (!this.canRevealManually()) {
       this.dependencies.setStatus?.({
         kind: "preview-ready",
-        message: "Wait for the compiled preview before revealing the cursor",
+        message: t("Wait for the compiled preview before revealing the cursor"),
       });
       return;
     }
@@ -420,14 +421,14 @@ export class PreviewSyncController {
   private async runManual(request: { path: string; cursor: number }): Promise<void> {
     if (!this.isEligible(request.path, request.cursor)) {
       this.log("forward sync", "info", `Reveal skipped: source offset ${request.cursor} is not textual Typst content.`);
-      this.dependencies.setStatus?.({ kind: "preview-ready", message: "This source position does not produce preview text" });
+      this.dependencies.setStatus?.({ kind: "preview-ready", message: t("This source position does not produce preview text") });
       return;
     }
     const generation = ++this.pdfForwardGeneration;
     this.manualForwardGeneration = generation;
     this.pendingPdfForward = null;
     this.refreshManualAction();
-    this.dependencies.setStatus?.({ kind: "sync-pending", message: "Locating cursor in preview..." });
+    this.dependencies.setStatus?.({ kind: "sync-pending", message: t("Locating cursor in preview...") });
     try {
       const requested = await this.handlePdfForward(request.path, request.cursor, generation);
       if (!requested && generation === this.manualForwardGeneration) {

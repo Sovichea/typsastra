@@ -11,7 +11,7 @@ describe("staged application updates", () => {
   test("downloads before offering an explicit restart", () => {
     expect(source).toContain("await this.update.download(event =>");
     expect(source).not.toContain("downloadAndInstall");
-    expect(source).toContain('this.badge.textContent = "Restart to update"');
+    expect(source).toContain('this.badge.textContent = t("Restart to update")');
     expect(source).toContain("await this.update.install()");
     expect(source).toContain("if (relaunchAfterInstall) await relaunch()");
   });

@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 export type PreviewFreshness = {
   status: "current" | "outdated" | "compiling" | "failed";
   externalFiles: readonly string[];
@@ -78,7 +80,7 @@ export function renderPreviewFreshnessBanner(state: PreviewFreshness, root: Docu
   const toolbarButton = root.getElementById("preview-recompile-btn") as HTMLButtonElement | null;
   if (toolbarButton) {
     toolbarButton.disabled = state.status === "compiling" || !!state.lspErrors;
-    toolbarButton.title = state.lspErrors ? "Fix source errors reported by the language server before recompiling." : "Recompile preview";
+    toolbarButton.title = state.lspErrors ? t("Fix source errors reported by the language server before recompiling.") : t("Recompile preview");
   }
   const banner = root.getElementById("preview-status-banner");
   if (!banner) return;
@@ -86,19 +88,19 @@ export function renderPreviewFreshnessBanner(state: PreviewFreshness, root: Docu
     || root.getElementById("preview-container-wrapper")?.dataset.previewStatusEnabled === "false";
   banner.dataset.status = state.status;
   const label = banner.querySelector<HTMLElement>("[data-preview-status-label]");
-  if (label) label.textContent = state.status === "compiling" ? "Compiling preview..."
-    : state.status === "failed" ? "Compilation failed - showing previous preview"
-    : "Source changed - preview outdated";
+  if (label) label.textContent = state.status === "compiling" ? t("Compiling preview...")
+    : state.status === "failed" ? t("Compilation failed - showing previous preview")
+    : t("Source changed - preview outdated");
   const detail = banner.querySelector<HTMLElement>("[data-preview-status-detail]");
   if (detail) {
     const count = state.externalFiles.length;
-    detail.textContent = count ? `${count} file${count === 1 ? "" : "s"} changed externally. Recompile when external editing is complete.` : "";
+    detail.textContent = count ? t`${count} file${count === 1 ? "" : "s"} changed externally. Recompile when external editing is complete.` : "";
     detail.title = state.externalFiles.join("\n");
   }
   const button = banner.querySelector<HTMLButtonElement>("[data-preview-status-recompile]");
   if (button) {
     button.disabled = state.status === "compiling" || !!state.lspErrors;
-    button.title = state.lspErrors ? "Fix source errors reported by the language server before recompiling." : "Recompile preview";
+    button.title = state.lspErrors ? t("Fix source errors reported by the language server before recompiling.") : t("Recompile preview");
     button.onclick = () => {
       if (!button.disabled) root.getElementById("preview-recompile-btn")?.click();
     };

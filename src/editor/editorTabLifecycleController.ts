@@ -8,6 +8,7 @@ import type { TypographyController } from "../typography/typographyController";
 import type { EditorSessionController } from "./editorSessionController";
 import type { EditorTab, PreviewSessionState } from "./editorTab";
 import type { EditorTabPresentationController } from "./editorTabPresentationController";
+import { t } from "../i18n";
 
 export interface EditorTabLoadOptions {
   temporary?: boolean;
@@ -65,8 +66,8 @@ export class EditorTabLifecycleController {
     const tab = tabs[tabIndex];
     if (!skipDirtyCheck && tab.isDirty) {
       const shouldClose = await confirm(
-        `Close ${tab.title ?? fileNameFromPath(tab.path)} without saving?`,
-        { title: "Unsaved Changes", kind: "warning" },
+        t`Close ${tab.title ?? fileNameFromPath(tab.path)} without saving?`,
+        { title: t("Unsaved Changes"), kind: "warning" },
       );
       if (!shouldClose) return;
       await this.dependencies.discardRecoverySnapshot(tab);

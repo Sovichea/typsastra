@@ -1,5 +1,6 @@
 import { createAppIcon } from "../ui/icons";
 import { filePathKey } from "../platform/paths";
+import { t } from "../i18n";
 
 export type LogEntryKind = "error" | "warning" | "info" | "log" | "hint";
 export type LogEntryChannel = "lsp" | "images" | "dev";
@@ -297,7 +298,7 @@ export class LogConsoleController {
     if (!entries.length) {
       const empty = document.createElement("div");
       empty.className = "log-console-empty";
-      empty.textContent = "No problems";
+      empty.textContent = t("No problems");
       this.body.appendChild(empty);
       return;
     }
@@ -371,9 +372,9 @@ export class LogConsoleController {
     const location = document.createElement("span");
     location.className = "log-entry-position";
     if (entry.locations?.length) {
-      location.textContent = `${entry.locations.length} location${entry.locations.length === 1 ? "" : "s"}`;
+      location.textContent = t`${entry.locations.length} location${entry.locations.length === 1 ? "" : "s"}`;
     } else if (entry.line) {
-      location.textContent = `[Ln ${entry.line}, Col ${entry.column ?? 1}]`;
+      location.textContent = t`[Ln ${entry.line}, Col ${entry.column ?? 1}]`;
     }
     item.append(icon, message, source, location);
     if (!entry.locations?.length) {
@@ -401,7 +402,7 @@ export class LogConsoleController {
       occurrenceButton.dataset.filePath = occurrence.filePath ?? entry.filePath ?? "";
       occurrenceButton.dataset.offset = String(occurrence.offset ?? "");
       occurrenceButton.dataset.toOffset = String(occurrence.toOffset ?? occurrence.offset ?? "");
-      occurrenceButton.textContent = `Ln ${occurrence.line}, Col ${occurrence.column}`;
+      occurrenceButton.textContent = t`Ln ${occurrence.line}, Col ${occurrence.column}`;
       occurrenceButton.addEventListener("click", () => {
         void this.onNavigate({ ...entry, ...occurrence, locations: undefined });
       });
@@ -439,7 +440,7 @@ export class LogConsoleController {
     this.setTabCount("dev", this.logs.filter(entry => entry.channel === "dev").length);
     this.toggleButton.dataset.state = errors ? "error" : totalWarnings ? "warning" : "ok";
     this.toggleButton.setAttribute("aria-expanded", String(this.visible));
-    this.toggleButton.setAttribute("aria-label", `${this.visible ? "Hide" : "Show"} log console, ${errors} error${errors === 1 ? "" : "s"}, ${totalWarnings} warning${totalWarnings === 1 ? "" : "s"}`);
+    this.toggleButton.setAttribute("aria-label", t`${this.visible ? "Hide" : "Show"} log console, ${errors} error${errors === 1 ? "" : "s"}, ${totalWarnings} warning${totalWarnings === 1 ? "" : "s"}`);
   }
 
   private setTabCount(tab: LogConsoleTab, value: number): void {

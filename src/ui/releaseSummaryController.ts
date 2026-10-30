@@ -1,6 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { releaseSummaryForVersion, shouldShowReleaseSummary } from "../releaseNotes";
+import { t } from "../i18n";
 
 const RELEASE_SUMMARY_SEEN_KEY_PREFIX = "typsastra:release-summary-seen";
 
@@ -26,7 +27,7 @@ export class ReleaseSummaryController {
     const detailsButton = document.getElementById("release-summary-details") as HTMLButtonElement | null;
     if (!summary || !overlay || !title || !subtitle || !highlights || !closeButton || !doneButton || !detailsButton) return;
 
-    title.textContent = `What's new in Typsastra ${summary.version}`;
+    title.textContent = t`What's new in Typsastra ${summary.version}`;
     subtitle.textContent = summary.title;
     highlights.replaceChildren(...summary.highlights.map(highlight => {
       const item = document.createElement("li");

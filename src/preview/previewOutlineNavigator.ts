@@ -1,5 +1,6 @@
 import { createAppIcon } from "../ui/icons";
 import type { PdfiumDestination, PdfiumOutlineItem } from "./pdfiumDocument";
+import { t } from "../i18n";
 
 export type PreviewOutlineEntry = {
   id: string;
@@ -76,15 +77,15 @@ export class PreviewOutlineNavigator {
   public constructor(private readonly options: PreviewOutlineNavigatorOptions) {
     this.panel = document.createElement("aside");
     this.panel.className = "preview-outline-panel hidden";
-    this.panel.setAttribute("aria-label", "Preview outline");
+    this.panel.setAttribute("aria-label", t("Preview outline"));
 
     this.header = document.createElement("div");
     this.header.className = "preview-outline-header";
-    this.header.title = "Drag to reposition";
+    this.header.title = t("Drag to reposition");
 
     const title = document.createElement("span");
     title.className = "preview-outline-title";
-    title.textContent = "Outline";
+    title.textContent = t("Outline");
 
     this.count = document.createElement("span");
     this.count.className = "preview-outline-count";
@@ -104,7 +105,7 @@ export class PreviewOutlineNavigator {
     this.body.className = "preview-outline-body";
     this.body.id = "preview-outline-body";
     this.body.setAttribute("role", "tree");
-    this.body.setAttribute("aria-label", "Document outline");
+    this.body.setAttribute("aria-label", t("Document outline"));
 
     this.panel.append(this.header, this.body);
     this.options.host.appendChild(this.panel);
@@ -150,7 +151,7 @@ export class PreviewOutlineNavigator {
   }
 
   private updateMinimizeControl(): void {
-    const label = this.minimized ? "Restore outline" : "Minimize outline";
+    const label = this.minimized ? t("Restore outline") : t("Minimize outline");
     this.minimizeButton.title = label;
     this.minimizeButton.setAttribute("aria-label", label);
     this.minimizeButton.setAttribute("aria-expanded", String(!this.minimized));
@@ -159,7 +160,7 @@ export class PreviewOutlineNavigator {
     this.minimizeButton.replaceChildren(
       createAppIcon(this.minimized ? "chevronDown" : "minimize2", { size: 13 }),
     );
-    this.header.title = this.minimized ? "" : "Drag to reposition";
+    this.header.title = this.minimized ? "" : t("Drag to reposition");
   }
 
   private beginDrag(event: PointerEvent, handle: HTMLElement): void {
@@ -224,7 +225,7 @@ export class PreviewOutlineNavigator {
       this.selectedId = null;
       const empty = document.createElement("div");
       empty.className = "preview-outline-empty";
-      empty.textContent = "No outline in this document.";
+      empty.textContent = t("No outline in this document.");
       this.body.replaceChildren(empty);
       return;
     }
@@ -253,7 +254,7 @@ export class PreviewOutlineNavigator {
         disclosure.className = "preview-outline-disclosure";
         disclosure.classList.toggle("collapsed", isCollapsed);
         disclosure.setAttribute("aria-expanded", String(!isCollapsed));
-        disclosure.setAttribute("aria-label", `${isCollapsed ? "Expand" : "Collapse"} ${entry.title}`);
+        disclosure.setAttribute("aria-label", t`${isCollapsed ? "Expand" : "Collapse"} ${entry.title}`);
         disclosure.appendChild(createAppIcon("chevronDown", { size: 12 }));
         disclosure.addEventListener("click", event => {
           event.stopPropagation();

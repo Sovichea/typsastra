@@ -68,7 +68,7 @@ describe("editor and document controller extraction", () => {
 
     expect(app).toContain("return this.pinnedMainTypographyController.prepare(path)");
     expect(typography).toContain("export interface PinnedMainTypographyDependencies");
-    expect(typography).toContain('title: "Prepare Document Fonts?"');
+    expect(typography).toContain('title: t("Prepare Document Fonts?")');
     expect(typography).toContain("prepareMainFileFonts(typography)");
     expectTypedBoundary(typography);
   });

@@ -184,7 +184,7 @@ describe("editor search navigation", () => {
     expect(source).toContain('iconButton("next", "Next match", "arrowDown"');
     expect(source).toContain('iconToggle(this.caseField, "Match case", "caseSensitive")');
     expect(source).toContain('iconToggle(this.diacriticsField, "Match diacritics", "languages")');
-    expect(source).toContain('field.setAttribute("aria-label", label)');
+    expect(source).toContain('field.setAttribute("aria-label", t(label))');
     expect(css).toContain(".cm-panel.cm-search .cm-search-icon-toggle:has(input:checked)");
     expect(css).toContain("width: 100% !important");
     expect(css).toContain("height: calc(var(--editor-line-height-px, 23.8px) + 10px) !important");

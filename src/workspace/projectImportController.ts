@@ -8,6 +8,7 @@ import {
 } from "../projectArchive";
 import type { ToolchainStatus } from "../toolchain/toolchainController";
 import { formatFileSize } from "./largeFileOpening";
+import { t } from "../i18n";
 
 export interface ProjectImportControllerPort {
   setStatus(status: LspStatus): void;
@@ -29,12 +30,12 @@ export class ProjectImportController {
     const selected = archivePath ?? await open({
       directory: false,
       multiple: false,
-      filters: [{ name: "Typsastra Project", extensions: ["typsastra", "typstella"] }],
+      filters: [{ name: t("Typsastra Project"), extensions: ["typsastra", "typstella"] }],
     });
     if (typeof selected !== "string") return;
 
     try {
-      this.port.setStatus({ kind: "starting", message: "Inspecting Typsastra project..." });
+      this.port.setStatus({ kind: "starting", message: t("Inspecting Typsastra project...") });
       let inspection = await this.inspect(selected);
       const requiredTinymist = inspection.manifest.toolchain.tinymistVersion;
       const requiredTypst = inspection.manifest.toolchain.typstVersion;
@@ -45,10 +46,10 @@ export class ProjectImportController {
           `This project requires Tinymist ${requiredTinymist} with Typst ${requiredTypst}. `
           + "The compatible version is installed but not active. Use it for this import?",
           {
-            title: "Compatible Toolchain Available",
+            title: t("Compatible Toolchain Available"),
             kind: "info",
-            okLabel: "Use Compatible Version",
-            cancelLabel: "Other Options",
+            okLabel: t("Use Compatible Version"),
+            cancelLabel: t("Other Options"),
           },
         );
         if (useInstalled) {
@@ -76,13 +77,13 @@ export class ProjectImportController {
       const destinationParent = await open({
         directory: true,
         multiple: false,
-        title: "Choose where to import the project",
+        title: t("Choose where to import the project"),
       });
       if (typeof destinationParent !== "string") return;
       const destination = await this.chooseDestination(inspection, destinationParent);
       if (!destination) return;
 
-      this.port.setStatus({ kind: "starting", message: "Verifying and importing project..." });
+      this.port.setStatus({ kind: "starting", message: t("Verifying and importing project...") });
       const imported = await this.runCancellableImport({
         archivePath: selected,
         destinationPath: destination.path,
@@ -91,14 +92,14 @@ export class ProjectImportController {
       });
       const completedInWorkspace = await this.port.completeImport(imported, destination.name);
       if (!completedInWorkspace) {
-        await message(`The project was imported to:\n\n${imported.workspacePath}`, {
-          title: "Project Imported",
+        await message(t`The project was imported to:\n\n${imported.workspacePath}`, {
+          title: t("Project Imported"),
           kind: "info",
         });
       }
     } catch (error) {
-      this.port.setStatus({ kind: "error", message: `Project import failed: ${error}` });
-      await message(String(error), { title: "Typsastra Project Import Failed", kind: "error" });
+      this.port.setStatus({ kind: "error", message: t`Project import failed: ${error}` });
+      await message(String(error), { title: t("Typsastra Project Import Failed"), kind: "error" });
     }
   }
 
@@ -116,10 +117,10 @@ export class ProjectImportController {
       `This project was exported with Tinymist ${requiredTinymist}, which embeds Typst ${requiredTypst}. `
       + "Download and activate that compatible version before importing?",
       {
-        title: "Compatible Toolchain Required",
+        title: t("Compatible Toolchain Required"),
         kind: "info",
-        okLabel: "Download Compatible Version",
-        cancelLabel: "Other Options",
+        okLabel: t("Download Compatible Version"),
+        cancelLabel: t("Other Options"),
       },
     );
     if (!downloadCompatible) {
@@ -130,7 +131,7 @@ export class ProjectImportController {
     try {
       this.port.setStatus({
         kind: "starting",
-        message: `Downloading Tinymist ${requiredTinymist} for imported project...`,
+        message: t`Downloading Tinymist ${requiredTinymist} for imported project...`,
       });
       const status = await invoke<ToolchainStatus>("install_tinymist_toolchain", {
         version: requiredTinymist,
@@ -149,10 +150,10 @@ export class ProjectImportController {
           + `${status.typstVersion ?? "unknown"}, but the project requires Typst ${requiredTypst}.\n\n`
           + "Import with this incompatible version anyway?",
           {
-            title: "Downloaded Toolchain Is Incompatible",
+            title: t("Downloaded Toolchain Is Incompatible"),
             kind: "warning",
-            okLabel: "Import Anyway",
-            cancelLabel: "Cancel",
+            okLabel: t("Import Anyway"),
+            cancelLabel: t("Cancel"),
           },
         );
         return useMismatch
@@ -176,10 +177,10 @@ export class ProjectImportController {
         `The compatible toolchain could not be downloaded or verified.\n\n${String(downloadError)}\n\n`
         + "Import with the current environment without a compatibility guarantee?",
         {
-          title: "Compatible Toolchain Unavailable",
+          title: t("Compatible Toolchain Unavailable"),
           kind: "warning",
-          okLabel: "Import Anyway",
-          cancelLabel: "Cancel",
+          okLabel: t("Import Anyway"),
+          cancelLabel: t("Cancel"),
         },
       );
       return importAfterFailure
@@ -211,7 +212,7 @@ export class ProjectImportController {
 
     originalName.textContent = inspection.manifest.project.name;
     parent.textContent = parentPath;
-    details.textContent = `${inspection.entryCount} archive entries · ${formatFileSize(inspection.totalUncompressedBytes)} uncompressed`;
+    details.textContent = t`${inspection.entryCount} archive entries · ${formatFileSize(inspection.totalUncompressedBytes)} uncompressed`;
     input.value = inspection.suggestedFolderName;
     resolvedPath.textContent = "";
     validation.textContent = "";
@@ -333,13 +334,13 @@ export class ProjectImportController {
     progress.setAttribute("role", "status");
     progress.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:10000;display:flex;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--ui-hover);border-radius:8px;background:var(--ui-bg);color:var(--ui-text);box-shadow:0 8px 24px rgba(0,0,0,.3)";
     const label = document.createElement("span");
-    label.textContent = "Verifying and extracting Typsastra project…";
+    label.textContent = t("Verifying and extracting Typsastra project…");
     const cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.textContent = "Cancel";
+    cancel.textContent = t("Cancel");
     cancel.addEventListener("click", () => {
       cancel.disabled = true;
-      label.textContent = "Cancelling import safely…";
+      label.textContent = t("Cancelling import safely…");
       void invoke("cancel_typsastra_project_import", { operationId });
     });
     progress.append(label, cancel);
@@ -363,10 +364,10 @@ export class ProjectImportController {
       + `Typst ${inspection.manifest.toolchain.typstVersion}. ${active}\n\n`
       + "Importing with the current environment is allowed, but rendering compatibility is not guaranteed.",
       {
-        title: "Import Without Compatibility Guarantee?",
+        title: t("Import Without Compatibility Guarantee?"),
         kind: "warning",
-        okLabel: "Import Anyway",
-        cancelLabel: "Cancel",
+        okLabel: t("Import Anyway"),
+        cancelLabel: t("Cancel"),
       },
     );
   }

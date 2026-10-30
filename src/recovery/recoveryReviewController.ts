@@ -11,6 +11,7 @@ import {
   splitDiffHunk,
   type TextDiffSide,
 } from "./textDiff";
+import { t } from "../i18n";
 
 type RecoveryReviewStatus = "unchanged" | "changed" | "missing" | "untitled" | "error";
 
@@ -239,7 +240,7 @@ export class RecoveryReviewController {
 
   private render(): void {
     const listing = this.deps.recovery().currentListing();
-    this.usage.textContent = `${formatBytes(listing.totalBytes)} of ${formatBytes(listing.limitBytes)} recovery storage used.`;
+    this.usage.textContent = t`${formatBytes(listing.totalBytes)} of ${formatBytes(listing.limitBytes)} recovery storage used.`;
     this.usage.classList.toggle("warning", listing.totalBytes > listing.limitBytes * 0.8);
     this.list.replaceChildren(
       ...this.rows.map(row => this.renderRow(row)),
@@ -259,15 +260,15 @@ export class RecoveryReviewController {
     title.textContent = row.title;
     const badge = document.createElement("span");
     badge.className = `recovery-status recovery-status-${row.status}`;
-    badge.textContent = row.status === "unchanged" ? "unchanged on disk"
-      : row.status === "changed" ? "disk changed"
-      : row.status === "missing" ? "file missing"
-      : row.status === "untitled" ? "untitled buffer"
-      : "needs attention";
+    badge.textContent = row.status === "unchanged" ? t("unchanged on disk")
+      : row.status === "changed" ? t("disk changed")
+      : row.status === "missing" ? t("file missing")
+      : row.status === "untitled" ? t("untitled buffer")
+      : t("needs attention");
     title.appendChild(badge);
     const meta = document.createElement("div");
     meta.className = "recovery-row-meta";
-    meta.textContent = `${row.untitled ? "Untitled buffer" : row.path ?? "No path"} · ${formatTimestamp(row.timestampMs)} · ${formatBytes(row.bytes)}`;
+    meta.textContent = t`${row.untitled ? t("Untitled buffer") : row.path ?? t("No path")} · ${formatTimestamp(row.timestampMs)} · ${formatBytes(row.bytes)}`;
     const status = document.createElement("div");
     status.className = "recovery-row-status";
     status.textContent = row.message;
@@ -297,11 +298,11 @@ export class RecoveryReviewController {
     title.textContent = row.fileName;
     const badge = document.createElement("span");
     badge.className = "recovery-status recovery-status-error";
-    badge.textContent = "corrupt record";
+    badge.textContent = t("corrupt record");
     title.appendChild(badge);
     const status = document.createElement("div");
     status.className = "recovery-row-status";
-    status.textContent = `${row.error} · ${formatBytes(row.bytes)}`;
+    status.textContent = t`${row.error} · ${formatBytes(row.bytes)}`;
     main.append(title, status);
     const actions = document.createElement("div");
     actions.className = "recovery-row-actions";
@@ -314,7 +315,7 @@ export class RecoveryReviewController {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `settings-secondary-button ${className}`.trim();
-    button.textContent = label;
+    button.textContent = t(label);
     button.addEventListener("click", action);
     return button;
   }

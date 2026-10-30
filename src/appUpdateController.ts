@@ -1,6 +1,7 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { AppDialogController } from "./ui/appDialog";
+import { t } from "./i18n";
 
 type UpdateState = "available" | "downloading" | "ready" | "installing";
 
@@ -54,10 +55,10 @@ export class AppUpdateController {
     this.availableVersion = rawVersion;
     this.state = "available";
     const version = displayVersion(rawVersion);
-    this.badge.textContent = `Update ${version}`;
+    this.badge.textContent = t`Update ${version}`;
     this.badge.title = this.developmentSimulation
-      ? `Test Typsastra ${version} update flow (development simulation)`
-      : `Typsastra ${version} is available`;
+      ? t`Test Typsastra ${version} update flow (development simulation)`
+      : t`Typsastra ${version} is available`;
     this.badge.hidden = false;
   }
 
@@ -72,12 +73,12 @@ export class AppUpdateController {
   private async confirmAndDownload(): Promise<void> {
     if (!this.availableVersion || !this.badge || this.state !== "available") return;
     const action = await this.dialog.show({
-      title: "Download Typsastra Update",
-      subtitle: `${displayVersion(this.availableVersion)} is available`,
-      description: "Download the update now? You can continue working and choose when to restart after the download finishes.",
+      title: t("Download Typsastra Update"),
+      subtitle: t`${displayVersion(this.availableVersion)} is available`,
+      description: t("Download the update now? You can continue working and choose when to restart after the download finishes."),
       actions: [
-        { id: "later", label: "Later" },
-        { id: "download", label: "Download Update", primary: true }
+        { id: "later", label: t("Later") },
+        { id: "download", label: t("Download Update"), primary: true }
       ],
       cancelAction: "later"
     });
@@ -85,7 +86,7 @@ export class AppUpdateController {
 
     this.state = "downloading";
     this.badge.disabled = true;
-    this.badge.textContent = "Downloading...";
+    this.badge.textContent = t("Downloading...");
 
     if (this.developmentSimulation) {
       await this.simulateDownload();
@@ -103,7 +104,7 @@ export class AppUpdateController {
           downloaded += event.data.chunkLength;
           if (contentLength && contentLength > 0) {
             const percent = Math.min(100, Math.round((downloaded / contentLength) * 100));
-            this.badge!.textContent = `Downloading ${percent}%`;
+            this.badge!.textContent = t`Downloading ${percent}%`;
           }
         }
       });
@@ -112,7 +113,7 @@ export class AppUpdateController {
       console.error("Failed to download Typsastra update:", error);
       await this.showNotice({
         title: "Update Download Failed",
-        description: `The update could not be downloaded.\n\n${String(error)}`
+        description: t`The update could not be downloaded.\n\n${String(error)}`
       });
       this.resetAvailableBadge();
     }
@@ -124,12 +125,12 @@ export class AppUpdateController {
       ? "\n\nYou have unsaved changes. Save them before restarting or they will be lost."
       : "";
     const action = await this.dialog.show({
-      title: "Restart to Update",
-      subtitle: `${displayVersion(this.availableVersion)} is ready to install`,
-      description: `Install the update and restart Typsastra now?${unsavedWarning}`,
+      title: t("Restart to Update"),
+      subtitle: t`${displayVersion(this.availableVersion)} is ready to install`,
+      description: t`Install the update and restart Typsastra now?${unsavedWarning}`,
       actions: [
-        { id: "later", label: "Later" },
-        { id: "restart", label: "Restart to Update", primary: true }
+        { id: "later", label: t("Later") },
+        { id: "restart", label: t("Restart to Update"), primary: true }
       ],
       cancelAction: "later"
     });
@@ -146,11 +147,11 @@ export class AppUpdateController {
     }
     if (this.state === "downloading") {
       const action = await this.dialog.show({
-        title: "Update Download in Progress",
-        description: "Typsastra is still downloading an update. Close now and discard this download?",
+        title: t("Update Download in Progress"),
+        description: t("Typsastra is still downloading an update. Close now and discard this download?"),
         actions: [
-          { id: "keep", label: "Keep Downloading" },
-          { id: "close", label: "Close Typsastra", primary: true }
+          { id: "keep", label: t("Keep Downloading") },
+          { id: "close", label: t("Close Typsastra"), primary: true }
         ],
         cancelAction: "keep"
       });
@@ -159,13 +160,13 @@ export class AppUpdateController {
     if (this.state !== "ready") return true;
 
     const choice = await this.dialog.show({
-      title: "Update ready",
-      subtitle: "Choose whether to install it before Typsastra closes",
-      description: "The downloaded update has been verified and is ready to install. You can install it now, close without updating, or return to Typsastra.",
+      title: t("Update ready"),
+      subtitle: t("Choose whether to install it before Typsastra closes"),
+      description: t("The downloaded update has been verified and is ready to install. You can install it now, close without updating, or return to Typsastra."),
       actions: [
-        { id: "skip", label: "Close Without Updating" },
-        { id: "cancel", label: "Cancel" },
-        { id: "install", label: "Install and Close", primary: true }
+        { id: "skip", label: t("Close Without Updating") },
+        { id: "cancel", label: t("Cancel") },
+        { id: "install", label: t("Install and Close"), primary: true }
       ],
       cancelAction: "cancel"
     });
@@ -178,7 +179,7 @@ export class AppUpdateController {
     if (!this.badge || this.state !== "ready") return false;
     this.state = "installing";
     this.badge.disabled = true;
-    this.badge.textContent = "Installing...";
+    this.badge.textContent = t("Installing...");
 
     if (this.developmentSimulation) {
       await delay(350);
@@ -204,7 +205,7 @@ export class AppUpdateController {
       console.error("Failed to install Typsastra update:", error);
       await this.showNotice({
         title: "Update Failed",
-        description: `The update could not be installed.\n\n${String(error)}`
+        description: t`The update could not be installed.\n\n${String(error)}`
       });
       this.markReady();
       return false;
@@ -214,7 +215,7 @@ export class AppUpdateController {
   private async simulateDownload(): Promise<void> {
     for (const percent of [20, 45, 70, 100]) {
       await delay(180);
-      this.badge!.textContent = `Downloading ${percent}%`;
+      this.badge!.textContent = t`Downloading ${percent}%`;
     }
     await delay(220);
     this.markReady();
@@ -224,15 +225,15 @@ export class AppUpdateController {
     if (!this.badge || !this.availableVersion) return;
     this.state = "ready";
     this.badge.disabled = false;
-    this.badge.textContent = "Restart to update";
-    this.badge.title = `Restart to install Typsastra ${displayVersion(this.availableVersion)}`;
+    this.badge.textContent = t("Restart to update");
+    this.badge.title = t`Restart to install Typsastra ${displayVersion(this.availableVersion)}`;
   }
 
   private resetAvailableBadge(): void {
     if (!this.badge || !this.availableVersion) return;
     this.state = "available";
     this.badge.disabled = false;
-    this.badge.textContent = `Update ${displayVersion(this.availableVersion)}`;
+    this.badge.textContent = t`Update ${displayVersion(this.availableVersion)}`;
   }
 
   private async showNotice(options: { title: string; description: string }): Promise<void> {
@@ -240,7 +241,7 @@ export class AppUpdateController {
       title: options.title,
       description: options.description,
       actions: [
-        { id: "dismiss", label: "OK", primary: true }
+        { id: "dismiss", label: t("OK"), primary: true }
       ],
       cancelAction: "dismiss"
     });

@@ -1,6 +1,7 @@
 import { filePathKey } from "../platform/paths";
 import type { LspStatus } from "../compiler/lsp";
 import type { PreviewFrame } from "./previewFrame";
+import { t } from "../i18n";
 
 export interface TinymistPreviewRecoveryDependencies {
   workspaceRootPath(): string | null;
@@ -39,7 +40,7 @@ export class TinymistPreviewRecoveryController {
       "warning",
       `Render generation ${failedGeneration} was interrupted because Tinymist stopped; attempting one automatic recovery.`,
     );
-    this.dependencies.setLspStatus({ kind: "starting", message: "Recovering preview compiler" });
+    this.dependencies.setLspStatus({ kind: "starting", message: t("Recovering preview compiler") });
     const previewFrame = this.dependencies.previewFrame();
     if (!previewFrame.currentUrl) {
       previewFrame.setLoading("Recovering PDF preview...");

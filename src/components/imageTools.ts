@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { WorkspaceExplorer } from "./explorer";
 import { workspaceParentDirectories } from "./explorer";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
+import { setLocalizedHtml, t } from "../i18n";
 
 export type ProjectImageReference = {
   sourcePath: string;
@@ -174,7 +175,7 @@ export class ImageToolsController {
     const initialLoad = !this.loaded;
 
     if (initialLoad) {
-      this.sidebar.innerHTML = `<div class="image-tool-loading">Indexing project images…</div>`;
+      setLocalizedHtml(this.sidebar, `<div class="image-tool-loading">Indexing project images…</div>`);
     }
 
     let index: ProjectImageIndex;
@@ -189,7 +190,7 @@ export class ImageToolsController {
       this.sidebar.replaceChildren();
       const message = document.createElement("div");
       message.className = "image-tool-empty";
-      message.textContent = `Could not index project images: ${String(error)}`;
+      message.textContent = t`Could not index project images: ${String(error)}`;
       this.sidebar.appendChild(message);
       return;
     }
@@ -330,7 +331,7 @@ export class ImageToolsController {
     quality.value = String(options.quality);
     quality.disabled = options.format !== "jpeg";
     const qualityOutput = quality.nextElementSibling as HTMLOutputElement | null;
-    if (qualityOutput) qualityOutput.textContent = options.format === "jpeg" ? String(options.quality) : "Lossless";
+    if (qualityOutput) qualityOutput.textContent = options.format === "jpeg" ? String(options.quality) : t("Lossless");
     this.crop = options.crop ? clampCrop(options.crop, image) : null;
     this.syncCropFields(image);
     await this.generateOptimizationPreview(image, {
@@ -355,7 +356,7 @@ export class ImageToolsController {
 
   private renderSidebar(): void {
     if (!this.workspaceRoot) {
-      this.sidebar.innerHTML = `<div class="image-tool-empty">Open a project to inspect its images.</div>`;
+      setLocalizedHtml(this.sidebar, `<div class="image-tool-empty">Open a project to inspect its images.</div>`);
       return;
     }
     if (this.imageExplorer && this.imageExpansionInitialized) {
@@ -371,7 +372,7 @@ export class ImageToolsController {
     if (needsMount) {
       controls = document.createElement("div");
       controls.className = "sidebar-tool-controls";
-      controls.innerHTML = `
+      setLocalizedHtml(controls, `
         <input class="sidebar-tool-search" type="search" placeholder="Search images" aria-label="Search project images" autocomplete="off" />
         <select class="sidebar-tool-filter" aria-label="Filter project images">
           <option value="all">All images</option>
@@ -379,7 +380,7 @@ export class ImageToolsController {
           <option value="referenced">Referenced elsewhere</option>
           <option value="unused">Unused</option>
           <option value="recommended">Optimization recommended</option>
-        </select>`;
+        </select>`);
 
       list = document.createElement("div");
       list.className = "sidebar-tool-list explorer-tree";
@@ -448,9 +449,9 @@ export class ImageToolsController {
         activeExplorer.setVisibleFiles([]);
         const empty = document.createElement("div");
         empty.className = "image-tool-empty";
-        empty.textContent = "No images match this view.";
+        empty.textContent = t("No images match this view.");
         activeList.replaceChildren(empty);
-        activeFooter.textContent = `0 images · ${this.scannedTypstFiles.toLocaleString()} Typst file${this.scannedTypstFiles === 1 ? "" : "s"} scanned`;
+        activeFooter.textContent = t`0 images · ${this.scannedTypstFiles.toLocaleString()} Typst file${this.scannedTypstFiles === 1 ? "" : "s"} scanned`;
         explorerHasRendered = false;
         return;
       }
@@ -477,7 +478,7 @@ export class ImageToolsController {
       explorerHasRendered = true;
       this.imageExpandedPaths = activeExplorer.expandedDirectoryPaths();
       activeExplorer.setActiveFile(this.committed?.path ?? null);
-      activeFooter.textContent = `${images.length.toLocaleString()} image${images.length === 1 ? "" : "s"} · ${this.scannedTypstFiles.toLocaleString()} Typst file${this.scannedTypstFiles === 1 ? "" : "s"} scanned`;
+      activeFooter.textContent = t`${images.length.toLocaleString()} image${images.length === 1 ? "" : "s"} · ${this.scannedTypstFiles.toLocaleString()} Typst file${this.scannedTypstFiles === 1 ? "" : "s"} scanned`;
     };
 
     if (needsMount) {
@@ -507,7 +508,7 @@ export class ImageToolsController {
 
   private renderEmptyInspector(): void {
     this.exitCropMode();
-    this.inspector.innerHTML = `<div class="preview-disabled-placeholder image-tool-inspector-empty"><div class="guardrail-placeholder-content"><div class="preview-disabled-title preview-accent-title">Image Tools</div><div class="preview-disabled-msg">Select an image in the sidebar to inspect and optimize it.</div></div></div>`;
+    setLocalizedHtml(this.inspector, `<div class="preview-disabled-placeholder image-tool-inspector-empty"><div class="guardrail-placeholder-content"><div class="preview-disabled-title preview-accent-title">Image Tools</div><div class="preview-disabled-msg">Select an image in the sidebar to inspect and optimize it.</div></div></div>`);
     this.comparison.replaceChildren();
     this.showImagePreview(null);
   }
@@ -531,7 +532,7 @@ export class ImageToolsController {
     this.cropOverlay.clear();
     const toggle = this.inspector.querySelector<HTMLButtonElement>('[data-action="crop-toggle"]');
     if (toggle) {
-      toggle.textContent = "Select Region";
+      toggle.textContent = t("Select Region");
       toggle.classList.remove("active");
       toggle.setAttribute("aria-pressed", "false");
     }
@@ -550,8 +551,8 @@ export class ImageToolsController {
     const summary = this.inspector.querySelector<HTMLElement>(".image-tool-crop-summary");
     if (summary) {
       summary.textContent = this.effectiveCrop(image)
-        ? `Crop ${crop.width.toLocaleString()} × ${crop.height.toLocaleString()} px from (${crop.x.toLocaleString()}, ${crop.y.toLocaleString()})`
-        : "Whole image";
+        ? t`Crop ${crop.width.toLocaleString()} × ${crop.height.toLocaleString()} px from (${crop.x.toLocaleString()}, ${crop.y.toLocaleString()})`
+        : t("Whole image");
     }
   }
 
@@ -566,7 +567,7 @@ export class ImageToolsController {
       ? `<div class="image-tool-notice warning"><strong>Optimization recommended</strong><span>${image.estimatedDecodedBytes > decodedWarningBytes ? "Large decoded dimensions can increase compilation and preview memory." : "The encoded source file is unusually large."}</span></div>`
       : "";
     const transformSupported = image.format !== "GIF";
-    this.inspector.innerHTML = `
+    setLocalizedHtml(this.inspector, `
       <div class="image-tool-inspector-header"><div><h2></h2><div class="image-tool-path"></div></div><span class="image-tool-status ${statusClass}">${status}</span></div>
       ${warning}
       <section class="image-tool-metadata-grid">
@@ -608,16 +609,16 @@ export class ImageToolsController {
           </div>
           <label class="image-tool-lock"><input data-field="update-references" type="checkbox" ${image.references.length === 0 ? "disabled" : ""} /> Replace static image paths with the optimized copy</label>
         </div><div class="image-tool-actions"><button type="button" data-action="preview" class="primary">Preview Changes</button><button type="button" data-action="save" disabled>Save Optimized Copy</button></div><div class="image-tool-output" aria-live="polite"></div>` : `<div class="image-tool-notice">Animated GIF optimization is not supported. The image remains available for inspection.</div>`}
-      </section>`;
+      </section>`);
     this.inspector.querySelector("h2")!.textContent = fileName(image.path);
     this.inspector.querySelector<HTMLElement>(".image-tool-path")!.textContent = relativePath(this.workspaceRoot!, image.path);
     const references = this.inspector.querySelector<HTMLElement>(".image-tool-references")!;
-    if (image.references.length === 0) references.innerHTML = `<div class="image-tool-empty-reference">No static Typst references found.</div>`;
+    if (image.references.length === 0) setLocalizedHtml(references, `<div class="image-tool-empty-reference">No static Typst references found.</div>`);
     for (const reference of image.references) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "image-tool-reference";
-      button.textContent = `${relativePath(this.workspaceRoot!, reference.sourcePath)} · Ln ${reference.line}, Col ${reference.column}`;
+      button.textContent = t`${relativePath(this.workspaceRoot!, reference.sourcePath)} · Ln ${reference.line}, Col ${reference.column}`;
       button.addEventListener("click", () => this.openReference(reference));
       references.appendChild(button);
     }
@@ -635,31 +636,31 @@ export class ImageToolsController {
     const workspaceRoot = this.workspaceRoot;
     const output = this.inspector.querySelector<HTMLElement>(".image-tool-reference-output");
     if (!workspaceRoot || image.references.length === 0) {
-      if (output) output.textContent = "This image has no static Typst references to replace.";
+      if (output) output.textContent = t("This image has no static Typst references to replace.");
       return;
     }
     button.disabled = true;
-    button.textContent = "Choosing…";
-    if (output) output.textContent = "Choose a replacement image inside this project.";
+    button.textContent = t("Choosing…");
+    if (output) output.textContent = t("Choose a replacement image inside this project.");
     try {
       const replacementPath = await open({
-        title: "Choose Replacement Image",
+        title: t("Choose Replacement Image"),
         defaultPath: workspaceRoot,
         directory: false,
         multiple: false,
         filters: [{
-          name: "Images",
+          name: t("Images"),
           extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"],
         }],
       });
       if (typeof replacementPath !== "string") {
-        if (output?.isConnected) output.textContent = "Replacement cancelled.";
+        if (output?.isConnected) output.textContent = t("Replacement cancelled.");
         return;
       }
       const originalKey = image.path.replace(/\\/gu, "/").toLocaleLowerCase();
       const replacementKey = replacementPath.replace(/\\/gu, "/").toLocaleLowerCase();
       if (originalKey === replacementKey) {
-        if (output?.isConnected) output.textContent = "The selected image already uses this path.";
+        if (output?.isConnected) output.textContent = t("The selected image already uses this path.");
         return;
       }
       const sourcePaths = [...new Set(image.references.map(reference => reference.sourcePath))];
@@ -675,14 +676,14 @@ export class ImageToolsController {
       await this.refresh(replacementPath);
       const refreshedOutput = this.inspector.querySelector<HTMLElement>(".image-tool-reference-output");
       if (refreshedOutput) {
-        refreshedOutput.textContent = `Replaced ${updatedReferences} static Typst image path${updatedReferences === 1 ? "" : "s"}.`;
+        refreshedOutput.textContent = t`Replaced ${updatedReferences} static Typst image path${updatedReferences === 1 ? "" : "s"}.`;
       }
     } catch (error) {
-      if (output?.isConnected) output.textContent = `Could not replace image paths: ${String(error)}`;
+      if (output?.isConnected) output.textContent = t`Could not replace image paths: ${String(error)}`;
     } finally {
       if (button.isConnected) {
         button.disabled = false;
-        button.textContent = "Choose Replacement Image…";
+        button.textContent = t("Choose Replacement Image…");
       }
     }
   }
@@ -701,7 +702,7 @@ export class ImageToolsController {
     if (!["png", "jpeg", "webp"].includes(format.value)) format.value = "png";
     const updateQualityAvailability = () => {
       quality.disabled = format.value !== "jpeg";
-      output.textContent = quality.disabled ? "Lossless" : quality.value;
+      output.textContent = quality.disabled ? t("Lossless") : quality.value;
     };
     updateQualityAvailability();
     let changing = false;
@@ -763,7 +764,7 @@ export class ImageToolsController {
     cropToggle.addEventListener("click", () => {
       if (this.cropMode) {
         this.cropMode = false;
-        cropToggle.textContent = "Select Region";
+        cropToggle.textContent = t("Select Region");
         cropToggle.classList.remove("active");
         cropToggle.setAttribute("aria-pressed", "false");
         const source = { width: image.width, height: image.height };
@@ -782,11 +783,11 @@ export class ImageToolsController {
         { interactive: true },
       );
       if (!started) {
-        output.textContent = "Wait for the image preview to load before selecting a crop region.";
+        output.textContent = t("Wait for the image preview to load before selecting a crop region.");
         return;
       }
       this.cropMode = true;
-      cropToggle.textContent = "Done";
+      cropToggle.textContent = t("Done");
       cropToggle.classList.add("active");
       cropToggle.setAttribute("aria-pressed", "true");
     });
@@ -800,7 +801,7 @@ export class ImageToolsController {
       event.stopPropagation();
       const generatedPreview = this.generatedPreview;
       if (!generatedPreview) {
-        output.textContent = "Preview the optimization before saving it.";
+        output.textContent = t("Preview the optimization before saving it.");
         saveCopy.disabled = true;
         return;
       }
@@ -828,14 +829,14 @@ export class ImageToolsController {
     if (!this.workspaceRoot || !Number.isFinite(options.width) || !Number.isFinite(options.height)) return;
     this.exitCropMode();
     button.disabled = true;
-    button.textContent = "Preparing…";
+    button.textContent = t("Preparing…");
     const output = this.inspector.querySelector<HTMLElement>(".image-tool-output")!;
     try {
       this.showImagePreview(null, image.path);
       this.generatedPreview = await invoke<ImageToolPreviewResult>("image_tool_generate_preview", {
         request: { workspaceRootPath: this.workspaceRoot, sourcePath: image.path, ...options },
       });
-      output.textContent = `${this.generatedPreview.width.toLocaleString()} × ${this.generatedPreview.height.toLocaleString()} px · ${formatBytes(this.generatedPreview.outputBytes)} encoded · ${formatBytes(this.generatedPreview.width * this.generatedPreview.height * 4)} decoded`;
+      output.textContent = t`${this.generatedPreview.width.toLocaleString()} × ${this.generatedPreview.height.toLocaleString()} px · ${formatBytes(this.generatedPreview.outputBytes)} encoded · ${formatBytes(this.generatedPreview.width * this.generatedPreview.height * 4)} decoded`;
       saveButton.disabled = false;
       this.showImagePreview(await this.imageDataUrl(this.generatedPreview), this.generatedPreview.path);
     } catch (error) {
@@ -843,7 +844,7 @@ export class ImageToolsController {
       this.generatedPreview = null;
     } finally {
       button.disabled = false;
-      button.textContent = "Preview Changes";
+      button.textContent = t("Preview Changes");
     }
   }
 
@@ -869,7 +870,7 @@ export class ImageToolsController {
     } catch (error) {
       if (this.committed?.path === image.path) this.showImagePreview(null, image.path);
       const output = this.inspector.querySelector<HTMLElement>(".image-tool-output");
-      if (output) output.textContent = `Could not prepare bounded image preview: ${String(error)}`;
+      if (output) output.textContent = t`Could not prepare bounded image preview: ${String(error)}`;
     }
   }
 
@@ -887,21 +888,21 @@ export class ImageToolsController {
     const workspaceRoot = this.workspaceRoot;
     const output = this.inspector.querySelector<HTMLElement>(".image-tool-output");
     if (!workspaceRoot) {
-      if (output) output.textContent = "Open a project before saving an optimized image.";
+      if (output) output.textContent = t("Open a project before saving an optimized image.");
       return;
     }
     const sourcePaths = [...new Set(image.references.map(reference => reference.sourcePath))];
     button.disabled = true;
-    button.textContent = "Saving…";
-    if (output) output.textContent = "Choose where to save the optimized image.";
+    button.textContent = t("Saving…");
+    if (output) output.textContent = t("Choose where to save the optimized image.");
     try {
       const destination = await save({
-        title: "Save Optimized Image Copy",
+        title: t("Save Optimized Image Copy"),
         defaultPath: defaultCopyPath(image.path, format),
         filters: [{ name: format.toUpperCase(), extensions: [format === "jpeg" ? "jpg" : format] }],
       });
       if (typeof destination !== "string") {
-        if (output?.isConnected) output.textContent = "Save cancelled.";
+        if (output?.isConnected) output.textContent = t("Save cancelled.");
         return;
       }
       const changedPaths = [
@@ -928,14 +929,14 @@ export class ImageToolsController {
       }
       await this.workspaceFilesWritten(changedPaths, "after");
       const successMessage = updateReferences
-        ? `Saved optimized copy and updated ${updatedReferences} static Typst reference${updatedReferences === 1 ? "" : "s"}.`
-        : `Saved optimized copy to ${destination}`;
+        ? t`Saved optimized copy and updated ${updatedReferences} static Typst reference${updatedReferences === 1 ? "" : "s"}.`
+        : t`Saved optimized copy to ${destination}`;
       if (output?.isConnected) output.textContent = successMessage;
       try {
         await this.refresh(destination);
       } catch (refreshError) {
         if (output?.isConnected) {
-          output.textContent = `${successMessage} Image Tools could not refresh: ${String(refreshError)}`;
+          output.textContent = t`${successMessage} Image Tools could not refresh: ${String(refreshError)}`;
         }
         return;
       }
@@ -944,11 +945,11 @@ export class ImageToolsController {
         refreshedOutput.textContent = successMessage;
       }
     } catch (error) {
-      if (output) output.textContent = `Could not save optimized image: ${String(error)}`;
+      if (output) output.textContent = t`Could not save optimized image: ${String(error)}`;
     } finally {
       if (button.isConnected) {
         button.disabled = false;
-        button.textContent = "Save Optimized Copy";
+        button.textContent = t("Save Optimized Copy");
       }
     }
   }

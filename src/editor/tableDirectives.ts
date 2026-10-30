@@ -4,6 +4,7 @@ import { GutterMarker, gutter } from "@codemirror/view";
 import type { EditorView } from "@codemirror/view";
 import { createAppIcon } from "../ui/icons";
 import { isStandaloneDocument } from "./standaloneDocument";
+import { t } from "../i18n";
 
 /** `//@table:<id>` on its own line links a document location to a tool table. */
 const DIRECTIVE_PATTERN = /^\s*\/\/@table:([A-Za-z0-9_]+)\s*$/u;
@@ -50,11 +51,11 @@ class TableDirectiveMarker extends GutterMarker {
       marker.classList.add("missing");
       marker.appendChild(createAppIcon("triangleAlert", { size: 17 }));
       marker.title =
-        `Table "${this.tableId}" no longer exists in the Table tool.\n\n`
-        + "Click to recreate the table or delete this directive.";
+        t`Table "${this.tableId}" no longer exists in the Table tool.\n\n`
+        + t("Click to recreate the table or delete this directive.");
       marker.setAttribute(
         "aria-label",
-        `Table ${this.tableId} is missing. Click for recreate and delete options.`,
+        t`Table ${this.tableId} is missing. Click for recreate and delete options.`,
       );
       marker.addEventListener("click", event => {
         event.preventDefault();
@@ -67,8 +68,8 @@ class TableDirectiveMarker extends GutterMarker {
       return marker;
     }
     marker.appendChild(createAppIcon("info", { size: 15 }));
-    marker.title = `Open table "${this.tableId}" in the Table tool`;
-    marker.setAttribute("aria-label", `Open table ${this.tableId} in the Table tool`);
+    marker.title = t`Open table "${this.tableId}" in the Table tool`;
+    marker.setAttribute("aria-label", t`Open table ${this.tableId} in the Table tool`);
     marker.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();

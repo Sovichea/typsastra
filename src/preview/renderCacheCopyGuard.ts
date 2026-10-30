@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import { t } from "../i18n";
 
 const COPY_FALLBACK_PREFIX = "TYPSASTRA_LARGE_ASSET_COPY_FALLBACK:";
 const approvedCaches = new Set<string>();
@@ -37,12 +38,12 @@ export async function prepareRenderProjectWithCopyGuard<T>(
     const notice = parseCopyFallbackNotice(error);
     if (!notice || approved) throw error;
     const accepted = await confirm(
-      `Typsastra cannot create hard links for ${notice.files.toLocaleString()} asset file${notice.files === 1 ? "" : "s"} (${formatBytes(notice.bytes)}). This usually means the project and Typsastra's machine-local cache are on different filesystems.\n\nContinuing will create real copies in the private application cache and consume additional disk space.`,
+      t`Typsastra cannot create hard links for ${notice.files.toLocaleString()} asset file${notice.files === 1 ? "" : "s"} (${formatBytes(notice.bytes)}). This usually means the project and Typsastra's machine-local cache are on different filesystems.\n\nContinuing will create real copies in the private application cache and consume additional disk space.`,
       {
-        title: "Copy Assets Into Preview Cache?",
+        title: t("Copy Assets Into Preview Cache?"),
         kind: "warning",
-        okLabel: "Continue and Copy",
-        cancelLabel: "Cancel",
+        okLabel: t("Continue and Copy"),
+        cancelLabel: t("Cancel"),
       },
     );
     if (!accepted) {

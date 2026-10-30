@@ -67,6 +67,7 @@ import { standaloneDocumentField } from "./standaloneDocument";
 import { selectionPairReplacementExtension } from "./selectionPairEditing";
 import { isMacShortcutPlatform } from "../platform/shortcuts";
 import { canonicalShortcut, shortcutDefinitions, shortcutFor, shortcutFromEvent, type ShortcutOverrides } from "../platform/shortcutRegistry";
+import { t } from "../i18n";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -622,7 +623,7 @@ const searchMatchCounter = ViewPlugin.fromClass(class {
       if (!status) return;
       if (!query.valid) {
         status.textContent = "0/0";
-        status.title = "No matches";
+        status.title = t("No matches");
         return;
       }
 
@@ -632,7 +633,7 @@ const searchMatchCounter = ViewPlugin.fromClass(class {
       let total = 0;
       let current = 0;
       status.textContent = "0/0";
-      status.title = "Counting matches";
+      status.title = t("Counting matches");
 
       const scan = () => {
         if (generation !== this.generation || this.view.state !== state) return;
@@ -640,19 +641,19 @@ const searchMatchCounter = ViewPlugin.fromClass(class {
         for (let processed = 0; processed < 500 && performance.now() - startedAt < 4; processed++) {
           const result = cursor.next();
           if (result.done) {
-            status.textContent = `${current}/${total}`;
+            status.textContent = t`${current}/${total}`;
             status.title = total === 0
-              ? "No matches"
+              ? t("No matches")
               : current > 0
-                ? `Match ${current} of ${total}`
-                : `${total} matches`;
+                ? t`Match ${current} of ${total}`
+                : t`${total} matches`;
             this.frame = null;
             return;
           }
           total += 1;
           if (result.value.from === selection.from && result.value.to === selection.to) current = total;
         }
-        status.textContent = `${current}/${total}`;
+        status.textContent = t`${current}/${total}`;
         this.frame = requestAnimationFrame(scan);
       };
       scan();
@@ -679,15 +680,15 @@ function foldedTypstPlaceholderSuffix(state: EditorState, range: { from: number;
 function foldedTypstPlaceholderDOM(_view: EditorView, onclick: (event: Event) => void, suffix: string | null): HTMLElement {
   const placeholder = document.createElement("span");
   placeholder.className = "cm-foldPlaceholder";
-  placeholder.textContent = ` ... ${suffix ?? ""}`;
-  placeholder.title = "This content is folded. Click to expand.";
+  placeholder.textContent = t` ... ${suffix ?? ""}`;
+  placeholder.title = t("This content is folded. Click to expand.");
   placeholder.addEventListener("click", onclick);
   return placeholder;
 }
 
 function typstFoldMarkerDOM(open: boolean): HTMLElement {
   const marker = document.createElement("span");
-  const label = open ? "Fold line" : "Unfold line";
+  const label = open ? t("Fold line") : t("Unfold line");
   marker.textContent = open ? "-" : "+";
   marker.dataset.folded = String(!open);
   marker.title = label;

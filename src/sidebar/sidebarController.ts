@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 export type SidebarTool = "explorer" | "search" | "images" | "tables";
 
 export interface SidebarControllerState {
@@ -155,12 +157,12 @@ export class SidebarController {
       sidebarToggle.disabled = toolKeepsSidebarOpen;
       const expanded = toolKeepsSidebarOpen || this.state.visible;
       const label = showingImages
-        ? "Image Tools keeps the sidebar open"
+        ? t("Image Tools keeps the sidebar open")
         : showingTables
-          ? "Table Tools keeps the sidebar open"
+          ? t("Table Tools keeps the sidebar open")
           : this.state.visible
-            ? "Hide sidebar"
-            : "Show sidebar";
+            ? t("Hide sidebar")
+            : t("Show sidebar");
       sidebarToggle.setAttribute("aria-expanded", String(expanded));
       sidebarToggle.setAttribute("aria-label", label);
       sidebarToggle.title = label;

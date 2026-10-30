@@ -14,6 +14,7 @@ import { createAppIcon, type AppIconName } from "../ui/icons";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import { runScopeHandlers, type EditorView, type Panel, type ViewUpdate } from "@codemirror/view";
 import { TypsastraSearchQuery } from "./searchMatcher";
+import { t } from "../i18n";
 
 export { TypsastraSearchQuery, type TypsastraSearchQueryConfig } from "./searchMatcher";
 
@@ -27,7 +28,8 @@ function input(attributes: Record<string, string | boolean | EventListener>): HT
     } else if (typeof value === "function" && name.startsWith("on")) {
       element.addEventListener(name.slice(2), value);
     } else {
-      element.setAttribute(name, String(value));
+      const text = String(value);
+      element.setAttribute(name, ["placeholder", "title", "aria-label"].includes(name) ? t(text) : text);
     }
   }
   return element;
@@ -46,8 +48,8 @@ function iconButton(name: string, label: string, icon: AppIconName, action: () =
   element.type = "button";
   element.name = name;
   element.className = "cm-button cm-search-icon-button";
-  element.title = label;
-  element.setAttribute("aria-label", label);
+  element.title = t(label);
+  element.setAttribute("aria-label", t(label));
   element.append(createAppIcon(icon, { size: 16 }));
   element.addEventListener("click", action);
   return element;
@@ -56,8 +58,8 @@ function iconButton(name: string, label: string, icon: AppIconName, action: () =
 function iconToggle(field: HTMLInputElement, label: string, icon: AppIconName): HTMLLabelElement {
   const element = document.createElement("label");
   element.className = "cm-search-icon-toggle";
-  element.title = label;
-  field.setAttribute("aria-label", label);
+  element.title = t(label);
+  field.setAttribute("aria-label", t(label));
   element.append(field, createAppIcon(icon, { size: 16 }));
   return element;
 }

@@ -35,6 +35,7 @@ import {
   previewRefreshStyle,
   previewSessionIdentity,
 } from "./previewPolicy";
+import { t } from "../i18n";
 
 const PDF_TRANSPORT_MODE = (
   import.meta as ImportMeta & { env?: Record<string, string | boolean | undefined> }
@@ -343,7 +344,7 @@ export class PdfPreviewRenderController {
         });
       }
       this.deps.log("info", "preview scheduler", `Reused cached PDF for an unchanged workspace snapshot at startup (content=${contentMode}).`);
-      this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
+      this.deps.setLspStatus({ kind: "preview-ready", message: t("Preview ready · cached") });
       return true;
     } catch (error) {
       this.deps.log("warning", "preview scheduler", `Unable to restore cached preview PDF; compiling normally: ${String(error)}`);
@@ -525,7 +526,7 @@ export class PdfPreviewRenderController {
             false,
           );
           this.deps.log("info", "preview scheduler", "Reused cached low-memory PDF and sync index for an unchanged workspace snapshot.");
-          this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
+          this.deps.setLspStatus({ kind: "preview-ready", message: t("Preview ready · cached") });
           if (freshnessRevision !== undefined) this.deps.freshness?.finish(freshnessRevision, true);
           this.deps.onRenderSucceeded();
           renderSucceeded = true;
@@ -571,7 +572,7 @@ export class PdfPreviewRenderController {
             });
           }
           this.deps.log("info", "preview scheduler", "Reused cached PDF for an unchanged workspace snapshot.");
-          this.deps.setLspStatus({ kind: "preview-ready", message: "Preview ready · cached" });
+          this.deps.setLspStatus({ kind: "preview-ready", message: t("Preview ready · cached") });
           if (freshnessRevision !== undefined) this.deps.freshness?.finish(freshnessRevision, true);
           this.deps.onRenderSucceeded();
           renderSucceeded = true;
@@ -595,7 +596,7 @@ export class PdfPreviewRenderController {
       "preview scheduler",
       `Render generation ${generation} started: refresh=${this.deps.getPreviewRenderMode()}; content=${generationContentMode}; active=${this.deps.getActiveFilePath()}; sourceUtf16=${contents.length}.`,
     );
-    if (reportRenderStatus) this.deps.setLspStatus({ kind: "syncing", message: "Compiling preview" });
+    if (reportRenderStatus) this.deps.setLspStatus({ kind: "syncing", message: t("Compiling preview") });
     if (!force && !this.deps.previewFrame.currentUrl) {
       this.deps.previewFrame.setLoading("Compiling live preview…");
     }

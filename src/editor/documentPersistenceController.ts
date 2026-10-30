@@ -5,6 +5,7 @@ import { fileExtension, isBinaryImagePath, isTypstDocumentPath } from "../platfo
 import { filePathKey, isUntitledDocumentPath } from "../platform/paths";
 import type { PreviewRenderMode } from "../settings";
 import type { EditorTab } from "./editorTab";
+import { t } from "../i18n";
 
 export type SaveIntent = "manual" | "automatic";
 
@@ -126,7 +127,7 @@ export class DocumentPersistenceController {
       if (sourceWasPinnedMain && isTypstDocumentPath(savePath)) {
         await this.deps.setPinnedMainFile(savePath);
       }
-      this.deps.setLspStatus({ kind: "preview-ready", message: "File saved as a new document" });
+      this.deps.setLspStatus({ kind: "preview-ready", message: t("File saved as a new document") });
     } catch (error) {
       const failure = `Save As failed: ${String(error)}`;
       console.error(failure);
@@ -261,7 +262,7 @@ export class DocumentPersistenceController {
         await this.deps.recoverySaved(activeTab, recoveryRevision);
         this.deps.renderEditorTabs();
       }
-      this.deps.setLspStatus({ kind: "preview-ready", message: "File saved" });
+      this.deps.setLspStatus({ kind: "preview-ready", message: t("File saved") });
       void Promise.resolve(this.deps.cachePreviewAfterSave()).catch(error => {
         this.deps.log("info", "preview scheduler", `Could not cache the saved preview: ${String(error)}`);
       });

@@ -122,6 +122,7 @@ import {
   type StandalonePdfSelectionItem,
   type StandalonePdfSelectionPage,
 } from "./standalonePdfSelection";
+import { setLocalizedHtml, t } from "../i18n";
 
 type PdfJsModule = typeof import("pdfjs-dist");
 
@@ -3791,7 +3792,7 @@ export class PreviewFrame {
     preview.style.height = `${renderedImageHeight}px`;
     const label = doc.createElement("div");
     label.className = "draft-image-popover-label";
-    label.textContent = `${image.width.toLocaleString()} × ${image.height.toLocaleString()} px · ${formatFileSize(image.sourceBytes)} source`;
+    label.textContent = t`${image.width.toLocaleString()} × ${image.height.toLocaleString()} px · ${formatFileSize(image.sourceBytes)} source`;
     popover.append(preview, label);
     popover.style.width = `${renderedImageWidth + 16}px`;
     doc.body.append(popover);
@@ -3827,7 +3828,7 @@ export class PreviewFrame {
     popover.setAttribute("role", "status");
     const label = doc.createElement("div");
     label.className = "draft-image-popover-label";
-    label.textContent = message;
+    label.textContent = t(message);
     popover.append(label);
     doc.body.append(popover);
     const anchor = link.getBoundingClientRect();
@@ -3905,7 +3906,7 @@ export class PreviewFrame {
     this.reportPageStatus(0);
     const host = document.createElement("div");
     host.className = "preview-message-host";
-    host.innerHTML = html;
+    setLocalizedHtml(host, html);
     this.pane.appendChild(host);
     this.messageHost = host;
   }
@@ -3934,21 +3935,21 @@ export class PreviewFrame {
     content.className = "guardrail-placeholder-content";
     const title = document.createElement("div");
     title.className = "preview-disabled-title";
-    title.textContent = options.title;
+    title.textContent = t(options.title);
     const description = document.createElement("div");
     description.className = "preview-disabled-msg";
-    description.textContent = options.message;
+    description.textContent = t(options.message);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "editor-file-placeholder-action";
-    button.textContent = options.confirmLabel;
+    button.textContent = t(options.confirmLabel);
     button.addEventListener("click", () => {
       button.disabled = true;
-      button.textContent = "Loading…";
+      button.textContent = t("Loading…");
       void Promise.resolve(options.onConfirm()).catch(error => {
         console.error("Preview confirmation action failed:", error);
         button.disabled = false;
-        button.textContent = options.confirmLabel;
+        button.textContent = t(options.confirmLabel);
       });
     });
     content.append(title, description, button);
@@ -3966,7 +3967,7 @@ export class PreviewFrame {
     this.clearMessageHost();
     const host = document.createElement("div");
     host.className = "preview-message-host preview-preserved-message-overlay";
-    host.innerHTML = html;
+    setLocalizedHtml(host, html);
     this.pane.appendChild(host);
     this.messageHost = host;
     this.installMessageZoom(host);
@@ -4020,7 +4021,7 @@ export class PreviewFrame {
     this.clearMessageHost();
     const host = document.createElement("div");
     host.className = "preview-message-host preview-loading-overlay";
-    host.innerHTML = markup;
+    setLocalizedHtml(host, markup);
     this.pane.appendChild(host);
     this.messageHost = host;
   }
@@ -4034,7 +4035,7 @@ export class PreviewFrame {
     content.className = "compiler-preview-error-content";
     const titleElement = document.createElement("h3");
     titleElement.className = "compiler-preview-error-title";
-    titleElement.textContent = `ⓧ ${title}`;
+    titleElement.textContent = t`ⓧ ${title}`;
     const details = document.createElement("pre");
     details.className = "compiler-preview-error-message";
     details.textContent = message;
@@ -4089,7 +4090,7 @@ export class PreviewFrame {
     content.className = "compiler-preview-error-content compiler-preview-diagnostic";
     const titleElement = document.createElement("h3");
     titleElement.className = "compiler-preview-error-title";
-    titleElement.textContent = `\u24e7 ${title}`;
+    titleElement.textContent = t`\u24e7 ${title}`;
     const summary = document.createElement("p");
     summary.className = "compiler-preview-diagnostic-summary";
     summary.textContent = diagnostic.summary;
@@ -4103,14 +4104,14 @@ export class PreviewFrame {
       const location = document.createElement("button");
       location.type = "button";
       location.className = "compiler-preview-diagnostic-location";
-      location.textContent = `${options.displayPath(frame.filePath)}:${frame.line}:${frame.column}`;
+      location.textContent = t`${options.displayPath(frame.filePath)}:${frame.line}:${frame.column}`;
       location.title = frame.filePath;
       location.addEventListener("click", () => options.navigate(frame));
       const copy = document.createElement("button");
       copy.type = "button";
       copy.className = "compiler-preview-diagnostic-copy";
-      copy.textContent = "Copy path";
-      copy.title = `Copy ${frame.filePath}`;
+      copy.textContent = t("Copy path");
+      copy.title = t`Copy ${frame.filePath}`;
       copy.addEventListener("click", () => { void writeText(frame.filePath); });
       locationRow.append(location, copy);
       frameContent.append(locationRow);
@@ -4130,7 +4131,7 @@ export class PreviewFrame {
         disclosure.className = "compiler-preview-diagnostic-frame compiler-preview-diagnostic-secondary";
         const disclosureSummary = document.createElement("summary");
         const label = frame.label ? `${frame.kind}: ${frame.label}` : `${frame.kind} location`;
-        disclosureSummary.textContent = `${label} \u2014 ${options.displayPath(frame.filePath)}:${frame.line}`;
+        disclosureSummary.textContent = t`${label} \u2014 ${options.displayPath(frame.filePath)}:${frame.line}`;
         disclosure.append(disclosureSummary, frameContent);
         content.append(disclosure);
       }
@@ -4144,7 +4145,7 @@ export class PreviewFrame {
     const rawDisclosure = document.createElement("details");
     rawDisclosure.className = "compiler-preview-diagnostic-raw";
     const rawSummary = document.createElement("summary");
-    rawSummary.textContent = "Show raw compiler output";
+    rawSummary.textContent = t("Show raw compiler output");
     const raw = document.createElement("pre");
     raw.textContent = diagnostic.raw;
     rawDisclosure.append(rawSummary, raw);

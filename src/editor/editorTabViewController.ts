@@ -1,6 +1,7 @@
 import type { EditorTab } from "./editorTab";
 import { fileNameFromPath, filePathKey } from "../platform/paths";
 import { createAppIcon } from "../ui/icons";
+import { t } from "../i18n";
 
 type EditorTabViewDependencies = {
   tabs: () => EditorTab[];
@@ -118,8 +119,8 @@ export class EditorTabViewController {
         const closeButton = document.createElement("span");
         closeButton.className = "editor-tab-close";
         closeButton.appendChild(createAppIcon("x", { size: 13 }));
-        closeButton.title = "Close";
-        closeButton.setAttribute("aria-label", `Close ${tab.title ?? fileNameFromPath(tab.path)}`);
+        closeButton.title = t("Close");
+        closeButton.setAttribute("aria-label", t`Close ${tab.title ?? fileNameFromPath(tab.path)}`);
         tabButton.appendChild(closeButton);
         closeButton.addEventListener("click", event => {
           event.stopPropagation();
@@ -171,14 +172,14 @@ export class EditorTabViewController {
       if (item.pinnedMain) {
         const main = document.createElement("span");
         main.className = "editor-tab-list-item-main";
-        main.textContent = "main";
+        main.textContent = t("main");
         button.appendChild(main);
       }
       if (item.dirty) {
         const dirty = document.createElement("span");
         dirty.className = "editor-tab-list-item-dirty";
-        dirty.title = "Unsaved changes";
-        dirty.setAttribute("aria-label", "Unsaved changes");
+        dirty.title = t("Unsaved changes");
+        dirty.setAttribute("aria-label", t("Unsaved changes"));
         button.appendChild(dirty);
       }
 

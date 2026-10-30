@@ -193,6 +193,7 @@ import { NavigationHistoryController } from "./navigation/navigationHistoryContr
 import { RecoveryController, type RecoveryRecord } from "./recovery/recoveryController";
 import { RecoveryReviewController } from "./recovery/recoveryReviewController";
 import { TinymistIntegrationController } from "./session/tinymistIntegrationController";
+import { t } from "./i18n";
 
 
 type EditorMode = "CODE" | "WYSIWYM";
@@ -460,8 +461,8 @@ export class TypsastraWorkspaceController {
     sourceChanged: tab => this.handleExternalSourceChange(tab),
     externalConflictDetected: path => this.pdfPreviewRenderController.noteExternalSourceChange(path),
     confirmReload: path => confirm(
-      `${fileNameFromPath(path)} changed outside Typsastra and also has local unsaved edits. Reload the external version and discard the local edits?`,
-      { title: "External edit conflict", kind: "warning", okLabel: "Reload external version", cancelLabel: "Keep local edits" },
+      t`${fileNameFromPath(path)} changed outside Typsastra and also has local unsaved edits. Reload the external version and discard the local edits?`,
+      { title: t("External edit conflict"), kind: "warning", okLabel: t("Reload external version"), cancelLabel: t("Keep local edits") },
     ),
     setLspStatus: status => this.setLspStatus(status),
     appendWorkspaceWarning: message => this.appendLspLog({ kind: "warning", source: "workspace", message }),
@@ -663,7 +664,7 @@ export class TypsastraWorkspaceController {
       if (enabled) {
         this.setLowMemoryIndexStatus({
           kind: "stopped",
-          message: "Sync index unavailable — compile preview to build it",
+          message: t("Sync index unavailable — compile preview to build it"),
         });
       }
       this.editorController.scheduleMatchMarkers();
@@ -799,8 +800,8 @@ export class TypsastraWorkspaceController {
       navigateForward: () => this.navigateForward(),
       reportActivationFailure: (path, error) => {
         console.error("Failed to load restored tab:", path, error);
-        void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
-          title: "Unable to Open File",
+        void message(t`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
+          title: t("Unable to Open File"),
           kind: "error"
         });
       },
@@ -953,7 +954,7 @@ export class TypsastraWorkspaceController {
     } catch (error) {
       if (generation !== this.tableDirectiveIndexGeneration) return;
       this.tableDirectiveIndex = null;
-      this.tableDirectiveIndexError = `Could not scan the project for table links: ${String(error)}`;
+      this.tableDirectiveIndexError = t`Could not scan the project for table links: ${String(error)}`;
       this.appendDeveloperLog({
         kind: "warning",
         source: "developer",
@@ -992,7 +993,7 @@ export class TypsastraWorkspaceController {
     try {
       const path = await save({
         defaultPath: suggestedName,
-        filters: [{ name: "Typst", extensions: ["typ"] }],
+        filters: [{ name: t("Typst"), extensions: ["typ"] }],
       });
       if (!path) return;
       await writeTextFile(path, content);
@@ -1009,7 +1010,7 @@ export class TypsastraWorkspaceController {
     try {
       const selected = await open({
         multiple: false,
-        filters: [{ name: "Typst", extensions: ["typ"] }],
+        filters: [{ name: t("Typst"), extensions: ["typ"] }],
       });
       const path = Array.isArray(selected) ? selected[0] : selected;
       if (!path) return null;
@@ -1634,9 +1635,9 @@ export class TypsastraWorkspaceController {
     path => this.openWorkspace(path),
     async path => {
       await message(
-        `Typsastra could not find this project folder:\n\n${path}\n\nIt will be removed from your recent projects.`,
+        t`Typsastra could not find this project folder:\n\n${path}\n\nIt will be removed from your recent projects.`,
         {
-          title: "Recent Project Not Found",
+          title: t("Recent Project Not Found"),
           kind: "warning",
           buttons: { ok: "Remove from Recent Projects" }
         }
@@ -2215,10 +2216,10 @@ export class TypsastraWorkspaceController {
     selectSystemToolchain: path => invoke<ToolchainStatus>("select_system_tinymist_toolchain", { path }),
     closeWindow: () => getCurrentWindow().close(),
     showInstallError: async error => {
-      await message(String(error), { title: "Toolchain installation failed", kind: "error" });
+      await message(String(error), { title: t("Toolchain installation failed"), kind: "error" });
     },
     showSelectionError: async error => {
-      await message(String(error), { title: "Toolchain selection failed", kind: "error" });
+      await message(String(error), { title: t("Toolchain selection failed"), kind: "error" });
     },
   });
   private readonly previewWindowController = new PreviewWindowController({
@@ -2458,7 +2459,7 @@ export class TypsastraWorkspaceController {
     void this.performanceController.logNativeStartupTimings();
     void this.finishStartupInitialization();
 
-    this.setLspStatus({ kind: "starting", message: "Preparing toolchain" });
+    this.setLspStatus({ kind: "starting", message: t("Preparing toolchain") });
 
     let toolchain: ToolchainStatus | null = null;
     try {
@@ -3122,11 +3123,11 @@ export class TypsastraWorkspaceController {
   private updatePreviewColorModeButton(mode: PreviewColorMode): void {
     const button = document.getElementById("preview-menu-btn");
     if (!button) return;
-    const label = mode === "dark" ? "Dark preview"
-      : mode === "inverted" ? "Inverted preview (experimental)"
-      : "Document colors";
-    button.title = mode === "document" ? "Preview Options" : `Preview Options · ${label}`;
-    button.setAttribute("aria-label", mode === "document" ? "Preview options" : `Preview options; ${label} active`);
+    const label = mode === "dark" ? t("Dark preview")
+      : mode === "inverted" ? t("Inverted preview (experimental)")
+      : t("Document colors");
+    button.title = mode === "document" ? t("Preview Options") : t`Preview Options · ${label}`;
+    button.setAttribute("aria-label", mode === "document" ? t("Preview options") : t`Preview options; ${label} active`);
   }
 
   private currentEditorSettingsEffects() {
@@ -3527,7 +3528,7 @@ export class TypsastraWorkspaceController {
     if (!shouldConnect && this.settingsController.value.preview.lowMemoryMode) {
       this.setLspStatus({
         kind: "stopped",
-        message: "Low memory mode: compiler starts only while rendering",
+        message: t("Low memory mode: compiler starts only while rendering"),
       });
     }
   }
@@ -3555,7 +3556,7 @@ export class TypsastraWorkspaceController {
     })) {
       return null;
     }
-    this.setLowMemoryIndexStatus({ kind: "ready", message: "Sync index ready · cached" });
+    this.setLowMemoryIndexStatus({ kind: "ready", message: t("Sync index ready · cached") });
     this.appendDeveloperLog({
       kind: "info",
       source: "forward sync",
@@ -3662,14 +3663,14 @@ export class TypsastraWorkspaceController {
     const previewRootPath = this.previewRootPath;
     if (!previewRootPath) return;
     const startedAt = performance.now();
-    this.setLowMemoryIndexStatus({ kind: "syncing", message: "Preparing sync index..." });
+    this.setLowMemoryIndexStatus({ kind: "syncing", message: t("Preparing sync index...") });
     this.appendDeveloperLog({ kind: "info", source: "forward sync", message: `Low-memory sync: building index for generation ${generation}...` });
     try {
       const pdfHash = await invoke<string>("hash_cached_preview_file", { path: pdfPath });
       const generationId = pdfHash;
       const cached = await invoke<string | null>("load_low_memory_sync_index", { workspaceRootPath, cacheRootPath, previewRootPath });
       if (cached && this.lowMemorySyncIndexController.install(JSON.parse(cached), { generationId, pdfHash })) {
-        this.setLowMemoryIndexStatus({ kind: "ready", message: "Sync index ready · cached" });
+        this.setLowMemoryIndexStatus({ kind: "ready", message: t("Sync index ready · cached") });
         this.appendDeveloperLog({ kind: "info", source: "forward sync", message: "Low-memory sync: reused persistent index for the current PDF." });
         return;
       }
@@ -3707,12 +3708,12 @@ export class TypsastraWorkspaceController {
       const installed = this.settingsController.value.preview.lowMemoryMode
         && this.lowMemorySyncIndexController.install(index, { generationId, pdfHash });
       if (!installed) {
-        this.setLowMemoryIndexStatus({ kind: "error", message: "Sync index failed — no usable source locations" });
+        this.setLowMemoryIndexStatus({ kind: "error", message: t("Sync index failed — no usable source locations") });
         return;
       }
       this.setLowMemoryIndexStatus({
         kind: "ready",
-        message: `Sync index ready · ${index.anchors.length.toLocaleString()} locations`,
+        message: t`Sync index ready · ${index.anchors.length.toLocaleString()} locations`,
       });
       // Persist the PDF only after its matching index is active. A project
       // reopened without edits can now restore this exact PDF/index pair and
@@ -3727,14 +3728,14 @@ export class TypsastraWorkspaceController {
       this.appendDeveloperLog({ kind: "info", source: "forward sync", message: `Low-memory sync: indexed ${index.anchors.length} source location(s) in ${(performance.now() - startedAt).toFixed(1)}ms; Tinymist indexing process will terminate.` });
     } catch (error) {
       const detail = previewErrorText(error).split(/\r?\n/u, 1)[0]?.trim() || "unknown error";
-      this.setLowMemoryIndexStatus({ kind: "error", message: `Sync index failed: ${detail}` });
+      this.setLowMemoryIndexStatus({ kind: "error", message: t`Sync index failed: ${detail}` });
       this.appendDeveloperLog({
         kind: "warning",
         source: "forward sync",
         message: `Low-memory sync index failed: ${previewErrorText(error)}`
       });
     } finally {
-      if (this.settingsController.value.preview.lowMemoryMode) this.setLspStatus({ kind: "stopped", message: "Low memory mode: compiler starts only while rendering" });
+      if (this.settingsController.value.preview.lowMemoryMode) this.setLspStatus({ kind: "stopped", message: t("Low memory mode: compiler starts only while rendering") });
     }
   }
 
@@ -3778,7 +3779,7 @@ export class TypsastraWorkspaceController {
     if (this.projectReplacementInProgress) {
       this.setLspStatus({
         kind: "preview-ready",
-        message: "Save is unavailable while a project replacement is being applied",
+        message: t("Save is unavailable while a project replacement is being applied"),
       });
       return;
     }
@@ -3796,7 +3797,7 @@ export class TypsastraWorkspaceController {
     if (this.projectReplacementInProgress) {
       this.setLspStatus({
         kind: "preview-ready",
-        message: "Save As is unavailable while a project replacement is being applied",
+        message: t("Save As is unavailable while a project replacement is being applied"),
       });
       return Promise.resolve();
     }
@@ -3805,8 +3806,8 @@ export class TypsastraWorkspaceController {
 
   private async createUntitledFile(): Promise<void> {
     if (!this.workspaceRootPath) {
-      await message("Open a project before creating a new file.", {
-        title: "New File",
+      await message(t("Open a project before creating a new file."), {
+        title: t("New File"),
         kind: "info",
       });
       return;
@@ -3823,7 +3824,7 @@ export class TypsastraWorkspaceController {
     void this.recoveryController.flushTab(tab, true);
     this.setLspStatus({
       kind: "preview-ready",
-      message: "New untitled document. Save to choose a file path.",
+      message: t("New untitled document. Save to choose a file path."),
     });
   }
 
@@ -3839,15 +3840,15 @@ export class TypsastraWorkspaceController {
       : `${tab.title ?? "Untitled"}.typ`;
     const savePath = await save({
       defaultPath,
-      filters: [{ name: "Typst Document", extensions: ["typ"] }],
+      filters: [{ name: t("Typst Document"), extensions: ["typ"] }],
     });
     if (typeof savePath !== "string") return;
     if (filePathKey(savePath) === filePathKey(tab.path)) return;
     const existing = this.openTabs.find(candidate =>
       candidate !== tab && filePathKey(candidate.path) === filePathKey(savePath));
     if (existing) {
-      await message("That file is already open. Close it before saving this buffer there.", {
-        title: "Save As",
+      await message(t("That file is already open. Close it before saving this buffer there."), {
+        title: t("Save As"),
         kind: "warning",
       });
       return;
@@ -3884,7 +3885,7 @@ export class TypsastraWorkspaceController {
       this.renderEditorTabs();
       this.persistActiveTabState();
       await this.saveWorkspaceState();
-      this.setLspStatus({ kind: "preview-ready", message: "File saved as a new document" });
+      this.setLspStatus({ kind: "preview-ready", message: t("File saved as a new document") });
       if (this.lspReady && this.lspClient) {
         await this.lspDocumentController.recheckActiveAfterPin(content);
         const resolved = await this.getLspUriAndContent(savePath, content);
@@ -3977,8 +3978,8 @@ export class TypsastraWorkspaceController {
   private showStandaloneProjectRecommendation(dependencies: readonly string[]): void {
     this.previewFrame.setConfirmationMessage({
       title: "Multi-file document",
-      message: `This file imports or includes ${dependencies.join(", ")}. `
-        + "A standalone preview compiles a single file. Promote this folder to a project to render it correctly.",
+      message: t`This file imports or includes ${dependencies.join(", ")}. `
+        + t("A standalone preview compiles a single file. Promote this folder to a project to render it correctly."),
       confirmLabel: "Promote to Project",
       onConfirm: () => this.promoteStandaloneToProject(),
     });
@@ -4002,7 +4003,7 @@ export class TypsastraWorkspaceController {
     const approved = await confirm(
       `Create a Typsastra project in this folder?\n\n${folder}\n\n` +
       "Typsastra writes a .typsastra folder with project settings and opens the file as the project's main document.",
-      { title: "Promote to Project", kind: "info", okLabel: "Create project", cancelLabel: "Cancel" },
+      { title: t("Promote to Project"), kind: "info", okLabel: t("Create project"), cancelLabel: t("Cancel") },
     );
     if (!approved) return;
     await this.openWorkspace(folder);
@@ -4043,7 +4044,7 @@ export class TypsastraWorkspaceController {
       this.lspReady = false;
       this.setLspStatus({
         kind: "error",
-        message: `Preview recompile failed while restarting Tinymist: ${String(error)}`,
+        message: t`Preview recompile failed while restarting Tinymist: ${String(error)}`,
       });
       this.previewFreshness.finish(freshnessToken, false);
     } finally {
@@ -4369,9 +4370,9 @@ export class TypsastraWorkspaceController {
 
   private renderStatus(status: LspStatus, label: "LSP" | "Index"): void {
     this.lspStatus.dataset.state = status.kind;
-    this.lspStatusDot.setAttribute("aria-label", status.message);
-    this.lspStatusLabel.textContent = label;
-    this.lspStatusText.textContent = status.message;
+    this.lspStatusDot.setAttribute("aria-label", t(status.message));
+    this.lspStatusLabel.textContent = t(label);
+    this.lspStatusText.textContent = t(status.message);
   }
 
   private handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number): Promise<void> {
@@ -4486,8 +4487,8 @@ export class TypsastraWorkspaceController {
       const button = document.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
       if (button) {
         button.disabled = !available;
-        button.title = `${action} (${shortcut})`;
-        button.setAttribute("aria-label", action);
+        button.title = t`${action} (${shortcut})`;
+        button.setAttribute("aria-label", t(action));
       }
     }
     for (const [id, available] of [
@@ -4615,7 +4616,7 @@ export class TypsastraWorkspaceController {
   private showTablePreview(pages: readonly string[]): void {
     if (pages.length === 0) {
       this.lastTablePreviewPages = null;
-      this.showTablePreviewMessage("Create or select a table to preview it.");
+      this.showTablePreviewMessage(t("Create or select a table to preview it."));
       return;
     }
     this.lastTablePreviewPages = pages
@@ -4631,7 +4632,8 @@ export class TypsastraWorkspaceController {
   }
 
   private showTablePreviewMessage(message: string): void {
-    const escaped = message.replace(/[&<>"]/gu, character => ({
+    const localized = t(message);
+    const escaped = localized.replace(/[&<>"]/gu, character => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
@@ -5126,7 +5128,7 @@ export class TypsastraWorkspaceController {
           await this.restartTinymistSession("Restarting LSP...");
         } catch (error) {
           this.lspReady = false;
-          this.setLspStatus({ kind: "error", message: `LSP restart failed: ${String(error)}` });
+          this.setLspStatus({ kind: "error", message: t`LSP restart failed: ${String(error)}` });
           return;
         }
         await this.restoreActiveDocumentAfterTinymistRestart();
@@ -5248,8 +5250,8 @@ export class TypsastraWorkspaceController {
         : this.openTabs.find(candidate => filePathKey(candidate.path) === filePathKey(path!));
       if (tab?.isDirty && tab.content !== record.text) {
         const proceed = await confirm(
-          `Replace the current unsaved changes in ${tab.title ?? displayName} with the recovered snapshot?`,
-          { title: "Recover Unsaved Work", kind: "warning" },
+          t`Replace the current unsaved changes in ${tab.title ?? displayName} with the recovered snapshot?`,
+          { title: t("Recover Unsaved Work"), kind: "warning" },
         );
         if (!proceed) return false;
       }
@@ -5329,8 +5331,8 @@ export class TypsastraWorkspaceController {
       this.setLspStatus({
         kind: "preview-ready",
         message: untitled
-          ? `Recovered ${displayName}. Use Save As to choose a file path.`
-          : `Recovered unsaved changes from ${displayName}`,
+          ? t`Recovered ${displayName}. Use Save As to choose a file path.`
+          : t`Recovered unsaved changes from ${displayName}`,
       });
       return true;
     } catch (error) {

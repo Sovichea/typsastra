@@ -10,6 +10,7 @@ import { filePathKey } from "../platform/paths";
 import { createAppIcon } from "../ui/icons";
 import type { PdfiumDestination, PdfiumOutlineItem } from "../preview/pdfiumDocument";
 import type { PreviewSourceOutlineItem } from "../preview/previewOutlineNavigator";
+import { t } from "../i18n";
 
 export type DocumentHeading = {
   id: string;
@@ -219,7 +220,7 @@ async function parseDocumentOutlineFlat(
                 kind: "include-cycle",
                 filePath,
                 line: lineNumber,
-                message: `Include cycle stopped at "${includePath}".`,
+                message: t`Include cycle stopped at "${includePath}".`,
               });
             } else {
               const includeSource = await readFile(resolvedPath);
@@ -228,7 +229,7 @@ async function parseDocumentOutlineFlat(
                   kind: "missing-include",
                   filePath,
                   line: lineNumber,
-                  message: `Could not resolve include "${includePath}".`,
+                  message: t`Could not resolve include "${includePath}".`,
                 });
               } else {
                 const subHeadings = await parseDocumentOutlineFlat(
@@ -251,7 +252,7 @@ async function parseDocumentOutlineFlat(
               kind: "dynamic-include",
               filePath,
               line: lineNumber,
-              message: `Dynamic include on line ${lineNumber} is not indexed.`,
+              message: t`Dynamic include on line ${lineNumber} is not indexed.`,
             });
           }
           if (/#import\b/.test(line)) {
@@ -266,7 +267,7 @@ async function parseDocumentOutlineFlat(
                 kind: "import-not-supported",
                 filePath,
                 line: lineNumber,
-                message: `Imported Typst modules are not indexed: "${importPath}".`,
+                message: t`Imported Typst modules are not indexed: "${importPath}".`,
               });
             }
           }
@@ -401,7 +402,7 @@ export class DocumentOutlineController {
   public initialize(): void {
     this.container.tabIndex = 0;
     this.container.setAttribute("role", "tree");
-    this.container.setAttribute("aria-label", "Document Outline");
+    this.container.setAttribute("aria-label", t("Document Outline"));
     this.container.addEventListener("focus", () => this.ensureKeyboardSelection());
     this.container.addEventListener("keydown", event => this.handleKeyboardNavigation(event));
     this.render();
@@ -594,7 +595,7 @@ export class DocumentOutlineController {
         this.selectedHeadingId = null;
         const empty = document.createElement("div");
         empty.className = "outline-empty";
-        empty.textContent = "No bookmarks in this PDF.";
+        empty.textContent = t("No bookmarks in this PDF.");
         this.container.replaceChildren(empty);
         return;
       }
@@ -605,7 +606,7 @@ export class DocumentOutlineController {
       this.selectedHeadingId = null;
       const empty = document.createElement("div");
       empty.className = "outline-empty";
-      empty.textContent = "No headings in this outline.";
+      empty.textContent = t("No headings in this outline.");
       this.container.replaceChildren(empty);
       return;
     }
@@ -687,7 +688,7 @@ export class DocumentOutlineController {
       row.dataset.outlineFile = heading.filePath;
       row.setAttribute("role", "treeitem");
       row.setAttribute("aria-selected", String(this.selectedHeadingId === heading.id));
-      row.title = `${heading.title} (line ${heading.line})`;
+      row.title = t`${heading.title} (line ${heading.line})`;
 
       const disclosure = document.createElement("button");
       disclosure.type = "button";
@@ -697,7 +698,7 @@ export class DocumentOutlineController {
         const isCollapsed = this.collapsed.has(heading.id);
         disclosure.appendChild(createAppIcon("chevronDown", { size: 14 }));
         disclosure.classList.toggle("collapsed", isCollapsed);
-        disclosure.setAttribute("aria-label", `${isCollapsed ? "Expand" : "Collapse"} ${heading.title}`);
+        disclosure.setAttribute("aria-label", isCollapsed ? t`Expand ${heading.title}` : t`Collapse ${heading.title}`);
         disclosure.setAttribute("aria-expanded", String(!isCollapsed));
         disclosure.addEventListener("click", event => {
           event.stopPropagation();
@@ -758,7 +759,7 @@ export class DocumentOutlineController {
         const isCollapsed = this.collapsed.has(outlineItem.id);
         disclosure.appendChild(createAppIcon("chevronDown", { size: 14 }));
         disclosure.classList.toggle("collapsed", isCollapsed);
-        disclosure.setAttribute("aria-label", `${isCollapsed ? "Expand" : "Collapse"} ${outlineItem.title}`);
+        disclosure.setAttribute("aria-label", isCollapsed ? t`Expand ${outlineItem.title}` : t`Collapse ${outlineItem.title}`);
         disclosure.setAttribute("aria-expanded", String(!isCollapsed));
         disclosure.addEventListener("click", event => {
           event.stopPropagation();

@@ -7,6 +7,7 @@ import { exportTableTypst, importTableTypst } from "./tableExchange";
 import { extractTableSource } from "./tableParse";
 import { wrapEditorCaretInput } from "../ui/editorCaretInput";
 import { createAppIcon } from "../ui/icons";
+import { setLocalizedHtml, t } from "../i18n";
 import {
   createToolbar,
   type SharedToolbar,
@@ -199,7 +200,7 @@ function normalizeTrackSize(value: string): string | null {
 
 /** Confirm destructive removals with the app's shared dialog style. */
 async function confirmDelete(message: string): Promise<boolean> {
-  return confirm(message, { title: "Confirm Delete", kind: "warning" });
+  return confirm(message, { title: t("Confirm Delete"), kind: "warning" });
 }
 
 /** Leading header rows, matching generation. */
@@ -521,12 +522,12 @@ export class TableToolController {
     const overlay = document.createElement("div");
     overlay.className = "settings-overlay table-samples-overlay";
     overlay.setAttribute("role", "presentation");
-    overlay.innerHTML =
+    setLocalizedHtml(overlay,
       `<div class="table-samples-dialog" role="dialog" aria-modal="true" aria-label="New table">` +
       `<header class="table-samples-header"><div><h2>New Table</h2>` +
       `<p>Start from a sample or an empty table.</p></div>` +
       `<button type="button" class="table-samples-close settings-icon-button" aria-label="Close">✕</button>` +
-      `</header><div class="table-samples-grid"></div></div>`;
+      `</header><div class="table-samples-grid"></div></div>`);
     const grid = overlay.querySelector<HTMLElement>(".table-samples-grid")!;
     for (const sample of TABLE_SAMPLES) {
       const card = document.createElement("button");
@@ -539,19 +540,19 @@ export class TableToolController {
         `<img class="table-sample-image" src="/table-samples/${sample.id}.svg" ` +
         `alt="" loading="lazy" draggable="false" /></span>` +
         `<span class="table-sample-name"></span><span class="table-sample-desc"></span>`;
-      card.querySelector<HTMLElement>(".table-sample-name")!.textContent = sample.name;
-      card.querySelector<HTMLElement>(".table-sample-desc")!.textContent = sample.description;
+      card.querySelector<HTMLElement>(".table-sample-name")!.textContent = t(sample.name);
+      card.querySelector<HTMLElement>(".table-sample-desc")!.textContent = t(sample.description);
       card.addEventListener("click", () => this.createFromSample(sample));
       grid.appendChild(card);
     }
     const importCard = document.createElement("button");
     importCard.type = "button";
     importCard.className = "table-sample-card table-sample-import";
-    importCard.innerHTML =
+    setLocalizedHtml(importCard,
       `<span class="table-sample-thumb table-sample-import-thumb">` +
       `<span class="table-sample-placeholder">Paste CSV / TSV</span></span>` +
       `<span class="table-sample-name">Import data</span>` +
-      `<span class="table-sample-desc">Paste comma- or tab-separated rows.</span>`;
+      `<span class="table-sample-desc">Paste comma- or tab-separated rows.</span>`);
     importCard.addEventListener("click", () => this.openImportDialog());
     grid.appendChild(importCard);
     overlay.querySelector(".table-samples-close")?.addEventListener("click", () => this.closeSamplesDialog());
@@ -581,7 +582,7 @@ export class TableToolController {
     const overlay = document.createElement("div");
     overlay.className = "settings-overlay table-import-overlay";
     overlay.setAttribute("role", "presentation");
-    overlay.innerHTML =
+    setLocalizedHtml(overlay,
       `<div class="table-samples-dialog table-import-dialog" role="dialog" aria-modal="true" aria-label="Import table data">` +
       `<header class="table-samples-header"><div><h2>Import data</h2>` +
       `<p>Paste comma- or tab-separated rows, or choose a .csv / .tsv file.</p></div>` +
@@ -599,7 +600,7 @@ export class TableToolController {
       `<footer class="table-import-footer">` +
       `<button type="button" class="table-import-file">Choose file…</button>` +
       `<button type="button" class="table-import-cancel">Cancel</button>` +
-      `<button type="button" class="table-import-confirm primary">Import</button></footer></div>`;
+      `<button type="button" class="table-import-confirm primary">Import</button></footer></div>`);
     const close = () => this.closeImportDialog();
     let chosenPath = "";
     overlay.querySelector(".table-import-close")?.addEventListener("click", close);
@@ -653,7 +654,7 @@ export class TableToolController {
     try {
       const selected = await open({
         multiple: false,
-        filters: [{ name: "Table data", extensions: ["csv", "tsv"] }],
+        filters: [{ name: t("Table data"), extensions: ["csv", "tsv"] }],
       });
       const path = Array.isArray(selected) ? selected[0] : selected;
       if (!path) return;
@@ -926,17 +927,17 @@ export class TableToolController {
     if (needsMount) {
       controls = document.createElement("div");
       controls.className = "sidebar-tool-controls";
-      controls.innerHTML = `
+      setLocalizedHtml(controls, `
         <input class="sidebar-tool-search" type="search" placeholder="Search tables" aria-label="Search project tables" autocomplete="off" />
         <select class="sidebar-tool-filter" aria-label="Filter project tables">
           ${TABLE_FILTER_LABELS.map(({ value, label }) => `<option value="${value}">${label}</option>`).join("")}
-        </select>`;
+        </select>`);
 
       rowList = document.createElement("div");
       rowList.className = "sidebar-tool-list";
       rowList.tabIndex = 0;
       rowList.setAttribute("role", "tree");
-      rowList.setAttribute("aria-label", "Project tables");
+      rowList.setAttribute("aria-label", t("Project tables"));
 
       footer = document.createElement("div");
       footer.className = "sidebar-tool-footer";
@@ -1064,8 +1065,8 @@ if (!controls || !rowList || !footer) {
       const empty = document.createElement("div");
       empty.className = "image-tool-empty";
       empty.textContent = this.tables.length === 0
-        ? "No tables yet. Create one to generate Typst code."
-        : "No tables match this view.";
+        ? t("No tables yet. Create one to generate Typst code.")
+        : t("No tables match this view.");
       rowList.appendChild(empty);
     }
 
@@ -1087,7 +1088,7 @@ if (!controls || !rowList || !footer) {
       text.textContent = table.name;
       const meta = document.createElement("span");
       meta.className = "table-tool-list-meta";
-      meta.textContent = `${table.rows.length}×${table.columns}`;
+      meta.textContent = t`${table.rows.length}×${table.columns}`;
       item.append(icon, text, meta);
       item.addEventListener("click", () => this.selectTable(table.id));
       // Tables are managed from the explorer: right-click to delete.
@@ -1104,7 +1105,7 @@ if (!controls || !rowList || !footer) {
       rowList.appendChild(item);
     }
 
-    footer.textContent = `${visible.length.toLocaleString()} table${visible.length === 1 ? "" : "s"}`;
+    footer.textContent = t`${visible.length.toLocaleString()} table${visible.length === 1 ? "" : "s"}`;
     this.ensureListKeyboardSelection();
   }
   /** Shows where the table is linked in code, mirroring the image tool. */
@@ -1118,15 +1119,15 @@ if (!controls || !rowList || !footer) {
       empty.className = "image-tool-empty-reference";
       // A failed scan looks identical to an unlinked table, so say which it is
       // rather than reporting a link that does not exist.
-      empty.textContent = this.deps.linkScanError?.() ?? "Not linked in the project.";
+      empty.textContent = this.deps.linkScanError?.() ?? t("Not linked in the project.");
       host.appendChild(empty);
       return;
     }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "image-tool-reference";
-    button.textContent = `${link.label} · Ln ${link.line}, Col ${link.column}`;
-    button.title = "Open this table in the code editor";
+    button.textContent = t`${link.label} · Ln ${link.line}, Col ${link.column}`;
+    button.title = t("Open this table in the code editor");
     button.addEventListener("click", () => this.deps.openLink?.(table.id));
     host.appendChild(button);
   }
@@ -1181,13 +1182,13 @@ if (!controls || !rowList || !footer) {
     this.selectionToolbar = null;
     const table = this.selected();
     if (!table) {
-      this.inspector.innerHTML =
+      setLocalizedHtml(this.inspector,
         `<div class="preview-disabled-placeholder image-tool-inspector-empty"><div class="guardrail-placeholder-content">` +
         `<div class="preview-disabled-title preview-accent-title">Table Tool</div>` +
-        `<div class="preview-disabled-msg">Create a table to generate Typst code.</div></div></div>`;
+        `<div class="preview-disabled-msg">Create a table to generate Typst code.</div></div></div>`);
       return;
     }
-    this.inspector.innerHTML =
+    setLocalizedHtml(this.inspector,
       `<div class="image-tool-inspector-header"><div><h2 data-field="table-heading"></h2>` +
       `<div class="image-tool-path" data-field="table-id"></div></div>` +
       `<span class="image-tool-status current-document">Table</span></div>` +
@@ -1214,7 +1215,7 @@ if (!controls || !rowList || !footer) {
       `<div class="image-tool-actions">` +
       `<button type="button" data-action="copy" class="primary"><span data-field="copy-label">Copy code</span></button>` +
       `<button type="button" data-action="link"><span data-field="link-label">Link to source</span></button></div>` +
-      `<pre class="table-tool-code" data-field="code"></pre></section>`;
+      `<pre class="table-tool-code" data-field="code"></pre></section>`);
 
     // Reuse the editor's caret text field so Khmer text renders in the same font
     // and the caret behaves like the code editor's.
@@ -1307,8 +1308,8 @@ if (!controls || !rowList || !footer) {
     copy.addEventListener("click", () => {
       void writeText(generateTableTypst(table))
         .then(() => {
-          copyLabel.textContent = "Copied";
-          window.setTimeout(() => { copyLabel.textContent = "Copy code"; }, 1200);
+          copyLabel.textContent = t("Copied");
+          window.setTimeout(() => { copyLabel.textContent = t("Copy code"); }, 1200);
         })
         .catch(error => this.deps.log?.("warning", `Could not copy table code: ${String(error)}`));
     });
@@ -1319,8 +1320,8 @@ if (!controls || !rowList || !footer) {
     link.addEventListener("click", () => {
       void writeText(tableDirectiveBlock(table))
         .then(() => {
-          linkLabel.textContent = "Copied";
-          window.setTimeout(() => { linkLabel.textContent = "Link to source"; }, 1200);
+          linkLabel.textContent = t("Copied");
+          window.setTimeout(() => { linkLabel.textContent = t("Link to source"); }, 1200);
           this.deps.showPreviewMessage?.(
             `Linked block copied. Paste it anywhere in your source and it stays synchronized. `
             + `To link manually, type //@table:${table.id} where you want it.`,
@@ -1772,7 +1773,7 @@ if (!controls || !rowList || !footer) {
     button.className = "table-tool-gutter-add";
     button.dataset.add = kind;
     button.textContent = "+";
-    button.title = kind === "row" ? "Add a row" : "Add a column";
+    button.title = kind === "row" ? t("Add a row") : t("Add a column");
     button.setAttribute("aria-label", button.title);
     button.addEventListener("click", event => {
       event.stopPropagation();
@@ -1838,8 +1839,8 @@ if (!controls || !rowList || !footer) {
     const selectAll = document.createElement("input");
     selectAll.type = "checkbox";
     selectAll.className = "table-tool-select-all";
-    selectAll.title = "Select the whole table";
-    selectAll.setAttribute("aria-label", "Select the whole table");
+    selectAll.title = t("Select the whole table");
+    selectAll.setAttribute("aria-label", t("Select the whole table"));
     selectAll.addEventListener("change", () => {
       if (selectAll.checked) {
         this.selectAll(table);
@@ -1858,7 +1859,7 @@ if (!controls || !rowList || !footer) {
       header.className = "table-tool-col-header";
       header.dataset.column = String(column);
       header.textContent = columnLetter(column);
-      header.title = `Select column ${columnLetter(column)}`;
+      header.title = t`Select column ${columnLetter(column)}`;
       header.style.gridRow = "1";
       header.style.gridColumn = `${column + 2}`;
       header.addEventListener("click", event => this.selectColumn(table, column, event.shiftKey));
@@ -1870,7 +1871,7 @@ if (!controls || !rowList || !footer) {
       header.className = "table-tool-row-header";
       header.dataset.row = String(row);
       header.textContent = String(row + 1);
-      header.title = `Select row ${row + 1}`;
+      header.title = t`Select row ${row + 1}`;
       header.style.gridRow = `${row + 2}`;
       header.style.gridColumn = "1";
       header.addEventListener("click", event => this.selectRow(table, row, event.shiftKey));
@@ -2003,7 +2004,7 @@ if (!controls || !rowList || !footer) {
           edge.classList.toggle("on", sideStyle.enabled);
           edge.style.setProperty("--edge-color", sideStyle.color);
           edge.style.setProperty("--edge-width", `${Math.max(1, Math.round(sideStyle.width * 1.5))}px`);
-          edge.title = `${side} border (${sideStyle.enabled ? "on" : "off"})`;
+          edge.title = sideStyle.enabled ? t`${t(side)} border (on)` : t`${t(side)} border (off)`;
           edge.addEventListener("pointerdown", event => {
             event.preventDefault();
             event.stopPropagation();
@@ -2227,15 +2228,15 @@ if (!controls || !rowList || !footer) {
     this.selectionToolbar?.element.classList.toggle("is-inactive", !range);
     if (!scope) return;
     if (!range) {
-      scope.textContent = "Applies to selected cells — click a cell to start. "
-        + "Shift+click or Shift+arrows select a range.";
+      scope.textContent = t("Applies to selected cells — click a cell to start. ")
+        + t("Shift+click or Shift+arrows select a range.");
       return;
     }
     const rows = range.maxRow - range.minRow + 1;
     const columns = range.maxColumn - range.minColumn + 1;
     scope.textContent = rows === 1 && columns === 1
-      ? "Applies to cell R" + String(range.minRow + 1) + "C" + String(range.minColumn + 1)
-      : `Applies to ${rows} × ${columns} selected cells`;
+      ? t`Applies to cell R${range.minRow + 1}C${range.minColumn + 1}`
+      : t`Applies to ${rows} × ${columns} selected cells`;
   }
 
   private applyTableStyle(table: StoredTable, style: StoredTableStyle): void {

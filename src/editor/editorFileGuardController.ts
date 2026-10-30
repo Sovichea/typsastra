@@ -5,6 +5,7 @@ import { fileNameFromPath, filePathKey } from "../platform/paths";
 import type { PreviewFrame } from "../preview/previewFrame";
 import { formatFileSize, type LargeFileOpeningNotice } from "../workspace/largeFileOpening";
 import type { EditorTab } from "./editorTab";
+import { t } from "../i18n";
 
 type EditorFileGuardDependencies = {
   previewFrame: () => PreviewFrame;
@@ -43,12 +44,12 @@ export class EditorFileGuardController {
     const title = document.createElement("div");
     title.className = "preview-disabled-title";
     title.textContent = isPdf
-      ? "PDF Document"
+      ? t("PDF Document")
       : isImage
-        ? "Image File"
+        ? t("Image File")
         : unsupported
-          ? "Unsupported File"
-          : "Binary File";
+          ? t("Unsupported File")
+          : t("Binary File");
 
     const fileName = document.createElement("div");
     fileName.className = "editor-file-placeholder-name";
@@ -57,12 +58,12 @@ export class EditorFileGuardController {
     const description = document.createElement("div");
     description.className = "preview-disabled-msg";
     description.textContent = isPdf
-      ? "This document is displayed in the live preview pane."
+      ? t("This document is displayed in the live preview pane.")
       : isImage
-        ? "This image is displayed in the interactive preview pane."
+        ? t("This image is displayed in the interactive preview pane.")
         : unsupported
-          ? "This file format cannot be displayed in Typsastra."
-          : "Cannot load raw binary in the text editor.";
+          ? t("This file format cannot be displayed in Typsastra.")
+          : t("Cannot load raw binary in the text editor.");
 
     const metadata = document.createElement("dl");
     metadata.className = "editor-file-metadata";
@@ -70,8 +71,8 @@ export class EditorFileGuardController {
       const row = document.createElement("div");
       const term = document.createElement("dt");
       const detail = document.createElement("dd");
-      term.textContent = label;
-      detail.textContent = value;
+      term.textContent = t(label);
+      detail.textContent = t(value);
       if (key) detail.dataset.fileMetadata = key;
       row.append(term, detail);
       metadata.append(row);
@@ -86,15 +87,15 @@ export class EditorFileGuardController {
         const image = new Image();
         image.addEventListener("load", () => {
           if (placeholder.isConnected) {
-            dimensions.textContent = `${image.naturalWidth.toLocaleString()} × ${image.naturalHeight.toLocaleString()} px`;
+            dimensions.textContent = t`${image.naturalWidth.toLocaleString()} × ${image.naturalHeight.toLocaleString()} px`;
           }
         }, { once: true });
         image.addEventListener("error", () => {
-          if (placeholder.isConnected) dimensions.textContent = "Unavailable";
+          if (placeholder.isConnected) dimensions.textContent = t("Unavailable");
         }, { once: true });
         image.src = source;
       } else {
-        dimensions.textContent = "Unavailable";
+        dimensions.textContent = t("Unavailable");
       }
     }
     addMetadata("Location", path, "location");
@@ -102,7 +103,7 @@ export class EditorFileGuardController {
     void invoke<number>("workspace_file_size", { path }).then(bytes => {
       if (placeholder.isConnected) size.textContent = formatFileSize(bytes);
     }).catch(() => {
-      if (placeholder.isConnected) size.textContent = "Unavailable";
+      if (placeholder.isConnected) size.textContent = t("Unavailable");
     });
 
     placeholder.append(icon, title, fileName, description, metadata);
@@ -110,7 +111,7 @@ export class EditorFileGuardController {
       const openButton = document.createElement("button");
       openButton.type = "button";
       openButton.className = "editor-file-placeholder-action";
-      openButton.textContent = "Open Externally";
+      openButton.textContent = t("Open Externally");
       openButton.addEventListener("click", () => void this.openFileExternally(path, openButton));
       placeholder.appendChild(openButton);
     }
@@ -185,10 +186,10 @@ export class EditorFileGuardController {
     const title = document.createElement("div");
     title.className = "preview-disabled-title";
     title.textContent = notice.kind === "pdf"
-      ? "Large PDF Document"
+      ? t("Large PDF Document")
       : isTypstDocumentPath(path)
-        ? "Large Typst Document"
-        : "Large Text File";
+        ? t("Large Typst Document")
+        : t("Large Text File");
 
     const fileName = document.createElement("div");
     fileName.className = "editor-file-placeholder-name";
@@ -197,18 +198,18 @@ export class EditorFileGuardController {
     const description = document.createElement("div");
     description.className = "preview-disabled-msg";
     const work = notice.kind === "pdf"
-      ? "Confirm in the preview pane before Typsastra decodes and renders it."
+      ? t("Confirm in the preview pane before Typsastra decodes and renders it.")
       : notice.kind === "main-preview"
-        ? `This file belongs to a large preview rooted at ${fileNameFromPath(notice.previewRootPath ?? "the configured main file")}. Opening it will initialize the editor and start that compiler preview.`
+        ? t`This file belongs to a large preview rooted at ${fileNameFromPath(notice.previewRootPath ?? t("the configured main file"))}. Opening it will initialize the editor and start that compiler preview.`
         : isTypstDocumentPath(path)
-          ? "Opening it will initialize the editor and start its compiler preview."
-          : "Opening it will initialize the editor, folding, outline, and language tools.";
+          ? t("Opening it will initialize the editor and start its compiler preview.")
+          : t("Opening it will initialize the editor, folding, outline, and language tools.");
     const scale = notice.lineCount !== undefined
-      ? `${notice.lineCount.toLocaleString()} lines, ${formatFileSize(notice.sizeBytes)}`
+      ? t`${notice.lineCount.toLocaleString()} lines, ${formatFileSize(notice.sizeBytes)}`
       : formatFileSize(notice.sizeBytes);
     description.textContent = notice.kind === "main-preview"
-      ? `The effective preview contains ${scale}. ${work}`
-      : `This file is ${scale}. ${work}`;
+      ? t`The effective preview contains ${scale}. ${work}`
+      : t`This file is ${scale}. ${work}`;
 
     const openConfirmedFile = async () => {
       this.deps.logPreview(`Large-file confirmation accepted: tab=${path}; kind=${notice.kind}; noticeRoot=${notice.previewRootPath ?? "none"}.`);
@@ -239,7 +240,7 @@ export class EditorFileGuardController {
     if (notice.kind === "pdf") {
       this.deps.previewFrame().setConfirmationMessage({
         title: "Large PDF Preview Not Started",
-        message: `${fileNameFromPath(path)} is ${formatFileSize(notice.sizeBytes)}. Opening it will decode the PDF and begin rendering visible pages.`,
+        message: t`${fileNameFromPath(path)} is ${formatFileSize(notice.sizeBytes)}. Opening it will decode the PDF and begin rendering visible pages.`,
         confirmLabel: "Open Large PDF",
         pairedGuardrail: true,
         onConfirm: openConfirmedFile,
@@ -248,17 +249,17 @@ export class EditorFileGuardController {
       const confirmButton = document.createElement("button");
       confirmButton.type = "button";
       confirmButton.className = "editor-file-placeholder-action";
-      const confirmLabel = isTypstDocumentPath(path) ? "Open and Compile Preview" : "Open Large File";
+      const confirmLabel = isTypstDocumentPath(path) ? t("Open and Compile Preview") : t("Open Large File");
       confirmButton.textContent = confirmLabel;
       confirmButton.addEventListener("click", () => {
         confirmButton.disabled = true;
-        confirmButton.textContent = "Opening…";
+        confirmButton.textContent = t("Opening…");
         void this.confirmLargeFile(path).catch(error => {
           console.error("Failed to open large file:", error);
           confirmButton.disabled = false;
           confirmButton.textContent = confirmLabel;
-          void message(`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
-            title: "Unable to Open File",
+          void message(t`Could not open ${fileNameFromPath(path)}: ${String(error)}`, {
+            title: t("Unable to Open File"),
             kind: "error",
           });
         });
@@ -308,8 +309,8 @@ export class EditorFileGuardController {
       await invoke("open_file_externally", { path });
     } catch (error) {
       console.error("Failed to open file externally:", error);
-      await message(`The file could not be opened externally.\n\n${String(error)}`, {
-        title: "Open External File Failed",
+      await message(t`The file could not be opened externally.\n\n${String(error)}`, {
+        title: t("Open External File Failed"),
         kind: "error",
       });
     } finally {

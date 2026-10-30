@@ -18,6 +18,7 @@ import type { TerminologyEntry } from "../settings";
 import type { Extension, StateEffect } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import type { LspStatus, TinymistLspClient } from "../compiler/lsp";
+import { t } from "../i18n";
 
 type ExamplesWorkspace = {
   workspacePath: string;
@@ -353,10 +354,10 @@ export class WorkspaceLifecycleController {
         "Typsastra now stores generated render caches in machine-local application data so they are not synchronized, searched, or copied with the project.\n\n" +
         "Continue to remove the old workspace cache and use the machine-local cache?",
         {
-          title: "Migrate Typsastra Cache",
+          title: t("Migrate Typsastra Cache"),
           kind: "warning",
-          okLabel: "Migrate and Open",
-          cancelLabel: "Cancel",
+          okLabel: t("Migrate and Open"),
+          cancelLabel: t("Cancel"),
         },
       );
       if (!approved) return;
@@ -428,7 +429,7 @@ export class WorkspaceLifecycleController {
       app.explorer.setActiveFile(null);
       app.explorer.clearWorkspace();
       app.renderEditorTabs();
-      await message(String(error), { title: "Unable to Open Project", kind: "error" });
+      await message(String(error), { title: t("Unable to Open Project"), kind: "error" });
       return;
     } finally {
       await app.editorFontManager.ready();
@@ -636,7 +637,7 @@ export class WorkspaceLifecycleController {
     }
     await app.setPinnedMainFile(imported.mainFilePath);
     await app.saveWorkspaceState();
-    app.setLspStatus({ kind: "preview-ready", message: `Imported ${projectName}` });
+    app.setLspStatus({ kind: "preview-ready", message: t`Imported ${projectName}` });
     return true;
   }
 
@@ -648,7 +649,7 @@ export class WorkspaceLifecycleController {
     }
     await app.setPinnedMainFile(project.mainFilePath);
     await app.saveWorkspaceState();
-    app.setLspStatus({ kind: "preview-ready", message: `Created ${project.projectName}` });
+    app.setLspStatus({ kind: "preview-ready", message: t`Created ${project.projectName}` });
     return true;
   }
 
@@ -676,7 +677,7 @@ export class WorkspaceLifecycleController {
       await app.loadFile(examples.entryPath);
     } catch (error) {
       app.appendLspLog({ kind: "error", source: "examples", message: `Failed to open examples: ${String(error)}` });
-      await message(String(error), { title: "Unable to open examples", kind: "error" });
+      await message(String(error), { title: t("Unable to open examples"), kind: "error" });
     } finally {
       if (button) button.disabled = false;
     }
@@ -688,8 +689,8 @@ export class WorkspaceLifecycleController {
     const discardedTabs = confirmUnsaved ? app.openTabs.filter(tab => tab.isDirty) : [];
     if (discardedTabs.length > 0) {
       const shouldClose = await confirm(
-        "Close this project with unsaved changes? Unsaved changes will be discarded and the files are not saved to disk.",
-        { title: "Unsaved Changes", kind: "warning" },
+        t("Close this project with unsaved changes? Unsaved changes will be discarded and the files are not saved to disk."),
+        { title: t("Unsaved Changes"), kind: "warning" },
       );
       if (!shouldClose) return false;
     }
@@ -798,7 +799,7 @@ export class WorkspaceLifecycleController {
     app.documentOutlineController.clear();
     app.navigationHistoryController.clear();
     app.renderEditorTabs();
-    app.setLspStatus({ kind: "stopped", message: "Project closed" });
+    app.setLspStatus({ kind: "stopped", message: t("Project closed") });
     app.updateWorkspaceViewportVisibility();
     return true;
   }

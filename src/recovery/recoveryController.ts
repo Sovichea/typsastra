@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { EditorView } from "@codemirror/view";
 import type { EditorTab } from "../editor/editorTab";
 import { fileNameFromPath, filePathKey, remapFilePath } from "../platform/paths";
+import { t } from "../i18n";
 import {
   canRecoverTab,
   recoveryDocumentId,
@@ -332,7 +333,7 @@ export class RecoveryController {
       documentId,
       workspaceRoot: this.deps.workspaceRootPath(),
       path: tab.untitled ? null : tab.path,
-      title: tab.untitled ? (tab.title ?? "Untitled") : null,
+      title: tab.untitled ? (tab.title ?? t("Untitled")) : null,
       text: useLiveEditor ? editor!.state.doc.toString() : tab.content,
       revision,
       timestampMs: Date.now(),

@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 export interface AppDialogAction {
   id: string;
   label: string;
@@ -34,10 +36,10 @@ export class AppDialogController {
     }
 
     this.active = true;
-    this.title.textContent = options.title;
-    this.subtitle.textContent = options.subtitle ?? "";
+    this.title.textContent = t(options.title);
+    this.subtitle.textContent = t(options.subtitle ?? "");
     this.subtitle.hidden = !options.subtitle;
-    this.description.textContent = options.description;
+    this.description.textContent = t(options.description);
 
     const slots = dialogActionSlots(options.actions.length);
     for (let index = 0; index < this.buttons.length; index += 1) {
@@ -45,7 +47,7 @@ export class AppDialogController {
       const actionIndex = slots.indexOf(index);
       const action = actionIndex >= 0 ? options.actions[actionIndex] : null;
       button.hidden = !action;
-      button.textContent = action?.label ?? "";
+      button.textContent = t(action?.label ?? "");
       button.classList.toggle("settings-primary", Boolean(action?.primary));
       button.dataset.actionId = action?.id ?? "";
     }

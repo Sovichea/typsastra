@@ -4,6 +4,7 @@ import type { DraftPreviewController } from "./draftPreviewController";
 import type { ImagePreviewController } from "./imagePreviewController";
 import type { MarkdownPreviewFrame } from "./markdownPreviewFrame";
 import type { PreviewFrame, PreviewInteractionStatus, PreviewPageStatus } from "./previewFrame";
+import { t } from "../i18n";
 
 /** Zoom bridge for the table tool's preview surface. */
 export interface TablePreviewZoom {
@@ -46,13 +47,13 @@ export class PreviewUiController {
     const tableIsFit = this.deps.tablePreview.isFit();
     if (imageZoomPercent !== null && imageIsFit !== null) {
       const pct = Math.round((zoomPercent ?? imageZoomPercent) * 100);
-      label.textContent = imageIsFit ? "Fit" : `${pct}%`;
+      label.textContent = imageIsFit ? t("Fit") : `${pct}%`;
     } else if (tableZoomPercent !== null && tableIsFit !== null) {
       const pct = Math.round((zoomPercent ?? tableZoomPercent) * 100);
-      label.textContent = tableIsFit ? "Fit" : `${pct}%`;
+      label.textContent = tableIsFit ? t("Fit") : `${pct}%`;
     } else {
       const pct = zoomPercent ?? this.deps.previewFrame.currentZoomPercent;
-      label.textContent = this.deps.previewFrame.isFitMode ? "Fit" : `${Math.round(pct)}%`;
+      label.textContent = this.deps.previewFrame.isFitMode ? t("Fit") : `${Math.round(pct)}%`;
     }
   }
 
@@ -183,7 +184,7 @@ export class PreviewUiController {
       return;
     }
     if (status.kind === "installed") {
-      this.deps.setLspStatus({ kind: "preview-ready", message: "Inverse sync source-map active" });
+      this.deps.setLspStatus({ kind: "preview-ready", message: t("Inverse sync source-map active") });
       this.deps.log(
         "info",
         "inverse sync",
@@ -191,7 +192,7 @@ export class PreviewUiController {
       );
       return;
     }
-    this.deps.setLspStatus({ kind: "preview-ready", message: "Inverse sync source-map blocked" });
+    this.deps.setLspStatus({ kind: "preview-ready", message: t("Inverse sync source-map blocked") });
     this.deps.log(
       "warning",
       "inverse sync",

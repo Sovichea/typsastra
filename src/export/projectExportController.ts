@@ -6,6 +6,7 @@ import {
   prepareRenderProjectWithCopyGuard,
   RenderCacheCopyCancelled,
 } from "../preview/renderCacheCopyGuard";
+import { t } from "../i18n";
 
 export type ExportableEditorTab = {
   path: string;
@@ -104,12 +105,12 @@ export class ProjectExportController {
         ? activeFilePath
         : (this.deps.previewMainPath() ?? activeFilePath)).replace(/\.typ$/i, ".pdf");
       exportPdfPath = await save({
-        title: "Export PDF",
+        title: t("Export PDF"),
         defaultPath: defaultPdfPath,
-        filters: [{ name: "PDF Document", extensions: ["pdf"] }]
+        filters: [{ name: t("PDF Document"), extensions: ["pdf"] }]
       });
       if (!exportPdfPath) {
-        this.deps.setLspStatus({ kind: "preview-ready", message: "PDF export cancelled" });
+        this.deps.setLspStatus({ kind: "preview-ready", message: t("PDF export cancelled") });
         return;
       }
 
@@ -128,7 +129,7 @@ export class ProjectExportController {
       this.throwIfPdfExportCancelled();
       this.deps.setLspStatus({
         kind: "running",
-        message: `Exporting PDF with ${provenance.displayName}... Use Export PDF again to cancel.`,
+        message: t`Exporting PDF with ${provenance.displayName}... Use Export PDF again to cancel.`,
       });
       let targetFilePath = rootPath;
       let targetContent = "";
@@ -189,12 +190,12 @@ export class ProjectExportController {
       this.updatePdfExportAction(false);
       this.deps.setLspStatus({
         kind: "running",
-        message: `Finalizing PDF export with ${provenance.displayName}...`,
+        message: t`Finalizing PDF export with ${provenance.displayName}...`,
       });
       await invoke("commit_pdf_export", { operationId, source: pdfPath, destination: exportPdfPath });
       this.deps.setLspStatus({
         kind: "preview-ready",
-        message: `Exported with ${provenance.displayName} to ${destinationName(exportPdfPath)}`,
+        message: t`Exported with ${provenance.displayName} to ${destinationName(exportPdfPath)}`,
       });
       this.deps.log("info", pdfExportProvenanceLog(provenance, "success", exportPdfPath));
     } catch (error) {
@@ -249,10 +250,10 @@ export class ProjectExportController {
   private updatePdfExportAction(running: boolean): void {
     const label = running ? "Cancel PDF Export" : "Export PDF";
     const menuItem = document.getElementById("action-export-pdf");
-    if (menuItem) menuItem.textContent = label;
+    if (menuItem) menuItem.textContent = t(label);
     for (const button of document.querySelectorAll<HTMLElement>('[data-tool="export-pdf"]')) {
-      button.title = label;
-      button.setAttribute("aria-label", label);
+      button.title = t(label);
+      button.setAttribute("aria-label", t(label));
       button.classList.toggle("is-cancelling-action", running);
     }
   }
@@ -260,12 +261,12 @@ export class ProjectExportController {
   async exportProjectArchive(): Promise<void> {
     const workspaceRootPath = this.deps.workspaceRootPath();
     if (!workspaceRootPath) {
-      alert("Please open a project first.");
+      alert(t("Please open a project first."));
       return;
     }
     if (this.deps.openTabs().some(tab => tab.isDirty)) {
-      await message("Save all modified files before exporting so the archive matches the editor.", {
-        title: "Unsaved Files",
+      await message(t("Save all modified files before exporting so the archive matches the editor."), {
+        title: t("Unsaved Files"),
         kind: "warning"
       });
       return;
@@ -276,8 +277,8 @@ export class ProjectExportController {
       activeFilePath?.toLowerCase().endsWith(".typ") ? activeFilePath : null
     );
     if (!mainFilePath) {
-      await message("Set or open the project's main Typst file before exporting a version-bound project.", {
-        title: "Main File Required",
+      await message(t("Set or open the project's main Typst file before exporting a version-bound project."), {
+        title: t("Main File Required"),
         kind: "warning"
       });
       return;
@@ -287,11 +288,11 @@ export class ProjectExportController {
     try {
       const folderName = workspaceRootPath.split(/[/\\]/).pop() || "workspace";
       const selected = await save({
-        filters: [{ name: "Typsastra Project", extensions: ["typsastra"] }],
+        filters: [{ name: t("Typsastra Project"), extensions: ["typsastra"] }],
         defaultPath: `${folderName}.typsastra`
       });
       if (selected) {
-        this.deps.setLspStatus({ kind: "running", message: "Exporting Typsastra project..." });
+        this.deps.setLspStatus({ kind: "running", message: t("Exporting Typsastra project...") });
         await invoke("export_typsastra_project", {
           workspacePath: workspaceRootPath,
           archivePath: selected,
@@ -299,12 +300,12 @@ export class ProjectExportController {
         });
         this.deps.setLspStatus({
           kind: "preview-ready",
-          message: `Typsastra project exported to ${selected}. Font files were not included.`
+          message: t`Typsastra project exported to ${selected}. Font files were not included.`
         });
       }
     } catch (error) {
-      this.deps.setLspStatus({ kind: "error", message: `Project export failed: ${error}` });
-      await message(String(error), { title: "Typsastra Project Export Failed", kind: "error" });
+      this.deps.setLspStatus({ kind: "error", message: t`Project export failed: ${error}` });
+      await message(String(error), { title: t("Typsastra Project Export Failed"), kind: "error" });
     } finally {
       this.busy = false;
     }
@@ -313,12 +314,12 @@ export class ProjectExportController {
   async exportSourceZip(): Promise<void> {
     const workspaceRootPath = this.deps.workspaceRootPath();
     if (!workspaceRootPath) {
-      alert("Please open a project first.");
+      alert(t("Please open a project first."));
       return;
     }
     if (this.deps.openTabs().some(tab => tab.isDirty)) {
-      await message("Save all modified files before exporting so the ZIP matches the editor.", {
-        title: "Unsaved Files",
+      await message(t("Save all modified files before exporting so the ZIP matches the editor."), {
+        title: t("Unsaved Files"),
         kind: "warning"
       });
       return;
@@ -328,23 +329,23 @@ export class ProjectExportController {
     try {
       const folderName = workspaceRootPath.split(/[/\\]/).pop() || "workspace";
       const selected = await save({
-        filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+        filters: [{ name: t("ZIP Archive"), extensions: ["zip"] }],
         defaultPath: `${folderName}.zip`
       });
       if (selected) {
-        this.deps.setLspStatus({ kind: "running", message: "Exporting source ZIP..." });
+        this.deps.setLspStatus({ kind: "running", message: t("Exporting source ZIP...") });
         await invoke("export_source_zip", {
           workspacePath: workspaceRootPath,
           zipPath: selected
         });
         this.deps.setLspStatus({
           kind: "preview-ready",
-          message: `Source ZIP exported to ${selected}. Font files were not included.`
+          message: t`Source ZIP exported to ${selected}. Font files were not included.`
         });
       }
     } catch (error) {
-      this.deps.setLspStatus({ kind: "error", message: `Source ZIP export failed: ${error}` });
-      await message(String(error), { title: "Source ZIP Export Failed", kind: "error" });
+      this.deps.setLspStatus({ kind: "error", message: t`Source ZIP export failed: ${error}` });
+      await message(String(error), { title: t("Source ZIP Export Failed"), kind: "error" });
     } finally {
       this.busy = false;
     }

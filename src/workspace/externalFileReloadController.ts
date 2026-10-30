@@ -4,6 +4,7 @@ import type { EditorTabPresentationController } from "../editor/editorTabPresent
 import { fileExtension, isBinaryImagePath } from "../platform/fileTypes";
 import { fileNameFromPath, filePathKey } from "../platform/paths";
 import { LatestRequestGuard } from "./latestRequestGuard";
+import { t } from "../i18n";
 
 export interface ExternalFileReloadDependencies {
   presentation: EditorTabPresentationController;
@@ -153,7 +154,7 @@ export class ExternalFileReloadController {
     this.deps.appendWorkspaceWarning(
       `${fileNameFromPath(path)} ${reason}; unsaved editor content was preserved.`,
     );
-    this.deps.setLspStatus({ kind: "error", message: "External change conflicts with unsaved edits" });
+    this.deps.setLspStatus({ kind: "error", message: t("External change conflicts with unsaved edits") });
   }
 
   private isActive(tab: EditorTab): boolean {

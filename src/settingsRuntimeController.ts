@@ -6,6 +6,7 @@ import type { SpellcheckController } from "./editor/spellcheck";
 import type { EditorFontManager } from "./editor/fontManager";
 import type { AppSettings } from "./settings";
 import type { PreviewRefreshStyle } from "./preview/previewPolicy";
+import { t } from "./i18n";
 
 export interface SettingsRuntimeDependencies {
   projectTerminology(): AppSettings["editor"]["globalTerminology"];
@@ -103,9 +104,9 @@ export class SettingsRuntimeController {
     }
 
     const wrapLabel = document.getElementById("word-wrap-label");
-    if (wrapLabel) wrapLabel.textContent = editor.wordWrap ? "Wrap: On" : "Wrap: Off";
+    if (wrapLabel) wrapLabel.textContent = editor.wordWrap ? t("Wrap: On") : t("Wrap: Off");
     const zwsLabel = document.getElementById("zws-label");
-    if (zwsLabel) zwsLabel.textContent = editor.showZws ? "Invisibles: On" : "Invisibles: Off";
+    if (zwsLabel) zwsLabel.textContent = editor.showZws ? t("Invisibles: On") : t("Invisibles: Off");
     if (!preview.cursorSync) this.deps.clearForwardSync();
   }
 

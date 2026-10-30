@@ -16,6 +16,7 @@ import { installModalFocusTrap } from "./modalFocus";
 import { isAltGraphKeyboardEvent } from "./keyboardModifiers";
 import { updateMaximizeIcon } from "./icons";
 import { nativeAppMenuOwnsShortcuts } from "../platform/nativeAppMenuSpec";
+import { t } from "../i18n";
 
 export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 
@@ -225,7 +226,7 @@ function bindAboutDialog(): void {
   aboutAction?.addEventListener("click", async () => {
     focusBeforeAbout = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const version = document.getElementById("about-version");
-    if (version) version.textContent = await getVersion().catch(() => "Unavailable");
+    if (version) version.textContent = await getVersion().catch(() => t("Unavailable"));
     aboutOverlay?.classList.remove("hidden");
     aboutClose?.focus();
   });
@@ -288,11 +289,11 @@ function bindWindowControls(actions: AppEventActions): void {
     let proceed = true;
     let discardRecovery = false;
     if (actions.hasUnsavedChanges()) {
-      proceed = await confirm("You have unsaved changes. Are you sure you want to close Typsastra?", {
-        title: "Unsaved Changes",
+      proceed = await confirm(t("You have unsaved changes. Are you sure you want to close Typsastra?"), {
+        title: t("Unsaved Changes"),
         kind: "warning",
-        okLabel: "Close Without Saving",
-        cancelLabel: "Cancel"
+        okLabel: t("Close Without Saving"),
+        cancelLabel: t("Cancel")
       });
       discardRecovery = proceed;
     }
@@ -475,7 +476,7 @@ export function bindAppEvents(actions: AppEventActions): void {
     const linkSpan = (mouseEvent.target as HTMLElement).closest(".wysiwym-link");
     const url = linkSpan?.getAttribute("data-url");
     if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) return;
-    const trust = window.confirm(`Do you want to open this external link in your browser?\n\n${url}`);
+    const trust = window.confirm(t`Do you want to open this external link in your browser?\n\n${url}`);
     if (!trust) return;
     try {
       await openUrl(url);

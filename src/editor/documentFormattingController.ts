@@ -2,6 +2,7 @@ import type { EditorView } from "@codemirror/view";
 import type { TinymistLspClient, LspLogEntry, LspStatus } from "../compiler/lsp";
 import { isTypstDocumentPath } from "../platform/fileTypes";
 import { filePathToUri } from "../platform/paths";
+import { t } from "../i18n";
 
 export interface DocumentFormattingDependencies {
   activeFilePath(): string | null;
@@ -27,7 +28,7 @@ export class DocumentFormattingController {
     const client = this.deps.client();
     if (!this.deps.lspReady() || !client) {
       if (!options.silent) {
-        this.deps.setLspStatus({ kind: "error", message: "Formatter unavailable until Tinymist LSP is ready" });
+        this.deps.setLspStatus({ kind: "error", message: t("Formatter unavailable until Tinymist LSP is ready") });
       }
       return false;
     }
@@ -69,7 +70,7 @@ export class DocumentFormattingController {
         message: `Format failed: ${String(error)}`,
       });
       if (!options.silent) {
-        this.deps.setLspStatus({ kind: "error", message: `Format failed: ${String(error)}` });
+        this.deps.setLspStatus({ kind: "error", message: t`Format failed: ${String(error)}` });
       }
       return false;
     }

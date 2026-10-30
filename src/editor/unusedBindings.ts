@@ -5,6 +5,7 @@ import { Decoration, EditorView, GutterMarker, ViewPlugin } from "@codemirror/vi
 import type { DecorationSet } from "@codemirror/view";
 import type { LspLocation, TinymistLspClient } from "../compiler/lsp";
 import { createAppIcon } from "../ui/icons";
+import { t } from "../i18n";
 
 export type LetBindingDeclaration = {
   name: string;
@@ -147,10 +148,10 @@ export function buildUnusedBindingPresentation(
     .sort((left, right) => left.from - right.from);
   for (const declaration of sorted) {
     if (declaration.from < 0 || declaration.to > docLength || declaration.to <= declaration.from) continue;
-    const message = `${declaration.name} (${declaration.kind}) is not used in this workspace. ${UNUSED_BINDING_TITLE}`;
+    const message = t`${declaration.name} (${declaration.kind}) is not used in this workspace. ${t(UNUSED_BINDING_TITLE)}`;
     decorationBuilder.add(declaration.from, declaration.to, Decoration.mark({
       class: "cm-unused-binding",
-      attributes: { title: UNUSED_BINDING_TITLE },
+      attributes: { title: t(UNUSED_BINDING_TITLE) },
     }));
     markerBuilder.add(declaration.from, declaration.from, new UnusedBindingMarker(message, declaration.name));
   }

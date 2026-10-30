@@ -1,6 +1,7 @@
 import { installPreviewZoomGestures, zoomPreviewElementAtPoint, GestureZoomSteps } from "./previewZoomGestures";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
+import { t } from "../i18n";
 
 export type MarkdownResource = {
   source: string;
@@ -51,7 +52,7 @@ export class MarkdownPreviewFrame {
   ) {
     this.host = document.createElement("div");
     this.host.className = "markdown-preview-host hidden";
-    this.host.setAttribute("aria-label", "Markdown preview");
+    this.host.setAttribute("aria-label", t("Markdown preview"));
     this.article = document.createElement("article");
     this.article.className = "markdown-preview-document";
     this.host.appendChild(this.article);
@@ -170,7 +171,7 @@ export class MarkdownPreviewFrame {
       if (!resource) {
         const blocked = document.createElement("span");
         blocked.className = "markdown-preview-blocked-resource";
-        blocked.textContent = source ? `Image unavailable: ${source}` : "Image unavailable";
+        blocked.textContent = source ? t`Image unavailable: ${source}` : t("Image unavailable");
         image.replaceWith(blocked);
         return;
       }

@@ -1,5 +1,6 @@
 import { resolveRuntimeTitlebar, type RuntimeTitlebarInput } from "./runtimeTitlebar";
 import { applicationShortcuts, canonicalShortcut, shortcutFor, type ShortcutOverrides } from "./shortcutRegistry";
+import { t } from "../i18n";
 
 let configuredShortcuts: ShortcutOverrides = {};
 
@@ -78,6 +79,6 @@ export function applyShortcutLabels(root: ParentNode = document, mac: boolean = 
     const label = formatShortcut(binding, mac);
     const title = element.dataset.shortcutTitle;
     if (title === undefined) element.textContent = label;
-    else element.title = title.replace("{}", label);
+    else element.title = t(title).replace("{}", label);
   });
 }

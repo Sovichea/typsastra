@@ -16,6 +16,7 @@ import {
 import { applyShortcutLabels } from "../platform/shortcuts";
 import { isTypstDocumentPath } from "../platform/fileTypes";
 import type { PreviewColorMode } from "../settings";
+import { setLocalizedHtml, t } from "../i18n";
 
 export type ContextMenuDependencies = {
   getWorkspaceRoot: () => string | null;
@@ -276,7 +277,7 @@ export class ContextMenuController {
             });
           } catch (error) {
             await message(String(error), {
-              title: "Copy with Formatting Failed",
+              title: t("Copy with Formatting Failed"),
               kind: "error",
             });
           }
@@ -314,7 +315,7 @@ export class ContextMenuController {
         if (this.spellingIssue) this.dependencies.setSpellingIgnored(this.spellingIssue, !this.spellingIssue.ignored);
         return;
       case "ctx-fs-copy":
-        if (this.targetIsDirectory) alert("Copying directories directly is not yet supported.");
+        if (this.targetIsDirectory) alert(t("Copying directories directly is not yet supported."));
         else this.copiedFilePath = this.targetPath;
         return;
       case "ctx-fs-reveal": if (this.targetPath) await invoke("reveal_in_explorer", { path: this.targetPath }); return;
@@ -358,7 +359,7 @@ export class ContextMenuController {
             await invoke("save_workspace_file", { path, contents: "" });
             await this.refreshExplorer();
             await this.dependencies.loadFile(path);
-          } catch (error) { alert(`Failed to create file: ${error}`); }
+          } catch (error) { alert(t`Failed to create file: ${error}`); }
         }
         resolve();
       });
@@ -374,7 +375,7 @@ export class ContextMenuController {
           try {
             await invoke("create_workspace_dir", { path: await join(await this.parentDirectory(workspace), name) });
             await this.refreshExplorer();
-          } catch (error) { alert(`Failed to create folder: ${error}`); }
+          } catch (error) { alert(t`Failed to create folder: ${error}`); }
         }
         resolve();
       });
@@ -395,7 +396,7 @@ export class ContextMenuController {
               && this.contextExplorer !== this.dependencies.getExplorer();
             await this.dependencies.renameWorkspacePath(originalPath, newPath, updateImageReferences);
             await this.refreshExplorer();
-          } catch (error) { alert(`Failed to rename: ${error}`); }
+          } catch (error) { alert(t`Failed to rename: ${error}`); }
         }
         resolve();
       });
@@ -411,8 +412,8 @@ export class ContextMenuController {
       const mainKey = mainFilePath.toLowerCase().replace(/\\/g, "/");
       const targetKey = path.toLowerCase().replace(/\\/g, "/");
       if (mainKey === targetKey || (this.targetIsDirectory && mainKey.startsWith(targetKey + "/"))) {
-        await message(`The active main document cannot be deleted.`, {
-          title: "Delete Blocked",
+        await message(t(`The active main document cannot be deleted.`), {
+          title: t("Delete Blocked"),
           kind: "error"
         });
         return;
@@ -420,14 +421,14 @@ export class ContextMenuController {
     }
 
     const accepted = await confirm(deleteConfirmationMessage(await basename(path), this.targetIsDirectory), {
-      title: "Confirm Delete", kind: "warning"
+      title: t("Confirm Delete"), kind: "warning"
     });
     if (!accepted) return;
     try {
       await invoke("move_to_trash", { path });
       await this.refreshExplorer();
       await this.dependencies.closeTab(path);
-    } catch (error) { alert(`Failed to move to trash: ${error}`); }
+    } catch (error) { alert(t`Failed to move to trash: ${error}`); }
   }
 
   private async pasteFile(): Promise<void> {
@@ -437,7 +438,7 @@ export class ContextMenuController {
       const destination = await join(await this.parentDirectory(workspace), `Copy of ${await basename(this.copiedFilePath)}`);
       await invoke("copy_workspace_file", { source: this.copiedFilePath, dest: destination });
       await this.refreshExplorer();
-    } catch (error) { alert(`Failed to paste file: ${error}`); }
+    } catch (error) { alert(t`Failed to paste file: ${error}`); }
   }
 
   private async duplicateFile(): Promise<void> {
@@ -451,14 +452,14 @@ export class ContextMenuController {
           try {
             const destination = await join(await dirname(source), name);
             if (await invoke<boolean>("workspace_path_exists", { path: destination })) {
-              alert(`A file named "${name}" already exists.`);
+              alert(t`A file named "${name}" already exists.`);
             } else {
               await invoke("copy_workspace_file", { source, dest: destination });
               await this.refreshExplorer();
               await this.dependencies.loadFile(destination);
             }
           } catch (error) {
-            alert(`Failed to duplicate file: ${error}`);
+            alert(t`Failed to duplicate file: ${error}`);
           }
         }
         resolve();
@@ -691,7 +692,7 @@ export class ContextMenuController {
     alignRight = false,
     menuKind = ""
   ): void {
-    this.menu.innerHTML = items;
+    setLocalizedHtml(this.menu, items);
     this.menu.dataset.menuKind = menuKind;
     this.menu.style.display = "block";
     applyShortcutLabels(this.menu);
@@ -893,7 +894,7 @@ export class ContextMenuController {
     if (!options.length) {
       const empty = document.createElement("p");
       empty.className = "surround-with-empty";
-      empty.textContent = "No bracket-capable functions match your search.";
+      empty.textContent = t("No bracket-capable functions match your search.");
       this.surroundList.appendChild(empty);
       this.surroundSearch?.removeAttribute("aria-activedescendant");
       return;
@@ -908,7 +909,7 @@ export class ContextMenuController {
       const form = document.createElement("code");
       form.textContent = option.label;
       const description = document.createElement("span");
-      description.textContent = option.description;
+      description.textContent = t(option.description);
       item.append(form, description);
       item.addEventListener("click", () => this.applySurroundWith(option));
       item.addEventListener("pointermove", () => this.selectSurroundWithResult(index, false));

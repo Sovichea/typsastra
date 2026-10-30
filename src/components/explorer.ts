@@ -3,6 +3,7 @@ import { join } from "@tauri-apps/api/path";
 import { createAppIcon, type AppIconName } from "../ui/icons";
 import { fileNameFromPath, filePathKey, relativeFilePath } from "../platform/paths";
 import { isSupportedImageReferencePath } from "../platform/fileTypes";
+import { setLocalizedHtml, t } from "../i18n";
 
 export interface FileNode { name: string; path: string; isDirectory: boolean; children?: FileNode[]; }
 
@@ -82,7 +83,7 @@ export class WorkspaceExplorer {
   ) {
     this.container.tabIndex = 0;
     this.container.setAttribute("role", "tree");
-    this.container.setAttribute("aria-label", "Project Explorer");
+    this.container.setAttribute("aria-label", t("Project Explorer"));
     this.container.addEventListener("pointerdown", event => {
       if (!(event.target as HTMLElement).closest("input, textarea")) {
         this.container.focus({ preventScroll: true });
@@ -186,7 +187,7 @@ export class WorkspaceExplorer {
     this.workspaceRootPath = rootPath;
     if (this.titleElement) {
       const projectName = fileNameFromPath(rootPath) || rootPath;
-      this.titleElement.textContent = `${this.titlePrefix}: ${projectName}`;
+      this.titleElement.textContent = t`${this.titlePrefix}: ${projectName}`;
       this.titleElement.title = rootPath;
     }
     const generation = ++this.loadGeneration;
@@ -194,7 +195,7 @@ export class WorkspaceExplorer {
     initialExpandedPaths.forEach(path => viewState.expandedPaths.add(path));
     const isFirstLoad = !this.container.querySelector(".file-tree-branch");
     if (isFirstLoad && this.showLoadingPlaceholder) {
-      this.container.innerHTML = `<div class="explorer-loading">Scanning Project...</div>`;
+      setLocalizedHtml(this.container, `<div class="explorer-loading">Scanning Project...</div>`);
     }
     try {
       const nodes = await this.readDirectory(rootPath);
@@ -207,7 +208,7 @@ export class WorkspaceExplorer {
       this.container.appendChild(this.renderTree(nodes, 0, viewState.expandedPaths, viewState.selectedPath));
     } catch {
       if (generation !== this.loadGeneration) return;
-      this.container.innerHTML = `<div class="explorer-error">Access Refused.</div>`;
+      setLocalizedHtml(this.container, `<div class="explorer-error">Access Refused.</div>`);
     }
   }
 
@@ -451,7 +452,7 @@ export class WorkspaceExplorer {
             const error = document.createElement("div");
             error.className = "explorer-error";
             error.style.paddingLeft = `${(depth + 1) * 12 + 8}px`;
-            error.textContent = "Unable to read folder.";
+            error.textContent = t("Unable to read folder.");
             childrenContainer.replaceChildren(error);
           } finally {
             loading = false;

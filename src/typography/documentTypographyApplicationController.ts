@@ -18,6 +18,7 @@ import {
 import { relativeFilePath } from "../platform/paths";
 import type { WorkspaceTextController } from "../workspace/workspaceTextController";
 import type { TypographyController } from "./typographyController";
+import { t } from "../i18n";
 
 export interface DocumentTypographyApplicationDependencies {
   activeFilePath(): string | null;
@@ -87,7 +88,7 @@ export class DocumentTypographyApplicationController {
           await this.deps.saveActiveFile();
           await typography.reloadTemplateContext(config);
           editor.focus();
-          this.deps.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
+          this.deps.setLspStatus({ kind: "preview-ready", message: t("Typography applied to template") });
           return true;
         }
       }
@@ -146,7 +147,7 @@ export class DocumentTypographyApplicationController {
       }
 
       await typography.reloadTemplateContext(config);
-      this.deps.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
+      this.deps.setLspStatus({ kind: "preview-ready", message: t("Typography applied to template") });
       editor.focus();
       return true;
     } catch (error) {
@@ -156,7 +157,7 @@ export class DocumentTypographyApplicationController {
         source: "typography",
         message: `Failed to apply template typography: ${String(error)}`,
       });
-      await message(String(error), { title: "Unable to apply typography", kind: "error" });
+      await message(String(error), { title: t("Unable to apply typography"), kind: "error" });
       return false;
     }
   }

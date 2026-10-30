@@ -1,5 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { t } from "./i18n";
 
 type StorageClass = "disposable" | "persistent" | "runtime" | "diagnostics" | "unknown";
 type StorageLevel = "healthy" | "advisory" | "actionRecommended" | "critical";
@@ -175,17 +176,17 @@ export class WebviewStorageController {
     const report = this.renderCacheReport;
     if (!report?.recordedAtMs) {
       status.textContent = this.getCacheRootPath()
-        ? "The project render cache has not been prepared yet."
-        : "Open a project to inspect its render cache.";
-      linked.textContent = this.getCacheRootPath() ? "Not prepared" : "No project";
-      copied.textContent = this.getCacheRootPath() ? "Not prepared" : "No project";
+        ? t("The project render cache has not been prepared yet.")
+        : t("Open a project to inspect its render cache.");
+      linked.textContent = this.getCacheRootPath() ? t("Not prepared") : t("No project");
+      copied.textContent = this.getCacheRootPath() ? t("Not prepared") : t("No project");
       return;
     }
     status.textContent = report.copiedBytes > 0
-      ? `${formatBytes(report.copiedBytes)} uses additional disk space; hard-linked assets share source storage.`
-      : "All recorded project assets share source storage through hard links.";
-    linked.textContent = `${formatBytes(report.hardLinkedBytes)} · ${report.hardLinkedFiles.toLocaleString()} file${report.hardLinkedFiles === 1 ? "" : "s"}`;
-    copied.textContent = `${formatBytes(report.copiedBytes)} · ${report.copiedFiles.toLocaleString()} file${report.copiedFiles === 1 ? "" : "s"}`;
+      ? t`${formatBytes(report.copiedBytes)} uses additional disk space; hard-linked assets share source storage.`
+      : t("All recorded project assets share source storage through hard links.");
+    linked.textContent = t`${formatBytes(report.hardLinkedBytes)} · ${report.hardLinkedFiles.toLocaleString()} file${report.hardLinkedFiles === 1 ? "" : "s"}`;
+    copied.textContent = t`${formatBytes(report.copiedBytes)} · ${report.copiedFiles.toLocaleString()} file${report.copiedFiles === 1 ? "" : "s"}`;
   }
 
   private async loadWorkspaceRenderCaches(): Promise<void> {
@@ -204,25 +205,25 @@ export class WebviewStorageController {
     if (!status || !list) return;
     const entries = this.workspaceRenderCaches;
     if (entries.length === 0) {
-      status.textContent = "No machine-local project render caches have been prepared yet.";
+      status.textContent = t("No machine-local project render caches have been prepared yet.");
       list.replaceChildren();
       return;
     }
     const totalBytes = entries.reduce((total, entry) => total + entry.totalBytes, 0);
     const copiedBytes = entries.reduce((total, entry) => total + entry.copiedBytes, 0);
-    status.textContent = `${entries.length.toLocaleString()} cached project${entries.length === 1 ? "" : "s"} use ${formatBytes(totalBytes)} in the machine-local cache${copiedBytes > 0 ? `; ${formatBytes(copiedBytes)} is real copied asset data.` : "."}`;
+    status.textContent = t`${entries.length.toLocaleString()} cached project${entries.length === 1 ? "" : "s"} use ${formatBytes(totalBytes)} in the machine-local cache${copiedBytes > 0 ? `; ${formatBytes(copiedBytes)} is real copied asset data.` : "."}`;
     list.replaceChildren(...entries.map(entry => {
       const row = document.createElement("div");
       row.className = "settings-workspace-render-cache";
       const details = document.createElement("div");
       const project = document.createElement("strong");
-      project.textContent = entry.projectRoot || "Project path unavailable";
-      project.title = entry.projectRoot || "Project path unavailable";
+      project.textContent = entry.projectRoot || t("Project path unavailable");
+      project.title = entry.projectRoot || t("Project path unavailable");
       const summary = document.createElement("small");
       const extra = entry.copiedBytes > 0
-        ? ` · ${formatBytes(entry.copiedBytes)} copied`
-        : " · hard links share source storage";
-      summary.textContent = `${formatBytes(entry.totalBytes)} · ${entry.fileCount.toLocaleString()} file${entry.fileCount === 1 ? "" : "s"}${extra}`;
+        ? t` · ${formatBytes(entry.copiedBytes)} copied`
+        : t(" · hard links share source storage");
+      summary.textContent = t`${formatBytes(entry.totalBytes)} · ${entry.fileCount.toLocaleString()} file${entry.fileCount === 1 ? "" : "s"}${extra}`;
       const cache = document.createElement("code");
       cache.textContent = entry.cacheRoot;
       cache.title = entry.cacheRoot;
@@ -230,7 +231,7 @@ export class WebviewStorageController {
       const reveal = document.createElement("button");
       reveal.type = "button";
       reveal.className = "settings-secondary-button";
-      reveal.textContent = "Reveal";
+      reveal.textContent = t("Reveal");
       reveal.dataset.renderCacheReveal = entry.cacheRoot;
       row.append(details, reveal);
       return row;
@@ -303,17 +304,17 @@ export class WebviewStorageController {
 
     status.classList.remove("warning", "error");
     if (!report.supported) {
-      status.textContent = `${report.runtime} storage monitoring is not yet qualified on ${report.platform}.`;
-      details.textContent = "Storage monitoring is available for Windows WebView2 and Linux WebKitGTK.";
-      profile.textContent = "Profile path unavailable";
+      status.textContent = t`${report.runtime} storage monitoring is not yet qualified on ${report.platform}.`;
+      details.textContent = t("Storage monitoring is available for Windows WebView2 and Linux WebKitGTK.");
+      profile.textContent = t("Profile path unavailable");
       profile.title = "";
       categories.replaceChildren();
       this.updateActionState();
       return;
     }
     if (!report.scannedAtMs) {
-      status.textContent = "WebView storage has not been scanned yet.";
-      details.textContent = "The first background scan runs after startup, or choose Scan now.";
+      status.textContent = t("WebView storage has not been scanned yet.");
+      details.textContent = t("The first background scan runs after startup, or choose Scan now.");
       profile.textContent = report.profilePath;
       profile.title = report.profilePath;
       categories.replaceChildren();
@@ -321,21 +322,21 @@ export class WebviewStorageController {
       return;
     }
 
-    const levelLabel = storageLevelLabel(report.level);
-    status.textContent = `${levelLabel}: ${formatBytes(report.totalBytes)} total, ${formatBytes(report.disposableBytes)} disposable cache.`;
+    const levelLabel = t(storageLevelLabel(report.level));
+    status.textContent = t`${levelLabel}: ${formatBytes(report.totalBytes)} total, ${formatBytes(report.disposableBytes)} disposable cache.`;
     status.classList.toggle("warning", report.level !== "healthy");
     if (report.incomplete) status.classList.add("warning");
     const scanTime = new Date(report.scannedAtMs).toLocaleString();
-    const estimate = report.estimated ? "estimated from the last full scan" : "complete storage scan";
+    const estimate = report.estimated ? t("estimated from the last full scan") : t("complete storage scan");
     const growth = report.growth24hBytes === null
-      ? "24-hour growth needs more history"
-      : `${formatSignedBytes(report.growth24hBytes)} in 24 hours`;
+      ? t("24-hour growth needs more history")
+      : t`${formatSignedBytes(report.growth24hBytes)} in 24 hours`;
     details.textContent = [
       `${report.runtime} | ${estimate}`,
-      `last scan ${scanTime}`,
+      t`last scan ${scanTime}`,
       growth,
-      `${report.entriesScanned.toLocaleString()} entries in ${report.scanDurationMs.toLocaleString()} ms`,
-      report.incomplete ? `incomplete (${report.errorCount} errors)` : "",
+      t`${report.entriesScanned.toLocaleString()} entries in ${report.scanDurationMs.toLocaleString()} ms`,
+      report.incomplete ? t`incomplete (${report.errorCount} errors)` : "",
     ].filter(Boolean).join(" | ");
     profile.textContent = report.profilePath;
     profile.title = report.profilePath;
@@ -343,10 +344,10 @@ export class WebviewStorageController {
       const row = document.createElement("div");
       row.className = "settings-storage-category";
       const name = document.createElement("span");
-      name.textContent = category.name;
-      name.title = category.name;
+      name.textContent = t(category.name);
+      name.title = t(category.name);
       const kind = document.createElement("small");
-      kind.textContent = storageClassLabel(category.class);
+      kind.textContent = t(storageClassLabel(category.class));
       const size = document.createElement("strong");
       size.textContent = formatBytes(category.bytes);
       row.append(name, kind, size);
@@ -361,12 +362,12 @@ export class WebviewStorageController {
 
   private updateSummary(id: string, bytes: number | null, estimated: boolean): void {
     const element = document.getElementById(id);
-    if (element) element.textContent = bytes === null ? "Unavailable" : `${estimated ? "~" : ""}${formatBytes(bytes)}`;
+    if (element) element.textContent = bytes === null ? t("Unavailable") : `${estimated ? "~" : ""}${formatBytes(bytes)}`;
   }
 
   private renderScanning(): void {
     const status = document.getElementById("settings-storage-status");
-    if (status) status.textContent = "Scanning WebView storage in the background...";
+    if (status) status.textContent = t("Scanning WebView storage in the background...");
     this.updateActionState();
   }
 
@@ -374,7 +375,7 @@ export class WebviewStorageController {
     const status = document.getElementById("settings-storage-status");
     if (!status) return;
     status.classList.add("error");
-    status.textContent = message;
+    status.textContent = t(message);
   }
 
   private updateActionState(): void {
@@ -382,7 +383,7 @@ export class WebviewStorageController {
     const reveal = document.getElementById("settings-storage-reveal") as HTMLButtonElement | null;
     if (scan) {
       scan.disabled = this.scanInProgress || this.report?.supported === false;
-      scan.textContent = this.scanInProgress ? "Scanning..." : "Scan now";
+      scan.textContent = this.scanInProgress ? t("Scanning...") : t("Scan now");
     }
     if (reveal) reveal.disabled = !this.report?.profilePath;
   }
@@ -406,9 +407,9 @@ export class WebviewStorageController {
     const message = document.getElementById("webview-storage-notification-message");
     if (!notification || !title || !message) return;
     title.textContent = report.level === "critical"
-      ? "WebView storage needs attention"
-      : "WebView storage is larger than expected";
-    message.textContent = `${formatBytes(report.totalBytes)} is in use, including ${formatBytes(report.disposableBytes)} of disposable cache. Review the storage details in Settings.`;
+      ? t("WebView storage needs attention")
+      : t("WebView storage is larger than expected");
+    message.textContent = t`${formatBytes(report.totalBytes)} is in use, including ${formatBytes(report.disposableBytes)} of disposable cache. Review the storage details in Settings.`;
     notification.classList.remove("hidden");
   }
 

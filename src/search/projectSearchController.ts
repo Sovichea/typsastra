@@ -28,6 +28,7 @@ import {
   type ProjectReplacementRequest,
   type ProjectReplacementResult,
 } from "./projectReplacement";
+import { t } from "../i18n";
 
 export type ProjectSearchNavigationTarget = {
   path: string;
@@ -512,7 +513,7 @@ export class ProjectSearchController {
     if (this.state.error) nodes.push(this.notice(this.state.error, "error"));
     if (this.state.truncated) {
       nodes.push(this.notice(
-        `Showing the first ${PROJECT_SEARCH_MAX_RESULTS.toLocaleString()} matches. Narrow the query to continue.`,
+        t`Showing the first ${PROJECT_SEARCH_MAX_RESULTS.toLocaleString()} matches. Narrow the query to continue.`,
         "warning",
       ));
     }
@@ -525,14 +526,14 @@ export class ProjectSearchController {
       const detail = [...counts.entries()]
         .map(([reason, count]) => `${count} ${reason}`)
         .join(", ");
-      nodes.push(this.notice(`${this.skippedFiles.length} file${this.skippedFiles.length === 1 ? "" : "s"} skipped (${detail}).`, "info"));
+      nodes.push(this.notice(t`${this.skippedFiles.length} file${this.skippedFiles.length === 1 ? "" : "s"} skipped (${detail}).`, "info"));
     }
     if (pathMatches.length > 0) {
       const section = document.createElement("section");
       section.className = "project-search-path-section";
       const heading = document.createElement("div");
       heading.className = "project-search-section-title";
-      heading.textContent = `Path matches (${pathMatches.length})`;
+      heading.textContent = t`Path matches (${pathMatches.length})`;
       section.append(heading, ...pathMatches.map(file => this.renderPathMatch(file)));
       nodes.push(section);
     }
@@ -540,7 +541,7 @@ export class ProjectSearchController {
     if (!nodes.length && !this.state.searching) {
       const empty = document.createElement("div");
       empty.className = "project-search-empty";
-      empty.textContent = this.state.options.query.trim() ? "No results." : "Type to search the project.";
+      empty.textContent = this.state.options.query.trim() ? t("No results.") : t("Type to search the project.");
       nodes.push(empty);
     }
     results.replaceChildren(...nodes);
@@ -552,24 +553,24 @@ export class ProjectSearchController {
     const total = [...this.fileResults.values()].reduce((sum, file) => sum + file.contentMatchCount, 0);
     const pathTotal = [...this.fileResults.values()].filter(file => file.pathMatch).length;
     if (!this.state.options.query.trim()) {
-      status.textContent = "Type to search the project.";
+      status.textContent = t("Type to search the project.");
       return;
     }
     if (this.state.searching) {
       status.textContent = total > 0
-        ? `${total.toLocaleString()} match${total === 1 ? "" : "es"} · searching…`
-        : "Searching…";
+        ? t`${total.toLocaleString()} match${total === 1 ? "" : "es"} · searching…`
+        : t("Searching…");
       return;
     }
     if (this.state.error && total === 0 && pathTotal === 0) {
-      status.textContent = "Search failed.";
+      status.textContent = t("Search failed.");
       return;
     }
     const files = [...this.fileResults.values()].filter(file => file.contentMatchCount > 0).length;
-    const parts = [`${total.toLocaleString()} match${total === 1 ? "" : "es"} in ${files} file${files === 1 ? "" : "s"}`];
-    if (pathTotal > 0) parts.push(`${pathTotal} path match${pathTotal === 1 ? "" : "es"}`);
-    if (this.state.truncated) parts.push("truncated");
-    if (this.state.incomplete) parts.push("incomplete");
+    const parts = [t`${total.toLocaleString()} match${total === 1 ? "" : "es"} in ${files} file${files === 1 ? "" : "s"}`];
+    if (pathTotal > 0) parts.push(t`${pathTotal} path match${pathTotal === 1 ? "" : "es"}`);
+    if (this.state.truncated) parts.push(t("truncated"));
+    if (this.state.incomplete) parts.push(t("incomplete"));
     status.textContent = parts.join(" · ");
   }
 
@@ -588,8 +589,8 @@ export class ProjectSearchController {
       select.checked = ranges.length > 0 && checked.length === ranges.length;
       select.indeterminate = checked.length > 0 && checked.length < ranges.length;
       select.disabled = ranges.length === 0;
-      select.title = "Select all replaceable matches in this file";
-      select.setAttribute("aria-label", `Select matches in ${file.relativePath}`);
+      select.title = t("Select all replaceable matches in this file");
+      select.setAttribute("aria-label", t`Select matches in ${file.relativePath}`);
       select.addEventListener("change", () => {
         for (const range of ranges) {
           const key = projectReplacementMatchKey(file.path, range.from, range.to);
@@ -649,9 +650,9 @@ export class ProjectSearchController {
       select.checked = this.selectedMatches.has(key);
       select.disabled = !safe;
       select.title = safe
-        ? "Include this match in the replacement"
-        : "This match splits a grapheme cluster and cannot be replaced safely";
-      select.setAttribute("aria-label", `Select ${file.relativePath}:${match.lineNumber}`);
+        ? t("Include this match in the replacement")
+        : t("This match splits a grapheme cluster and cannot be replaced safely");
+      select.setAttribute("aria-label", t`Select ${file.relativePath}:${match.lineNumber}`);
       select.addEventListener("change", () => {
         if (select.checked) this.selectedMatches.add(key);
         else this.selectedMatches.delete(key);
@@ -670,8 +671,8 @@ export class ProjectSearchController {
     button.dataset.searchTo = String(to);
     button.dataset.searchKind = "content";
     button.title = !safe
-      ? "This match splits a grapheme cluster and cannot be replaced safely"
-      : `${file.relativePath}:${match.lineNumber}`;
+      ? t("This match splits a grapheme cluster and cannot be replaced safely")
+      : t`${file.relativePath}:${match.lineNumber}`;
     const lineNumber = document.createElement("span");
     lineNumber.className = "project-search-line-number";
     lineNumber.textContent = String(match.lineNumber);
@@ -733,7 +734,7 @@ export class ProjectSearchController {
   private notice(text: string, kind: "info" | "warning" | "error"): HTMLElement {
     const element = document.createElement("div");
     element.className = `project-search-notice ${kind}`;
-    element.textContent = text;
+    element.textContent = t(text);
     return element;
   }
 
@@ -800,15 +801,15 @@ export class ProjectSearchController {
     if (replaceAll) {
       replaceAll.disabled = !this.canReplaceAll();
       replaceAll.title = replaceAll.disabled
-        ? "Wait for a complete literal or regex search with replaceable matches"
-        : "Replace every safe match in these results";
+        ? t("Wait for a complete literal or regex search with replaceable matches")
+        : t("Replace every safe match in these results");
     }
     const review = document.getElementById("project-search-review-replace") as HTMLButtonElement | null;
     if (review) {
       review.disabled = !this.canApplyReplacement();
       review.title = review.disabled
-        ? "Select replaceable matches after a complete literal or regex search"
-        : "Review the selected matches before replacing";
+        ? t("Select replaceable matches after a complete literal or regex search")
+        : t("Review the selected matches before replacing");
     }
     const undo = document.getElementById("project-search-undo-replace") as HTMLButtonElement | null;
     if (undo) {
@@ -897,11 +898,11 @@ export class ProjectSearchController {
     section.className = "project-search-review";
     const title = document.createElement("div");
     title.className = "project-search-review-title";
-    title.textContent = `Review replacement in ${request.files.length} file${request.files.length === 1 ? "" : "s"}`;
+    title.textContent = t`Review replacement in ${request.files.length} file${request.files.length === 1 ? "" : "s"}`;
     const summary = document.createElement("div");
     summary.className = "project-search-review-summary";
     const total = request.files.reduce((sum, file) => sum + file.matches.length, 0);
-    summary.textContent = `${total} match${total === 1 ? "" : "es"} selected. Source files are not written until you save.`;
+    summary.textContent = t`${total} match${total === 1 ? "" : "es"} selected. Source files are not written until you save.`;
     section.append(title, summary);
     let previewCount = 0;
     let previewTruncated = false;
@@ -912,7 +913,7 @@ export class ProjectSearchController {
       if (!file) continue;
       const fileHeading = document.createElement("div");
       fileHeading.className = "project-search-review-file";
-      fileHeading.textContent = `${file.relativePath} (${requestFile.matches.length})`;
+      fileHeading.textContent = t`${file.relativePath} (${requestFile.matches.length})`;
       section.appendChild(fileHeading);
       for (const match of file.contentMatches) {
         const selected = match.ranges
@@ -958,7 +959,7 @@ export class ProjectSearchController {
     }
     if (previewTruncated) {
       const notice = this.notice(
-        `Showing the first ${maxPreviewLines} changed lines. Apply still replaces every selected match.`,
+        t`Showing the first ${maxPreviewLines} changed lines. Apply still replaces every selected match.`,
         "info",
       );
       section.appendChild(notice);
@@ -968,7 +969,7 @@ export class ProjectSearchController {
     actions.className = "project-search-review-actions";
     const back = document.createElement("button");
     back.type = "button";
-    back.textContent = "Back";
+    back.textContent = t("Back");
     back.addEventListener("click", () => {
       this.reviewingReplacement = false;
       this.scheduleRender();
@@ -976,7 +977,7 @@ export class ProjectSearchController {
     const apply = document.createElement("button");
     apply.type = "button";
     apply.className = "primary";
-    apply.textContent = "Apply Replacement";
+    apply.textContent = t("Apply Replacement");
     apply.addEventListener("click", () => {
       apply.disabled = true;
       if (!this.requestReplacement(false)) apply.disabled = false;
@@ -1054,7 +1055,7 @@ export class ProjectSearchController {
       if (regex) diacritics.checked = true;
     }
     const input = this.queryInput();
-    if (input) input.placeholder = fuzzy ? "Fuzzy search project" : "Search project";
+    if (input) input.placeholder = fuzzy ? t("Fuzzy search project") : t("Search project");
   }
 
   private resetOptionControls(): void {

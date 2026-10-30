@@ -7,6 +7,7 @@ import {
   type DocumentTypography,
 } from "../editor/documentTypography";
 import type { TypographyController } from "./typographyController";
+import { t } from "../i18n";
 
 export interface PinnedMainTypographyDependencies {
   typography(): TypographyController;
@@ -30,7 +31,7 @@ export class PinnedMainTypographyController {
         if (unsupportedInternalScale) {
           this.dependencies.appendLog("error", "typography", unsupportedInternalScale.message);
           await message(unsupportedInternalScale.message, {
-            title: "Unsupported Built-in Font Scale",
+            title: t("Unsupported Built-in Font Scale"),
             kind: "error",
           });
           config = typographyController.resetUnsupportedInternalScales(config, unsupportedInternalScale.fonts);
@@ -51,12 +52,12 @@ export class PinnedMainTypographyController {
         const outsideFineRange = typographyController.scaleRangeWarning(typography) !== null;
         const variantWarning = typographyController.variantLimitWarning(status);
         const accepted = await confirm(
-          `${fileNameFromPath(path)} contains a document typography directive that requires local font scaling:\n\n${scaledFonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate the fonts in its private global cache before setting this file as main. No font data will be written into the project. Font scaling is intended for fine optical adjustment${outsideFineRange ? "; one or more values also exceed the recommended ±10% range, where accurate representation is not guaranteed and varies between fonts" : ""}.${variantWarning ? `\n\n${variantWarning}` : "\n\nPrepare the fonts and continue?"}`,
+          t`${fileNameFromPath(path)} contains a document typography directive that requires local font scaling:\n\n${scaledFonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate the fonts in its private global cache before setting this file as main. No font data will be written into the project. Font scaling is intended for fine optical adjustment${outsideFineRange ? "; one or more values also exceed the recommended ±10% range, where accurate representation is not guaranteed and varies between fonts" : ""}.${variantWarning ? `\n\n${variantWarning}` : "\n\nPrepare the fonts and continue?"}`,
           {
-            title: "Prepare Document Fonts?",
+            title: t("Prepare Document Fonts?"),
             kind: "warning",
-            okLabel: "Prepare and Continue",
-            cancelLabel: "Cancel",
+            okLabel: t("Prepare and Continue"),
+            cancelLabel: t("Cancel"),
           },
         );
         if (!accepted) return false;
@@ -70,7 +71,7 @@ export class PinnedMainTypographyController {
         "typography",
         `Could not prepare typography for ${fileNameFromPath(path)}: ${String(error)}`,
       );
-      await message(String(error), { title: "Unable to Prepare Document Fonts", kind: "error" });
+      await message(String(error), { title: t("Unable to Prepare Document Fonts"), kind: "error" });
       return false;
     }
   }

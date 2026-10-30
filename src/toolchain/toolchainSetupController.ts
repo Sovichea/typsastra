@@ -1,4 +1,5 @@
 import type { SystemToolchain, ToolchainStatus } from "./toolchainController";
+import { setLocalizedHtml, t } from "../i18n";
 
 type TinymistRelease = { version: string; publishedAt: string | null };
 
@@ -47,7 +48,7 @@ export class ToolchainSetupController {
       versionSelect.addEventListener("change", () => {
         const hasSelection = Boolean(versionSelect.value);
         downloadBtn.disabled = !hasSelection;
-        downloadBtn.textContent = versionSelect.value.startsWith("system:") ? "Use Toolchain" : "Download";
+        downloadBtn.textContent = versionSelect.value.startsWith("system:") ? t("Use Toolchain") : t("Download");
         downloadBtn.style.opacity = hasSelection ? "1" : "0.55";
         downloadBtn.style.cursor = hasSelection ? "pointer" : "default";
       });
@@ -84,7 +85,7 @@ export class ToolchainSetupController {
     versionSelect.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "Select a toolchain...";
+    placeholder.textContent = t("Select a toolchain...");
     versionSelect.appendChild(placeholder);
 
     if (this.systemToolchains.length > 0) {
@@ -93,7 +94,7 @@ export class ToolchainSetupController {
       this.systemToolchains.forEach((toolchain, index) => {
         const option = document.createElement("option");
         option.value = `system:${index}`;
-        option.textContent = `Tinymist ${toolchain.tinymistVersion} (Typst ${toolchain.typstVersion})`;
+        option.textContent = t`Tinymist ${toolchain.tinymistVersion} (Typst ${toolchain.typstVersion})`;
         option.title = toolchain.path;
         group.appendChild(option);
       });
@@ -113,12 +114,12 @@ export class ToolchainSetupController {
     }
 
     if (this.systemToolchains.length > 0) {
-      versionHint.textContent = `${this.systemToolchains.length} system installation${this.systemToolchains.length === 1 ? "" : "s"} detected. Managed downloads remain available below.`;
+      versionHint.textContent = t`${this.systemToolchains.length} system installation${this.systemToolchains.length === 1 ? "" : "s"} detected. Managed downloads remain available below.`;
     } else if (releases.length > 0) {
-      versionHint.textContent = `${releases.length} stable releases available. The latest is ${releases[0]?.version ?? "unknown"}.`;
+      versionHint.textContent = t`${releases.length} stable releases available. The latest is ${releases[0]?.version ?? "unknown"}.`;
     } else {
-      versionSelect.innerHTML = "<option value=\"\">Failed to load releases</option>";
-      versionHint.textContent = "No system Tinymist was detected and GitHub could not be reached.";
+      setLocalizedHtml(versionSelect, "<option value=\"\">Failed to load releases</option>");
+      versionHint.textContent = t("No system Tinymist was detected and GitHub could not be reached.");
     }
   }
 
@@ -157,20 +158,20 @@ export class ToolchainSetupController {
     progressContainer.classList.remove("hidden");
 
     progressBar.style.width = "0%";
-    progressLabel.textContent = `Preparing Tinymist ${selectedVersion}...`;
+    progressLabel.textContent = t`Preparing Tinymist ${selectedVersion}...`;
 
     try {
       const status = await this.deps.install(selectedVersion, progress => {
         this.renderInstallProgress(progress, progressLabel, progressBar);
       });
       progressBar.style.width = "100%";
-      progressLabel.textContent = "Installation complete!";
+      progressLabel.textContent = t("Installation complete!");
       await new Promise<void>(done => window.setTimeout(done, 700));
       overlay.classList.add("hidden");
       resolve(status);
     } catch (error) {
       progressBar.style.width = "0%";
-      progressLabel.textContent = "Installation failed. Please try again.";
+      progressLabel.textContent = t("Installation failed. Please try again.");
       await this.deps.showInstallError(error);
       progressContainer.classList.add("hidden");
       versionPicker.classList.remove("hidden");
@@ -184,7 +185,7 @@ export class ToolchainSetupController {
     bar: HTMLElement,
   ): void {
     if (progress.phase === "resolving") {
-      label.textContent = "Resolving Tinymist release...";
+      label.textContent = t("Resolving Tinymist release...");
       bar.style.width = "3%";
       return;
     }
@@ -193,17 +194,17 @@ export class ToolchainSetupController {
       const ratio = total && total > 0 ? Math.min(1, progress.downloadedBytes / total) : null;
       bar.style.width = `${ratio === null ? 8 : 5 + ratio * 80}%`;
       label.textContent = total
-        ? `Downloading Tinymist... ${formatBytes(progress.downloadedBytes)} of ${formatBytes(total)}`
-        : `Downloading Tinymist... ${formatBytes(progress.downloadedBytes)}`;
+        ? t`Downloading Tinymist... ${formatBytes(progress.downloadedBytes)} of ${formatBytes(total)}`
+        : t`Downloading Tinymist... ${formatBytes(progress.downloadedBytes)}`;
       return;
     }
     if (progress.phase === "installing") {
-      label.textContent = "Installing downloaded toolchain...";
+      label.textContent = t("Installing downloaded toolchain...");
       bar.style.width = "88%";
       return;
     }
     if (progress.phase === "verifying") {
-      label.textContent = "Verifying embedded Typst compiler...";
+      label.textContent = t("Verifying embedded Typst compiler...");
       bar.style.width = "95%";
     }
   }
