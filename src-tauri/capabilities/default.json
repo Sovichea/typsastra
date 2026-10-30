@@ -55,6 +55,10 @@
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "**" }]
     }
   ]
 }

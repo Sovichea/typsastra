@@ -285,6 +285,12 @@ describe("application settings", () => {
     const lifecycle = await Bun.file(
       new URL("../src/workspace/workspaceLifecycleController.ts", import.meta.url),
     ).text();
+    const lexicon = await Bun.file(
+      new URL("../src/settingsLexicon.ts", import.meta.url),
+    ).text();
+    const capabilities = JSON.parse(await Bun.file(
+      new URL("../src-tauri/capabilities/default.json", import.meta.url),
+    ).text()) as { permissions: Array<string | { identifier: string; allow?: Array<{ path: string }> }> };
 
     expect(html).toContain('id="settings-user-dictionary-path"');
     expect(html).toContain('id="settings-open-user-dictionary"');
@@ -298,6 +304,17 @@ describe("application settings", () => {
       'this.openTerminologyFile(this.projectTerminologyPath, PROJECT_TERMINOLOGY_FILE)',
     );
     expect(controller).toContain("this.lexiconFilesReady = true");
+    expect(controller).toContain("await ensureTextFile(path, content)");
+    expect(controller).toContain("path === this.userDictionaryPath");
+    expect(controller).toContain("formatTerminology(this.projectTerminology, [])");
+    expect(lexicon).toContain("export async function ensureTextFile");
+    const existsPermission = capabilities.permissions.find(
+      permission => typeof permission === "object" && permission.identifier === "fs:allow-exists",
+    );
+    expect(existsPermission).toEqual({
+      identifier: "fs:allow-exists",
+      allow: [{ path: "**" }],
+    });
     expect(lifecycle).toContain('await join(selected, ".typsastra", "terminology.txt")');
   });
 

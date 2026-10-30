@@ -12,6 +12,7 @@ import {
   type ThemeName
 } from "./settings";
 import {
+  ensureTextFile,
   formatTerminology,
   formatUserDictionary,
   parseTerminology,
@@ -1540,6 +1541,15 @@ export class SettingsController {
   private async openTerminologyFile(path: string, label: string): Promise<void> {
     if (!path) return;
     try {
+      const content = path === this.userDictionaryPath
+        ? formatUserDictionary(this.settings.editor.userDictionary)
+        : path === this.projectTerminologyPath
+          ? formatTerminology(this.projectTerminology, [])
+          : formatTerminology(
+              this.settings.editor.globalTerminology,
+              this.settings.editor.languageTerminology,
+            );
+      await ensureTextFile(path, content);
       await invoke("open_file_externally", { path });
     } catch (error) {
       await message(t`Could not open ${label}: ${String(error)}`, {

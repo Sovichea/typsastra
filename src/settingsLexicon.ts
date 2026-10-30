@@ -79,6 +79,10 @@ export async function readTextFileIfPresent(path: string): Promise<string | null
   return await exists(path) ? await readTextFile(path) : null;
 }
 
+export async function ensureTextFile(path: string, text: string): Promise<void> {
+  if (!await exists(path)) await writeTextFileEnsuringParent(path, text);
+}
+
 export async function writeTextFileEnsuringParent(path: string, text: string): Promise<void> {
   await mkdir(await dirname(path), { recursive: true });
   await writeTextFile(path, text);
