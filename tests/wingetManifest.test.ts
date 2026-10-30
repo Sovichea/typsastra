@@ -97,6 +97,19 @@ describe("winget manifests", () => {
         }
       });
 
+      test("pins the supported manifest schema version", () => {
+        for (const [file, type] of [
+          [`${identifier}.yaml`, "version"],
+          [`${identifier}.locale.en-US.yaml`, "defaultLocale"],
+          [`${identifier}.installer.yaml`, "installer"],
+        ] as const) {
+          const contents = readFileSync(join(directory, file), "utf8");
+          expect(contents).toContain("ManifestVersion: 1.28.0");
+          expect(contents).toContain(`winget-manifest.${type}.1.28.0.schema.json`);
+          expect(contents.endsWith("\n")).toBe(true);
+        }
+      });
+
       test("path segments match the package identifier", () => {
         const segments = directory.split(/[\\/]/).filter(Boolean);
         // winget-pkgs stores manifests under manifests/<partition>/<identifier>/

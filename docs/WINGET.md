@@ -125,6 +125,11 @@ Two requirements that are easy to miss:
 - `Platform` is a list of `Windows.Desktop` or `Windows.Universal`, not the
   string `Windows.Latest`.
 
+All three manifest files must use the schema version currently accepted by
+winget-pkgs. The generator pins `1.28.0`; keep the schema URLs, `ManifestVersion`
+fields, and trailing newlines in sync when the repository moves to a newer
+schema.
+
 The manifest tests run `winget validate` when the CLI is present, so CI-style
 local runs catch these too.
 
