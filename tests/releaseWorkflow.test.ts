@@ -9,4 +9,17 @@ describe("release workflow publishing", () => {
     expect(workflow).not.toContain("max-parallel: 1");
     expect(workflow).toContain("uses: tauri-apps/tauri-action@v0");
   });
+
+  test("rebuilds AppImage staging and verifies launcher permissions", async () => {
+    const workflow = await Bun.file(new URL("../.github/workflows/release.yml", import.meta.url)).text();
+    const packageJson = await Bun.file(new URL("../package.json", import.meta.url)).json() as {
+      devDependencies?: Record<string, string>;
+    };
+
+    expect(packageJson.devDependencies?.["@tauri-apps/cli"]).toBe("~2.12.4");
+    expect(workflow).toContain("Reset Linux AppImage Staging");
+    expect(workflow).toContain("rm -rf src-tauri/target/release/bundle/appimage");
+    expect(workflow).toContain("for entry in AppRun AppRun.wrapped; do");
+    expect(workflow).toContain('${mode: -1}');
+  });
 });

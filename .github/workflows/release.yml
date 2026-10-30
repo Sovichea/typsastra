@@ -91,6 +91,15 @@ jobs:
       - name: Install Frontend Dependencies
         run: bun install --frozen-lockfile
 
+      - name: Reset Linux AppImage Staging
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'ubuntu-22.04-arm'
+        run: |
+          # The Rust cache can restore an AppDir whose AppRun.wrapped was
+          # written by an older bundler with mode 0770. Rebuild it from scratch
+          # with the current Tauri CLI so the launcher is world-executable.
+          rm -rf src-tauri/target/release/bundle/appimage
+          rm -rf src-tauri/target/*/release/bundle/appimage
+
       - name: Verify macOS Build Environment
         if: matrix.platform == 'macos-latest'
         run: |
@@ -182,6 +191,15 @@ jobs:
               echo "::error::$entry is missing from the AppImage root"
               exit 1
             fi
+          done
+          for entry in AppRun AppRun.wrapped; do
+            line="$(archive_entry "$entry")"
+            mode=${line%% *}
+            if [[ "${mode: -1}" != "x" ]]; then
+              echo "::error::$entry is not executable for all users ($mode)"
+              exit 1
+            fi
+            echo "OK $entry mode $mode"
           done
           for link in .DirIcon Typsastra.desktop; do
             line="$(archive_entry "$link")"
