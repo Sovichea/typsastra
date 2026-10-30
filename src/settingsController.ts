@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { dirname, join } from "@tauri-apps/api/path";
 import { confirm, message, open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import {
@@ -10,6 +11,17 @@ import {
   type TerminologyEntry,
   type ThemeName
 } from "./settings";
+import {
+  formatTerminology,
+  formatUserDictionary,
+  parseTerminology,
+  parseUserDictionary,
+  readTextFileIfPresent,
+  writeTextFileEnsuringParent,
+  PROJECT_TERMINOLOGY_FILE,
+  TERMINOLOGY_FILE,
+  USER_DICTIONARY_FILE,
+} from "./settingsLexicon";
 import {
   codeEditorFonts,
   unicodeEditorFonts,
@@ -94,11 +106,15 @@ function formatBytes(bytes: number): string {
 export class SettingsController {
   private settings: AppSettings = cloneDefaultAppSettings();
   private filePath = "";
+  private userDictionaryPath = "";
+  private terminologyPath = "";
+  private lexiconFilesReady = false;
   private saveTimer: number | null = null;
   private loadError: string | null = null;
   private systemFonts: SystemFontCatalog = { all: ["MiSans Latin"], monospace: ["Fira Mono"] };
   private readonly timingEntries: SettingsTimingEntry[] = [];
   private projectTerminology: TerminologyEntry[] = [];
+  private projectTerminologyPath = "";
   private rendererCompatibility: LinuxRendererCompatibility | null = null;
   private rendererCompatibilityError: string | null = null;
   private languageCatalogQuery = "";
@@ -159,6 +175,10 @@ export class SettingsController {
       this.loadError = String(error);
     }
 
+    if (await this.loadLexiconFiles()) {
+      shouldPersist = true;
+    }
+
     if (shouldPersist) {
       const persistStart = performance.now();
       await this.persist();
@@ -166,6 +186,102 @@ export class SettingsController {
     }
     this.recordTiming("frontend startup", "settings load total", loadStart);
     void this.refreshRendererCompatibility();
+  }
+
+  private async loadLexiconFiles(): Promise<boolean> {
+    if (!this.filePath) return false;
+    try {
+      const directory = await dirname(this.filePath);
+      this.userDictionaryPath = await join(directory, USER_DICTIONARY_FILE);
+      this.terminologyPath = await join(directory, TERMINOLOGY_FILE);
+
+      const dictionary = await readTextFileIfPresent(this.userDictionaryPath);
+      if (dictionary !== null) {
+        this.settings.editor.userDictionary = parseUserDictionary(dictionary);
+      } else {
+        await writeTextFileEnsuringParent(
+          this.userDictionaryPath,
+          formatUserDictionary(this.settings.editor.userDictionary),
+        );
+      }
+
+      const terminology = await readTextFileIfPresent(this.terminologyPath);
+      if (terminology !== null) {
+        const parsed = parseTerminology(terminology);
+        this.settings.editor.globalTerminology = parsed.global;
+        this.settings.editor.languageTerminology = parsed.language;
+      } else {
+        await writeTextFileEnsuringParent(
+          this.terminologyPath,
+          formatTerminology(
+            this.settings.editor.globalTerminology,
+            this.settings.editor.languageTerminology,
+          ),
+        );
+      }
+
+      this.settings = normalizeAppSettings(this.settings);
+      this.lexiconFilesReady = true;
+      this.updateTerminologyStoragePaths();
+      return true;
+    } catch (error) {
+      console.warn(
+        "Failed to load plain-text dictionary and terminology files; using settings.json fallback.",
+        error,
+      );
+      this.lexiconFilesReady = false;
+      this.updateTerminologyStoragePaths();
+      return false;
+    }
+  }
+
+  private async persistLexiconFiles(): Promise<void> {
+    if (!this.lexiconFilesReady) return;
+    await writeTextFileEnsuringParent(
+      this.userDictionaryPath,
+      formatUserDictionary(this.settings.editor.userDictionary),
+    );
+    await writeTextFileEnsuringParent(
+      this.terminologyPath,
+      formatTerminology(
+        this.settings.editor.globalTerminology,
+        this.settings.editor.languageTerminology,
+      ),
+    );
+  }
+
+  private async persistProjectTerminology(): Promise<void> {
+    if (!this.projectTerminologyPath) return;
+    try {
+      await writeTextFileEnsuringParent(
+        this.projectTerminologyPath,
+        formatTerminology(this.projectTerminology, []),
+      );
+    } catch (error) {
+      console.warn("Failed to save project terminology file.", error);
+    }
+  }
+
+  public async loadProjectTerminology(
+    path: string,
+    fallback: readonly TerminologyEntry[],
+    update?: (entries: TerminologyEntry[]) => void,
+  ): Promise<TerminologyEntry[]> {
+    let entries: TerminologyEntry[] | null = null;
+    try {
+      const text = await readTextFileIfPresent(path);
+      if (text !== null) {
+        entries = parseTerminology(text).global;
+      } else {
+        entries = [...fallback];
+        await writeTextFileEnsuringParent(path, formatTerminology(entries, []));
+      }
+    } catch (error) {
+      console.warn("Failed to load project terminology file; using project metadata.", error);
+      entries = [...fallback];
+    }
+    this.setProjectTerminology(entries, update, path);
+    return entries;
   }
 
   public update(mutator: (settings: AppSettings) => void) {
@@ -187,10 +303,14 @@ export class SettingsController {
   public setProjectTerminology(
     entries: readonly TerminologyEntry[],
     update?: (entries: TerminologyEntry[]) => void,
+    path?: string,
   ): void {
     this.projectTerminology = [...entries];
     if (update) this.updateProjectTerminology = update;
+    if (path !== undefined) this.projectTerminologyPath = path;
     this.populateTerminology();
+    this.updateTerminologyStoragePaths();
+    void this.persistProjectTerminology();
   }
 
   public setWorkspacePreviewRenderMode(
@@ -398,6 +518,15 @@ export class SettingsController {
     document.getElementById("settings-reveal-file")?.addEventListener("click", () => {
       if (this.filePath) void invoke("reveal_in_explorer", { path: this.filePath });
     });
+    document.getElementById("settings-open-user-dictionary")?.addEventListener("click", () => {
+      void this.openTerminologyFile(this.userDictionaryPath, USER_DICTIONARY_FILE);
+    });
+    document.getElementById("settings-open-terminology")?.addEventListener("click", () => {
+      void this.openTerminologyFile(this.terminologyPath, TERMINOLOGY_FILE);
+    });
+    document.getElementById("settings-open-project-terminology")?.addEventListener("click", () => {
+      void this.openTerminologyFile(this.projectTerminologyPath, PROJECT_TERMINOLOGY_FILE);
+    });
     document.addEventListener("keydown", event => {
       if (event.key === "Escape" && !overlay.classList.contains("hidden")) {
         event.preventDefault();
@@ -583,6 +712,7 @@ export class SettingsController {
     const status = document.getElementById("settings-save-status");
     if (status) status.textContent = "Saving...";
     try {
+      await this.persistLexiconFiles();
       this.filePath = await invoke<string>("save_app_settings", { settings: this.settings });
       this.loadError = null;
       localStorage.removeItem("typsastra-theme");
@@ -590,6 +720,7 @@ export class SettingsController {
       if (status) status.textContent = "Saved";
       const path = document.getElementById("settings-file-path");
       if (path) path.textContent = this.filePath;
+      this.updateTerminologyStoragePaths();
       return true;
     } catch (error) {
       console.error("Failed to save settings.json", error);
@@ -712,6 +843,7 @@ export class SettingsController {
       path.textContent = this.filePath || "settings.json path unavailable";
       path.title = this.filePath;
     }
+    this.updateTerminologyStoragePaths();
     const status = document.getElementById("settings-save-status");
     if (status && this.loadError) status.textContent = `Using defaults: ${this.loadError}`;
   }
@@ -1312,6 +1444,7 @@ export class SettingsController {
           this.projectTerminology = next;
           this.updateProjectTerminology(next);
           this.populateTerminology();
+          void this.persistProjectTerminology();
         },
       })),
       ...this.settings.editor.languageTerminology.map((entry, index) => ({
@@ -1345,6 +1478,47 @@ export class SettingsController {
       row.append(text, button);
       return row;
     }));
+  }
+
+  private updateTerminologyStoragePaths(): void {
+    const dictionaryPath = document.getElementById("settings-user-dictionary-path");
+    const dictionaryButton =
+      document.getElementById("settings-open-user-dictionary") as HTMLButtonElement | null;
+    if (dictionaryPath) {
+      dictionaryPath.textContent = this.userDictionaryPath || USER_DICTIONARY_FILE;
+      dictionaryPath.title = this.userDictionaryPath;
+    }
+    if (dictionaryButton) dictionaryButton.disabled = !this.userDictionaryPath;
+
+    const terminologyPath = document.getElementById("settings-terminology-path");
+    const terminologyButton =
+      document.getElementById("settings-open-terminology") as HTMLButtonElement | null;
+    if (terminologyPath) {
+      terminologyPath.textContent = this.terminologyPath || TERMINOLOGY_FILE;
+      terminologyPath.title = this.terminologyPath;
+    }
+    if (terminologyButton) terminologyButton.disabled = !this.terminologyPath;
+
+    const projectPath = document.getElementById("settings-project-terminology-path");
+    const projectButton =
+      document.getElementById("settings-open-project-terminology") as HTMLButtonElement | null;
+    if (projectPath) {
+      projectPath.textContent = this.projectTerminologyPath || "Open a project to edit project terminology.";
+      projectPath.title = this.projectTerminologyPath;
+    }
+    if (projectButton) projectButton.disabled = !this.projectTerminologyPath;
+  }
+
+  private async openTerminologyFile(path: string, label: string): Promise<void> {
+    if (!path) return;
+    try {
+      await invoke("open_file_externally", { path });
+    } catch (error) {
+      await message(`Could not open ${label}: ${String(error)}`, {
+        title: "Open File",
+        kind: "error",
+      });
+    }
   }
 
   private async toggleLanguageCatalog(): Promise<void> {

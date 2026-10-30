@@ -1,5 +1,6 @@
 import type { PreviewViewportAnchor } from "../preview/previewViewportAnchor";
 import { invoke } from "@tauri-apps/api/core";
+import { join } from "@tauri-apps/api/path";
 import { confirm, message } from "@tauri-apps/plugin-dialog";
 import { filePathKey } from "../platform/paths";
 import { fileExtension, isBinaryImagePath, isSupportedInAppPath } from "../platform/fileTypes";
@@ -117,7 +118,12 @@ export interface WorkspaceLifecycleServices {
       };
     };
     setWorkspacePreviewRenderMode(mode: PreviewRenderMode | null, changed?: (mode: PreviewRenderMode) => void): void;
-    setProjectTerminology(entries: TerminologyEntry[], changed: (entries: TerminologyEntry[]) => void): void;
+    setProjectTerminology(entries: TerminologyEntry[], changed?: (entries: TerminologyEntry[]) => void, path?: string): void;
+    loadProjectTerminology(
+      path: string,
+      fallback: readonly TerminologyEntry[],
+      changed?: (entries: TerminologyEntry[]) => void,
+    ): Promise<TerminologyEntry[]>;
   };
   draftPreviewController: { mode: unknown; setMode(mode: unknown, reason: string): void; reset(): void };
   spellcheckController: { setTerminology(global: TerminologyEntry[], project: TerminologyEntry[], language: Record<string, TerminologyEntry[]>, ignored: Record<string, TerminologyEntry[]>): void };
@@ -372,13 +378,8 @@ export class WorkspaceLifecycleController {
       );
       app.lastPreviewRenderMode = app.workspaceMetadata.workspace.previewRenderMode;
       app.draftPreviewController.setMode(app.workspaceMetadata.workspace.previewContentMode, "normal");
-      app.spellcheckController.setTerminology(
-        app.settingsController.value.editor.globalTerminology,
-        app.workspaceMetadata.project.terminology,
-        app.settingsController.value.editor.languageTerminology,
-        app.settingsController.value.editor.scopedIgnoredWords,
-      );
-      app.settingsController.setProjectTerminology(
+      const projectTerminology = await app.settingsController.loadProjectTerminology(
+        await join(selected, ".typsastra", "terminology.txt"),
         app.workspaceMetadata.project.terminology,
         (entries: TerminologyEntry[]) => {
           if (!app.workspaceMetadata) return;
@@ -391,6 +392,13 @@ export class WorkspaceLifecycleController {
           );
           void app.saveWorkspaceState();
         },
+      );
+      app.workspaceMetadata.project.terminology = projectTerminology;
+      app.spellcheckController.setTerminology(
+        app.settingsController.value.editor.globalTerminology,
+        projectTerminology,
+        app.settingsController.value.editor.languageTerminology,
+        app.settingsController.value.editor.scopedIgnoredWords,
       );
       await this.restoreToolchain(app.workspaceMetadata);
       const expandedDirectories = (await Promise.all(
@@ -739,6 +747,7 @@ export class WorkspaceLifecycleController {
     app.tableToolController.setWorkspace([]);
     app.workspaceMetadata = null;
     app.settingsController.setWorkspacePreviewRenderMode(null);
+    app.settingsController.setProjectTerminology([], undefined, "");
     app.lastPreviewRenderMode = app.settingsController.value.preview.renderMode;
     app.workspaceLoading = false;
     app.recommendedWorkspaceToolchain = null;

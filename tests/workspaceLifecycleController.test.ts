@@ -3,6 +3,7 @@ import {
   WorkspaceLifecycleController,
   type WorkspaceLifecycleDependencies,
 } from "../src/workspace/workspaceLifecycleController";
+import type { TerminologyEntry } from "../src/settings";
 
 function lifecycleHarness(
   overrides: Partial<WorkspaceLifecycleDependencies> = {},
@@ -35,6 +36,7 @@ function lifecycleHarness(
       },
       setWorkspacePreviewRenderMode: () => {},
       setProjectTerminology: () => {},
+      loadProjectTerminology: async (_path: string, fallback: TerminologyEntry[]) => [...fallback],
     },
     appendDeveloperLog: () => {},
     closeEditorTab: async (path: string) => { calls.push(`close-tab:${path}`); },
@@ -117,6 +119,7 @@ describe("WorkspaceLifecycleController behavior", () => {
         },
         setWorkspacePreviewRenderMode: () => {},
         setProjectTerminology: () => {},
+      loadProjectTerminology: async (_path: string, fallback: TerminologyEntry[]) => [...fallback],
       },
     });
 
@@ -221,6 +224,7 @@ describe("WorkspaceLifecycleController behavior", () => {
         },
         setWorkspacePreviewRenderMode: () => {},
         setProjectTerminology: () => {},
+      loadProjectTerminology: async (_path: string, fallback: TerminologyEntry[]) => [...fallback],
       },
       draftPreviewController: { mode: "normal", setMode: () => {}, reset: () => {} },
       previewSyncController: { cancelManual: () => {}, clearForward: () => {} },
