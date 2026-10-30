@@ -1094,9 +1094,20 @@ impl LanguageSegmenter for KhmerProvider {
     }
 }
 
+struct CompletionWord {
+    normalized: String,
+    display: Option<String>,
+}
+
+impl CompletionWord {
+    fn display(&self) -> &str {
+        self.display.as_deref().unwrap_or(&self.normalized)
+    }
+}
+
 struct EnglishHunspellProvider {
     dictionary: spellbook::Dictionary,
-    completion_words: Vec<String>,
+    completion_words: Vec<CompletionWord>,
     known_stems: HashSet<String>,
 }
 
@@ -1230,7 +1241,7 @@ struct GenericHunspellProvider {
     scripts: Vec<&'static str>,
     pattern: &'static str,
     dictionary: spellbook::Dictionary,
-    completion_words: Vec<String>,
+    completion_words: Vec<CompletionWord>,
     known_stems: HashSet<String>,
     version: &'static str,
     license: &'static str,
@@ -1252,18 +1263,21 @@ impl GenericHunspellProvider {
         let dictionary = spellbook::Dictionary::new(&preprocessed, dic)
             .map_err(|error| format!("Failed to load {locale} dictionary: {error}"))?;
         let is_lao = language_tag.split('-').next() == Some("lo");
-        let mut completion_words: Vec<String> = dic
+        let mut completion_words: Vec<CompletionWord> = dic
             .lines()
             .skip(1)
             .filter_map(hunspell_dic_stem)
             .filter(|word| {
                 is_generic_completion_word(word) || (is_lao && is_lao_dictionary_word(word))
             })
-            .map(normalize_generic_word)
+            .filter_map(|word| completion_word(word, normalize_generic_word))
             .collect();
-        completion_words.sort();
-        completion_words.dedup();
-        let known_stems = completion_words.iter().cloned().collect();
+        completion_words.sort_by(|left, right| left.normalized.cmp(&right.normalized));
+        completion_words.dedup_by(|left, right| left.normalized == right.normalized);
+        let known_stems = completion_words
+            .iter()
+            .map(|word| word.normalized.clone())
+            .collect();
         Ok(Self {
             id: Box::leak(format!("hunspell:{locale}").into_boxed_str()),
             display_name: Box::leak(display_name.to_owned().into_boxed_str()),
@@ -1299,7 +1313,8 @@ impl GenericHunspellProvider {
             return;
         }
         let normalized = normalize_generic_word(word);
-        let known = self.dictionary.check(word) || self.dictionary.check(&normalized);
+        let known = self.dictionary.check(word)
+            || (is_case_variant_accepted(word) && self.dictionary.check(&normalized));
         tokens.push(SegmentToken {
             text: normalized.clone(),
             from: from_utf16,
@@ -1316,10 +1331,10 @@ impl GenericHunspellProvider {
         }
         let index = self
             .completion_words
-            .partition_point(|candidate| candidate.as_str() < prefix.as_str());
+            .partition_point(|candidate| candidate.normalized.as_str() < prefix.as_str());
         self.completion_words
             .get(index)
-            .is_some_and(|candidate| candidate.starts_with(&prefix))
+            .is_some_and(|candidate| candidate.normalized.starts_with(&prefix))
     }
 }
 
@@ -1499,14 +1514,14 @@ impl LanguageSegmenter for GenericHunspellProvider {
         }
         let index = self
             .completion_words
-            .partition_point(|candidate| candidate.as_str() < normalized.as_str());
+            .partition_point(|candidate| candidate.normalized.as_str() < normalized.as_str());
         self.completion_words
             .iter()
             .skip(index)
-            .take_while(|candidate| candidate.starts_with(&normalized))
-            .filter(|candidate| candidate.as_str() != normalized.as_str())
+            .take_while(|candidate| candidate.normalized.starts_with(&normalized))
+            .filter(|candidate| candidate.normalized.as_str() != normalized.as_str())
             .take(limit)
-            .cloned()
+            .map(|candidate| candidate.display().to_string())
             .collect()
     }
 }
@@ -1515,16 +1530,19 @@ impl EnglishHunspellProvider {
     fn new() -> Result<Self, String> {
         let dictionary = spellbook::Dictionary::new(EN_US_AFF, EN_US_DIC)
             .map_err(|error| format!("Failed to load en_US dictionary: {error}"))?;
-        let mut completion_words: Vec<String> = EN_US_DIC
+        let mut completion_words: Vec<CompletionWord> = EN_US_DIC
             .lines()
             .skip(1)
             .filter_map(hunspell_dic_stem)
             .filter(|word| is_completion_word(word))
-            .map(|word| word.to_ascii_lowercase())
+            .filter_map(|word| completion_word(word, normalize_english_word))
             .collect();
-        completion_words.sort();
-        completion_words.dedup();
-        let known_stems = completion_words.iter().cloned().collect();
+        completion_words.sort_by(|left, right| left.normalized.cmp(&right.normalized));
+        completion_words.dedup_by(|left, right| left.normalized == right.normalized);
+        let known_stems = completion_words
+            .iter()
+            .map(|word| word.normalized.clone())
+            .collect();
         Ok(Self {
             dictionary,
             completion_words,
@@ -1539,24 +1557,18 @@ impl EnglishHunspellProvider {
         }
         let index = self
             .completion_words
-            .partition_point(|candidate| candidate.as_str() < prefix.as_str());
+            .partition_point(|candidate| candidate.normalized.as_str() < prefix.as_str());
         self.completion_words
             .get(index)
-            .is_some_and(|candidate| candidate.starts_with(&prefix))
+            .is_some_and(|candidate| candidate.normalized.starts_with(&prefix))
     }
 
     fn should_skip_token(&self, text: &str, from: usize, to: usize) -> bool {
         let word = &text[from..to];
-        if word.len() <= 1 || word.chars().all(|c| c.is_ascii_uppercase()) {
+        if word.len() <= 1 {
             return true;
         }
         if word.contains('_') || word.chars().any(|c| c.is_ascii_digit()) {
-            return true;
-        }
-        if word.chars().any(|c| c.is_ascii_uppercase())
-            && !is_title_case_word(word)
-            && !word.chars().all(|c| c.is_ascii_uppercase())
-        {
             return true;
         }
         let previous = text[..from].chars().next_back();
@@ -1699,14 +1711,14 @@ impl LanguageSegmenter for EnglishHunspellProvider {
         }
         let index = self
             .completion_words
-            .partition_point(|candidate| candidate.as_str() < normalized.as_str());
+            .partition_point(|candidate| candidate.normalized.as_str() < normalized.as_str());
         self.completion_words
             .iter()
             .skip(index)
-            .take_while(|candidate| candidate.starts_with(&normalized))
-            .filter(|candidate| candidate.as_str() != normalized.as_str())
+            .take_while(|candidate| candidate.normalized.starts_with(&normalized))
+            .filter(|candidate| candidate.normalized.as_str() != normalized.as_str())
             .take(limit)
-            .map(|candidate| apply_english_casing(prefix, candidate))
+            .map(|candidate| candidate.display().to_string())
             .collect()
     }
 }
@@ -1737,7 +1749,8 @@ impl EnglishHunspellProvider {
         let trim_end_utf16 = text[trimmed_to_byte..original_to_byte]
             .encode_utf16()
             .count();
-        let known = self.dictionary.check(word) || self.dictionary.check(&normalized);
+        let known = self.dictionary.check(word)
+            || (is_case_variant_accepted(word) && self.dictionary.check(&normalized));
         tokens.push(SegmentToken {
             text: normalized.clone(),
             from: from_utf16 + trim_start_utf16,
@@ -1796,6 +1809,83 @@ fn is_generic_token_char(character: char) -> bool {
 
 fn normalize_generic_word(word: &str) -> String {
     word.to_lowercase()
+}
+
+/// Accept lowercase, Title Case, and ALL CAPS as case variants of a known
+/// word. Other mixed-case spellings must exist in the dictionary exactly.
+fn is_case_variant_accepted(word: &str) -> bool {
+    let letters = word
+        .chars()
+        .filter(|character| character.is_uppercase() || character.is_lowercase())
+        .collect::<Vec<_>>();
+    letters.is_empty()
+        || letters.iter().all(|letter| letter.is_lowercase())
+        || letters.iter().all(|letter| letter.is_uppercase())
+        || (letters[0].is_uppercase() && letters[1..].iter().all(|letter| letter.is_lowercase()))
+}
+
+fn completion_word(word: &str, normalize: fn(&str) -> String) -> Option<CompletionWord> {
+    let normalized = normalize(word);
+    (!normalized.is_empty()).then(|| CompletionWord {
+        display: (normalized != word).then(|| word.to_string()),
+        normalized,
+    })
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CompletionCasing {
+    Preserve,
+    Title,
+    Upper,
+}
+
+fn completion_casing(prefix: &str) -> CompletionCasing {
+    let letters = prefix
+        .chars()
+        .filter(|character| character.is_uppercase() || character.is_lowercase())
+        .collect::<Vec<_>>();
+    match (letters.first(), letters.get(1)) {
+        (Some(first), Some(second)) if first.is_uppercase() && second.is_uppercase() => {
+            CompletionCasing::Upper
+        }
+        (Some(first), Some(second)) if first.is_uppercase() && second.is_lowercase() => {
+            CompletionCasing::Title
+        }
+        (Some(first), None) if first.is_uppercase() => CompletionCasing::Title,
+        _ => CompletionCasing::Preserve,
+    }
+}
+
+fn apply_completion_casing(prefix: &str, word: &str) -> String {
+    match completion_casing(prefix) {
+        CompletionCasing::Preserve => word.to_string(),
+        CompletionCasing::Title => title_case_completion(word),
+        CompletionCasing::Upper => word.to_uppercase(),
+    }
+}
+
+fn title_case_completion(word: &str) -> String {
+    let mut first_cased = false;
+    let mut later_uppercase = false;
+    let mut result = String::with_capacity(word.len());
+    for character in word.chars() {
+        if character.is_uppercase() || character.is_lowercase() {
+            if !first_cased {
+                first_cased = true;
+                result.extend(character.to_uppercase());
+            } else {
+                later_uppercase |= character.is_uppercase();
+                result.push(character);
+            }
+        } else {
+            result.push(character);
+        }
+    }
+    if later_uppercase {
+        word.to_string()
+    } else {
+        result
+    }
 }
 
 fn character_matches_language_tag(character: char, language_tag: &str) -> bool {
@@ -1928,7 +2018,14 @@ fn english_us_provider_capabilities() -> ProviderCapabilities {
 }
 
 fn generic_hunspell_supports_completion(language_tag: &str) -> bool {
-    script_for_language_tag(language_tag) == "Latn" || language_tag.split('-').next() == Some("lo")
+    script_uses_capital_letters(script_for_language_tag(language_tag))
+        || language_tag.split('-').next() == Some("lo")
+}
+
+/// Scripts whose Unicode case mappings distinguish capital and lowercase
+/// letters. Caseless scripts keep their dictionary case unchanged.
+fn script_uses_capital_letters(script: &str) -> bool {
+    matches!(script, "Latn" | "Cyrl" | "Grek" | "Armn")
 }
 
 fn generic_hunspell_provider_capabilities(spec: &HunspellCatalogSpec) -> ProviderCapabilities {
@@ -2104,28 +2201,6 @@ fn trim_english_token(text: &str, mut from: usize, mut to: usize) -> (usize, usi
 
 fn normalize_english_word(word: &str) -> String {
     word.replace('’', "'").to_ascii_lowercase()
-}
-
-fn apply_english_casing(prefix: &str, word: &str) -> String {
-    if prefix.chars().all(|c| !c.is_ascii_lowercase()) {
-        return word.to_ascii_uppercase();
-    }
-    if is_title_case_word(prefix) {
-        let mut chars = word.chars();
-        let Some(first) = chars.next() else {
-            return String::new();
-        };
-        return format!("{}{}", first.to_ascii_uppercase(), chars.as_str());
-    }
-    word.to_string()
-}
-
-fn is_title_case_word(word: &str) -> bool {
-    let mut chars = word.chars().filter(|c| c.is_ascii_alphabetic());
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    first.is_ascii_uppercase() && chars.all(|c| c.is_ascii_lowercase())
 }
 
 fn looks_like_url_context(text: &str, from: usize, to: usize) -> bool {
@@ -2957,18 +3032,32 @@ fn complete_with_provider(
     // newly typed suffix. Try the longest recent token sequence first so a
     // prefix such as `សាលា` + `រ` remains `សាលារ`, not merely `រ`.
     let first_index = end_index.saturating_sub(3);
+    let utf16_boundaries = utf16_to_byte_boundaries(&request.text);
+    let user_terms = request
+        .user_dictionary
+        .iter()
+        .map(|word| word.trim())
+        .filter(|word| !word.is_empty())
+        .map(|word| (word.replace('’', "'").to_lowercase(), word))
+        .collect::<Vec<_>>();
     for start_index in first_index..=end_index {
         let prefix = analysis.tokens[start_index..=end_index]
             .iter()
             .map(|token| token.text.as_str())
             .collect::<String>();
+        let typed_prefix = utf16_byte_range(
+            &utf16_boundaries,
+            analysis.tokens[start_index].from,
+            request.cursor_utf16,
+            request.text.len(),
+        )
+        .map(|range| &request.text[range])
+        .unwrap_or(prefix.as_str());
         let limit = request.limit.min(50);
-        let mut options = request
-            .user_dictionary
+        let mut options = user_terms
             .iter()
-            .map(|word| word.trim())
-            .filter(|word| !word.is_empty() && provider.supports(word) && word.starts_with(&prefix))
-            .map(str::to_owned)
+            .filter(|(normalized, word)| provider.supports(word) && normalized.starts_with(&prefix))
+            .map(|(_, word)| (*word).to_string())
             .collect::<Vec<_>>();
         options.sort_by(|left, right| {
             left.encode_utf16()
@@ -2978,12 +3067,21 @@ fn complete_with_provider(
         });
         options.dedup();
         for option in provider.autocomplete(&prefix, limit) {
+            let option = apply_completion_casing(typed_prefix, &option);
             if !options.iter().any(|candidate| candidate == &option) {
                 options.push(option);
             }
         }
-        if provider.is_known_word(&prefix) && !options.iter().any(|option| option == &prefix) {
-            options.insert(0, prefix);
+        let normalized_prefix = typed_prefix.replace('’', "'").to_lowercase();
+        let preferred_prefix = user_terms
+            .iter()
+            .find(|(normalized, _)| *normalized == normalized_prefix)
+            .map(|(_, word)| *word)
+            .unwrap_or(typed_prefix);
+        if provider.is_known_word(&prefix)
+            && !options.iter().any(|option| option == preferred_prefix)
+        {
+            options.insert(0, preferred_prefix.to_string());
         }
         options.truncate(limit);
         if !options.is_empty() {
@@ -3131,6 +3229,34 @@ mod tests {
         .expect("Lao test provider")
     }
 
+    fn german_test_provider() -> GenericHunspellProvider {
+        GenericHunspellProvider::new(
+            "de_DE",
+            "German (Germany)",
+            "de-DE",
+            "[\\p{Script=Latin}][\\p{Script=Latin}\\p{M}'’\\-]*",
+            "SET UTF-8\nTRY äöüÄÖÜß\n",
+            "4\nheute\nHaus\nWetter\nMädchen\n",
+            "test-1",
+            "GPL-3.0",
+        )
+        .expect("German test provider")
+    }
+
+    fn serbian_test_provider() -> GenericHunspellProvider {
+        GenericHunspellProvider::new(
+            "sr",
+            "Serbian (Cyrillic)",
+            "sr-Cyrl",
+            "[\\p{Script=Cyrillic}][\\p{Script=Cyrillic}\\p{M}'’\\-]*",
+            "SET UTF-8\n",
+            "2\nкућа\nБеоград\n",
+            "test-1",
+            "test",
+        )
+        .expect("Serbian test provider")
+    }
+
     #[test]
     fn lao_icu4x_tokenizer_preserves_utf16_ranges() {
         let provider = lao_test_provider();
@@ -3178,6 +3304,81 @@ mod tests {
         .expect("completion response");
         assert_eq!((response.from, response.to), (2, 4));
         assert!(response.options.iter().any(|word| word == "ພາສາ"));
+    }
+
+    #[test]
+    fn latin_completion_preserves_typed_and_dictionary_case() {
+        let provider = german_test_provider();
+        let complete = |text: &str| {
+            complete_with_provider(
+                &provider,
+                &CompletionRequest {
+                    provider: provider.id().to_string(),
+                    text: text.to_string(),
+                    cursor_utf16: text.encode_utf16().count(),
+                    limit: 10,
+                    user_dictionary: Vec::new(),
+                },
+            )
+            .expect("German completion")
+            .expect("completion response")
+            .options
+        };
+
+        assert!(
+            complete("Heut").iter().any(|word| word == "Heute"),
+            "sentence-start capitalization should be restored"
+        );
+        assert!(
+            complete("hau").iter().any(|word| word == "Haus"),
+            "dictionary noun capitalization should be preserved"
+        );
+        assert!(
+            complete("HAU").iter().any(|word| word == "HAUS"),
+            "all-caps typing should produce an all-caps completion"
+        );
+    }
+
+    #[test]
+    fn cyrillic_completion_restores_typed_and_dictionary_case() {
+        let provider = serbian_test_provider();
+        assert!(provider.supports_completion());
+        let complete = |text: &str| {
+            complete_with_provider(
+                &provider,
+                &CompletionRequest {
+                    provider: provider.id().to_string(),
+                    text: text.to_string(),
+                    cursor_utf16: text.encode_utf16().count(),
+                    limit: 10,
+                    user_dictionary: Vec::new(),
+                },
+            )
+            .expect("Serbian completion")
+            .expect("completion response")
+            .options
+        };
+
+        assert!(
+            complete("Ку").iter().any(|word| word == "Кућа"),
+            "sentence-start capitalization should be restored"
+        );
+        assert!(
+            complete("бе").iter().any(|word| word == "Београд"),
+            "dictionary proper-name capitalization should be preserved"
+        );
+    }
+
+    #[test]
+    fn completion_casing_keeps_mixed_case_words() {
+        assert_eq!(apply_completion_casing("Heut", "heute"), "Heute");
+        assert_eq!(apply_completion_casing("HAU", "Haus"), "HAUS");
+        assert_eq!(apply_completion_casing("hau", "Haus"), "Haus");
+        assert_eq!(apply_completion_casing("ReC", "receive"), "Receive");
+        assert_eq!(apply_completion_casing("rEC", "receive"), "receive");
+        assert_eq!(apply_completion_casing("REc", "receive"), "RECEIVE");
+        assert_eq!(apply_completion_casing("Mc", "McDonald"), "McDonald");
+        assert_eq!(apply_completion_casing("Iph", "iPhone"), "iPhone");
     }
 
     #[test]
@@ -3863,6 +4064,20 @@ mod tests {
     }
 
     #[test]
+    fn mixed_case_spellings_are_not_accepted_as_case_variants() {
+        let provider = EnglishHunspellProvider::new().expect("English provider");
+        let analysis = provider
+            .analyze("latex Latex LATEX LaTeX")
+            .expect("analysis");
+        let known = analysis
+            .tokens
+            .iter()
+            .map(|token| token.known)
+            .collect::<Vec<_>>();
+        assert_eq!(known, vec![true, true, true, false]);
+    }
+
+    #[test]
     fn english_hunspell_provider_completes_prefixes() {
         let provider = EnglishHunspellProvider::new().expect("English provider");
         let response = complete_with_provider(
@@ -3880,6 +4095,122 @@ mod tests {
         assert_eq!(response.from, "I went to ".encode_utf16().count());
         assert_eq!(response.to, "I went to schoo".encode_utf16().count());
         assert!(response.options.iter().any(|word| word == "school"));
+    }
+
+    #[test]
+    fn english_completion_restores_sentence_start_case() {
+        let provider = EnglishHunspellProvider::new().expect("English provider");
+        let complete = |text: &str| {
+            complete_with_provider(
+                &provider,
+                &CompletionRequest {
+                    provider: "hunspell:en_US".to_string(),
+                    text: text.to_string(),
+                    cursor_utf16: text.encode_utf16().count(),
+                    limit: 10,
+                    user_dictionary: Vec::new(),
+                },
+            )
+            .expect("English completion")
+            .expect("completion response")
+            .options
+        };
+
+        assert!(
+            complete("Tod").iter().any(|word| word == "Today"),
+            "sentence-start capitalization should be restored"
+        );
+    }
+
+    #[test]
+    fn english_all_caps_words_are_checked_and_completed() {
+        let provider = EnglishHunspellProvider::new().expect("English provider");
+        let analysis = provider.analyze("THIS IS A RECIEVE").expect("analysis");
+        let token = analysis
+            .tokens
+            .iter()
+            .find(|token| token.text == "recieve")
+            .expect("all-caps misspelling token");
+        assert!(!token.known, "all-caps misspellings must stay checkable");
+
+        let response = complete_with_provider(
+            &provider,
+            &CompletionRequest {
+                provider: "hunspell:en_US".to_string(),
+                text: "TOD".to_string(),
+                cursor_utf16: 3,
+                limit: 10,
+                user_dictionary: Vec::new(),
+            },
+        )
+        .expect("English completion")
+        .expect("completion response");
+        assert!(
+            response.options.iter().any(|word| word == "TODAY"),
+            "all-caps typing should produce an all-caps completion"
+        );
+    }
+
+    #[test]
+    fn english_completion_case_follows_the_first_two_letters() {
+        let provider = EnglishHunspellProvider::new().expect("English provider");
+        for (text, expected) in [
+            ("REC", "RECEIVE"),
+            ("Rec", "Receive"),
+            ("rec", "receive"),
+            ("ReC", "Receive"),
+            ("rEC", "receive"),
+            ("REc", "RECEIVE"),
+        ] {
+            let response = complete_with_provider(
+                &provider,
+                &CompletionRequest {
+                    provider: "hunspell:en_US".to_string(),
+                    text: text.to_string(),
+                    cursor_utf16: text.encode_utf16().count(),
+                    limit: 50,
+                    user_dictionary: Vec::new(),
+                },
+            )
+            .expect("English completion")
+            .expect("completion response");
+            assert!(
+                response.options.iter().any(|word| word == expected),
+                "prefix {text} should suggest {expected}, got {:?}",
+                response.options
+            );
+        }
+    }
+
+    #[test]
+    fn user_dictionary_terms_keep_their_exact_case() {
+        let provider = EnglishHunspellProvider::new().expect("English provider");
+        let user_dictionary = vec!["LaTeX".to_string()];
+        for text in ["La", "la", "LA", "LAT", "lat", "LaT", "late"] {
+            let response = complete_with_provider(
+                &provider,
+                &CompletionRequest {
+                    provider: "hunspell:en_US".to_string(),
+                    text: text.to_string(),
+                    cursor_utf16: text.encode_utf16().count(),
+                    limit: 50,
+                    user_dictionary: user_dictionary.clone(),
+                },
+            )
+            .expect("English completion")
+            .expect("completion response");
+            assert!(
+                response.options.iter().any(|word| word == "LaTeX"),
+                "prefix {text} should keep the user dictionary spelling, got {:?}",
+                response.options
+            );
+            if text == "late" {
+                assert!(
+                    response.options.iter().any(|word| word == "latex"),
+                    "dictionary and user dictionary spellings should both be offered"
+                );
+            }
+        }
     }
 
     #[test]
