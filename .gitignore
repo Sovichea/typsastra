@@ -47,3 +47,10 @@ vite.config.ts.timestamp-*.mjs
 assets/debug
 temp/
 graphify-out/
+
+# Package-manager build output
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/*.pkg.tar.*
+packaging/aur/*.deb
+packaging/chocolatey/*.nupkg

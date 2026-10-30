@@ -61,6 +61,13 @@ The install is per-machine and requests administrator rights. Windows
 installers are not code signed, so SmartScreen shows a warning on first
 launch. See [WINGET.md](./WINGET.md) for manifest maintenance.
 
+### Other package managers
+
+Packaging metadata for Chocolatey, Scoop, and the Arch User Repository is
+maintained in the repository under `packaging/`. See
+[PACKAGING.md](./PACKAGING.md) for build, test, and publishing instructions.
+These channels are not live until their metadata is published.
+
 ### Automatic updates on macOS
 
 Typsastra's in-app update artifacts are cryptographically signed and verified

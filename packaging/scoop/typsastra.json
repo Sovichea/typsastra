@@ -1,0 +1,55 @@
+{
+    "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Schemas/master/installer.json",
+    "version": "0.9.6",
+    "description": "Typst editor with live preview, autocomplete, outline, diagnostics, and project navigation.",
+    "homepage": "https://github.com/Sovichea/typsastra",
+    "notes": "Requires the Microsoft Edge WebView2 Runtime, which is included with Windows 11 and most Windows 10 installations.",
+    "license": {
+        "identifier": "MIT",
+        "url": "https://github.com/Sovichea/typsastra/blob/v0.9.6/LICENSE"
+    },
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/Sovichea/typsastra/releases/download/v0.9.6/Typsastra_0.9.6_x64_en-US.msi",
+            "hash": "89a09bb1bd121c1ab9479e1e577b6c360243934a91afc1da33bd436f32d65a61"
+        },
+        "arm64": {
+            "url": "https://github.com/Sovichea/typsastra/releases/download/v0.9.6/Typsastra_0.9.6_arm64_en-US.msi",
+            "hash": "be2b637562765a903c7cf3ede26bfe3afff94da4f30a206ecb23f43cc6f9aedd"
+        }
+    },
+    "installer": {
+        "script": [
+            "Expand-MsiArchive \"$dir\\$fname\" \"$dir\" -ExtractDir 'PFiles\\Typsastra'",
+            "Remove-Item \"$dir\\$fname\" -Force"
+        ]
+    },
+    "bin": "typsastra.exe",
+    "shortcuts": [
+        [
+            "typsastra.exe",
+            "Typsastra"
+        ]
+    ],
+    "checkver": {
+        "github": "https://github.com/Sovichea/typsastra"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/Sovichea/typsastra/releases/download/v$version/Typsastra_$version_x64_en-US.msi",
+                "hash": {
+                    "url": "https://api.github.com/repos/Sovichea/typsastra/releases/tags/v$version",
+                    "jsonpath": "$.assets[?(@.name == 'Typsastra_$version_x64_en-US.msi')].digest"
+                }
+            },
+            "arm64": {
+                "url": "https://github.com/Sovichea/typsastra/releases/download/v$version/Typsastra_$version_arm64_en-US.msi",
+                "hash": {
+                    "url": "https://api.github.com/repos/Sovichea/typsastra/releases/tags/v$version",
+                    "jsonpath": "$.assets[?(@.name == 'Typsastra_$version_arm64_en-US.msi')].digest"
+                }
+            }
+        }
+    }
+}

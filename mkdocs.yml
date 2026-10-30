@@ -106,6 +106,7 @@ nav:
       - Troubleshooting: TROUBLESHOOTING.md
   - Contributors:
       - Development: DEVELOPMENT.md
+      - Packaging and distribution: PACKAGING.md
       - Language contributor guide: LANGUAGE_CONTRIBUTOR_GUIDE.md
       - Script editing policies: SCRIPT_EDITING_POLICIES.md
       - Compatibility policy: COMPATIBILITY_POLICY.md

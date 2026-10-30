@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>typsastra</id>
+    <version>0.9.6</version>
+    <title>Typsastra</title>
+    <authors>Typsastra</authors>
+    <owners>Typsastra</owners>
+    <projectUrl>https://github.com/Sovichea/typsastra</projectUrl>
+    <projectSourceUrl>https://github.com/Sovichea/typsastra</projectSourceUrl>
+    <packageSourceUrl>https://github.com/Sovichea/typsastra/tree/v0.9.6/packaging/chocolatey</packageSourceUrl>
+    <docsUrl>https://docs.typsastra.com/</docsUrl>
+    <bugTrackerUrl>https://github.com/Sovichea/typsastra/issues</bugTrackerUrl>
+    <licenseUrl>https://github.com/Sovichea/typsastra/blob/v0.9.6/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Typst editor with live preview, autocomplete, outline, diagnostics, and project navigation.</description>
+    <summary>Typst editor for research and long-form multilingual writing.</summary>
+    <releaseNotes>See https://github.com/Sovichea/typsastra/releases/tag/v0.9.6</releaseNotes>
+    <copyright>Copyright (c) Typsastra contributors</copyright>
+    <tags>typst editor typesetting latex preview tinymist</tags>
+    <iconUrl>https://raw.githubusercontent.com/Sovichea/typsastra/v0.9.6/src-tauri/icons/128x128.png</iconUrl>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

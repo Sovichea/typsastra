@@ -1,0 +1,4 @@
+# AUR metadata is consumed by Bash and makepkg on Linux. Keep LF endings even
+# when the repository is checked out on Windows.
+packaging/aur/PKGBUILD text eol=lf
+packaging/aur/.SRCINFO text eol=lf

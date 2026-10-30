@@ -42,6 +42,7 @@ the reference documents when you need exact behavior or contributor contracts.
 ## Contributors and architecture
 
 - [Development guide](DEVELOPMENT.md)
+- [Packaging and distribution](PACKAGING.md)
 - [Language contributor guide](LANGUAGE_CONTRIBUTOR_GUIDE.md)
 - [Interface localization](I18N.md)
 - [Script editing policies](SCRIPT_EDITING_POLICIES.md)

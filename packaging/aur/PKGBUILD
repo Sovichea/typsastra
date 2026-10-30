@@ -1,0 +1,30 @@
+# Maintainer: Typsastra contributors <https://github.com/Sovichea/typsastra/issues>
+pkgname=typsastra-bin
+pkgver=0.9.6
+pkgrel=1
+pkgdesc="Typst editor with live preview, autocomplete, outline, diagnostics, and project navigation"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Sovichea/typsastra"
+license=('MIT')
+depends=('gtk3' 'webkit2gtk-4.1' 'xdg-utils')
+provides=('typsastra')
+conflicts=('typsastra')
+options=('!strip' '!debug')
+source_x86_64=('https://github.com/Sovichea/typsastra/releases/download/v0.9.6/Typsastra_0.9.6_amd64.deb')
+source_aarch64=('https://github.com/Sovichea/typsastra/releases/download/v0.9.6/Typsastra_0.9.6_arm64.deb')
+noextract=("Typsastra_0.9.6_amd64.deb" "Typsastra_0.9.6_arm64.deb")
+sha256sums_x86_64=('30d3dd92b1e232227522a3eee71089b2ec0f5ea8dbcd408640098186520dc138')
+sha256sums_aarch64=('081b7f2bbdc91bd96aa16931062f3c2509825f858f46bb992fa933e021fcd820')
+
+package() {
+  local deb
+  case "$CARCH" in
+    x86_64) deb="Typsastra_0.9.6_amd64.deb" ;;
+    aarch64) deb="Typsastra_0.9.6_arm64.deb" ;;
+    *) error "Unsupported architecture: $CARCH" ;;
+  esac
+
+  # The Debian package is a thin wrapper around the same Tauri bundle. Extract
+  # its data archive instead of depending on dpkg on Arch Linux.
+  bsdtar -xOf "$srcdir/$deb" data.tar.* | bsdtar -xf - -C "$pkgdir"
+}
