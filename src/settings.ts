@@ -31,12 +31,16 @@ export type DeveloperLogSettings = Record<DeveloperLogCategory, boolean>;
 export type TerminologyEntry = { term: string; exactCase: boolean };
 export type LanguageTerminologyEntry = TerminologyEntry & { languageFamily: string };
 export type ScopedIgnoredWord = { term: string; scope: "global" | "project" | "languageFamily"; languageFamily?: string };
+export type DefaultScriptLanguage = { script: string; languageTag: string };
 
 export type AppSettings = {
   version: 2;
   developerMode: boolean;
   developerLogs: DeveloperLogSettings;
   shortcuts: ShortcutOverrides;
+  language: {
+    defaultScriptLanguages: DefaultScriptLanguage[];
+  };
   appearance: {
     theme: ThemeName;
     editorFontSize: number;
@@ -107,6 +111,9 @@ export const defaultAppSettings: AppSettings = {
     general: true
   },
   shortcuts: {},
+  language: {
+    defaultScriptLanguages: [{ script: "Latn", languageTag: "en-US" }],
+  },
   appearance: {
     theme: "default",
     editorFontSize: 14,
@@ -189,6 +196,30 @@ function previewColorMode(value: unknown): PreviewColorMode {
   return value === "dark" || value === "inverted" ? value : "document";
 }
 
+function normalizeDefaultScriptLanguages(value: unknown): DefaultScriptLanguage[] {
+  if (!Array.isArray(value)) return [];
+  const assignments = new Map<string, DefaultScriptLanguage>();
+  for (const item of value.slice(0, 256)) {
+    const record = objectValue(item);
+    if (typeof record.script !== "string" || !/^[A-Za-z]{4}$/u.test(record.script)) continue;
+    if (typeof record.languageTag !== "string") continue;
+    const script = `${record.script[0]!.toUpperCase()}${record.script.slice(1).toLowerCase()}`;
+    const languageTag = /^([A-Za-z]{2,3})(?:-([A-Za-z]{4}))?(?:-([A-Za-z]{2}|[0-9]{3}))?(?:-([A-Za-z0-9]{5,8}))?$/u.exec(
+      record.languageTag,
+    );
+    if (!languageTag) continue;
+    const [, language, scriptPart, region, variant] = languageTag;
+    const normalizedTag = [
+      language!.toLowerCase(),
+      scriptPart ? `${scriptPart[0]!.toUpperCase()}${scriptPart.slice(1).toLowerCase()}` : null,
+      region ? (/^\d{3}$/u.test(region) ? region : region.toUpperCase()) : null,
+      variant ? variant.toLowerCase() : null,
+    ].filter((part): part is string => part !== null).join("-");
+    assignments.set(script, { script, languageTag: normalizedTag });
+  }
+  return [...assignments.values()];
+}
+
 function terminologyEntries(value: unknown, limit = 2_000): TerminologyEntry[] {
   if (!Array.isArray(value)) return [];
   const entries = new Map<string, TerminologyEntry>();
@@ -263,6 +294,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   const compatibility = objectValue(root.compatibility);
   const fonts = objectValue(root.fonts);
   const developerLogs = objectValue(root.developerLogs);
+  const language = objectValue(root.language);
   const toolchain = objectValue(root.toolchain);
   const enhancedUnicodeEnginePath = typeof toolchain.enhancedUnicodeEnginePath === "string"
     && toolchain.enhancedUnicodeEnginePath.trim().length > 0
@@ -291,6 +323,18 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       general: booleanValue(developerLogs.general, defaultAppSettings.developerLogs.general)
     },
     shortcuts: normalizeShortcutOverrides(root.shortcuts),
+    language: {
+      defaultScriptLanguages: (() => {
+        const normalized = language.defaultScriptLanguages === undefined
+          ? []
+          : normalizeDefaultScriptLanguages(language.defaultScriptLanguages);
+        // New projects need a usable starting point. Treat an empty or invalid
+        // stored list as the built-in Latin -> English (US) default.
+        return normalized.length > 0
+          ? normalized
+          : defaultAppSettings.language.defaultScriptLanguages.map(entry => ({ ...entry }));
+      })(),
+    },
     appearance: {
       theme,
       editorFontSize: boundedNumber(appearance.editorFontSize, defaultAppSettings.appearance.editorFontSize, 10, 32),

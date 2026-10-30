@@ -3291,6 +3291,27 @@ body.typsastra-resizing #input-container-wrapper::after {
   gap: 10px;
 }
 
+.settings-default-language-assignments {
+  margin: 2px 0 4px;
+}
+
+.settings-default-language-assignments .document-language-row {
+  grid-template-columns: minmax(100px, 0.45fr) minmax(160px, 1fr);
+}
+
+.settings-default-language-assignments select {
+  height: 28px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font-family: var(--font-family-sans);
+  cursor: pointer;
+}
+
 .document-language-row {
   display: grid;
   grid-template-columns: minmax(120px, 0.55fr) minmax(220px, 1fr);

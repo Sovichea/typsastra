@@ -283,4 +283,13 @@ describe("WorkspaceLifecycleController behavior", () => {
       Object.defineProperty(globalThis, "window", { configurable: true, value: previousWindow });
     }
   });
+
+  test("seeds new projects with the global document-language defaults", async () => {
+    const lifecycle = await Bun.file(
+      new URL("../src/workspace/workspaceLifecycleController.ts", import.meta.url),
+    ).text();
+
+    expect(lifecycle).toContain("app.applyDefaultDocumentLanguages()");
+    expect(lifecycle).toContain("async completeCreatedProject(project: CreatedProject)");
+  });
 });

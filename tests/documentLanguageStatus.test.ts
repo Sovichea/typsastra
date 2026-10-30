@@ -56,6 +56,18 @@ describe("document language status", () => {
     expect(app).toContain("settings.editor.wordCompletion = enabled");
   });
 
+  test("keeps global defaults in settings rather than the document modal", async () => {
+    const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
+    const controller = await Bun.file(new URL("../src/editor/documentLanguageStatusController.ts", import.meta.url)).text();
+    const settings = await Bun.file(new URL("../src/settingsController.ts", import.meta.url)).text();
+
+    expect(html).toContain('id="settings-default-document-language-assignments"');
+    expect(controller).not.toContain("openDefaults");
+    expect(controller).not.toContain("applyDefaultAssignments");
+    expect(settings).toContain("populateDefaultDocumentLanguages");
+    expect(settings).toContain("data-default-script-language");
+  });
+
   test("keeps unavailable explicit assignments when rendering the modal", async () => {
     const controller = await Bun.file(new URL("../src/editor/documentLanguageStatusController.ts", import.meta.url)).text();
     expect(controller).toContain("options.some(option => option.languageTag.toLowerCase() === assigned.toLowerCase())");

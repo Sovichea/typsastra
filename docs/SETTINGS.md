@@ -334,6 +334,11 @@ and are stored portably in `.typsastra/config.json`, independently from fonts
 and Typst `lang` scopes. Providers are loaded lazily only when their resolved
 language is detected in Typst prose.
 
+**Default document languages** in Language settings control the script-language
+assignments written into new projects. The initial default is Latin → English
+(United States). Existing projects keep their own assignments in
+`.typsastra/config.json`; change those from the status-bar language item.
+
 **Add language...** opens the catalog dialog to download additional Hunspell dictionaries. Each catalog entry row displays detailed onboarding metadata:
 - **Provider Type:** Displays the type level (e.g. `Deep provider` or `Dictionary only`).
 - **Support Level:** Displays support depth (Basic, Enhanced, Deep) and stability (Stable, Experimental).

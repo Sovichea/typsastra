@@ -17,6 +17,10 @@ installed provider that is not selected for an ambiguous script does not
 spellcheck or complete that script. A selected provider is loaded lazily only
 when its language is detected in Typst prose.
 
+New projects start with Latin → English (United States). Change the defaults in
+**Settings → Language → Default document languages**; existing projects keep
+their own assignments.
+
 Support labels retain their existing meaning: Basic provides dictionary
 spellcheck, Enhanced adds language-specific boundaries, and Deep may add
 segmentation, completion, and a tested script-editing policy.

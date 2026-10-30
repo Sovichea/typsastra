@@ -3289,6 +3289,13 @@ export class TypsastraWorkspaceController {
     void this.saveWorkspaceState();
   }
 
+  public applyDefaultDocumentLanguages(): void {
+    if (!this.workspaceMetadata || this.workspaceMetadata.project.scriptLanguages.length > 0) return;
+    const defaults = this.settingsController.value.language.defaultScriptLanguages;
+    if (defaults.length === 0) return;
+    this.applyDocumentLanguageAssignments(defaults);
+  }
+
   private scheduleDocumentOutlineUpdate(path: string, delay = 180): void {
     this.documentLanguageController.scheduleOutlineUpdate(path, delay);
   }

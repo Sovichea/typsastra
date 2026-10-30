@@ -40,6 +40,7 @@ describe("application settings", () => {
     expect(settings.developerMode).toBe(false);
     expect(settings.developerLogs).toEqual(defaultAppSettings.developerLogs);
     expect(settings.shortcuts).toEqual({});
+    expect(settings.language.defaultScriptLanguages).toEqual([{ script: "Latn", languageTag: "en-US" }]);
     expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.unicodeFonts).toEqual({});
@@ -63,6 +64,38 @@ describe("application settings", () => {
     expect(settings.toolchain.tinymistVersion).toBeNull();
     expect(settings.toolchain.enhancedUnicodeEngineEnabled).toBe(false);
     expect(settings.toolchain.enhancedUnicodeEnginePath).toBeNull();
+  });
+
+  test("defaults new projects to Latin English and normalizes default document languages", () => {
+    expect(defaultAppSettings.language.defaultScriptLanguages).toEqual([
+      { script: "Latn", languageTag: "en-US" },
+    ]);
+    expect(normalizeAppSettings({}).language.defaultScriptLanguages).toEqual([
+      { script: "Latn", languageTag: "en-US" },
+    ]);
+    expect(normalizeAppSettings({ language: { defaultScriptLanguages: [] } })
+      .language.defaultScriptLanguages).toEqual([
+        { script: "Latn", languageTag: "en-US" },
+      ]);
+    const settings = normalizeAppSettings({
+      language: {
+        defaultScriptLanguages: [
+          { script: "latn", languageTag: "en-us" },
+          { script: "Cyrl", languageTag: "ru-ru" },
+          { script: "Latn", languageTag: "de-CH" },
+          { script: "bad", languageTag: "en-US" },
+          { script: "Grek", languageTag: "not a tag" },
+        ],
+      },
+    });
+    expect(settings.language.defaultScriptLanguages).toEqual([
+      { script: "Latn", languageTag: "de-CH" },
+      { script: "Cyrl", languageTag: "ru-RU" },
+    ]);
+    expect(settingsHtml).toContain('id="settings-default-document-language-assignments"');
+    expect(settingsController).toContain("populateDefaultDocumentLanguages");
+    expect(settingsController).toContain("data-default-script-language");
+    expect(settingsController).toContain("this.settings.language.defaultScriptLanguages");
   });
 
   test("restores valid shortcut overrides without persisting invalid or colliding assignments", () => {
@@ -208,10 +241,12 @@ describe("application settings", () => {
     first.editor.wordWrap = false;
     first.developerMode = true;
     first.developerLogs.memory = false;
+    first.language.defaultScriptLanguages[0]!.languageTag = "de-DE";
 
     expect(second.editor.wordWrap).toBe(true);
     expect(second.developerMode).toBe(false);
     expect(second.developerLogs.memory).toBe(true);
+    expect(second.language.defaultScriptLanguages[0]!.languageTag).toBe("en-US");
   });
 
   test("preserves both supported preview render modes", () => {

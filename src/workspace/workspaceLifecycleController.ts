@@ -170,6 +170,7 @@ export interface WorkspaceLifecycleOperations {
   restoreActiveDocumentAfterTinymistRestart(forcePreview?: boolean): Promise<void>;
   restoreActiveLowMemoryPreview(): Promise<void>;
   setPinnedMainFile(path: string | null): Promise<void>;
+  applyDefaultDocumentLanguages(): void;
   closeEditorTab(path: string, skipDirtyCheck?: boolean): Promise<void>;
   updateWorkspaceViewportVisibility(): void;
   appendDeveloperLog(entry: DeveloperLog): void;
@@ -636,6 +637,7 @@ export class WorkspaceLifecycleController {
       return false;
     }
     await app.setPinnedMainFile(project.mainFilePath);
+    app.applyDefaultDocumentLanguages();
     await app.saveWorkspaceState();
     app.setLspStatus({ kind: "preview-ready", message: t`Created ${project.projectName}` });
     return true;

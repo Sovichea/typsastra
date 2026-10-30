@@ -28,6 +28,8 @@ import {
   unicodeEditorFonts,
   unicodeFontPreferenceOptions,
 } from "./editor/fontCatalog";
+import { displayLanguageTag } from "./editor/documentLanguageStatusController";
+import { DocumentLanguageService } from "./editor/languageScopes";
 import { isMacShortcutPlatform, shortcutLabel } from "./platform/shortcuts";
 import { captureShortcut, isCustomizedShortcut, shortcutCollision, shortcutDefinitions, shortcutFor, shortcutFromEvent, validShortcut, type ShortcutDefinition } from "./platform/shortcutRegistry";
 import {
@@ -122,6 +124,9 @@ export class SettingsController {
   private languageCatalogQuery = "";
   private languageCatalogInitialized = false;
   private languageCatalogLoad: Promise<void> | null = null;
+  private languageCatalogEntries: LanguageCatalogCapabilities[] = [];
+  private installedLanguageProviders: LanguageProviderCapabilities[] = [];
+  private readonly defaultLanguageService = new DocumentLanguageService();
   private languageProviderOperationInProgress = false;
   private workspacePreviewRenderMode: PreviewRenderMode | null = null;
   private updateWorkspacePreviewRenderMode: (mode: PreviewRenderMode) => void = () => {};
@@ -389,10 +394,7 @@ export class SettingsController {
     document.addEventListener("typsastra:close-settings", closeSettings);
     document.addEventListener("typsastra:system-fonts-changed", () => void this.refreshSystemFonts());
     document.addEventListener("typsastra:language-providers-changed", () => {
-      const catalog = document.getElementById("settings-language-catalog");
-      if (this.languageCatalogInitialized && catalog && !catalog.classList.contains("hidden")) {
-        void this.populateLanguageCatalog();
-      }
+      void this.populateLanguageCatalog();
     });
 
     const onChange = (id: string, update: (settings: AppSettings, control: HTMLInputElement | HTMLSelectElement) => void) => {
@@ -749,6 +751,7 @@ export class SettingsController {
   private populatePanel() {
     const { appearance, editor, preview } = this.settings;
     this.populateUiLocales();
+    this.populateDefaultDocumentLanguages();
     const setValue = (id: string, value: string) => {
       const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
       if (control) control.value = value;
@@ -1265,6 +1268,86 @@ export class SettingsController {
     }
   }
 
+  private populateDefaultDocumentLanguages(force = false): void {
+    const container = document.getElementById("settings-default-document-language-assignments");
+    if (!container) return;
+    this.configureDefaultLanguageService();
+    const scripts = this.defaultLanguageService.configurableScripts();
+    if (!force && container.dataset.rendered === "true") {
+      this.syncDefaultDocumentLanguageSelections(container);
+      return;
+    }
+    container.replaceChildren(...scripts.map(({ script, options }) => {
+      const row = document.createElement("label");
+      row.className = "document-language-row";
+      const name = document.createElement("span");
+      name.className = "document-language-script";
+      name.textContent = t(script.label);
+      const select = document.createElement("select");
+      select.dataset.defaultScriptLanguage = script.iso15924;
+      select.setAttribute("aria-label", t`${t(script.label)} default language`);
+      const prompt = document.createElement("option");
+      prompt.value = "";
+      prompt.textContent = t("Select language");
+      select.append(prompt, ...options.map(option => {
+        const item = document.createElement("option");
+        item.value = option.languageTag;
+        const label = ["Hani", "Bopo"].includes(script.iso15924)
+          ? option.displayName
+          : displayLanguageTag(option.languageTag, option.displayName);
+        item.textContent = t`${label}${option.installed ? "" : " — no provider"}`;
+        if (!option.installed) item.dataset.noProvider = "true";
+        return item;
+      }));
+      const assigned = this.settings.language.defaultScriptLanguages.find(entry =>
+        entry.script.toLowerCase() === script.iso15924.toLowerCase())?.languageTag ?? "";
+      if (assigned && !options.some(option => option.languageTag.toLowerCase() === assigned.toLowerCase())) {
+        const unavailable = document.createElement("option");
+        unavailable.value = assigned;
+        unavailable.textContent = t`${displayLanguageTag(assigned, assigned)} — unavailable`;
+        select.append(unavailable);
+      }
+      select.value = assigned;
+      select.addEventListener("change", () => this.updateDefaultDocumentLanguage(script.iso15924, select.value));
+      row.append(name, select);
+      return row;
+    }));
+    if (scripts.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "settings-empty-state";
+      empty.textContent = t("Every available script has one unambiguous language and is configured automatically.");
+      container.append(empty);
+    }
+    container.dataset.rendered = "true";
+  }
+
+  private configureDefaultLanguageService(): void {
+    this.defaultLanguageService.configure(
+      this.settings.language.defaultScriptLanguages,
+      this.languageCatalogEntries,
+      this.installedLanguageProviders,
+    );
+  }
+
+  private syncDefaultDocumentLanguageSelections(container: HTMLElement): void {
+    const assignments = this.settings.language.defaultScriptLanguages;
+    for (const select of container.querySelectorAll<HTMLSelectElement>("[data-default-script-language]")) {
+      const script = select.dataset.defaultScriptLanguage ?? "";
+      const assigned = assignments.find(entry =>
+        entry.script.toLowerCase() === script.toLowerCase())?.languageTag ?? "";
+      if (select.value !== assigned) select.value = assigned;
+    }
+  }
+
+  private updateDefaultDocumentLanguage(script: string, languageTag: string): void {
+    this.update(settings => {
+      const next = settings.language.defaultScriptLanguages.filter(entry =>
+        entry.script.toLowerCase() !== script.toLowerCase());
+      if (languageTag) next.push({ script, languageTag });
+      settings.language.defaultScriptLanguages = next;
+    });
+  }
+
   private populateUiLocales(): void {
     const select = document.getElementById("settings-ui-locale") as HTMLSelectElement | null;
     if (!select) return;
@@ -1566,6 +1649,9 @@ export class SettingsController {
     } catch (error) {
       console.warn("Failed to load installed language providers.", error);
     }
+    this.languageCatalogEntries = entries;
+    this.installedLanguageProviders = installedProviders;
+    this.populateDefaultDocumentLanguages(true);
     const supplemental = supplementalLanguageProviders(entries, installedProviders);
 
     const header = document.createElement("div");
