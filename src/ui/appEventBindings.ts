@@ -23,6 +23,19 @@ export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 export type DevUiAction =
   | { action: "sidebar-tool"; tool: "explorer" | "search" | "images" | "tables" }
   | { action: "project-templates" }
+  | {
+      action: "settings-open";
+      panel?:
+        | "appearance"
+        | "editor"
+        | "language"
+        | "shortcuts"
+        | "preview"
+        | "toolchain"
+        | "storage"
+        | "developer";
+    }
+  | { action: "settings-close" }
   | { action: "preview-recompile" }
   | { action: "preview-content-mode"; mode: PreviewContentMode }
   | { action: "preview-color-mode"; mode: PreviewColorMode }

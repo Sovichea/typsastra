@@ -4824,6 +4824,14 @@ export class TypsastraWorkspaceController {
       case "project-templates":
         this.createProjectFromTemplate();
         return;
+      case "settings-open":
+        document.dispatchEvent(new CustomEvent("typsastra:open-settings", {
+          detail: { panel: action.panel },
+        }));
+        return;
+      case "settings-close":
+        document.dispatchEvent(new Event("typsastra:close-settings"));
+        return;
       case "preview-recompile":
         await this.recompilePreviewManually();
         return;

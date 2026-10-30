@@ -87,6 +87,9 @@ debug app to use another loopback bind address. The API is not started in releas
   - `{"action":"sidebar-tool","tool":"images"}`
   - `{"action":"sidebar-tool","tool":"search"}`
   - `{"action":"project-templates"}`
+  - `{"action":"settings-open"}`
+  - `{"action":"settings-open","panel":"language"}`
+  - `{"action":"settings-close"}`
   - `{"action":"preview-content-mode","mode":"draft"}`
   - `{"action":"preview-color-mode","mode":"inverted"}`
   - `{"action":"preview-zoom","direction":"in"}`
@@ -102,7 +105,9 @@ debug app to use another loopback bind address. The API is not started in releas
 - `GET /screenshot/region?x=40&y=80&width=640&height=400` returns a cropped PNG. Coordinates are physical pixels relative to the top-left of the window screenshot; it also accepts `restore=true`.
 
 Search opens the project search sidebar, and `project-templates` opens the
-Create New Project dialog.
+Create New Project dialog. `settings-open` opens the settings dialog; the
+optional `panel` selects `appearance`, `editor`, `language`, `shortcuts`,
+`preview`, `toolchain`, `storage`, or `developer`. `settings-close` closes it.
 
 Project open/main requests return `202 Accepted` after being handed to the app; the
 frontend performs the normal workspace operation and reflects its result. Project

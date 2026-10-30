@@ -386,6 +386,7 @@ export class SettingsController {
         });
       }
     });
+    document.addEventListener("typsastra:close-settings", closeSettings);
     document.addEventListener("typsastra:system-fonts-changed", () => void this.refreshSystemFonts());
     document.addEventListener("typsastra:language-providers-changed", () => {
       const catalog = document.getElementById("settings-language-catalog");

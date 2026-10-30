@@ -133,6 +133,19 @@ enum DevPreviewContentMode {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum DevSettingsPanel {
+    Appearance,
+    Editor,
+    Language,
+    Shortcuts,
+    Preview,
+    Toolchain,
+    Storage,
+    Developer,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum DevEditorSetting {
     WordWrap,
@@ -176,6 +189,11 @@ enum DevUiAction {
         tool: DevSidebarTool,
     },
     ProjectTemplates,
+    SettingsOpen {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        panel: Option<DevSettingsPanel>,
+    },
+    SettingsClose,
     PreviewRecompile,
     PreviewContentMode {
         mode: DevPreviewContentMode,
@@ -1519,6 +1537,27 @@ mod tests {
             serde_json::json!({ "action": "project-templates" })
         );
 
+        let settings_open: DevUiAction =
+            serde_json::from_str(r#"{"action":"settings-open"}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(settings_open).unwrap(),
+            serde_json::json!({ "action": "settings-open" })
+        );
+
+        let settings_language: DevUiAction =
+            serde_json::from_str(r#"{"action":"settings-open","panel":"language"}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(settings_language).unwrap(),
+            serde_json::json!({ "action": "settings-open", "panel": "language" })
+        );
+
+        let settings_close: DevUiAction =
+            serde_json::from_str(r#"{"action":"settings-close"}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(settings_close).unwrap(),
+            serde_json::json!({ "action": "settings-close" })
+        );
+
         let content_mode: DevUiAction =
             serde_json::from_str(r#"{"action":"preview-content-mode","mode":"draft"}"#).unwrap();
         assert_eq!(
@@ -1538,6 +1577,10 @@ mod tests {
         .is_err());
         assert!(serde_json::from_str::<DevUiAction>(
             r#"{"action":"preview-content-mode","mode":"unknown"}"#
+        )
+        .is_err());
+        assert!(serde_json::from_str::<DevUiAction>(
+            r#"{"action":"settings-open","panel":"unknown"}"#
         )
         .is_err());
 
