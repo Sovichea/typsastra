@@ -40,7 +40,9 @@ const LOCALE_METADATA = {
   shortDescription:
     "Typst editor with live preview, autocomplete, outline, diagnostics, and project navigation.",
   moniker: "typsastra",
-  tags: ["typst", "editor", "typesetting", "latex", "preview", "tinymist"],
+  // Avoid words containing "ESET": winget's Targeted Brand policy check matches
+  // that brand case-insensitively inside ordinary words such as "typesetting".
+  tags: ["typst", "editor", "typography", "latex", "preview", "tinymist"],
   documentations: [
     { label: "Installation guide", path: "docs/INSTALL.md" },
     { label: "Troubleshooting", path: "docs/TROUBLESHOOTING.md" },

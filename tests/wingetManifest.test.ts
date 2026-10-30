@@ -129,6 +129,17 @@ describe("winget manifests", () => {
         expect(description.toLocaleLowerCase()).not.toContain("installer");
       });
 
+      test("avoids targeted-brand false positives in tags", () => {
+        const source = readFileSync(localeFile, "utf8");
+        const block = /^Tags:\n((?:  - .+\n?)+)/mu.exec(source)?.[1] ?? "";
+        const tags = [...block.matchAll(/^  - (.+)$/gmu)].map(match => match[1].trim());
+        expect(tags.length).toBeGreaterThan(0);
+        // Winget's Targeted Brand policy check matches "ESET" inside ordinary
+        // words. "typesetting" contains "eset" and forces manual review.
+        for (const tag of tags) expect(tag.toLowerCase()).not.toContain("eset");
+        expect((localeManifest.get("ShortDescription") ?? "").toLowerCase()).not.toContain("eset");
+      });
+
       test("links docs and license to the released tag rather than main", () => {
         for (const key of ["LicenseUrl", "ReleaseNotesUrl"]) {
           const value = localeManifest.get(key) ?? "";

@@ -133,6 +133,13 @@ schema.
 The manifest tests run `winget validate` when the CLI is present, so CI-style
 local runs catch these too.
 
+### Policy false positives
+
+Winget's `Policy-Test-1.2` Targeted Brand check matches brand names inside
+ordinary words. The tag `typesetting` contains `ESET` (`typESETting`) and
+forces manual review. Use `typography` instead, and keep tags and descriptions
+free of similar substrings.
+
 ## Silent installation
 
 Both installers are MSI packages built by WiX, so `msiexec` handles them and
