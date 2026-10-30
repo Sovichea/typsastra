@@ -1,5 +1,6 @@
 import "./style.css";
 import { TypsastraWorkspaceController } from "./appController";
+import { initializeI18n } from "./i18n";
 import { applyRuntimeTitlebarClasses, resolveRuntimeTitlebar } from "./platform/runtimeTitlebar";
 import { applyShortcutLabels } from "./platform/shortcuts";
 import { initializeLucideIcons } from "./ui/icons";
@@ -14,6 +15,7 @@ applyRuntimeTitlebarClasses(resolveRuntimeTitlebar({
 }));
 
 document.addEventListener("DOMContentLoaded", () => {
+  initializeI18n();
   applyShortcutLabels();
   initializeDesktopInputPolicy();
   initializeLucideIcons();
