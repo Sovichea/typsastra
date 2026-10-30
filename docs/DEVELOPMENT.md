@@ -85,7 +85,9 @@ debug app to use another loopback bind address. The API is not started in releas
 - `GET /project/images` returns indexed image metadata; `GET /project/tables` returns project table summaries.
 - `POST /ui/action` performs the named editor/tool action through the running frontend and returns `202 Accepted`. Example actions:
   - `{"action":"sidebar-tool","tool":"images"}`
+  - `{"action":"sidebar-tool","tool":"search"}`
   - `{"action":"project-templates"}`
+  - `{"action":"preview-content-mode","mode":"draft"}`
   - `{"action":"preview-color-mode","mode":"inverted"}`
   - `{"action":"preview-zoom","direction":"in"}`
   - `{"action":"preview-recompile"}`
@@ -98,6 +100,9 @@ debug app to use another loopback bind address. The API is not started in releas
   - `{"action":"table-set-cell","tableId":"basic_table","row":1,"column":0,"text":"Updated"}`
 - `GET /screenshot/window` returns the main window as a PNG image. Add `restore=true` to show/focus it if hidden or minimized.
 - `GET /screenshot/region?x=40&y=80&width=640&height=400` returns a cropped PNG. Coordinates are physical pixels relative to the top-left of the window screenshot; it also accepts `restore=true`.
+
+Search opens the project search sidebar, and `project-templates` opens the
+Create New Project dialog.
 
 Project open/main requests return `202 Accepted` after being handed to the app; the
 frontend performs the normal workspace operation and reflects its result. Project

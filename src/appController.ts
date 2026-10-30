@@ -4812,10 +4812,23 @@ export class TypsastraWorkspaceController {
         if (action.tool !== "explorer" && !this.workspaceRootPath) {
           throw new Error("Open a project before using project tools.");
         }
-        this.sidebarController.setTool(action.tool);
+        if (action.tool === "search") {
+          if (this.standaloneFilePath !== null) {
+            throw new Error("Close the standalone file before using project search.");
+          }
+          this.openProjectSearch(false);
+        } else {
+          this.sidebarController.setTool(action.tool);
+        }
+        return;
+      case "project-templates":
+        this.createProjectFromTemplate();
         return;
       case "preview-recompile":
         await this.recompilePreviewManually();
+        return;
+      case "preview-content-mode":
+        await this.draftPreviewController.changeMode(action.mode);
         return;
       case "preview-color-mode":
         this.settingsController.update(settings => {

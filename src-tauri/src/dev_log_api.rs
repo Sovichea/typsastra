@@ -104,6 +104,7 @@ struct DevImageCrop {
 #[serde(rename_all = "lowercase")]
 enum DevSidebarTool {
     Explorer,
+    Search,
     Images,
     Tables,
 }
@@ -122,6 +123,13 @@ enum DevPreviewZoomDirection {
     In,
     Out,
     Fit,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum DevPreviewContentMode {
+    Normal,
+    Draft,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -167,7 +175,11 @@ enum DevUiAction {
     SidebarTool {
         tool: DevSidebarTool,
     },
+    ProjectTemplates,
     PreviewRecompile,
+    PreviewContentMode {
+        mode: DevPreviewContentMode,
+    },
     PreviewColorMode {
         mode: DevPreviewColorMode,
     },
@@ -1493,6 +1505,27 @@ mod tests {
             serde_json::json!({ "action": "sidebar-tool", "tool": "images" })
         );
 
+        let search: DevUiAction =
+            serde_json::from_str(r#"{"action":"sidebar-tool","tool":"search"}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(search).unwrap(),
+            serde_json::json!({ "action": "sidebar-tool", "tool": "search" })
+        );
+
+        let project_templates: DevUiAction =
+            serde_json::from_str(r#"{"action":"project-templates"}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(project_templates).unwrap(),
+            serde_json::json!({ "action": "project-templates" })
+        );
+
+        let content_mode: DevUiAction =
+            serde_json::from_str(r#"{"action":"preview-content-mode","mode":"draft"}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(content_mode).unwrap(),
+            serde_json::json!({ "action": "preview-content-mode", "mode": "draft" })
+        );
+
         let zoom: DevUiAction =
             serde_json::from_str(r#"{"action":"preview-zoom","direction":"in"}"#).unwrap();
         assert_eq!(
@@ -1501,6 +1534,10 @@ mod tests {
         );
         assert!(serde_json::from_str::<DevUiAction>(
             r#"{"action":"sidebar-tool","tool":"unknown"}"#
+        )
+        .is_err());
+        assert!(serde_json::from_str::<DevUiAction>(
+            r#"{"action":"preview-content-mode","mode":"unknown"}"#
         )
         .is_err());
 

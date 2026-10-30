@@ -22,7 +22,9 @@ export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 
 export type DevUiAction =
   | { action: "sidebar-tool"; tool: "explorer" | "search" | "images" | "tables" }
+  | { action: "project-templates" }
   | { action: "preview-recompile" }
+  | { action: "preview-content-mode"; mode: PreviewContentMode }
   | { action: "preview-color-mode"; mode: PreviewColorMode }
   | { action: "preview-zoom"; direction: "in" | "out" | "fit" }
   | {
