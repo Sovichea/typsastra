@@ -2783,7 +2783,7 @@
                             data-settings-panel-content="editor"
                         >
                             <h3>Editor</h3>
-                            <div class="settings-field settings-private-fonts-field">
+                            <div class="settings-field settings-private-fonts-field settings-field-stacked">
                                 <label>Private local font directories</label>
                                 <div
                                     id="settings-private-font-directories"
@@ -2826,7 +2826,7 @@
                                     matching MiSans family.</small
                                 >
                             </div>
-                            <details class="settings-field settings-unicode-fonts-field settings-disclosure">
+                            <details class="settings-field settings-unicode-fonts-field settings-disclosure settings-field-stacked">
                                 <summary>Per-script editor fallbacks</summary>
                                 <div id="settings-unicode-fonts" class="settings-unicode-fonts"></div>
                                 <small>Automatic choices are resolved independently for every script detected in the document.</small>
@@ -3036,7 +3036,7 @@
                                     ></span
                                 ></label
                             >
-                            <div class="settings-field" id="settings-language-providers">
+                            <div class="settings-field settings-field-stacked" id="settings-language-providers">
                                 <label>Language providers</label>
                                 <div class="settings-language-tools">
                                     <button
@@ -3061,12 +3061,12 @@
                                     configured automatically.</small
                                 >
                             </div>
-                            <div class="settings-field">
+                            <div class="settings-field settings-field-stacked">
                                 <label>Accepted terminology</label>
                                 <div id="settings-terminology" class="settings-check-list" aria-live="polite"></div>
                                 <small>Global terms apply everywhere, project terms travel in <code>.typsastra/config.json</code>, and language terms remain isolated to one language family. Add terms from a spelling issue's context menu.</small>
                             </div>
-                            <div class="settings-field">
+                            <div class="settings-field settings-field-stacked">
                                 <label>Dictionary and terminology files</label>
                                 <div class="settings-storage">
                                     <div class="settings-storage-row">
@@ -3307,7 +3307,7 @@
                                 <div><small>Persistent state</small><strong id="settings-storage-persistent">Not scanned</strong></div>
                                 <div><small>Free disk space</small><strong id="settings-storage-free">Not scanned</strong></div>
                             </div>
-                            <div class="settings-field settings-storage-path-field">
+                            <div class="settings-field settings-storage-path-field settings-field-stacked">
                                 <label>WebView data root</label>
                                 <code id="settings-storage-profile">Resolving profile path...</code>
                                 <small>The path is resolved from Typsastra's platform configuration and is never included in project exports.</small>
@@ -3332,7 +3332,7 @@
                             <p class="settings-help">These caches are outside project folders, so cloud-sync tools and project search do not index duplicate render files. Reveal opens a selected cache directory.</p>
                             <h4 class="settings-storage-heading">Scaled-font cache</h4>
                             <div id="settings-scaled-font-status" class="settings-notice" role="status" aria-live="polite">Select Storage to inspect cached font variants.</div>
-                            <div class="settings-field settings-storage-path-field">
+                            <div class="settings-field settings-storage-path-field settings-field-stacked">
                                 <label>Global cache root</label>
                                 <code id="settings-scaled-font-root">Not scanned</code>
                                 <small>Generated variants are machine-local and are never included in project exports.</small>

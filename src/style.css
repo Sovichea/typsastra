@@ -2438,7 +2438,7 @@ body.typsastra-resizing #input-container-wrapper::after {
 
 .settings-field {
   display: grid;
-  grid-template-columns: minmax(120px, 168px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
   gap: 6px 18px;
   align-items: baseline;
   padding: 13px 0;
@@ -2452,7 +2452,8 @@ body.typsastra-resizing #input-container-wrapper::after {
 .settings-toggle {
   display: grid;
   grid-template-columns: 20px 1fr;
-  gap: 6px 18px;
+  column-gap: 18px;
+  row-gap: 3px;
   align-items: center;
   padding: 13px 0;
   border-bottom: 1px solid var(--ui-border);
@@ -2516,9 +2517,15 @@ body.typsastra-resizing #input-container-wrapper::after {
   grid-column: 2;
 }
 
-.settings-toggle input { margin: 0; }
-.settings-toggle span { display: flex; flex-direction: column; gap: 3px; }
-.settings-toggle small { color: var(--ui-header-text); font-size: 11px; }
+.settings-toggle input {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  margin: 0;
+}
+.settings-toggle span { display: contents; }
+.settings-toggle strong { grid-column: 2; grid-row: 1; align-self: center; }
+.settings-toggle small { grid-column: 2; grid-row: 2; color: var(--ui-header-text); font-size: 11px; }
 .settings-developer-log-filters { margin-top: 18px; }
 .settings-developer-log-filters h4 { margin: 0 0 4px; font-size: 12px; }
 .settings-developer-log-filters.disabled { opacity: 0.55; }
@@ -2882,6 +2889,45 @@ body.typsastra-resizing #input-container-wrapper::after {
 .settings-storage-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-storage-row button { flex-shrink: 0; }
 .settings-footer-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.settings-field.settings-field-stacked {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  row-gap: 6px;
+}
+
+.settings-field.settings-field-stacked > label,
+.settings-field.settings-field-stacked > summary,
+.settings-field.settings-field-stacked > small {
+  grid-column: 1;
+  grid-row: auto;
+}
+
+.settings-field.settings-field-stacked > label,
+.settings-field.settings-field-stacked > summary {
+  order: 1;
+}
+
+.settings-field.settings-field-stacked > small {
+  order: 2;
+}
+
+.settings-field.settings-field-stacked > :not(label):not(summary):not(small):not(button) {
+  grid-column: 1;
+  grid-row: auto;
+  order: 3;
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
+}
+
+.settings-field.settings-field-stacked > button {
+  grid-column: 1;
+  grid-row: auto;
+  order: 3;
+  width: auto;
+  justify-self: start;
+}
 
 @media (max-width: 680px) {
   .settings-overlay { padding: 10px; }

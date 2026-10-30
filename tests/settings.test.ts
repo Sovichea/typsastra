@@ -311,9 +311,18 @@ describe("application settings", () => {
 
 describe("editor settings presentation", () => {
   test("collapses per-script editor fallbacks by default", () => {
-    expect(settingsHtml).toContain('<details class="settings-field settings-unicode-fonts-field settings-disclosure">');
+    expect(settingsHtml).toContain('<details class="settings-field settings-unicode-fonts-field settings-disclosure settings-field-stacked">');
     expect(settingsHtml).toContain("<summary>Per-script editor fallbacks</summary>");
-    expect(settingsHtml).not.toContain('<details open class="settings-field settings-unicode-fonts-field settings-disclosure">');
+    expect(settingsHtml).not.toContain('<details open class="settings-field settings-unicode-fonts-field settings-disclosure settings-field-stacked">');
+  });
+
+  test("gives descriptions two-thirds width and stacks wide fields", () => {
+    expect(settingsStyles).toContain("grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);");
+    expect(settingsStyles).toContain(".settings-field.settings-field-stacked");
+    expect(settingsHtml).toContain('class="settings-field settings-field-stacked" id="settings-language-providers"');
+    expect(settingsHtml).toContain("settings-private-fonts-field settings-field-stacked");
+    expect(settingsHtml).toContain("settings-unicode-fonts-field settings-disclosure settings-field-stacked");
+    expect((settingsHtml.match(/settings-field-stacked/g) ?? []).length).toBeGreaterThanOrEqual(6);
   });
 
   test("shows and lazily populates the language provider catalog by default", () => {
