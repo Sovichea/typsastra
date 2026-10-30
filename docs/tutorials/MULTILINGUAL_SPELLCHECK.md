@@ -70,5 +70,18 @@ In short:
 - Use **terminology** for scoped vocabulary whose meaning or capitalization
   should follow a project or language.
 
+**Settings → Editor → Dictionary and terminology files** shows the plain-text
+storage and opens each file in your external editor:
+
+- `user_dict.txt` stores the personal user dictionary.
+- `terminology.txt` stores global terminology and `[en]`-style language sections.
+- `.typsastra/terminology.txt` stores project terminology.
+
+Write one entry per line. In terminology files, prefix a term with `~` to make
+it case-insensitive. Existing JSON entries are migrated automatically, and
+`settings.json` keeps a compatibility copy for older Typsastra versions.
+Restart Typsastra after editing application files; reopen the project after
+editing its terminology file.
+
 Try `02-multilingual-writing/02-language-scoped-spellcheck` and
 `04-research-projects/01-multilingual-article`.
