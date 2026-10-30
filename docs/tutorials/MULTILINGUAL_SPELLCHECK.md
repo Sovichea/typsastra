@@ -2,7 +2,7 @@
 
 ## Configure document languages
 
-1. Install optional providers from **Settings → Editor → Language providers**.
+1. Install optional providers from **Settings → Language → Language providers**.
 2. Open a Typst document and select the language item in the status bar.
 3. In **Document Languages**, choose a language for each listed script.
 4. Select **Apply**.
@@ -70,7 +70,7 @@ In short:
 - Use **terminology** for scoped vocabulary whose meaning or capitalization
   should follow a project or language.
 
-**Settings → Editor → Dictionary and terminology files** shows the plain-text
+**Settings → Language → Dictionary and terminology files** shows the plain-text
 storage and opens each file in your external editor:
 
 - `user_dict.txt` stores the personal user dictionary.

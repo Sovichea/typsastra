@@ -1,6 +1,6 @@
 # Installing language providers
 
-Open **Settings → Editor → Language providers**. English and Khmer are bundled;
+Several optional providers are available from **Settings → Language → Language providers**. English and Khmer are bundled;
 other catalog providers can be downloaded or removed independently.
 
 Installation is global, but language selection is per project. After installing

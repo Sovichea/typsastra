@@ -322,7 +322,7 @@ Document Typography records one default text font per configured script and can 
 
 Script-aware editing, spellcheck, correction suggestions, and typing word suggestions are independent capabilities. Script-aware editing is applied automatically where Typsastra has a tested policy; it does not depend on a dictionary or on spellcheck being enabled.
 
-Spellcheck and typing word suggestions can be controlled independently in Editor settings. Corrections are shown only when the active provider advertises reliable correction support.
+Spellcheck and typing word suggestions can be controlled independently in Language settings. Corrections are shown only when the active provider advertises reliable correction support.
 
 Settings installs language providers globally. The status bar shows the
 script-language pair under the caret; select it to open **Document Languages**.

@@ -50,7 +50,7 @@ export class DocumentLanguageStatusController {
       this.close(false);
       document.dispatchEvent(new CustomEvent("typsastra:open-settings", {
         detail: {
-          panel: "editor",
+          panel: "language",
           revealLanguageProviders: true,
           languageTag: languageTag ?? undefined,
         },

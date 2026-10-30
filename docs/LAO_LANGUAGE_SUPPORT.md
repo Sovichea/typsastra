@@ -59,4 +59,4 @@ bun test tests/laoReference.test.ts tests/khmerReference.test.ts tests/editingPo
 cargo test --lib lao_
 ```
 
-Then install Lao from Settings → Language Tools and test unspaced Lao prose, mixed Khmer/Lao text, completion replacement ranges, corrections, and removal of the provider. Removing Lao must restore Unicode-only behavior without modifying source documents or Khmer results.
+Then install Lao from **Settings → Language → Language providers** and test unspaced Lao prose, mixed Khmer/Lao text, completion replacement ranges, corrections, and removal of the provider. Removing Lao must restore Unicode-only behavior without modifying source documents or Khmer results.

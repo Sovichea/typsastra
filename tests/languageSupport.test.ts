@@ -51,8 +51,8 @@ describe("language support taxonomy", () => {
     ];
 
     expect(rankAndFilterLanguageProviders(providers, "").map(provider => provider.displayName)).toEqual([
-      "English (US)",
       "Khmer",
+      "English (US)",
       "Arabic",
       "French",
     ]);

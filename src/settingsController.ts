@@ -335,7 +335,7 @@ export class SettingsController {
         panel.classList.toggle("active", panel.dataset.settingsPanelContent === name);
       });
       if (name === "storage") void this.refreshScaledFontCache();
-      if (name === "editor") void this.ensureLanguageCatalogPopulated();
+      if (name === "language") void this.ensureLanguageCatalogPopulated();
     };
     const openSettings = (panel?: string) => {
       this.populatePanel();

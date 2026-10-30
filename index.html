@@ -2653,6 +2653,13 @@
                         >
                             Editor
                         </button>
+                        <button
+                            class="settings-nav-item"
+                            type="button"
+                            data-settings-panel="language"
+                        >
+                            Language
+                        </button>
                         <button class="settings-nav-item" type="button" data-settings-panel="shortcuts">
                             Shortcuts
                         </button>
@@ -2922,6 +2929,74 @@
                                     ></span
                                 ></label
                             >
+                            <label class="settings-toggle"
+                                ><input
+                                    id="settings-show-zws"
+                                    type="checkbox"
+                                /><span
+                                    ><strong>Show invisible characters</strong
+                                    ><small
+                                        >Render Zero Width Spaces (ZWS),
+                                        temporary ZWNJ composition boundaries,
+                                        and Soft Hyphens (SHY) visually in the editor.</small
+                                    ></span
+                                ></label
+                            >
+                            <label class="settings-toggle"
+                                ><input
+                                    id="settings-format-on-save"
+                                    type="checkbox"
+                                /><span
+                                    ><strong>Format on save</strong
+                                    ><small
+                                        >Run Tinymist's Typst formatter before
+                                        saving.</small
+                                ></span
+                                ></label
+                            >
+                            <div class="settings-field">
+                                <label for="settings-external-edit-interval">External edit check interval</label>
+                                <input
+                                    id="settings-external-edit-interval"
+                                    type="number"
+                                    min="0.1"
+                                    max="60"
+                                    step="0.1"
+                                    inputmode="decimal"
+                                />
+                                <small>Seconds between source-file checks (default: 1). External edits refresh clean tabs without marking them unsaved. The preview shows an outdated banner until you choose Recompile.</small>
+                            </div>
+                            <label class="settings-toggle"
+                                ><input
+                                    id="settings-auto-save"
+                                    type="checkbox"
+                                /><span
+                                    ><strong>Auto save</strong
+                                    ><small
+                                        >Write changed files automatically and recompile the preview in On save mode.</small
+                                    ></span
+                                ></label
+                            >
+                            <div class="settings-field">
+                                <label for="settings-auto-save-interval">Auto-save interval</label>
+                                <input
+                                    id="settings-auto-save-interval"
+                                    type="number"
+                                    min="5"
+                                    max="300"
+                                    step="5"
+                                    inputmode="numeric"
+                                />
+                                <small>Seconds between automatic save checks (5–300). Manual Save still recompiles an On save preview.</small>
+                            </div>
+                        </div>
+
+                        <div
+                            class="settings-panel"
+                            data-settings-panel-content="language"
+                        >
+                            <h3>Language</h3>
+                            <p class="settings-help">Install language providers and manage spellcheck, typing suggestions, accepted words, and terminology.</p>
                             <div class="settings-capability-note">
                                 <strong>Script-aware editing</strong>
                                 <small
@@ -3006,66 +3081,6 @@
                                     </div>
                                 </div>
                                 <small class="settings-storage-help">One entry per line. In terminology files, prefix a term with <code>~</code> for case-insensitive matching and use <code>[en]</code> sections for language-specific terms. A compatibility copy remains in settings metadata for older versions. Restart Typsastra after editing; reopen the project after editing its file.</small>
-                            </div>
-                            <label class="settings-toggle"
-                                ><input
-                                    id="settings-show-zws"
-                                    type="checkbox"
-                                /><span
-                                    ><strong>Show invisible characters</strong
-                                    ><small
-                                        >Render Zero Width Spaces (ZWS),
-                                        temporary ZWNJ composition boundaries,
-                                        and Soft Hyphens (SHY) visually in the editor.</small
-                                    ></span
-                                ></label
-                            >
-                            <label class="settings-toggle"
-                                ><input
-                                    id="settings-format-on-save"
-                                    type="checkbox"
-                                /><span
-                                    ><strong>Format on save</strong
-                                    ><small
-                                        >Run Tinymist's Typst formatter before
-                                        saving.</small
-                                ></span
-                                ></label
-                            >
-                            <div class="settings-field">
-                                <label for="settings-external-edit-interval">External edit check interval</label>
-                                <input
-                                    id="settings-external-edit-interval"
-                                    type="number"
-                                    min="0.1"
-                                    max="60"
-                                    step="0.1"
-                                    inputmode="decimal"
-                                />
-                                <small>Seconds between source-file checks (default: 1). External edits refresh clean tabs without marking them unsaved. The preview shows an outdated banner until you choose Recompile.</small>
-                            </div>
-                            <label class="settings-toggle"
-                                ><input
-                                    id="settings-auto-save"
-                                    type="checkbox"
-                                /><span
-                                    ><strong>Auto save</strong
-                                    ><small
-                                        >Write changed files automatically and recompile the preview in On save mode.</small
-                                    ></span
-                                ></label
-                            >
-                            <div class="settings-field">
-                                <label for="settings-auto-save-interval">Auto-save interval</label>
-                                <input
-                                    id="settings-auto-save-interval"
-                                    type="number"
-                                    min="5"
-                                    max="300"
-                                    step="5"
-                                    inputmode="numeric"
-                                />
-                                <small>Seconds between automatic save checks (5–300). Manual Save still recompiles an On save preview.</small>
                             </div>
                         </div>
 

@@ -170,10 +170,17 @@ export function rankAndFilterLanguageProviders<T extends SearchableLanguageProvi
       return terms.every(term => haystack.includes(term));
     })
     .sort((left, right) => {
+      // Khmer is the deep reference provider and should lead the catalog.
+      const priority = languageProviderPriority(left) - languageProviderPriority(right);
+      if (priority !== 0) return priority;
       if (left.installed !== right.installed) return left.installed ? -1 : 1;
       return left.displayName.localeCompare(right.displayName)
         || left.languageTag.localeCompare(right.languageTag);
     });
+}
+
+function languageProviderPriority(provider: SearchableLanguageProvider): number {
+  return provider.languageTag.split("-")[0]?.toLocaleLowerCase() === "km" ? 0 : 1;
 }
 
 function normalizeLanguageSearchText(value: string): string {

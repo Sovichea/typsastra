@@ -327,7 +327,9 @@ describe("editor settings presentation", () => {
     expect(catalogMarkup).toContain('class="settings-language-catalog"');
     expect(catalogMarkup).not.toContain("hidden");
     expect(settingsHtml).toContain('aria-expanded="true"');
-    expect(settingsController).toContain('if (name === "editor") void this.ensureLanguageCatalogPopulated();');
+    expect(settingsHtml).toContain('data-settings-panel="language"');
+    expect(settingsHtml).toContain('data-settings-panel-content="language"');
+    expect(settingsController).toContain('if (name === "language") void this.ensureLanguageCatalogPopulated();');
     expect(ensureMethod).toContain("this.languageCatalogLoad = this.populateLanguageCatalog();");
     expect(ensureMethod).not.toContain(".focus()");
     expect(settingsController).toContain('button.textContent = visible ? "Hide languages" : "Show languages"');
