@@ -541,4 +541,42 @@ describe("spellcheck request safety", () => {
     await wait(20);
     expect(fixture.controller.issues).toEqual([]);
   });
+
+  test("keeps correction replacements in the source capitalization", async () => {
+    const { applySpellingSuggestionCasing, preferredTerminologyTerm, matchesUserDictionaryWord } =
+      await import("../src/editor/spellcheck");
+
+    expect(applySpellingSuggestionCasing("RECIEVE", "receive")).toBe("RECEIVE");
+    expect(applySpellingSuggestionCasing("Recieve", "receive")).toBe("Receive");
+    expect(applySpellingSuggestionCasing("recieve", "receive")).toBe("receive");
+    expect(applySpellingSuggestionCasing("ReCieve", "receive")).toBe("Receive");
+    expect(applySpellingSuggestionCasing("rECieve", "receive")).toBe("receive");
+    expect(applySpellingSuggestionCasing("REcieve", "receive")).toBe("RECEIVE");
+    expect(applySpellingSuggestionCasing("КУЋА", "кућа")).toBe("КУЋА");
+
+    const terminology = [{ term: "LaTeX", exactCase: true }];
+    expect(preferredTerminologyTerm("latex", terminology)).toBe("LaTeX");
+    expect(preferredTerminologyTerm("LATEX", terminology)).toBe("LaTeX");
+
+    expect(matchesUserDictionaryWord(
+      "LaTeX", "latex", new Set(["LaTeX"]), new Set(),
+    )).toBe(true);
+    expect(matchesUserDictionaryWord(
+      "LATEX", "latex", new Set(["LaTeX"]), new Set(),
+    )).toBe(false);
+    expect(matchesUserDictionaryWord(
+      "LATEX", "latex", new Set(["latex"]), new Set(["latex"]),
+    )).toBe(true);
+  });
+
+  test("offers validated terminology in word completion", async () => {
+    const app = await Bun.file(
+      new URL("../src/appController.ts", import.meta.url),
+    ).text();
+
+    expect(app).toContain("private completionWordList(): readonly string[]");
+    expect(app).toContain("...editor.globalTerminology.map(entry => entry.term)");
+    expect(app).toContain("...(this.workspaceMetadata?.project.terminology ?? []).map(entry => entry.term)");
+    expect(app).toContain("...editor.languageTerminology.map(entry => entry.term)");
+  });
 });

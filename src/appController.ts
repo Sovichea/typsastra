@@ -3439,10 +3439,20 @@ export class TypsastraWorkspaceController {
       () => this.documentLanguageService.currentGeneration(),
       milliseconds => this.performanceController.record({ name: "language.completion", milliseconds }),
       message => this.appendDeveloperLog({ kind: "info", source: "lsp autocomplete", message }),
-      () => this.settingsController.value.editor.userDictionary,
+      () => this.completionWordList(),
       editor.typstCompletionMode,
       () => this.tableToolController.tableCompletions(),
     );
+  }
+
+  private completionWordList(): readonly string[] {
+    const editor = this.settingsController.value.editor;
+    return [
+      ...editor.userDictionary,
+      ...editor.globalTerminology.map(entry => entry.term),
+      ...(this.workspaceMetadata?.project.terminology ?? []).map(entry => entry.term),
+      ...editor.languageTerminology.map(entry => entry.term),
+    ];
   }
 
   private async resolveMarkdownWorkspacePath(documentPath: string, reference: string): Promise<string | null> {
