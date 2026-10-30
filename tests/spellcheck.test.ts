@@ -282,10 +282,18 @@ describe("spellcheck request safety", () => {
   });
 
   test("uses a selected word as the dictionary entry when it contains a misspelling", () => {
-    expect(dictionaryWordsForSelection("សេចក្តី", [{ word: "ក្ត" }]))
+    expect(dictionaryWordsForSelection("សេចក្តី", [{ sourceText: "សេចក្តី" }]))
       .toEqual(["សេចក្តី"]);
-    expect(dictionaryWordsForSelection("wrong text bad", [{ word: "wrong" }, { word: "bad" }]))
-      .toEqual(["wrong", "bad"]);
+    expect(dictionaryWordsForSelection("wrong text bad", [
+      { sourceText: "wrong" },
+      { sourceText: "bad" },
+    ])).toEqual(["wrong", "bad"]);
+    expect(dictionaryWordsForSelection("LaTeX", [{ sourceText: "LaTeX" }]))
+      .toEqual(["LaTeX"]);
+    expect(dictionaryWordsForSelection("LaTeX latex", [
+      { sourceText: "LaTeX" },
+      { sourceText: "latex" },
+    ])).toEqual(["LaTeX", "latex"]);
     expect(dictionaryWordsForSelection("known", [])).toEqual([]);
   });
 

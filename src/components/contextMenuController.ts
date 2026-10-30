@@ -81,12 +81,12 @@ export function deleteConfirmationMessage(name: string, isDirectory: boolean): s
 
 export function dictionaryWordsForSelection(
   selectedText: string,
-  issues: readonly Pick<SpellingIssue, "word">[],
+  issues: readonly Pick<SpellingIssue, "sourceText">[],
 ): string[] {
   if (issues.length === 0) return [];
   const selectedWord = selectedText.trim();
   if (selectedWord && !/\s/u.test(selectedWord)) return [selectedWord];
-  return [...new Set(issues.map(issue => issue.word).filter(Boolean))];
+  return [...new Set(issues.map(issue => issue.sourceText).filter(Boolean))];
 }
 
 export class ContextMenuController {
@@ -644,7 +644,7 @@ export class ContextMenuController {
         : this.dependencies.getSpellingIssuesInRange(selection.from, selection.to);
       this.spellingDictionaryWords = selectedIssues.length > 0
         ? dictionaryWordsForSelection(editor.state.sliceDoc(selection.from, selection.to), selectedIssues)
-        : this.spellingIssue ? [this.spellingIssue.word] : [];
+        : this.spellingIssue ? [this.spellingIssue.sourceText] : [];
       this.spellingSuggestions = this.spellingIssue
         ? await this.dependencies.getSpellingSuggestions(this.spellingIssue)
         : [];

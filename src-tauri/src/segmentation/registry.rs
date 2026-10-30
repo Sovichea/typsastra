@@ -3072,6 +3072,13 @@ fn complete_with_provider(
                 options.push(option);
             }
         }
+        let typed_is_known_variant = provider.is_known_word(&prefix)
+            && user_terms
+                .iter()
+                .any(|(normalized, word)| normalized == &prefix && *word != typed_prefix);
+        if typed_is_known_variant && !options.iter().any(|option| option == typed_prefix) {
+            options.insert(0, typed_prefix.to_string());
+        }
         let normalized_prefix = typed_prefix.replace('’', "'").to_lowercase();
         let preferred_prefix = user_terms
             .iter()
@@ -4186,7 +4193,9 @@ mod tests {
     fn user_dictionary_terms_keep_their_exact_case() {
         let provider = EnglishHunspellProvider::new().expect("English provider");
         let user_dictionary = vec!["LaTeX".to_string()];
-        for text in ["La", "la", "LA", "LAT", "lat", "LaT", "late"] {
+        for text in [
+            "La", "la", "LA", "LAT", "lat", "LaT", "late", "latex", "Latex", "LATEX",
+        ] {
             let response = complete_with_provider(
                 &provider,
                 &CompletionRequest {
@@ -4208,6 +4217,13 @@ mod tests {
                 assert!(
                     response.options.iter().any(|word| word == "latex"),
                     "dictionary and user dictionary spellings should both be offered"
+                );
+            }
+            if matches!(text, "latex" | "Latex" | "LATEX") {
+                assert!(
+                    response.options.iter().any(|word| word == text),
+                    "the typed dictionary spelling should remain visible, got {:?}",
+                    response.options
                 );
             }
         }

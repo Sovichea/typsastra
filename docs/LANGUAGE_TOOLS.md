@@ -4,7 +4,7 @@ Typsastra's editor spellcheck, correction suggestions, and typing word suggestio
 
 Language support uses the Basic, Enhanced, and Deep taxonomy defined in [Product Direction and Terminology](./PRODUCT_DIRECTION.md). Stability is reported separately as Stable or Experimental. The frontend must display only the capabilities explicitly advertised by each provider.
 
-Unknown words can be handled from the editor context menu in two distinct ways. **Add to dictionary** treats the word as correct and removes it from spellcheck. **Ignore** keeps the word visible with a blue informational underline and keeps it in the Spellcheck log for navigation, but excludes it from problem counters. Both word lists persist in application settings; **Stop ignoring** restores the normal unknown-word warning.
+Unknown words can be handled from the editor context menu in three distinct ways. **Add to user dictionary** treats the exact typed word as correct everywhere, keeps mixed-case entries case-sensitive, and removes it from spellcheck. **Add to terminology** accepts a name or domain term globally, for the current project, or for the configured language family, preserving its preferred case. **Ignore** keeps the word visible with a blue informational underline and keeps it in the Spellcheck log for navigation, but excludes it from problem counters. Dictionary and terminology entries also feed word completion. Both word lists persist in application settings unless the entry is project-scoped; **Stop ignoring** restores the normal unknown-word warning.
 
 The frontend remains provider-neutral:
 

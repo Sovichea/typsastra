@@ -41,5 +41,34 @@ Use the spelling context menu to accept a product or proper name globally, for
 the project, or for the configured language family. Project terminology is
 stored in `.typsastra/config.json`.
 
+## User dictionary versus terminology
+
+Both lists suppress spelling warnings and both feed word completion, but they
+have different purposes.
+
+Use the **user dictionary** for personal spellings that should be accepted in
+every project. It is a global accepted-word list. A mixed-case entry such as
+`LaTeX` is accepted only with that exact spelling; a lowercase entry is accepted
+case-insensitively. The context menu adds the exact text you typed, not its
+lowercase form.
+
+Use **terminology** for names, brands, acronyms, identifiers, and domain terms
+that belong to a project, language family, or your general writing. Terminology
+has explicit scope:
+
+- **Global terminology** applies in every project and language.
+- **Project terminology** follows the current project.
+- **Language terminology** applies only to that language family.
+
+Terminology preserves case by default, so accepting `LaTeX` does not
+automatically accept `latex` or `LATEX`. It is also preferred over generic
+dictionary casing in correction suggestions.
+
+In short:
+
+- Use the **user dictionary** for personal words you always want accepted.
+- Use **terminology** for scoped vocabulary whose meaning or capitalization
+  should follow a project or language.
+
 Try `02-multilingual-writing/02-language-scoped-spellcheck` and
 `04-research-projects/01-multilingual-article`.
