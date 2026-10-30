@@ -43,6 +43,7 @@ the reference documents when you need exact behavior or contributor contracts.
 
 - [Development guide](DEVELOPMENT.md)
 - [Language contributor guide](LANGUAGE_CONTRIBUTOR_GUIDE.md)
+- [Interface localization](I18N.md)
 - [Script editing policies](SCRIPT_EDITING_POLICIES.md)
 - [Compatibility policy](COMPATIBILITY_POLICY.md)
 - [Performance gates](PERFORMANCE_GATES.md)

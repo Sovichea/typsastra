@@ -324,6 +324,8 @@ Script-aware editing, spellcheck, correction suggestions, and typing word sugges
 
 Spellcheck and typing word suggestions can be controlled independently in Language settings. Corrections are shown only when the active provider advertises reliable correction support.
 
+**Interface language** appears in Language settings when more than one interface locale is installed. It changes Typsastra's own labels, not document text, spellcheck languages, or language providers. The choice is remembered locally.
+
 Settings installs language providers globally. The status bar shows the
 script-language pair under the caret; select it to open **Document Languages**.
 Only scripts with multiple possible languages are listed. Single-language
