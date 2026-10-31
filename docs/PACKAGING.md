@@ -35,8 +35,9 @@ bun run generate:packaging 0.10.0 --dry-run
 ```
 
 Do not edit the generated files by hand. Change the generator, then regenerate.
-The checked-in metadata must match `package.json`; the packaging tests fail when
-the version or cross-file checksum agreement drifts.
+Packaging metadata is generated from a published release, so it may still
+describe the previous version until the new release is published. The packaging
+tests validate that the checked-in files agree with each other.
 
 ### Layout
 

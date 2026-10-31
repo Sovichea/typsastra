@@ -10,8 +10,6 @@ const packageJson = (await Bun.file(join(root, "package.json")).json()) as {
   version: string;
   scripts?: Record<string, string>;
 };
-const version = packageJson.version;
-const tag = `v${version}`;
 const chocolateyRoot = join(packagingRoot, "chocolatey");
 const scoopRoot = join(packagingRoot, "scoop");
 const aurRoot = join(packagingRoot, "aur");
@@ -25,6 +23,8 @@ const pkgbuildPath = join(aurRoot, "PKGBUILD");
 const srcinfoPath = join(aurRoot, ".SRCINFO");
 
 const nuspec = readFileSync(nuspecPath, "utf8");
+const version = /<version>([^<]+)<\/version>/u.exec(nuspec)?.[1] ?? "";
+const tag = `v${version}`;
 const installScript = readFileSync(installPath, "utf8");
 const uninstallScript = readFileSync(uninstallPath, "utf8");
 const verification = readFileSync(verificationPath, "utf8");
@@ -96,7 +96,8 @@ const aurHashes = [
 ];
 
 describe("packaging metadata", () => {
-  test("ships Chocolatey, Scoop, and AUR files for the current version", () => {
+  test("ships Chocolatey, Scoop, and AUR files for the checked-in version", () => {
+    expect(version).toMatch(/^\d+\.\d+\.\d+$/u);
     for (const path of [
       nuspecPath,
       installPath,
