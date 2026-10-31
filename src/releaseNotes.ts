@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.10.0": {
+    version: "0.10.0",
+    title: "Search, recovery, and navigation",
+    highlights: [
+      "Project search finds literal, regular-expression, or fuzzy matches across files, with glob filters and a reviewed before/after replacement workflow.",
+      "The outline follows the configured main document while included chapters are active, and Back/Forward source navigation preserves selection and preview state.",
+      "Unsaved text is snapshotted outside the project and can be reviewed as a unified diff, restored as an unsaved buffer, or discarded.",
+      "Language settings add built-in interface localization and global default document languages for new projects, with Latin set to English (United States)."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.10.0"
+  },
   "0.9.6": {
     version: "0.9.6",
     title: "Language providers and editing reliability",

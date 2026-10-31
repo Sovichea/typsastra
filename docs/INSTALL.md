@@ -12,7 +12,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.9.6.
+Typsastra is currently beta software. The latest release is v0.10.0.
 
 ### Open an unsigned macOS release
 
