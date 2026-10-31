@@ -83,13 +83,23 @@ debug app to use another loopback bind address. The API is not started in releas
 - `PUT /project/main` with `{"path":"chapter.typ"}` sets a project-relative or absolute `.typ` file as main.
 - `POST /project/open-document` with `{"path":"main.typ","approveLargePreview":true}` opens a Typst document in the editor and can explicitly accept its large-preview confirmation.
 - `GET /project/images` returns indexed image metadata; `GET /project/tables` returns project table summaries.
+- `POST /recovery/demo` writes a synthetic unsaved snapshot for the open project's main document; `DELETE /recovery/demo` removes it. Both are intended for deterministic recovery UI screenshots.
 - `POST /ui/action` performs the named editor/tool action through the running frontend and returns `202 Accepted`. Example actions:
   - `{"action":"sidebar-tool","tool":"images"}`
   - `{"action":"sidebar-tool","tool":"search"}`
   - `{"action":"project-templates"}`
+  - `{"action":"project-language","script":"Latn","languageTag":"en-US"}`
   - `{"action":"settings-open"}`
   - `{"action":"settings-open","panel":"language"}`
   - `{"action":"settings-close"}`
+  - `{"action":"settings-default-language","script":"Latn","languageTag":"en-US"}`
+  - `{"action":"scroll-to","target":"settings-default-document-languages-field"}`
+  - `{"action":"close-other-tabs"}`
+  - `{"action":"close-dialogs"}`
+  - `{"action":"tab-list"}`
+  - `{"action":"recovery-review","open":true}`
+  - `{"action":"project-search","query":"research","replacement":"study","review":true}`
+  - `{"action":"preview-page","page":2}`
   - `{"action":"preview-content-mode","mode":"draft"}`
   - `{"action":"preview-color-mode","mode":"inverted"}`
   - `{"action":"preview-zoom","direction":"in"}`
@@ -108,6 +118,11 @@ Search opens the project search sidebar, and `project-templates` opens the
 Create New Project dialog. `settings-open` opens the settings dialog; the
 optional `panel` selects `appearance`, `editor`, `language`, `shortcuts`,
 `preview`, `toolchain`, `storage`, or `developer`. `settings-close` closes it.
+`project-language` sets the open project's assignment for one script, while
+`settings-default-language` sets the global default used by new projects.
+`project-search` runs a search immediately and can open the reviewed replacement
+view. `recovery-review` shows available snapshots and, with `open`, opens the
+first record's diff.
 
 Project open/main requests return `202 Accepted` after being handed to the app; the
 frontend performs the normal workspace operation and reflects its result. Project

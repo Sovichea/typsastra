@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -189,14 +190,42 @@ enum DevUiAction {
         tool: DevSidebarTool,
     },
     ProjectTemplates,
+    ProjectLanguage {
+        script: String,
+        language_tag: String,
+    },
     SettingsOpen {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         panel: Option<DevSettingsPanel>,
     },
     SettingsClose,
+    SettingsDefaultLanguage {
+        script: String,
+        language_tag: String,
+    },
+    ScrollTo {
+        target: String,
+    },
+    CloseOtherTabs,
+    CloseDialogs,
+    TabList,
+    RecoveryReview {
+        #[serde(default)]
+        open: bool,
+    },
+    ProjectSearch {
+        query: String,
+        #[serde(default)]
+        replacement: Option<String>,
+        #[serde(default)]
+        review: bool,
+    },
     PreviewRecompile,
     PreviewContentMode {
         mode: DevPreviewContentMode,
+    },
+    PreviewPage {
+        page: u32,
     },
     PreviewColorMode {
         mode: DevPreviewColorMode,
@@ -347,6 +376,14 @@ impl DevProjectState {
             return Err("The requested file must exist inside the open project.".into());
         }
         Ok(path)
+    }
+
+    fn context(&self) -> Result<DevProjectContext, String> {
+        self.context
+            .lock()
+            .map_err(|_| "Project state is unavailable".to_string())?
+            .clone()
+            .ok_or_else(|| "No project is currently open.".to_string())
     }
 
     fn table_summaries(&self) -> Result<Vec<DevTableSummary>, String> {
@@ -578,6 +615,26 @@ async fn handle_connection(
     let path = target.split('?').next().unwrap_or_default();
     let (status, reason, content_type, body) = match (method, path) {
         ("GET", "/health") => (200, "OK", "application/json", br#"{"ok":true}"#.to_vec()),
+        ("POST", "/recovery/demo") => match project_state.context() {
+            Ok(context) => match write_demo_recovery(&app, &context) {
+                Ok(result) => match serde_json::to_vec(&result) {
+                    Ok(body) => (200, "OK", "application/json; charset=utf-8", body),
+                    Err(error) => (500, "Internal Server Error", "text/plain", error.to_string().into_bytes()),
+                },
+                Err(error) => (500, "Internal Server Error", "text/plain", error.into_bytes()),
+            },
+            Err(error) => (409, "Conflict", "text/plain", error.into_bytes()),
+        },
+        ("DELETE", "/recovery/demo") => match project_state.context() {
+            Ok(context) => match delete_demo_recovery(&app, &context) {
+                Ok(result) => match serde_json::to_vec(&result) {
+                    Ok(body) => (200, "OK", "application/json; charset=utf-8", body),
+                    Err(error) => (500, "Internal Server Error", "text/plain", error.to_string().into_bytes()),
+                },
+                Err(error) => (500, "Internal Server Error", "text/plain", error.into_bytes()),
+            },
+            Err(error) => (409, "Conflict", "text/plain", error.into_bytes()),
+        },
         ("GET", "/logs") => {
             let after = parse_query_value(target, "after").and_then(|value| value.parse::<u64>().ok());
             match serde_json::to_vec(&buffer.snapshot(after)) {
@@ -662,6 +719,42 @@ async fn handle_connection(
             match serde_json::from_slice::<DevUiAction>(&request[header_end + 4..]) {
                 Ok(mut action) => {
                     let validation = match &mut action {
+                        DevUiAction::ProjectLanguage {
+                            script,
+                            language_tag,
+                        }
+                        | DevUiAction::SettingsDefaultLanguage {
+                            script,
+                            language_tag,
+                        } => validate_script_language(script, language_tag),
+                        DevUiAction::ScrollTo { target } => {
+                            if target.is_empty()
+                                || target.len() > 128
+                                || !target
+                                    .bytes()
+                                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+                            {
+                                Err("Scroll target must be a simple element id.".into())
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        DevUiAction::ProjectSearch {
+                            query,
+                            replacement,
+                            ..
+                        } => {
+                            if query.trim().is_empty() || query.len() > 512 {
+                                Err("Project search query must be 1-512 bytes.".into())
+                            } else if replacement.as_ref().is_some_and(|value| value.len() > 4096) {
+                                Err("Project search replacement exceeds the 4096-byte API limit.".into())
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        DevUiAction::PreviewPage { page } if *page == 0 => {
+                            Err("Preview page must be at least 1.".into())
+                        }
                         DevUiAction::ImageSelect { path } => project_state
                             .validate_file(path)
                             .map(|validated| *path = validated.to_string_lossy().to_string()),
@@ -750,9 +843,9 @@ async fn handle_connection(
             200,
             "OK",
             "text/plain; charset=utf-8",
-            b"Typsastra developer API. GET /logs?after=<sequence>, GET /settings, PATCH /settings, GET /project/files, GET /project/images, GET /project/tables, POST /project/open, PUT /project/main, POST /project/open-document, POST /ui/action, GET /screenshot/window, GET /screenshot/region?x=&y=&width=&height=, GET /health.\n".to_vec(),
+            b"Typsastra developer API. GET /logs?after=<sequence>, GET /settings, PATCH /settings, GET /project/files, GET /project/images, GET /project/tables, POST /project/open, PUT /project/main, POST /project/open-document, POST /ui/action, POST /recovery/demo, DELETE /recovery/demo, GET /screenshot/window, GET /screenshot/region?x=&y=&width=&height=, GET /health.\n".to_vec(),
         ),
-        (_, "/logs" | "/settings" | "/health" | "/project/files" | "/project/images" | "/project/tables" | "/project/open" | "/project/main" | "/project/open-document" | "/ui/action" | "/screenshot/window" | "/screenshot/region") => (
+        (_, "/logs" | "/settings" | "/health" | "/project/files" | "/project/images" | "/project/tables" | "/project/open" | "/project/main" | "/project/open-document" | "/ui/action" | "/recovery/demo" | "/screenshot/window" | "/screenshot/region") => (
             405,
             "Method Not Allowed",
             "text/plain",
@@ -1077,6 +1170,135 @@ fn validate_project_path(path: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn demo_recovery_document_id(context: &DevProjectContext, main: &Path) -> String {
+    let root = path_key(&context.root);
+    let path = path_key(main);
+    format!("file:{root}::{path}")
+}
+
+fn path_key(path: &Path) -> String {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    if cfg!(windows) {
+        normalized.to_ascii_lowercase()
+    } else {
+        normalized
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn write_demo_recovery(
+    app: &tauri::AppHandle,
+    context: &DevProjectContext,
+) -> Result<Value, String> {
+    let main = context
+        .main_file
+        .clone()
+        .unwrap_or_else(|| context.root.join("main.typ"));
+    let disk_text = std::fs::read_to_string(&main)
+        .map_err(|error| format!("Could not read the main document: {error}"))?;
+    let text = format!(
+        "{disk_text}\n\n= Recovered draft\n\nThis paragraph was recovered from an unsaved buffer after an interruption.\n"
+    );
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    let record = crate::recovery::RecoveryRecord {
+        version: crate::recovery::RECOVERY_RECORD_VERSION,
+        document_id: demo_recovery_document_id(context, &main),
+        workspace_root: Some(context.root.to_string_lossy().to_string()),
+        path: Some(main.to_string_lossy().to_string()),
+        title: None,
+        text,
+        saved_text_hash: sha256_hex(disk_text.as_bytes()),
+        revision: now,
+        timestamp_ms: now,
+        selection_anchor: 0,
+        selection_head: 0,
+        scroll_top: 0.0,
+        scroll_left: 0.0,
+    };
+    let data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to resolve recovery storage: {error}"))?;
+    let root = crate::recovery::recovery_root(&data_dir);
+    let result = crate::recovery::write_recovery_record(&root, record)?;
+    serde_json::to_value(result).map_err(|error| error.to_string())
+}
+
+fn delete_demo_recovery(
+    app: &tauri::AppHandle,
+    context: &DevProjectContext,
+) -> Result<Value, String> {
+    let main = context
+        .main_file
+        .clone()
+        .unwrap_or_else(|| context.root.join("main.typ"));
+    let document_id = demo_recovery_document_id(context, &main);
+    let data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to resolve recovery storage: {error}"))?;
+    let root = crate::recovery::recovery_root(&data_dir);
+    let result = crate::recovery::delete_recovery_record(&root, &document_id, None)?;
+    serde_json::to_value(result).map_err(|error| error.to_string())
+}
+
+fn validate_script_language(script: &mut String, language_tag: &mut String) -> Result<(), String> {
+    if script.len() != 4 || !script.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+        return Err("Script must be a four-letter ISO 15924 code.".into());
+    }
+    *script = format!(
+        "{}{}",
+        script[..1].to_ascii_uppercase(),
+        script[1..].to_ascii_lowercase()
+    );
+    if language_tag.is_empty()
+        || language_tag.len() > 32
+        || !language_tag
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        return Err("Language tag is invalid.".into());
+    }
+    let mut parts = language_tag.split('-');
+    let language = parts.next().unwrap_or_default();
+    if !(language.len() == 2 || language.len() == 3)
+        || !language.bytes().all(|byte| byte.is_ascii_alphabetic())
+    {
+        return Err("Language tag must start with a two- or three-letter language.".into());
+    }
+    let mut normalized = vec![language.to_ascii_lowercase()];
+    for part in parts {
+        let is_script = part.len() == 4 && part.bytes().all(|byte| byte.is_ascii_alphabetic());
+        let is_region = (part.len() == 2 && part.bytes().all(|byte| byte.is_ascii_alphabetic()))
+            || (part.len() == 3 && part.bytes().all(|byte| byte.is_ascii_digit()));
+        let is_variant =
+            (5..=8).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_alphanumeric());
+        if !(is_script || is_region || is_variant) {
+            return Err("Language tag contains an invalid subtag.".into());
+        }
+        if is_script {
+            normalized.push(format!(
+                "{}{}",
+                part[..1].to_ascii_uppercase(),
+                part[1..].to_ascii_lowercase()
+            ));
+        } else if is_region {
+            normalized.push(part.to_ascii_uppercase());
+        } else {
+            normalized.push(part.to_ascii_lowercase());
+        }
+    }
+    *language_tag = normalized.join("-");
+    Ok(())
+}
+
 fn validate_main_file(root: &Path, path: &Path) -> Result<PathBuf, String> {
     let path = if path.is_absolute() {
         path.to_path_buf()
@@ -1377,8 +1599,8 @@ mod tests {
     use super::{
         default_dev_log_settings, dev_log_settings_from_value, is_allowed_origin, is_loopback_host,
         parse_query_value, parse_screenshot_region, parse_screenshot_restore,
-        screenshot_error_status, DevLogBuffer, DevLogInput, DevProjectState, DevUiAction,
-        ProjectOpenDocumentRequest,
+        screenshot_error_status, validate_script_language, DevLogBuffer, DevLogInput,
+        DevProjectState, DevUiAction, ProjectOpenDocumentRequest,
     };
 
     #[test]
@@ -1558,6 +1780,40 @@ mod tests {
             serde_json::json!({ "action": "settings-close" })
         );
 
+        let project_language: DevUiAction = serde_json::from_str(
+            r#"{"action":"project-language","script":"Latn","languageTag":"en-US"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(project_language).unwrap(),
+            serde_json::json!({
+                "action": "project-language",
+                "script": "Latn",
+                "languageTag": "en-US"
+            })
+        );
+
+        let search: DevUiAction = serde_json::from_str(
+            r#"{"action":"project-search","query":"research","replacement":"study","review":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(search).unwrap(),
+            serde_json::json!({
+                "action": "project-search",
+                "query": "research",
+                "replacement": "study",
+                "review": true
+            })
+        );
+
+        let preview_page: DevUiAction =
+            serde_json::from_str(r#"{"action":"preview-page","page":1}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(preview_page).unwrap(),
+            serde_json::json!({ "action": "preview-page", "page": 1 })
+        );
+
         let content_mode: DevUiAction =
             serde_json::from_str(r#"{"action":"preview-content-mode","mode":"draft"}"#).unwrap();
         assert_eq!(
@@ -1620,5 +1876,23 @@ mod tests {
                 "text": "Updated"
             })
         );
+    }
+
+    #[test]
+    fn developer_api_normalizes_script_language_tags() {
+        let mut script = "latn".to_string();
+        let mut language = "en-us".to_string();
+        validate_script_language(&mut script, &mut language).unwrap();
+        assert_eq!(script, "Latn");
+        assert_eq!(language, "en-US");
+
+        let mut script = "Cyrl".to_string();
+        let mut language = "ru".to_string();
+        validate_script_language(&mut script, &mut language).unwrap();
+        assert_eq!(language, "ru");
+
+        let mut script = "Latn".to_string();
+        let mut language = "not a tag".to_string();
+        assert!(validate_script_language(&mut script, &mut language).is_err());
     }
 }

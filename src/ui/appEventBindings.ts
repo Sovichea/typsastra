@@ -23,6 +23,7 @@ export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 export type DevUiAction =
   | { action: "sidebar-tool"; tool: "explorer" | "search" | "images" | "tables" }
   | { action: "project-templates" }
+  | { action: "project-language"; script: string; languageTag: string }
   | {
       action: "settings-open";
       panel?:
@@ -36,8 +37,16 @@ export type DevUiAction =
         | "developer";
     }
   | { action: "settings-close" }
+  | { action: "settings-default-language"; script: string; languageTag: string }
+  | { action: "scroll-to"; target: string }
+  | { action: "close-other-tabs" }
+  | { action: "close-dialogs" }
+  | { action: "tab-list" }
+  | { action: "recovery-review"; open?: boolean }
+  | { action: "project-search"; query: string; replacement?: string; review?: boolean }
   | { action: "preview-recompile" }
   | { action: "preview-content-mode"; mode: PreviewContentMode }
+  | { action: "preview-page"; page: number }
   | { action: "preview-color-mode"; mode: PreviewColorMode }
   | { action: "preview-zoom"; direction: "in" | "out" | "fit" }
   | {

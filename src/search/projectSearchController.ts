@@ -87,6 +87,7 @@ export class ProjectSearchController {
   private applyingReplacement = false;
   private suppressSelectionDefaults = false;
   private skippedFiles: readonly ProjectTextSkippedFile[] = [];
+  private searchCompletion: (() => void) | null = null;
   private state: SearchState = {
     options: { ...DEFAULT_OPTIONS },
     searching: false,
@@ -136,6 +137,32 @@ export class ProjectSearchController {
   public focusQuery(focusReplace = false): void {
     this.initialize();
     (focusReplace ? this.replacementInput() : this.queryInput())?.focus();
+  }
+
+  /** Run a complete search immediately for the developer API. */
+  public async searchNow(query: string, replacement = ""): Promise<void> {
+    this.initialize();
+    this.resolveSearchCompletion();
+    if (!query.trim()) return;
+    const input = this.queryInput();
+    if (input) input.value = query;
+    const replaceInput = this.replacementInput();
+    if (replaceInput) replaceInput.value = replacement;
+    this.state.options = this.readOptions();
+    const completed = new Promise<void>(resolve => {
+      this.searchCompletion = resolve;
+    });
+    await this.runSearch();
+    await completed;
+    this.updateReplacementControls();
+    this.scheduleRender();
+  }
+
+  /** Open the reviewed-replacement view for the current selection. */
+  public reviewCurrentReplacement(): boolean {
+    if (!this.canApplyReplacement() || !this.buildReplacementRequest()) return false;
+    this.startReplacementReview();
+    return true;
   }
 
   public refreshReplacementControls(): void {
@@ -252,8 +279,11 @@ export class ProjectSearchController {
 
   private async runSearch(): Promise<void> {
     const options = this.readOptions();
-    if (!options.query.trim()) return;
-    this.cancelWork();
+    if (!options.query.trim()) {
+      this.resolveSearchCompletion();
+      return;
+    }
+    this.cancelWork(false);
     const generation = ++this.generation;
     this.fileResults.clear();
     this.skippedFiles = [];
@@ -272,6 +302,7 @@ export class ProjectSearchController {
         this.state.searching = false;
         this.state.error = `Invalid regular expression: ${String(error)}`;
         this.scheduleRender();
+        this.resolveSearchCompletion();
         return;
       }
     }
@@ -344,6 +375,9 @@ export class ProjectSearchController {
       this.state.searching = false;
       this.state.error = String(error);
       this.scheduleRender();
+      const resolve = this.searchCompletion;
+      this.searchCompletion = null;
+      resolve?.();
     } finally {
       if (this.readAbort === abort) this.readAbort = null;
     }
@@ -363,6 +397,9 @@ export class ProjectSearchController {
       this.state.searching = false;
       this.state.error = `Project search worker failed to start: ${String(error)}`;
       this.scheduleRender();
+      const resolve = this.searchCompletion;
+      this.searchCompletion = null;
+      resolve?.();
       return;
     }
     this.worker = worker;
@@ -442,6 +479,9 @@ export class ProjectSearchController {
     this.activeRequestId = 0;
     this.pruneSelectedMatches();
     this.scheduleRender();
+    const resolve = this.searchCompletion;
+    this.searchCompletion = null;
+    resolve?.();
   }
 
   /** Drop selections that no longer correspond to a current safe match. */
@@ -459,7 +499,7 @@ export class ProjectSearchController {
     }
   }
 
-  private cancelWork(): void {
+  private cancelWork(resolvePending = true): void {
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
@@ -472,6 +512,13 @@ export class ProjectSearchController {
     worker?.terminate();
     this.activeRequestId = 0;
     this.deps.projectText().cancel();
+    if (resolvePending) this.resolveSearchCompletion();
+  }
+
+  private resolveSearchCompletion(): void {
+    const resolve = this.searchCompletion;
+    this.searchCompletion = null;
+    resolve?.();
   }
 
   private clearWatchdog(): void {

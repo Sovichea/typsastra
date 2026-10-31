@@ -4831,6 +4831,14 @@ export class TypsastraWorkspaceController {
       case "project-templates":
         this.createProjectFromTemplate();
         return;
+      case "project-language":
+        if (!this.workspaceMetadata) throw new Error("Open a project before setting a project language.");
+        this.applyDocumentLanguageAssignments([
+          ...this.workspaceMetadata.project.scriptLanguages.filter(entry =>
+            entry.script.toLowerCase() !== action.script.toLowerCase()),
+          { script: action.script, languageTag: action.languageTag },
+        ]);
+        return;
       case "settings-open":
         document.dispatchEvent(new CustomEvent("typsastra:open-settings", {
           detail: { panel: action.panel },
@@ -4839,11 +4847,53 @@ export class TypsastraWorkspaceController {
       case "settings-close":
         document.dispatchEvent(new Event("typsastra:close-settings"));
         return;
+      case "settings-default-language":
+        this.settingsController.update(settings => {
+          settings.language.defaultScriptLanguages = [
+            ...settings.language.defaultScriptLanguages.filter(entry =>
+              entry.script.toLowerCase() !== action.script.toLowerCase()),
+            { script: action.script, languageTag: action.languageTag },
+          ];
+        });
+        return;
+      case "scroll-to":
+        document.getElementById(action.target)?.scrollIntoView({ block: "center" });
+        return;
+      case "close-other-tabs":
+        if (this.activeFilePath) await this.closeOtherTabs(this.activeFilePath);
+        return;
+      case "close-dialogs":
+        for (const id of ["project-template-close", "settings-close", "recovery-close", "about-close"]) {
+          document.getElementById(id)?.click();
+        }
+        return;
+      case "tab-list":
+        document.getElementById("editor-tab-list-toggle")?.click();
+        return;
+      case "recovery-review": {
+        const shown = await this.recoveryReviewController.showIfNeeded({ workspaceRoot: this.workspaceRootPath });
+        if (shown && action.open) {
+          const review = [...document.querySelectorAll<HTMLButtonElement>("#recovery-list button")]
+            .find(button => button.textContent?.trim() === "Review");
+          review?.click();
+        }
+        return;
+      }
+      case "project-search":
+        this.openProjectSearch(action.replacement !== undefined);
+        await this.projectSearchController.searchNow(action.query, action.replacement ?? "");
+        if (action.review && !this.projectSearchController.reviewCurrentReplacement()) {
+          throw new Error("Project search did not produce reviewable replacement matches.");
+        }
+        return;
       case "preview-recompile":
         await this.recompilePreviewManually();
         return;
       case "preview-content-mode":
         await this.draftPreviewController.changeMode(action.mode);
+        return;
+      case "preview-page":
+        if (action.page > 0) this.previewFrame.scrollToPage(action.page);
         return;
       case "preview-color-mode":
         this.settingsController.update(settings => {
