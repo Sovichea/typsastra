@@ -1,21 +1,21 @@
 {
     "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Schemas/master/installer.json",
-    "version": "0.9.6",
+    "version": "0.10.0",
     "description": "Typst editor with live preview, autocomplete, outline, diagnostics, and project navigation.",
     "homepage": "https://github.com/Sovichea/typsastra",
     "notes": "Requires the Microsoft Edge WebView2 Runtime, which is included with Windows 11 and most Windows 10 installations.",
     "license": {
         "identifier": "MIT",
-        "url": "https://github.com/Sovichea/typsastra/blob/v0.9.6/LICENSE"
+        "url": "https://github.com/Sovichea/typsastra/blob/v0.10.0/LICENSE"
     },
     "architecture": {
         "64bit": {
-            "url": "https://github.com/Sovichea/typsastra/releases/download/v0.9.6/Typsastra_0.9.6_x64_en-US.msi",
-            "hash": "89a09bb1bd121c1ab9479e1e577b6c360243934a91afc1da33bd436f32d65a61"
+            "url": "https://github.com/Sovichea/typsastra/releases/download/v0.10.0/Typsastra_0.10.0_x64_en-US.msi",
+            "hash": "1fa1c06786543ce1b135fe53b7cba5679c8c1bef193bfa5f864c5dbdd7a143b2"
         },
         "arm64": {
-            "url": "https://github.com/Sovichea/typsastra/releases/download/v0.9.6/Typsastra_0.9.6_arm64_en-US.msi",
-            "hash": "be2b637562765a903c7cf3ede26bfe3afff94da4f30a206ecb23f43cc6f9aedd"
+            "url": "https://github.com/Sovichea/typsastra/releases/download/v0.10.0/Typsastra_0.10.0_arm64_en-US.msi",
+            "hash": "fbc015bfabb64cfa01126ee6e871b34e0eac08e5803bee68ae118533d3e299f3"
         }
     },
     "installer": {
