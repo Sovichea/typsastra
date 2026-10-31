@@ -18,7 +18,8 @@ Typsastra is currently beta software. The latest release is v0.10.0.
 
 Windows users can also install through
 [Windows Package Manager](https://learn.microsoft.com/windows/package-manager/winget/)
-with `winget install --id Typsastra.Typsastra`.
+with `winget install --id Typsastra.Typsastra` after the manifest is available
+in the community repository.
 
 Typsastra is an open-source project and does not plan to purchase Apple
 Developer ID signing or notarization. On macOS, Gatekeeper may therefore report

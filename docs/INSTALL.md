@@ -63,10 +63,17 @@ launch. See [WINGET.md](./WINGET.md) for manifest maintenance.
 
 ### Other package managers
 
+Scoop users can install from the project bucket:
+
+```powershell
+scoop bucket add typsastra https://github.com/Sovichea/scoop-typsastra
+scoop install typsastra
+```
+
 Packaging metadata for Chocolatey, Scoop, and the Arch User Repository is
 maintained in the repository under `packaging/`. See
 [PACKAGING.md](./PACKAGING.md) for build, test, and publishing instructions.
-These channels are not live until their metadata is published.
+Chocolatey and AUR are not live until their packages are published.
 
 ### Automatic updates on macOS
 

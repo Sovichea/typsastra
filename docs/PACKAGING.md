@@ -104,14 +104,16 @@ typsastra
 scoop uninstall typsastra
 ```
 
-To publish, either add `typsastra.json` to a personal bucket repository or open
-a pull request against `ScoopInstaller/Extras`. A personal bucket is the
-low-effort option:
+The project bucket is published at
+<https://github.com/Sovichea/scoop-typsastra>:
 
-```text
-scoop bucket add typsastra https://github.com/<owner>/scoop-typsastra
+```powershell
+scoop bucket add typsastra https://github.com/Sovichea/scoop-typsastra
 scoop install typsastra
 ```
+
+A personal bucket is the low-effort option; the manifest can also be submitted
+to `ScoopInstaller/Extras` for broader discovery.
 
 The manifest includes `checkver` and `autoupdate` entries. Future releases can
 be picked up by the bucket's update workflow; the hash is read from the GitHub
