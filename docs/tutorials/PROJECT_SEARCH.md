@@ -8,6 +8,8 @@ Open it from the magnifier in the activity bar, **Edit → Search Project**, or
 `Ctrl+Shift+F` (`Cmd+Shift+F` on macOS). The Search panel replaces the sidebar
 content; the editor and PDF preview stay visible.
 
+![Project search sidebar with grouped file results and filters](../assets/screenshots/demo-project-search.png)
+
 ## Search modes
 
 - **Literal** searches for the text as entered. Match case, Whole word, and
@@ -58,6 +60,8 @@ applying stale offsets.
 Literal and Regex searches can replace selected matches across the project. Open
 the replace field with **Edit → Replace in Project** or `Ctrl+Shift+H`
 (`Cmd+Shift+H` on macOS), or type a replacement directly in the Search sidebar.
+
+![Reviewed replacement showing before and after lines across two files](../assets/screenshots/demo-project-replace.png)
 
 1. Run a search and wait for it to finish. Replacement is unavailable while a
    search is still running, incomplete, truncated, or errored.

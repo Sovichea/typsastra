@@ -60,6 +60,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Release notes:
+      - v0.10.0 — Search, recovery, and navigation: RELEASE_NOTES_V0.10.0.md
       - v0.9.6 — Language and editing fixes: RELEASE_NOTES_V0.9.6.md
       - v0.9.5 — UX and performance: RELEASE_NOTES_V0.9.5.md
       - v0.9.4: RELEASE_NOTES_V0.9.4.md

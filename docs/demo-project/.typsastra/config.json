@@ -3,7 +3,12 @@
   "projectId": "c27fccd1-274c-414e-9795-49c34ddf9d63",
   "recommendedToolchain": null,
   "schemaVersion": 2,
-  "scriptLanguages": [],
+  "scriptLanguages": [
+    {
+      "languageTag": "en-US",
+      "script": "Latn"
+    }
+  ],
   "tables": [
     {
       "alt": "",

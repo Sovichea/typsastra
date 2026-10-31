@@ -13,7 +13,8 @@ walkthrough.
 - [Editor and PDF preview](tutorials/EDITOR_AND_PREVIEW.md) — edit source, choose
   preview behavior, navigate pages, and synchronize source with the PDF.
 - [Editor productivity](tutorials/EDITOR_PRODUCTIVITY.md) — search, shortcuts,
-  Typst-aware editing, drag/drop and paste, and save/recompile behavior.
+  navigation, unsaved-work recovery, Typst-aware editing, drag/drop and paste,
+  and save/recompile behavior.
 - [Search a project](tutorials/PROJECT_SEARCH.md) — search literal, regex, or
   fuzzy matches across project files and review replacements across files with
   glob filters and stale-safe navigation.

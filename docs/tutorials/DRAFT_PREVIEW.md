@@ -12,6 +12,8 @@ renders the original images. Draft mode shows lightweight placeholders while
 keeping their measured dimensions and positions in the document. Switch back to
 Normal before export or final visual review; PDF export uses original assets.
 
+![Draft Preview showing layout-preserving image placeholders](../assets/screenshots/demo-draft-preview.png)
+
 <video controls preload="none" playsinline width="100%">
   <source src="https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db" type="video/mp4">
   Your browser cannot play the embedded video. <a href="https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db">Open the Draft Preview demo.</a>

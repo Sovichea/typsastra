@@ -14,6 +14,17 @@ images so the Explorer, Image Tools, and multi-file preview have useful content.
    this demo project's configuration. Its ID matches the `//@table:basic_table`
    anchor in `main.typ`, and its generated Typst block is synchronized there.
 4. Change a table cell and inspect the live preview update.
+5. Open **Search Project** and search for `research` to see matches across the
+   main document and chapters. Enter a replacement and use **Review** to inspect
+   the before/after changes before applying them.
+6. Edit a chapter, wait for the unsaved-work snapshot, and reopen the project to
+   review the recovered text as a unified diff. Restoring opens an unsaved
+   buffer; it does not overwrite the source file.
+
+The project declares Latin script → English (United States) in
+`.typsastra/config.json`, so the language status and spellcheck tools have a
+usable default. New projects inherit this assignment from **Settings → Language →
+Default document languages**.
 
 ## Follow the guides
 

@@ -339,6 +339,8 @@ assignments written into new projects. The initial default is Latin → English
 (United States). Existing projects keep their own assignments in
 `.typsastra/config.json`; change those from the status-bar language item.
 
+![Language settings with Latin set to English (United States) for new projects](assets/screenshots/demo-language-settings.png)
+
 **Add language...** opens the catalog dialog to download additional Hunspell dictionaries. Each catalog entry row displays detailed onboarding metadata:
 - **Provider Type:** Displays the type level (e.g. `Deep provider` or `Dictionary only`).
 - **Support Level:** Displays support depth (Basic, Enhanced, Deep) and stability (Stable, Experimental).

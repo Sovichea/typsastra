@@ -6,15 +6,41 @@ technical documentation, theses, books, and multilingual long-form writing.
 This site brings together step-by-step workflows, tool references, language
 guides, and contributor documentation.
 
-## New in v0.9.6
+## New in v0.10.0
 
-This update improves Hunspell dictionary compatibility, adds LibreOffice
-spelling variants, streamlines language-provider management, and fixes selection
-wrapping, paste, preview freshness, and stale diagnostic behavior.
+Typsastra v0.10.0 adds project-wide search and reviewed replacement, a shared
+main-document outline, Back/Forward source navigation, unsaved-work recovery,
+and global default document languages.
 
-Read the [v0.9.6 release notes](RELEASE_NOTES_V0.9.6.md), or explore the
-[preview settings](SETTINGS.md#preview) and
-[PDF navigation guide](tutorials/PDF_PREVIEW_AND_SYNC.md).
+Read the [v0.10.0 release notes](RELEASE_NOTES_V0.10.0.md).
+
+### Search and replace across a project
+
+![Project search sidebar with grouped results and filters](assets/screenshots/demo-project-search.png)
+
+![Reviewed replacement showing before and after lines in two files](assets/screenshots/demo-project-replace.png)
+
+### Recover unsaved work
+
+![Recovery review showing an unsaved main.typ buffer and a unified diff](assets/screenshots/demo-recovery-review.png)
+
+### Set default document languages
+
+![Language settings with Latin set to English (United States) for new projects](assets/screenshots/demo-language-settings.png)
+
+### Main-document outline and tab navigation
+
+The outline follows the configured main document while an included chapter is
+active. The tab-list menu reaches every open source tab.
+
+![Shared main-document outline while a chapter is active](assets/screenshots/demo-explorer.png)
+
+![Tab list menu listing the main document and included chapters](assets/screenshots/demo-tab-list.png)
+
+The previous v0.9.6 update improved Hunspell dictionary compatibility, added
+LibreOffice spelling variants, streamlined language-provider management, and
+fixed selection wrapping, paste, preview freshness, and stale diagnostic
+behavior. See the [v0.9.6 release notes](RELEASE_NOTES_V0.9.6.md).
 
 ## Start here
 
@@ -22,6 +48,8 @@ Read the [v0.9.6 release notes](RELEASE_NOTES_V0.9.6.md), or explore the
 - [Projects and main files](tutorials/PROJECTS_AND_MAIN_FILES.md) — understand multi-file projects and main documents.
 - [Create from templates](tutorials/PROJECT_TEMPLATES.md) — browse Universe, offline, and user templates.
 - [PDF preview and synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md) — work with live preview and source navigation.
+- [Search a project](tutorials/PROJECT_SEARCH.md) — find and review replacements across project files.
+- [Editor productivity](tutorials/EDITOR_PRODUCTIVITY.md) — navigation, recovery, shortcuts, and editing workflows.
 - [Image Tools](tutorials/IMAGE_TOOLS.md) — inspect, crop, and optimize project images.
 - [Table Tools](tutorials/TABLE_TOOLS.md) — create, link, and edit Typst tables.
 - [Settings reference](SETTINGS.md) — configure editing, preview, language tools, and appearance.

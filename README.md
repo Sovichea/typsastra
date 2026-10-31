@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.9.6.
+Typsastra is currently beta software. The latest release is v0.10.0.
 
 Windows users can also install through
 [Windows Package Manager](https://learn.microsoft.com/windows/package-manager/winget/)
@@ -46,6 +46,39 @@ The name combines Typst, the typesetting system at the center of the project, wi
 It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typsastra focuses on Unicode-safe editing, script-aware interaction, responsive PDF preview, extensible language tools, and multi-file project workflows while keeping the underlying Typst source portable.
 
 Khmer is the first language with deep support, including tailored cursor and deletion behavior, spellcheck, and word completion. Khmer demonstrates the depth Typsastra aims to provide; it is not the boundary of the project. The editing-policy and language-provider architecture is designed so other languages can add their own behavior without changing or weakening Khmer support.
+
+## v0.10.0: Search, recovery, and navigation
+
+Typsastra v0.10.0 adds project-wide search and reviewed replacement, a shared
+main-document outline, Back/Forward source navigation, unsaved-work recovery,
+and global default document languages.
+
+### Search and replace across a project
+
+<img src="./assets/screenshot-project-search.png" alt="Project search sidebar with grouped file results and filters" width="800"/>
+
+<img src="./assets/screenshot-project-replace.png" alt="Reviewed replacement showing before and after lines across two files" width="800"/>
+
+### Recover unsaved work
+
+Typsastra snapshots unsaved text outside the project and reviews recovery
+snapshots as unified diffs before restoring them as unsaved buffers.
+
+<img src="./assets/screenshot-recovery-review.png" alt="Recovery review showing an unsaved main.typ buffer and a unified diff" width="800"/>
+
+### Main-document outline, tab navigation, and language defaults
+
+The outline follows the configured main document while an included chapter is
+active. The tab-list menu reaches every open source tab, and new projects inherit
+the default document-language assignments configured in Settings.
+
+<img src="./assets/screenshot-main-outline.png" alt="Shared main-document outline while an included chapter is active" width="800"/>
+
+<img src="./assets/screenshot-tab-list.png" alt="Tab list menu listing the main document and included chapters" width="800"/>
+
+<img src="./assets/screenshot-language-settings.png" alt="Language settings with Latin set to English (United States) for new projects" width="800"/>
+
+See the [v0.10.0 release notes](./docs/RELEASE_NOTES_V0.10.0.md).
 
 ## v0.9.6: Language and editing reliability
 

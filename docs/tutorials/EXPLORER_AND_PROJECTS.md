@@ -4,7 +4,7 @@ Typsastra treats a project folder as the workspace. Source files stay ordinary
 files on disk; project-specific settings live in `.typsastra/config.json`, and
 the editing session is stored separately from source content.
 
-![Explorer showing a multi-file Typst project](../assets/screenshots/demo-explorer.png)
+![Shared main-document outline while an included chapter is active](../assets/screenshots/demo-explorer.png)
 
 ## Open a project
 
@@ -30,6 +30,10 @@ The configured main `.typ` file owns the project preview. Use **Set as Main
 File** from a Typst file's context menu. Files included from the main document
 share its compiler and preview; opening a chapter changes the editor tab without
 switching the PDF to a separate chapter preview.
+
+The Outline follows the main document even while an included chapter is active.
+Headings from other files are muted so the active file's headings stand out, and
+the outline expansion and selection survive tab changes.
 
 ## Other project files
 
