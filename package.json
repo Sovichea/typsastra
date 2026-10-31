@@ -23,6 +23,7 @@
     "generate:winget-manifest": "bun scripts/generate-winget-manifest.ts",
     "samples:render": "bun scripts/renderTableSamples.ts",
     "tauri:dev": "bun scripts/run-tauri-with-fallback.ts dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:dev:fresh": "bun scripts/run-tauri-with-fallback.ts dev --config src-tauri/tauri.dev.conf.json --fresh",
     "tauri:build": "bun scripts/run-tauri-with-fallback.ts build",
     "dev:update": "bun run tauri:dev:update",
     "tauri:dev:update": "tauri dev --config src-tauri/tauri.dev.conf.json --config src-tauri/tauri.update-test.conf.json",

@@ -251,6 +251,28 @@ html {
   opacity: 0.78;
 }
 
+.toolchain-required-badge {
+  height: 24px;
+  margin-right: 6px;
+  padding: 0 9px;
+  border: 1px solid #c92a2a;
+  border-radius: 4px;
+  background: #c92a2a;
+  color: #ffffff;
+  font: 600 11px var(--font-family-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toolchain-required-badge:hover {
+  background: #a51f1f;
+}
+
+.toolchain-required-badge:focus-visible {
+  outline: 1px solid #c92a2a;
+  outline-offset: 1px;
+}
+
 #titlebar-close:hover {
   background-color: #e81123 !important;
   color: #fff !important;
@@ -428,7 +450,8 @@ button.dropdown-item {
 
 .titlebar-button,
 .menu-item,
-.app-update-badge {
+.app-update-badge,
+.toolchain-required-badge {
   -webkit-app-region: no-drag;
 }
 

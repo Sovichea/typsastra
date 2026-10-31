@@ -56,7 +56,7 @@ export class ToolchainController {
     });
     document.addEventListener("typsastra:settings-opened", () => void this.refresh(false));
     document.querySelector('[data-settings-panel="toolchain"]')?.addEventListener("click", () => {
-      void this.refresh(false);
+      void this.refresh(true);
     });
     this.render();
   }

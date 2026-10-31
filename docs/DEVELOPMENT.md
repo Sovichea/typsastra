@@ -17,7 +17,18 @@ bun install --frozen-lockfile
 bun run tauri:dev
 ```
 
-The first launch requires internet access to retrieve the selected stable Tinymist binary from GitHub. Later launches use the managed copy in the platform application-data directory.
+The first launch no longer blocks on Tinymist. The editor, project files, and
+settings remain usable without a compiler; live preview, diagnostics, and
+completion become available after installing a toolchain from
+**Settings → Toolchain**. The title-bar **Tinymist required** badge opens that
+panel and refreshes the release catalog.
+
+To test first-run behavior with a separate application-data and configuration
+directory, run:
+
+```bash
+bun run tauri:dev:fresh
+```
 
 ### Tauri CLI fallback
 

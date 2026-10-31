@@ -10,8 +10,16 @@ const INTERRUPTED_EXIT_CODES = new Set([130, 143]);
 const NATIVE_CRASH_EXIT_CODES = new Set([132, 134, 135, 136, 139]);
 
 function usage(): never {
-  console.error("Usage: bun scripts/run-tauri-with-fallback.ts <dev|build> [...tauri arguments]");
+  console.error("Usage: bun scripts/run-tauri-with-fallback.ts <dev|build> [--fresh] [...tauri arguments]");
   process.exit(2);
+}
+
+export function tauriArgumentsFor(mode: TauriMode, rawArguments: readonly string[]): string[] {
+  const argumentsForTauri = [mode, ...rawArguments.filter(argument => argument !== "--fresh")];
+  if (rawArguments.includes("--fresh")) {
+    argumentsForTauri.push("--config", "src-tauri/tauri.fresh.conf.json");
+  }
+  return argumentsForTauri;
 }
 
 function appendCaptured(current: string, chunk: string): string {
@@ -149,7 +157,16 @@ async function lockedTauriCliVersion(): Promise<string | null> {
 async function main(): Promise<number> {
   const mode = Bun.argv[2] as TauriMode | undefined;
   if (mode !== "dev" && mode !== "build") usage();
-  const tauriArguments = [mode, ...Bun.argv.slice(3)];
+  const rawArguments = Bun.argv.slice(3);
+  const fresh = rawArguments.includes("--fresh");
+  if (fresh && mode !== "dev") {
+    console.error("--fresh is only supported for dev.");
+    process.exit(2);
+  }
+  const tauriArguments = tauriArgumentsFor(mode, rawArguments);
+  if (fresh) {
+    process.env.TYPSASTRA_DEV_LOG_API_ADDR ??= "127.0.0.1:17343";
+  }
   const bundledCli = await resolvedTauriCli();
 
   if (bundledCli) {

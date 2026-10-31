@@ -4,7 +4,7 @@ import { installPreviewZoomGestures, zoomPreviewElementAtPoint, GestureZoomSteps
 import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { dirname, join } from "@tauri-apps/api/path";
 import { EditorState, Transaction, type Extension, type Text } from "@codemirror/state";
@@ -129,8 +129,7 @@ import type { LargeFileOpeningNotice } from "./workspace/largeFileOpening";
 import { PerformanceController } from "./performance/performanceController";
 import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
-import { ToolchainController, type SystemToolchain, type ToolchainStatus } from "./toolchain/toolchainController";
-import { ToolchainSetupController, type ToolchainInstallProgress } from "./toolchain/toolchainSetupController";
+import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
 import { DocumentOutlineController, matchOutlinePreviewPositions, outlineSourceSnapshot, parseDocumentOutline, type DocumentHeading, type DocumentOutlineNotice, type OutlinePreviewItem } from "./outline/documentOutline";
 import { WindowStateController } from "./window/windowStateController";
 import { bindAppEvents, type DevUiAction } from "./ui/appEventBindings";
@@ -2202,26 +2201,6 @@ export class TypsastraWorkspaceController {
       this.fileDropController.pasteClipboardImages(images, selection, view);
     },
   });
-  private readonly toolchainSetupController = new ToolchainSetupController({
-    listReleases: () => invoke("list_tinymist_releases"),
-    listSystemToolchains: () => invoke<SystemToolchain[]>("list_system_tinymist_toolchains"),
-    install: (version, onProgress) => {
-      const progress = new Channel<ToolchainInstallProgress>();
-      progress.onmessage = onProgress;
-      return invoke<ToolchainStatus>("install_tinymist_toolchain_with_progress", {
-        version,
-        onProgress: progress,
-      });
-    },
-    selectSystemToolchain: path => invoke<ToolchainStatus>("select_system_tinymist_toolchain", { path }),
-    closeWindow: () => getCurrentWindow().close(),
-    showInstallError: async error => {
-      await message(String(error), { title: t("Toolchain installation failed"), kind: "error" });
-    },
-    showSelectionError: async error => {
-      await message(String(error), { title: t("Toolchain selection failed"), kind: "error" });
-    },
-  });
   private readonly previewWindowController = new PreviewWindowController({
     loadSettings: () => this.settingsController.load(),
     theme: () => this.settingsController.value.appearance.theme,
@@ -2356,6 +2335,8 @@ export class TypsastraWorkspaceController {
   });
   private readonly windowStateController = new WindowStateController(getCurrentWindow());
   private lspStatus = document.getElementById("lsp-status")!;
+  private readonly toolchainRequiredBadge = document.getElementById("toolchain-required-badge") as HTMLButtonElement | null;
+  private toolchainAvailable = false;
   private lspStatusDot = this.lspStatus.querySelector(".status-dot") as HTMLElement;
   private lspStatusLabel = this.lspStatus.querySelector(".status-label") as HTMLElement;
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
@@ -2448,6 +2429,11 @@ export class TypsastraWorkspaceController {
 
     await this.performanceController.timeStartup("show main window", () => getCurrentWindow().show());
     this.appUpdateController.initialize();
+    if (this.toolchainRequiredBadge) {
+      this.toolchainRequiredBadge.textContent = t("Tinymist required");
+      this.toolchainRequiredBadge.title = t("Tinymist is required for live preview and diagnostics. Open Settings → Toolchain.");
+      this.toolchainRequiredBadge.addEventListener("click", () => this.openToolchainSettings());
+    }
     this.webviewStorageController.initialize();
     void this.installNativeAppMenu();
     this.editorController.refreshLayout("main window shown");
@@ -2468,15 +2454,17 @@ export class TypsastraWorkspaceController {
       console.error("Failed to check toolchain status:", e);
     }
 
-    if (!toolchain?.tinymistVersion) {
-      toolchain = await this.showToolchainSetupDialog();
-    }
+    this.updateToolchainRequiredBadge(toolchain);
+    this.toolchainAvailable = Boolean(toolchain?.tinymistVersion);
 
     this.toolchainController.setStatus(toolchain ?? { typstVersion: null, typstSource: null, tinymistVersion: null, tinymistSource: null, lspAvailable: false, message: "" });
     await this.releaseSummaryController.showIfNeeded();
     await this.performanceController.timeStartup("initialize Tinymist LSP", () => this.initLsp(
       Boolean(toolchain?.lspAvailable) && !this.settingsController.value.preview.lowMemoryMode
     ));
+    if (!toolchain?.tinymistVersion) {
+      this.setLspStatus({ kind: "error", message: t("Tinymist required") });
+    }
     this.pruneStandaloneCaches();
     await this.drainPendingLaunchRequests();
     this.recoveryReviewAutoShowReady = true;
@@ -3170,8 +3158,16 @@ export class TypsastraWorkspaceController {
   }
 
 
-  private showToolchainSetupDialog(): Promise<ToolchainStatus | null> {
-    return this.toolchainSetupController.show();
+  private openToolchainSettings(): void {
+    void this.toolchainController.refresh(true);
+    document.dispatchEvent(new CustomEvent("typsastra:open-settings", {
+      detail: { panel: "toolchain" },
+    }));
+  }
+
+  private updateToolchainRequiredBadge(toolchain: ToolchainStatus | null): void {
+    if (!this.toolchainRequiredBadge) return;
+    this.toolchainRequiredBadge.hidden = Boolean(toolchain?.tinymistVersion);
   }
 
 
@@ -3531,12 +3527,17 @@ export class TypsastraWorkspaceController {
   }
 
   private async initLsp(shouldConnect = true) {
-    await this.documentSessionController.initialize(shouldConnect);
-    if (!shouldConnect && this.settingsController.value.preview.lowMemoryMode) {
-      this.setLspStatus({
-        kind: "stopped",
-        message: t("Low memory mode: compiler starts only while rendering"),
-      });
+    const connect = shouldConnect && this.toolchainAvailable;
+    await this.documentSessionController.initialize(connect);
+    if (!connect) {
+      if (this.settingsController.value.preview.lowMemoryMode) {
+        this.setLspStatus({
+          kind: "stopped",
+          message: t("Low memory mode: compiler starts only while rendering"),
+        });
+      } else if (!this.toolchainAvailable) {
+        this.setLspStatus({ kind: "error", message: t("Tinymist required") });
+      }
     }
   }
 
@@ -3763,6 +3764,10 @@ export class TypsastraWorkspaceController {
   }
 
   private restartTinymistSession(statusMessage: string): Promise<void> {
+    if (!this.toolchainAvailable) {
+      this.setLspStatus({ kind: "error", message: t("Tinymist required") });
+      return Promise.resolve();
+    }
     return this.documentSessionController.restart(statusMessage);
   }
 
@@ -3773,8 +3778,13 @@ export class TypsastraWorkspaceController {
     return this.tinymistPreviewRecoveryController.recover(contents, failedGeneration);
   }
 
-  private handleToolchainChanged(status: ToolchainStatus): Promise<void> {
-    return this.tinymistIntegrationController.handleToolchainChanged(status);
+  private async handleToolchainChanged(status: ToolchainStatus): Promise<void> {
+    this.updateToolchainRequiredBadge(status);
+    this.toolchainAvailable = Boolean(status.tinymistVersion);
+    await this.tinymistIntegrationController.handleToolchainChanged(status);
+    if (!status.tinymistVersion) {
+      this.setLspStatus({ kind: "error", message: t("Tinymist required") });
+    }
   }
 
 
@@ -4863,7 +4873,7 @@ export class TypsastraWorkspaceController {
         if (this.activeFilePath) await this.closeOtherTabs(this.activeFilePath);
         return;
       case "close-dialogs":
-        for (const id of ["project-template-close", "settings-close", "recovery-close", "about-close"]) {
+        for (const id of ["project-template-close", "settings-close", "recovery-close", "release-summary-close", "about-close"]) {
           document.getElementById(id)?.click();
         }
         return;

@@ -1,0 +1,12 @@
+{
+  "productName": "Typsastra Fresh",
+  "identifier": "com.typsastra.editor.fresh",
+  "app": {
+    "windows": [
+      {
+        "title": "Typsastra Fresh",
+        "zoomHotkeysEnabled": true
+      }
+    ]
+  }
+}

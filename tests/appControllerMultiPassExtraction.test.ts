@@ -19,7 +19,7 @@ describe("appController multi-pass extraction", () => {
     expect(app).toContain("return this.editorTabActivationController.activate(path, persistCurrent, options)");
     expect(app).toContain("return this.previewWindowController.bootstrap()");
     expect(app).toContain("return this.pinnedMainFileController.set(path)");
-    expect(app).toContain("return this.toolchainSetupController.show()");
+    expect(app).toContain("this.updateToolchainRequiredBadge(toolchain)");
     expect(app).toContain("this.settingsRuntimeController.apply(settings)");
     expect(app).toContain("const initialized = this.editorInitializationController.initialize()");
   });
