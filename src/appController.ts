@@ -2186,6 +2186,10 @@ export class TypsastraWorkspaceController {
     appendDeveloperLog: entry => this.appendDeveloperLog(entry),
     isLoadingFile: () => this.isLoadingFile,
     activeFilePath: () => this.activeFilePath,
+    pathContext: () => {
+      if (!this.workspaceMetadata || !this.workspaceRootPath || !this.activeFilePath) return null;
+      return { workspaceRoot: this.workspaceRootPath, documentPath: this.activeFilePath };
+    },
     markActiveTabDirty: () => this.markActiveTabDirty(),
     scheduleEditorContentMutation: doc => this.scheduleEditorContentMutation(doc),
     syncSelectedSpellingLocation: () => this.syncSelectedSpellingLocation(),

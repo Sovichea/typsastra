@@ -5238,6 +5238,37 @@ body.table-tools-active #code-render-pane {
   background: rgba(176, 136, 0, 0.08);
 }
 
+.cm-relative-path-warning {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #b08800;
+  text-underline-offset: 3px;
+}
+
+.cm-path-fix-button {
+  margin-left: 6px;
+  padding: 0 6px;
+  height: 18px;
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font: 11px var(--font-family-sans);
+  line-height: 16px;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.cm-path-fix-button:hover {
+  background: var(--ui-hover);
+  border-color: var(--ui-accent-color);
+}
+
+.cm-path-fix-button:focus-visible {
+  outline: 1px solid var(--ui-accent-color);
+  outline-offset: 1px;
+}
+
 .cm-diagnostic-info,
 .cm-diagnostic-hint {
   text-decoration-color: var(--ui-accent-color);

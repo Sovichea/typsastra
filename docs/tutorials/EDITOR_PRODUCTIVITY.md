@@ -97,6 +97,11 @@ not block other files.
 - Drag images from Explorer into a Typst document, or paste an image from the
   clipboard. Typsastra saves a collision-safe project asset and inserts a
   relative Typst image reference.
+- Relative paths that climb out of the current document folder, such as
+  `../images/photo.png`, are underlined. Use the **Use root path** action to
+  replace them with project-root paths such as `/images/photo.png`. The warning
+  covers images, includes, imports, bibliographies, and Typst data/asset
+  functions.
 - **Surround With** uses Typst function metadata and explicit content wrappers;
   it does not offer arbitrary functions that cannot accept content.
 - The completion catalog uses Tinymist metadata when ready and retains a local

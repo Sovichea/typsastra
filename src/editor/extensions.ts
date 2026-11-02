@@ -62,6 +62,7 @@ import { TYPSASTRA_GREEN, TYPSASTRA_GREEN_GLOW } from "../ui/brandColors";
 import { wrappedLineIndentation } from "./wrappedIndent";
 import { contextualDoubleQuoteExtension } from "./quoteEditing";
 import { imageOptimizationWarningsExtension } from "./imageWarnings";
+import { pathWarningsExtension, type PathWarningContext } from "./pathWarnings";
 import { tableDirectiveGutterExtension } from "./tableDirectives";
 import { standaloneDocumentField } from "./standaloneDocument";
 import { selectionPairReplacementExtension } from "./selectionPairEditing";
@@ -907,6 +908,7 @@ export function getEditorExtensions(
   ) => void,
   getShortcuts: () => ShortcutOverrides = () => ({}),
   getKhmerWordAt?: (position: number) => { from: number; to: number } | null,
+  getPathContext?: () => PathWarningContext | null,
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
@@ -1004,6 +1006,7 @@ export function getEditorExtensions(
     }),
     foldService.of(typstFunctionFoldService),
     imageOptimizationWarningsExtension,
+    pathWarningsExtension(getPathContext ?? (() => null)),
     tableDirectiveGutterExtension,
     lineNumbersCompartment.of(lineNumbers()),
     foldGutter({

@@ -18,6 +18,7 @@ import type { DraftPreviewController, DraftThumbnailQueueMetric } from "../previ
 import type { ClipboardImageData } from "./imageDrop";
 import type { ShortcutOverrides } from "../platform/shortcutRegistry";
 import type { NavigationHistoryEditPort } from "../navigation/navigationHistoryController";
+import type { PathWarningContext } from "./pathWarnings";
 
 export interface EditorInitializationDependencies {
   editorFontManager: EditorFontManager;
@@ -35,6 +36,7 @@ export interface EditorInitializationDependencies {
   appendDeveloperLog(entry: { kind: "info" | "warning"; source: string; message: string }): void;
   isLoadingFile(): boolean;
   activeFilePath(): string | null;
+  pathContext(): PathWarningContext | null;
   markActiveTabDirty(): void;
   scheduleEditorContentMutation(doc: Text): void;
   syncSelectedSpellingLocation(): void;
@@ -80,6 +82,7 @@ export class EditorInitializationController {
         (images, selection, view) => deps.pasteClipboardImages(images, selection, view),
         () => deps.shortcuts(),
         position => deps.spellcheck.khmerWordAt(position),
+        () => deps.pathContext(),
       ),
       deps.spellcheck.extension(),
       EditorView.updateListener.of(update => {
