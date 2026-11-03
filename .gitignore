@@ -24,9 +24,6 @@ crates/*/target/
 # Typsastra workspace-generated render/font caches (plus the legacy name)
 .typsastra/
 .typstella/
-!docs/demo-project/.typsastra/
-docs/demo-project/.typsastra/workspace.json
-docs/demo-project/.typsastra/cache/
 
 # Editor
 .vscode/
