@@ -138,7 +138,11 @@ describe("preview freshness", () => {
           getActiveFilePath: () => "main.typ", getPinnedMainFilePath: () => "main.typ",
           getPreviewRootPath: () => "main.typ", getPreviewSessionKey: () => "main",
           isPreviewImported: () => false, isPreviewDisabled: () => false,
-          freshness: new PreviewFreshnessController(), draftPreview: { mode: "normal" },
+          freshness: new PreviewFreshnessController(), draftPreview: {
+            mode: "normal",
+            inspectImageProfile: async () => null,
+            updateImageHeavyWarning: () => {},
+          },
           typography: { fontUpdateInProgress: false },
           previewFrame: {
             retainMountedLivePreview: (identity: string) => { expect(identity).toBe("cache/render/main.typ"); return mounted; },

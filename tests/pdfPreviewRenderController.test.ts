@@ -142,6 +142,26 @@ describe("PDF preview render controller", () => {
     expect(lspWaitsForCache).toBeGreaterThan(cacheRestore);
   });
 
+  test("refreshes image gutter metadata after cached preview restores", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/pdfPreviewRenderController.ts", import.meta.url),
+    ).text();
+
+    const cachedStart = source.indexOf("public async restoreCachedPreview(");
+    const cachedEnd = source.indexOf("public async persistCurrentPreviewCache(", cachedStart);
+    const cachedRestore = source.slice(cachedStart, cachedEnd);
+    expect(cachedStart).toBeGreaterThan(-1);
+    expect(cachedRestore).toContain("inspectImageProfile");
+    expect(cachedRestore).toContain("updateImageHeavyWarning");
+
+    const keepStart = source.indexOf("const restoreExisting =");
+    const keepEnd = source.indexOf("if (!await this.deps.ensureLargePreviewApproved", keepStart);
+    const keptPreview = source.slice(keepStart, keepEnd);
+    expect(keepStart).toBeGreaterThan(-1);
+    expect(keptPreview).toContain("inspectImageProfile");
+    expect(keptPreview).toContain("updateImageHeavyWarning");
+  });
+
   test("keeps appController as a thin delegate for render, load, schedule, and invalidation", async () => {
     const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
 

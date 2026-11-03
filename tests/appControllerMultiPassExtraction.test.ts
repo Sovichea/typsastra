@@ -16,7 +16,8 @@ const extracted = files.map(file => readFileSync(file, "utf8"));
 
 describe("appController multi-pass extraction", () => {
   test("keeps root methods as narrow delegates for moved workflows", () => {
-    expect(app).toContain("return this.editorTabActivationController.activate(path, persistCurrent, options)");
+    expect(app).toContain("await this.editorTabActivationController.activate(path, persistCurrent, options)");
+    expect(app).toContain("this.draftPreviewController.publishWarnings()");
     expect(app).toContain("return this.previewWindowController.bootstrap()");
     expect(app).toContain("return this.pinnedMainFileController.set(path)");
     expect(app).toContain("this.updateToolchainRequiredBadge(toolchain)");

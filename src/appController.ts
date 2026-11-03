@@ -3519,8 +3519,12 @@ export class TypsastraWorkspaceController {
     return this.editorFileContentController.classifyUnknownTextPath(path);
   }
 
-  private activateEditorTab(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}): Promise<void> {
-    return this.editorTabActivationController.activate(path, persistCurrent, options);
+  private async activateEditorTab(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}): Promise<void> {
+    await this.editorTabActivationController.activate(path, persistCurrent, options);
+    // The image profile is project-wide, but its gutter markers are filtered to
+    // the active source file. Republish them after the tab swap so switching
+    // documents does not leave the previous file's image/table markers behind.
+    this.draftPreviewController.publishWarnings();
   }
 
   private async resumeDeferredWorkspaceServices(): Promise<void> {

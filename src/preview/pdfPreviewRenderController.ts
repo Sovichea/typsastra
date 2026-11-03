@@ -345,6 +345,12 @@ export class PdfPreviewRenderController {
       }
       this.deps.log("info", "preview scheduler", `Reused cached PDF for an unchanged workspace snapshot at startup (content=${contentMode}).`);
       this.deps.setLspStatus({ kind: "preview-ready", message: t("Preview ready · cached") });
+      // The cached-PDF path bypasses the full render pipeline. Inspect the
+      // image profile here so image/table gutter markers and the image-heavy
+      // warning are available immediately after startup.
+      void this.deps.draftPreview
+        .inspectImageProfile(this.deps.getPreviewRootPath())
+        .then(profile => this.deps.draftPreview.updateImageHeavyWarning(profile));
       return true;
     } catch (error) {
       this.deps.log("warning", "preview scheduler", `Unable to restore cached preview PDF; compiling normally: ${String(error)}`);
@@ -427,6 +433,12 @@ export class PdfPreviewRenderController {
         }
         await this.loadPdfPath(snapshot.path, snapshot.identity, snapshot.sessionKey, "live");
       }
+      // Cached preview restores skip the full render path, so inspect the
+      // image profile here to keep image/table gutter markers and the
+      // image-heavy warning available immediately after startup.
+      void this.deps.draftPreview
+        .inspectImageProfile(this.deps.getPreviewRootPath())
+        .then(profile => this.deps.draftPreview.updateImageHeavyWarning(profile));
       this.deps.log("info", "preview scheduler", `Restored live preview without compilation; status=${this.deps.freshness?.state.status ?? "unknown"}.`);
       return;
     }
