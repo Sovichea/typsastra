@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use typst_syntax::ast::{Arg, AstNode, ContentBlock, Expr, FuncCall};
+use typst_syntax::ast::{
+    Arg, AstNode, ContentBlock, Expr, FuncCall, LetBinding, LetBindingKind, Param, Pattern,
+};
 use typst_syntax::SyntaxNode;
 
 pub const DRAFT_LINK_PREFIX: &str = "https://draft-preview.typsastra.invalid/";
@@ -67,8 +70,10 @@ pub fn prepare_draft_images(
     source: &str,
 ) -> DraftPreparation {
     let root = typst_syntax::parse(source);
+    let mut wrappers = HashMap::new();
+    collect_image_wrappers(&root, 0, &mut wrappers);
     let mut calls = Vec::new();
-    collect_image_calls(&root, 0, &mut calls);
+    collect_image_calls(&root, 0, &wrappers, &mut calls);
     calls.sort_by_key(|call| call.replacement_start);
 
     let mut result = DraftPreparation::default();
@@ -283,7 +288,155 @@ struct CounterMove {
     dy: Option<(usize, usize)>,
 }
 
-fn collect_image_calls(node: &SyntaxNode, offset: usize, output: &mut Vec<ImageCall>) {
+#[derive(Debug, Clone)]
+struct ImageWrapper<'a> {
+    parameter: String,
+    body: Expr<'a>,
+    body_offset: usize,
+}
+
+#[derive(Debug)]
+struct ResolvedWrapperImage {
+    literal_path: String,
+    layout_arguments: Vec<(usize, usize)>,
+    has_width: bool,
+    has_height: bool,
+}
+
+fn collect_image_wrappers<'a>(
+    node: &'a SyntaxNode,
+    offset: usize,
+    output: &mut HashMap<String, ImageWrapper<'a>>,
+) {
+    if let Some(binding) = LetBinding::from_untyped(node) {
+        if let LetBindingKind::Closure(name) = binding.kind() {
+            if let Some(Expr::Closure(closure)) = binding.init() {
+                let mut params = closure.params().children();
+                if let (Some(Param::Pos(Pattern::Normal(Expr::Ident(parameter)))), None) =
+                    (params.next(), params.next())
+                {
+                    let body = closure.body();
+                    if let Some(relative) = relative_node_offset(node, body.to_untyped(), 0) {
+                        output.insert(
+                            name.as_str().to_string(),
+                            ImageWrapper {
+                                parameter: parameter.as_str().to_string(),
+                                body,
+                                body_offset: offset + relative,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    let mut child_offset = offset;
+    for child in node.children() {
+        collect_image_wrappers(child, child_offset, output);
+        child_offset += child.len();
+    }
+}
+
+fn bound_literal(expression: Expr<'_>, bindings: &HashMap<String, String>) -> Option<String> {
+    match expression {
+        Expr::Str(value) => Some(value.get().to_string()),
+        Expr::Ident(identifier) => bindings.get(identifier.as_str()).cloned(),
+        Expr::Parenthesized(group) => bound_literal(group.expr(), bindings),
+        _ => None,
+    }
+}
+
+fn resolve_wrapper_image<'a>(
+    call: FuncCall<'a>,
+    call_offset: usize,
+    wrappers: &HashMap<String, ImageWrapper<'a>>,
+    bindings: &HashMap<String, String>,
+    depth: usize,
+) -> Option<ResolvedWrapperImage> {
+    if depth > 32 {
+        return None;
+    }
+    let Expr::Ident(callee) = call.callee() else {
+        return None;
+    };
+    let callee = callee.as_str();
+    if callee == "image" {
+        let first = call.args().items().next()?;
+        let Arg::Pos(first) = first else {
+            return None;
+        };
+        let literal_path = bound_literal(first, bindings)?;
+        let mut layout_arguments = Vec::new();
+        let mut has_width = false;
+        let mut has_height = false;
+        for argument in call.args().items() {
+            let Arg::Named(named) = argument else {
+                continue;
+            };
+            let name = named.name().as_str();
+            if name != "width" && name != "height" {
+                continue;
+            }
+            has_width |= name == "width";
+            has_height |= name == "height";
+            let argument_node = named.to_untyped();
+            let argument_offset =
+                relative_node_offset(call.to_untyped(), argument_node, call_offset)?;
+            layout_arguments.push((argument_offset, argument_offset + argument_node.len()));
+        }
+        return Some(ResolvedWrapperImage {
+            literal_path,
+            layout_arguments,
+            has_width,
+            has_height,
+        });
+    }
+
+    let wrapper = wrappers.get(callee)?;
+    let first = call.args().items().next()?;
+    let Arg::Pos(first) = first else {
+        return None;
+    };
+    let literal_path = bound_literal(first, bindings)?;
+    let mut next_bindings = bindings.clone();
+    next_bindings.insert(wrapper.parameter.clone(), literal_path);
+    match wrapper.body {
+        Expr::FuncCall(inner) => resolve_wrapper_image(
+            inner,
+            wrapper.body_offset,
+            wrappers,
+            &next_bindings,
+            depth + 1,
+        ),
+        Expr::Parenthesized(group) => {
+            let inner = group.expr();
+            let Expr::FuncCall(call) = inner else {
+                return None;
+            };
+            let inner_offset = relative_node_offset(
+                wrapper.body.to_untyped(),
+                inner.to_untyped(),
+                wrapper.body_offset,
+            )?;
+            resolve_wrapper_image(call, inner_offset, wrappers, &next_bindings, depth + 1)
+        }
+        _ => None,
+    }
+}
+
+fn collect_image_calls<'a>(
+    node: &'a SyntaxNode,
+    offset: usize,
+    wrappers: &HashMap<String, ImageWrapper<'a>>,
+    output: &mut Vec<ImageCall>,
+) {
+    if let Some(binding) = LetBinding::from_untyped(node) {
+        if matches!(binding.kind(), LetBindingKind::Closure(_)) {
+            return;
+        }
+    }
+
     if let Some(call) = node.cast::<FuncCall>() {
         if let Some(frame) = image_frame_call(node, call, offset) {
             output.push(frame);
@@ -293,10 +446,33 @@ fn collect_image_calls(node: &SyntaxNode, offset: usize, output: &mut Vec<ImageC
             output.push(image_call(node, call, offset));
             return;
         }
+        if let Expr::Ident(ident) = call.callee() {
+            if wrappers.contains_key(ident.as_str()) {
+                if let Some(resolved) =
+                    resolve_wrapper_image(call, offset, wrappers, &HashMap::new(), 0)
+                {
+                    output.push(ImageCall {
+                        image_start: offset,
+                        image_end: offset + node.len(),
+                        replacement_start: offset,
+                        replacement_end: offset + node.len(),
+                        literal_path: Some(resolved.literal_path),
+                        layout_arguments: resolved.layout_arguments,
+                        has_width: resolved.has_width,
+                        has_height: resolved.has_height,
+                        has_stroke: false,
+                        has_inset: false,
+                        has_clip: false,
+                        counter_moves: Vec::new(),
+                    });
+                    return;
+                }
+            }
+        }
     }
     let mut child_offset = offset;
     for child in node.children() {
-        collect_image_calls(child, child_offset, output);
+        collect_image_calls(child, child_offset, wrappers, output);
         child_offset += child.len();
     }
 }
@@ -873,6 +1049,79 @@ mod tests {
         assert_eq!(prepared.replacements.len(), 1);
         assert_eq!(prepared.assets.len(), 1);
         assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn resolves_multi_level_image_helper_calls() {
+        let workspace = tempfile::tempdir().unwrap();
+        let image = workspace.path().join("wide.png");
+        let mut png = vec![0u8; 24];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[16..20].copy_from_slice(&1600u32.to_be_bytes());
+        png[20..24].copy_from_slice(&900u32.to_be_bytes());
+        fs::write(&image, png).unwrap();
+        let source = "#let x(url) = image(url)\n#let y(url) = x(url)\n\n#y(\"wide.png\")";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        let replacement = &prepared.replacements[0];
+        let call_start = source.find("y(\"wide.png\")").unwrap();
+        assert_eq!(replacement.start, call_start);
+        assert_eq!(replacement.end, call_start + "y(\"wide.png\")".len());
+        assert!(replacement.generated.contains("width: 100%"));
+        assert!(replacement.generated.contains("viewBox='0 0 1600 900'"));
+        assert_eq!(prepared.assets.len(), 1);
+        assert_eq!(prepared.assets[0].width, 1600);
+        assert_eq!(prepared.assets[0].height, 900);
+        assert!(prepared.diagnostics.is_empty());
+        assert_eq!(
+            prepared.assets[0].references[0].from_utf16,
+            source[..call_start].encode_utf16().count()
+        );
+    }
+
+    #[test]
+    fn preserves_helper_layout_arguments_through_multiple_levels() {
+        let workspace = tempfile::tempdir().unwrap();
+        let image = workspace.path().join("wide.png");
+        let mut png = vec![0u8; 24];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[16..20].copy_from_slice(&1600u32.to_be_bytes());
+        png[20..24].copy_from_slice(&900u32.to_be_bytes());
+        fs::write(&image, png).unwrap();
+        let source = "#let x(url) = image(url, width: 50%, height: 4cm)\n#let y(url) = x(url)\n#y(\"wide.png\")";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        let generated = &prepared.replacements[0].generated;
+        assert!(generated.contains("width: 50%"));
+        assert!(generated.contains("height: 4cm"));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn leaves_dynamic_helper_calls_unmodified() {
+        let workspace = tempfile::tempdir().unwrap();
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            "#let x(url) = image(url)\n#let path = \"wide.png\"\n#x(path)",
+        );
+        assert!(prepared.replacements.is_empty());
     }
 
     #[test]

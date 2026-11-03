@@ -3,7 +3,10 @@
 Draft Preview reduces the cost of iterating on image-heavy Typst documents. It
 replaces supported static raster `image()` calls in Typsastra's private render
 mirror with placeholders that preserve the image's layout dimensions. The
-project source, original images, and exported PDFs are not rewritten.
+project source, original images, and exported PDFs are not rewritten. Simple
+image helper functions that forward a literal path through nested `#let`
+definitions are resolved as well, so the helper call site receives the
+placeholder.
 
 ## Switch preview modes
 

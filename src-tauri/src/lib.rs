@@ -6772,6 +6772,8 @@ struct PreviewPdfCacheManifest {
     root_path: String,
     source_signature: String,
     pdf_path: String,
+    #[serde(default)]
+    draft_preparation_version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     draft: Option<DraftPreviewCacheMetadata>,
 }
@@ -6994,6 +6996,7 @@ async fn persist_low_memory_preview_cache(
         root_path: preview_root.to_string_lossy().into_owned(),
         source_signature: current_source_signature,
         pdf_path: destination.to_string_lossy().into_owned(),
+        draft_preparation_version: render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION,
         draft: None,
     };
     let manifest_temporary = directory.join(format!("{key}.json.tmp"));
@@ -7065,6 +7068,12 @@ async fn restore_preview_pdf_cache(
         return Ok(None);
     }
     if calculate_workspace_preview_signature(&root)? != manifest.source_signature {
+        return Ok(None);
+    }
+    if content_mode == PreviewContentMode::Draft
+        && manifest.draft_preparation_version
+            != render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION
+    {
         return Ok(None);
     }
     let pdf_path = PathBuf::from(&manifest.pdf_path);
@@ -7147,6 +7156,7 @@ async fn persist_preview_pdf_cache(
         root_path: preview_root.to_string_lossy().into_owned(),
         source_signature: current_source_signature,
         pdf_path: destination.to_string_lossy().into_owned(),
+        draft_preparation_version: render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION,
         draft,
     };
     let manifest_temporary = directory.join(format!("{key}.json.tmp"));
@@ -7339,6 +7349,8 @@ mod preview_pdf_cache_tests {
             root_path: "C:/project/main.typ".into(),
             source_signature: "signature".into(),
             pdf_path: "C:/cache/main-draft.pdf".into(),
+            draft_preparation_version:
+                crate::render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION,
             draft: Some(DraftPreviewCacheMetadata {
                 assets: vec![asset("cover")],
                 diagnostics: Vec::new(),
