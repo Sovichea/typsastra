@@ -51,7 +51,9 @@ matches and the preview is compiled normally.
 Use **Reveal Cursor in Preview** or `Alt+Enter` (`Option+Enter` on macOS) for
 forward synchronization. Double-click supported PDF content to inverse-sync to
 its Typst source. Internal links and references become interactive while the
-platform modifier key is held.
+platform modifier key is held. When an image is rendered by nested helpers,
+inverse sync follows forwarded image parameters to the outermost helper call
+that supplies the image when that call is unambiguous.
 
 ## Long documents
 

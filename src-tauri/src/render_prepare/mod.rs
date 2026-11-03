@@ -2,6 +2,7 @@
 
 pub mod draft;
 pub mod draft_thumbnail;
+pub mod image_call_site;
 pub mod mirror;
 pub mod scanner;
 pub mod sourcemap;
@@ -10,6 +11,7 @@ pub use draft::{DraftImageAsset, DraftImageDiagnostic, PreviewContentMode};
 pub use draft_thumbnail::{
     cancel_draft_thumbnail_generation, get_draft_thumbnail_status, start_draft_thumbnail_generation,
 };
+pub use image_call_site::{resolve_image_call_site, ImageCallSite};
 pub use mirror::{
     inspect_render_cache_storage, inspect_workspace_render_caches, mirror_project_cancellable,
     prepare_single_in_memory_file, validate_existing_render_cache_owner,

@@ -70,4 +70,25 @@ describe("preview source navigation controller", () => {
     expect(source).toContain("relativeFilePath(workspaceRootPath, filePath)");
     expect(source).not.toContain("filePath.startsWith(workspaceRootPath)");
   });
+
+  test("backtracks image inverse sync to the outermost unambiguous helper call", async () => {
+    const source = await Bun.file(
+      new URL("../src/preview/previewSourceNavigationController.ts", import.meta.url),
+    ).text();
+    const native = await Bun.file(
+      new URL("../src-tauri/src/lib.rs", import.meta.url),
+    ).text();
+    const resolver = await Bun.file(
+      new URL("../src-tauri/src/render_prepare/image_call_site.rs", import.meta.url),
+    ).text();
+
+    expect(source).toContain('invoke<ImageCallSite | null>("resolve_image_call_site"');
+    expect(source).toContain("const imageCursor = await this.backtrackImageCallSite(cursor);");
+    expect(source).toContain("if (imageCursor === null) return;");
+    expect(source).toContain("return target.fromUtf16;");
+    expect(native).toContain("async fn resolve_image_call_site(");
+    expect(native).toContain("resolve_image_call_site,");
+    expect(resolver).toContain("pub fn resolve_image_call_site(");
+    expect(resolver).toContain("collect_reachable_typst_files");
+  });
 });
