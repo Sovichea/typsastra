@@ -96,8 +96,8 @@ queries. Blue information markers appear in the editor scrollbar for every
 match. Select a marker and confirm that the editor reveals its exact source
 range rather than only the containing line.
 
-The active result uses a distinct theme-aware highlight. Moving with **Next** or
-**Previous** changes that active result without adding a second highlight over
+The active result uses a distinct theme-aware highlight. Moving with *Next* or
+*Previous* changes that active result without adding a second highlight over
 the currently selected text.
 
 == Regular-expression searches

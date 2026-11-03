@@ -19,5 +19,5 @@ The font named above is an external runtime dependency. A recipient installs an
 appropriate font separately. Exact Typst and Tinymist versions improve source
 compatibility but cannot promise identical rendering when fonts differ.
 
-Use **Export Typsastra Project** for a version-bound `.typsastra` archive or
-**Export Source ZIP** for a lightweight source-only snapshot.
+Use *Export Typsastra Project* for a version-bound `.typsastra` archive or
+*Export Source ZIP* for a lightweight source-only snapshot.

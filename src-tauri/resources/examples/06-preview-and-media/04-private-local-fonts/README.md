@@ -1,7 +1,7 @@
 # Private local fonts
 
-This example documents the v0.6.0 private-font workflow while remaining
-portable and compilable without an external font.
+This example documents the private-font workflow while remaining portable and
+compilable without an external font.
 
 Supported private desktop font containers are TTF, OTF, TTC, and OTC. WOFF and
 WOFF2 are web-font formats and are ignored. Variable TTF or OTF fonts are

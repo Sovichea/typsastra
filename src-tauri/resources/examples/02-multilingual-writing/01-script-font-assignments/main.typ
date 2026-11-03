@@ -41,7 +41,7 @@ Western digits to the Khmer font. However, MiSans Khmer also contains Latin
 glyphs, so embedded English may never reach New Computer Modern. Putting Latin
 first fixes English but gives those shared characters to the Latin font.
 
-Typsastra 0.6 uses ordinary Typst fallback order. Choose the order that best
+Typsastra uses ordinary Typst fallback order. Choose the order that best
 matches the document's dominant typography. Script-specific font enforcement
 is intentionally deferred until its behavior for shared digits, punctuation,
 and inherited marks can be made predictable.
@@ -86,4 +86,4 @@ Latin uses its assigned family: Multilingual documents should remain readable.
 Script-font assignments do not control the source-editor font, spellcheck,
 completion, Typst `lang`, or text direction. Generated scaled fonts stay in
 Typsastra's private global cache and never enter `.typsastra`, a copied project,
-or its exports. Advanced cache management is planned for a future update.
+or its exports. Inspect generated cache usage from **Settings → Storage**.

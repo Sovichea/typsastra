@@ -5,7 +5,7 @@ metadata, included chapters, bibliography data, and image assets. It is intended
 to verify ordinary research-project relationships rather than language tools in
 isolation.
 
-It also serves as a realistic v0.6.0 exercise:
+It also serves as a realistic preview and navigation exercise:
 
 - switch between Normal and Draft Preview, then hover the wordmark, icon, and
   chapter figure placeholders;

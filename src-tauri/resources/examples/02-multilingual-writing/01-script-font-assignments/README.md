@@ -15,7 +15,7 @@ rewriting document content.
    experimental because Typst may normalize generated fonts during PDF
    subsetting; use `1.0` for dependable PDF output.
 
-Typsastra v0.6.0 intentionally generates a simple ordered font tuple. It does
-not emit script-coverage regular expressions or a shared-mark override.
+Typsastra intentionally generates a simple ordered font tuple. It does not
+emit script-coverage regular expressions or a shared-mark override.
 
 Tutorial: <https://github.com/Sovichea/typsastra/blob/main/docs/tutorials/DOCUMENT_TYPOGRAPHY.md>

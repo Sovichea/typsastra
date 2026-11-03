@@ -458,18 +458,78 @@ mod tests {
             "05-project-portability/01-main-and-included-files/main.typ",
             "05-project-portability/02-portable-workspace-state/main.typ",
             "05-project-portability/03-font-free-project-export/main.typ",
-            "06-v0.6-feature-showcase/01-draft-preview-and-image-guidance/main.typ",
-            "06-v0.6-feature-showcase/01-draft-preview-and-image-guidance/README.md",
-            "06-v0.6-feature-showcase/02-preview-navigation/main.typ",
-            "06-v0.6-feature-showcase/02-preview-navigation/README.md",
-            "06-v0.6-feature-showcase/03-private-local-fonts/main.typ",
-            "06-v0.6-feature-showcase/03-private-local-fonts/README.md",
+            "06-preview-and-media/README.md",
+            "06-preview-and-media/01-draft-preview-and-image-guidance/main.typ",
+            "06-preview-and-media/01-draft-preview-and-image-guidance/README.md",
+            "06-preview-and-media/02-image-helper-chains/main.typ",
+            "06-preview-and-media/02-image-helper-chains/README.md",
+            "06-preview-and-media/03-preview-navigation/main.typ",
+            "06-preview-and-media/03-preview-navigation/README.md",
+            "06-preview-and-media/04-private-local-fonts/main.typ",
+            "06-preview-and-media/04-private-local-fonts/README.md",
+            "06-preview-and-media/05-markdown-notes/README.md",
+            "07-editor-workflows/README.md",
+            "07-editor-workflows/01-project-search-and-recovery/main.typ",
+            "07-editor-workflows/01-project-search-and-recovery/README.md",
+            "07-editor-workflows/01-project-search-and-recovery/chapters/01-observations.typ",
+            "07-editor-workflows/01-project-search-and-recovery/chapters/02-methods.typ",
+            "07-editor-workflows/02-language-defaults/main.typ",
+            "07-editor-workflows/02-language-defaults/README.md",
+            "08-tools-and-templates/README.md",
+            "08-tools-and-templates/01-linked-table/main.typ",
+            "08-tools-and-templates/01-linked-table/README.md",
+            "08-tools-and-templates/02-project-templates/README.md",
         ] {
             assert!(
                 root.join(relative).is_file(),
                 "missing bundled example {relative}"
             );
         }
+    }
+
+    #[test]
+    fn editor_workflow_example_supports_search_replacement_and_navigation() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let example_dir = manifest_dir
+            .join("resources/examples/07-editor-workflows/01-project-search-and-recovery");
+        let main = std::fs::read_to_string(example_dir.join("main.typ")).expect("read main");
+        assert!(main.contains("#include \"chapters/01-observations.typ\""));
+        assert!(main.contains("#include \"chapters/02-methods.typ\""));
+        assert!(main.contains("canopy"));
+
+        for chapter in ["chapters/01-observations.typ", "chapters/02-methods.typ"] {
+            let contents =
+                std::fs::read_to_string(example_dir.join(chapter)).expect("read chapter");
+            assert!(contents.contains("canopy"));
+        }
+    }
+
+    #[test]
+    fn image_helper_example_forwards_paths_through_nested_helpers() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let example_dir =
+            manifest_dir.join("resources/examples/06-preview-and-media/02-image-helper-chains");
+        let main = std::fs::read_to_string(example_dir.join("main.typ")).expect("read main");
+        assert!(main.contains("#let framed(src, width: 46%) = image(src, width: width)"));
+        assert!(main.contains("#let cover(src, width: 46%) = framed(src, width: width)"));
+        assert!(main.contains("#cover(\"assets/typsastra-icon.png\")"));
+        assert!(main.contains("#let plate(src, width: 58%) = image(src, width: width)"));
+        assert!(main.contains("#let wordmark(src) = plate(src, width: 58%)"));
+        assert!(example_dir.join("assets/typsastra-icon.png").is_file());
+        assert!(example_dir.join("assets/typsastra-wordmark.png").is_file());
+    }
+
+    #[test]
+    fn linked_table_example_contains_a_managed_table_block() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let main = std::fs::read_to_string(
+            manifest_dir.join("resources/examples/08-tools-and-templates/01-linked-table/main.typ"),
+        )
+        .expect("read linked table example");
+        assert!(main.contains("//@table:basic_table"));
+        assert!(main.contains("//@generated-table-start"));
+        assert!(main.contains("//@generated-table-end"));
+        assert!(main.contains("table.header([Name], [Score], [Grade])"));
     }
 
     #[test]

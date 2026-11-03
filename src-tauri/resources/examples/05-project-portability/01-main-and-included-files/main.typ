@@ -17,5 +17,5 @@ This `main.typ` owns the complete document preview.
 #include "chapters/included.typ"
 
 Open the included chapter in Explorer. Its editor tab changes, but the preview
-continues to represent this complete main document. Use **Set as Main File** on
+continues to represent this complete main document. Use *Set as Main File* on
 `main.typ` if the example was opened without a configured main file.

@@ -1,7 +1,7 @@
 # Draft Preview and image guidance
 
-This example exercises the v0.6.0 image-heavy authoring workflow without
-bundling a pathological image.
+This example exercises the image-heavy authoring workflow without bundling a
+pathological image.
 
 ## Try it
 
@@ -19,7 +19,7 @@ bundling a pathological image.
 9. Open **Image Tools** in the sidebar, select a bundled raster asset, adjust
    resize or output-format settings, and preview the comparison.
 10. Choose **Save Optimized Copy** under a new name. If you enable reference
-    updates, v0.7.0 updates all indexed exact static references; it does not
+    updates, Typsastra updates all indexed exact static references; it does not
     overwrite the original or update only one selected occurrence.
 
 The bundled assets are intentionally modest. A high-resolution or pathological
@@ -28,6 +28,8 @@ Such an image may be only a few megabytes on disk yet consume much more memory
 when decoded, slowing Typst compilation, Tinymist, PDF loading, and page
 rendering.
 
-Draft substitution is qualified for standalone image calls and common images
-inside clipped blocks. Other compositions can produce different placeholder
+Draft substitution covers standalone image calls, common images inside clipped
+blocks, and same-file helper chains that forward the path and width or height.
+A helper that wraps `image()` in a `figure()` or derives the path dynamically
+may remain unchanged. Other compositions can produce different placeholder
 geometry or interaction.

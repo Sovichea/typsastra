@@ -11,10 +11,27 @@
 
 = Learn Typsastra
 
-These writable examples progress from ordinary Typst source to multilingual,
-multi-file research projects. Start with the first two sections, then open the
-example that matches the feature you want to learn. The matching walkthroughs
-are in the #link("https://docs.typsastra.com/")[Typsastra documentation].
+These writable examples follow the capabilities of the current Typsastra
+release rather than a historical release number. Start with the first two
+sections, then open the exercise that matches the workflow you want to learn.
+Every exercise is ordinary Typst source; the matching walkthroughs are in the
+#link("https://docs.typsastra.com/")[Typsastra documentation].
+
+== Recommended path
+
+1. `01-basics`: markup, mathematics, and diacritic-aware search.
+2. `02-multilingual-writing`: document-script fonts, spellcheck, completion,
+   complex-script shaping, and direction samples.
+3. `03-language-providers`: bundled, optional, and unavailable providers.
+4. `04-research-projects`: complete multi-file articles, theses, and books.
+5. `05-project-portability`: main documents, workspace state, and font-free
+   export.
+6. `06-preview-and-media`: Normal/Draft preview, image helpers, preview links,
+   private fonts, and Markdown notes.
+7. `07-editor-workflows`: project search, reviewed replacement, recovery,
+   shared outline, Back/Forward navigation, and language defaults.
+8. `08-tools-and-templates`: linked Table Tools blocks, CSV/TSV import, table
+   export, and project creation from templates.
 
 == 01. Basics
 
@@ -56,31 +73,62 @@ English and Khmer are bundled. Optional providers are installed from Settings
 
 - `01-main-and-included-files`: main-document preview ownership.
 - `02-portable-workspace-state`: what Typsastra stores in `.typsastra`.
-- `03-font-free-project-export`: lightweight archives and external font requirements.
+- `03-font-free-project-export`: lightweight archives and external font
+  requirements.
 
-== 06. v0.6.0 feature showcase
+== 06. Preview and media
 
 - `01-draft-preview-and-image-guidance`: Normal/Draft preview, cached hover
-  thumbnails, direct placeholder inverse sync, and image diagnostics.
-- `02-preview-navigation`: manual forward sync plus internal and external
-  clickable references.
-- `03-private-local-fonts`: machine-local font directories, source portability,
-  fallback order, and export boundaries.
+  thumbnails, image diagnostics, and a non-destructive Image Tools workflow.
+- `02-image-helper-chains`: inverse sync follows nested `image()` helpers to the
+  outermost call, and Draft Preview substitutes that same call while forwarding
+  helper width and height parameters.
+- `03-preview-navigation`: manual forward sync, inverse sync, internal
+  references, external links, page jumps, and preserved scroll position.
+- `04-private-local-fonts`: machine-local font directories, fallback order, and
+  the project-export boundary.
+- `05-markdown-notes/README.md`: sanitized Markdown preview, GFM structures,
+  workspace resources, mixed scripts, and blocked remote content.
 
-== 07. v0.7.0 feature showcase
+== 07. Editor workflows
 
-- `01-markdown-live-preview/README.md`: sanitized Markdown rendering, common
-  GFM structures, workspace links and images, mixed scripts, and blocked remote
-  resources.
-- Open `06-v0.6-feature-showcase/01-draft-preview-and-image-guidance/main.typ`,
-  then choose Image Tools to inspect its bundled raster assets and preview an
-  optimized copy.
-- Revisit `01-basics/03-diacritic-aware-search` for wrapped search highlights
-  and exact scrollbar-marker navigation.
-- Open `05-project-portability/01-main-and-included-files` to verify one shared
-  preview page across the main document and included chapter.
-- After compiling an example, open Settings and inspect its machine-local cache
-  under Storage.
+- `01-project-search-and-recovery`: search a three-file notebook with literal,
+  regex, and fuzzy modes; review a cross-file replacement; inspect unsaved-work
+  recovery; follow the shared main-document outline; and retrace jumps with
+  Back and Forward.
+- `02-language-defaults`: compare per-project script-language assignments with
+  the global defaults used by new projects.
+
+== 08. Tools and templates
+
+- `01-linked-table`: recover or create a Table Tools model, link it to a
+  `//@table:` anchor, edit cells, and inspect the generated Typst block.
+- `02-project-templates/README.md`: browse Typst Universe, downloaded, and user
+  templates; create a project; and save a reusable template.
+
+== Current feature map
+
+#table(
+  columns: (1fr, 2fr),
+  inset: 7pt,
+  stroke: 0.5pt + luma(185),
+  table.header([Feature], [Example]),
+  [Project search and reviewed replacement], [`07-editor-workflows/01-project-search-and-recovery`],
+  [Unsaved-work recovery], [`07-editor-workflows/01-project-search-and-recovery`],
+  [Shared main-document outline and tab list], [`07-editor-workflows/01-project-search-and-recovery`],
+  [Back/Forward source navigation], [`07-editor-workflows/01-project-search-and-recovery`],
+  [Global document-language defaults], [`07-editor-workflows/02-language-defaults`],
+  [Nested image helpers and inverse sync], [`06-preview-and-media/02-image-helper-chains`],
+  [Draft Preview and image diagnostics], [`06-preview-and-media/01-draft-preview-and-image-guidance`],
+  [Preview links and synchronization], [`06-preview-and-media/03-preview-navigation`],
+  [Markdown live preview], [`06-preview-and-media/05-markdown-notes/README.md`],
+  [Private fonts and script typography], [`06-preview-and-media/04-private-local-fonts`, `02-multilingual-writing/01-script-font-assignments`],
+  [Language providers], [`03-language-providers`],
+  [Linked Table Tools blocks], [`08-tools-and-templates/01-linked-table`],
+  [Project templates], [`08-tools-and-templates/02-project-templates/README.md`],
+  [Low-Memory Mode], [`04-research-projects/03-khmer-folklore-book`],
+  [Main-file preview ownership], [`05-project-portability/01-main-and-included-files`],
+)
 
 Open a `main.typ` file from Explorer. Set it as the project main file when the
 example contains included files. Your installed examples are writable. Each

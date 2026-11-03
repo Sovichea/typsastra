@@ -1,7 +1,7 @@
-# Markdown live preview
+# Markdown notes
 
-This file is an editable v0.7.0 Markdown preview fixture. It is not compiled by
-Typst and does not change the configured Typst main file.
+This file is an editable Markdown preview fixture. It is not compiled by Typst
+and does not change the configured Typst main file.
 
 ## Common GFM content
 
@@ -28,7 +28,7 @@ Mixed scripts remain selectable: English, Français, Español, ខ្មែរ, 
 The image below is loaded from another bundled example without leaving this
 workspace:
 
-![Typsastra icon](../../06-v0.6-feature-showcase/01-draft-preview-and-image-guidance/assets/typsastra-icon.png)
+![Typsastra icon](../01-draft-preview-and-image-guidance/assets/typsastra-icon.png)
 
 Hold `Ctrl` on Windows/Linux or `Command` on macOS when opening this local
 [example guide](../README.md).
