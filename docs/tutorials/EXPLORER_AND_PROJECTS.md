@@ -4,7 +4,7 @@ Typsastra treats a project folder as the workspace. Source files stay ordinary
 files on disk; project-specific settings live in `.typsastra/config.json`, and
 the editing session is stored separately from source content.
 
-![Shared main-document outline while an included chapter is active](../assets/screenshots/demo-explorer.png)
+![Shared main-document outline while an included chapter is active](../assets/screenshots/example-shared-outline.png)
 
 ## Open a project
 
@@ -33,7 +33,9 @@ switching the PDF to a separate chapter preview.
 
 The Outline follows the main document even while an included chapter is active.
 Headings from other files are muted so the active file's headings stand out, and
-the outline expansion and selection survive tab changes.
+the outline expansion and selection survive tab changes. The bundled
+`07-editor-workflows/01-project-search-and-recovery` example includes two
+chapters for testing this behavior.
 
 ## Other project files
 

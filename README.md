@@ -54,18 +54,22 @@ Typsastra v0.10.0 adds project-wide search and reviewed replacement, a shared
 main-document outline, Back/Forward source navigation, unsaved-work recovery,
 and global default document languages.
 
+These screenshots use the writable `07-editor-workflows` examples. Open
+**Open Examples** from the welcome screen to edit the three-file notebook
+safely.
+
 ### Search and replace across a project
 
-<img src="./assets/screenshot-project-search.png" alt="Project search sidebar with grouped file results and filters" width="800"/>
+<img src="./assets/screenshot-example-search.png" alt="Project search across a three-file field notebook" width="800"/>
 
-<img src="./assets/screenshot-project-replace.png" alt="Reviewed replacement showing before and after lines across two files" width="800"/>
+<img src="./assets/screenshot-example-replace.png" alt="Reviewed replacement showing before and after lines across files" width="800"/>
 
 ### Recover unsaved work
 
 Typsastra snapshots unsaved text outside the project and reviews recovery
 snapshots as unified diffs before restoring them as unsaved buffers.
 
-<img src="./assets/screenshot-recovery-review.png" alt="Recovery review showing an unsaved main.typ buffer and a unified diff" width="800"/>
+<img src="./assets/screenshot-example-recovery.png" alt="Recovery review showing an unsaved main.typ buffer and a unified diff" width="800"/>
 
 ### Main-document outline, tab navigation, and language defaults
 
@@ -73,13 +77,38 @@ The outline follows the configured main document while an included chapter is
 active. The tab-list menu reaches every open source tab, and new projects inherit
 the default document-language assignments configured in Settings.
 
-<img src="./assets/screenshot-main-outline.png" alt="Shared main-document outline while an included chapter is active" width="800"/>
+<img src="./assets/screenshot-example-outline.png" alt="Shared main-document outline while an included chapter is active" width="800"/>
 
-<img src="./assets/screenshot-tab-list.png" alt="Tab list menu listing the main document and included chapters" width="800"/>
+<img src="./assets/screenshot-example-tabs.png" alt="Tab list menu listing the main document and included chapters" width="800"/>
 
-<img src="./assets/screenshot-language-settings.png" alt="Language settings with Latin set to English (United States) for new projects" width="800"/>
+<img src="./assets/screenshot-example-language.png" alt="Default document-language settings for new projects" width="800"/>
 
-See the [v0.10.0 release notes](./docs/RELEASE_NOTES_V0.10.0.md).
+See the [v0.10.0 release notes](./docs/RELEASE_NOTES_V0.10.0.md), the [project
+search](./docs/tutorials/PROJECT_SEARCH.md), and [editor
+productivity](./docs/tutorials/EDITOR_PRODUCTIVITY.md) guides.
+
+## Bundled examples
+
+The writable examples are organized by capability rather than by release
+number. Start with `START-HERE.typ`, then explore `06-preview-and-media` for
+Draft Preview, nested image helper chains, preview navigation, private fonts,
+and Markdown notes, `07-editor-workflows` for search, recovery, outline,
+history, and document-language defaults, or `08-tools-and-templates` for linked
+Table Tools blocks and project creation.
+
+The image helper exercise shows the same current behavior in Normal and Draft
+preview: inverse sync selects the outermost call that supplied the image, and
+Draft Preview replaces that call with a layout-preserving placeholder using the
+helper's resolved width and height.
+
+<img src="./assets/screenshot-example-draft.png" alt="Draft Preview placeholders for images forwarded through nested helpers" width="800"/>
+
+The `08-tools-and-templates` exercises cover project-owned Table Tools blocks,
+table export/import, and project creation from templates. The linked-table
+example can recover its table model from generated source when project metadata
+is missing.
+
+<img src="./assets/screenshot-example-table.png" alt="Table Tools editing a linked table in the bundled example" width="800"/>
 
 ## v0.9.6: Language and editing reliability
 
@@ -194,7 +223,7 @@ https://github.com/user-attachments/assets/990277b9-b9df-4154-b6b5-bba293f07dc4
 v0.8.0 retains secure Markdown live preview, PDF color modes, Image Tools,
 machine-local project caches, Draft Preview, document typography, language
 tools, and source navigation from earlier releases. Choose **Open Examples**
-from the welcome screen to explore the bundled v0.7 and v0.6 feature guides.
+from the welcome screen to explore the current capability-based exercises.
 
 ### Experimental Low-Memory Mode
 

@@ -3,7 +3,7 @@
 Image Tools provides an explicit workspace for inspecting and optimizing local
 raster assets without silently modifying the source project.
 
-![Image Tools showing asset metadata, references, crop controls, and an optimization preview](../assets/screenshots/demo-image-tools.png)
+![Image Tools showing asset metadata, references, crop controls, and an optimization preview](../assets/screenshots/example-image-tools.png)
 
 Open a workspace, select **Image Tools** from the sidebar, and choose an image.
 The sidebar can filter all images, images used by the current document,
@@ -33,9 +33,9 @@ resized or re-encoded; animated GIFs remain inspection-only.
 </video>
 
 The original image is not overwritten automatically. Reference updates apply
-to all indexed exact static references for that asset; v0.7.0 does not offer a
-single-reference-only rewrite. Dynamic paths, package resources, remote assets,
-plugins, and unresolved expressions are not rewritten.
+to all indexed exact static references for that asset; Typsastra does not offer
+a single-reference-only rewrite. Dynamic paths, package resources, remote
+assets, plugins, and unresolved expressions are not rewritten.
 
 Renaming an image through the project explorer updates its indexed static Typst
 paths. The replacement-image action can likewise point those static references
@@ -49,6 +49,6 @@ active image only after its preview source is ready, so an old image is not
 mistaken for the selected asset while loading.
 
 Use the documentation [`demo-project`](../demo-project/README.md) or the bundled
-`06-v0.6-feature-showcase/01-draft-preview-and-image-guidance` project to
-exercise Image Tools with local raster files. Draft Preview remains
-a separate source-preserving preview mode and never exports placeholders.
+`06-preview-and-media/01-draft-preview-and-image-guidance` project to exercise
+Image Tools with local raster files. Draft Preview remains a separate
+source-preserving preview mode and never exports placeholders.

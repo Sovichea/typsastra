@@ -46,10 +46,13 @@ a placeholder to inspect a cached thumbnail, original dimensions, and encoded
 source size. Image warnings remain recommendations: Typsastra identifies
 expensive assets but never resizes or re-encodes them automatically.
 
-Try the bundled `06-v0.6-feature-showcase` examples for Draft Preview, image
-guidance, preview links, manual synchronization, and private local fonts.
-The `07-v0.7-feature-showcase` section adds a Markdown live-preview fixture and
-an Image Tools walkthrough using those bundled raster assets.
+Try the bundled `06-preview-and-media` examples for Draft Preview, image
+guidance, nested image helper chains, preview links, manual synchronization,
+private local fonts, and a Markdown live-preview fixture. The
+`07-editor-workflows` section adds project search, reviewed replacement,
+unsaved-work recovery, the shared main-document outline, Back/Forward source
+navigation, and document-language defaults. `08-tools-and-templates` adds a
+linked Table Tools exercise and a project-template walkthrough.
 
 ## Save and export
 

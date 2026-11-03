@@ -4,7 +4,7 @@ Table Tools provides a spreadsheet-style editor for project-owned tables. Tables
 are stored in the project's `.typsastra/config.json` and generated as ordinary
 Typst source when linked to a document.
 
-![Table Tools with a sample table, cell editor, and live preview](../assets/screenshots/demo-table-tools.png)
+![Table Tools editing a linked table in the bundled example](../assets/screenshots/example-table-tools.png)
 
 ![New Table dialog with built-in table layouts and data import](../assets/screenshots/screenshot-create-table.png)
 
@@ -37,9 +37,15 @@ Tables can also be exported and imported losslessly as `.typ` source. Project
 table definitions remain in portable project metadata; no separate table file
 is created unless you explicitly export one.
 
-## Try the demo
+## Try the examples
 
 Open [`docs/demo-project`](../demo-project/README.md). It has a linked
 **Basic table** stored in project metadata and a `//@table:basic_table` anchor in
 `main.typ`. Change the first body cell. The generated Typst block and live
 preview update with the table.
+
+The bundled
+`08-tools-and-templates/01-linked-table` example starts with generated source
+but no stored table model. Recreate the table from its gutter action or create
+the **Basic table** sample, then edit cells, apply styles, import CSV, and
+export the table as `.typ`.

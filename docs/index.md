@@ -14,33 +14,66 @@ and global default document languages.
 
 Read the [v0.10.0 release notes](RELEASE_NOTES_V0.10.0.md).
 
+The screenshots below use the writable
+[`07-editor-workflows`](https://github.com/Sovichea/typsastra/tree/main/src-tauri/resources/examples/07-editor-workflows)
+examples. Each exercise is a small, ordinary Typst project you can open from
+**Open Examples** and edit safely.
+
 ### Search and replace across a project
 
-![Project search sidebar with grouped results and filters](assets/screenshots/demo-project-search.png)
+![Project search across the three-file field notebook](assets/screenshots/example-project-search.png)
 
-![Reviewed replacement showing before and after lines in two files](assets/screenshots/demo-project-replace.png)
+![Reviewed replacement showing before and after lines across files](assets/screenshots/example-project-replace.png)
 
 ### Recover unsaved work
 
-![Recovery review showing an unsaved main.typ buffer and a unified diff](assets/screenshots/demo-recovery-review.png)
+![Recovery review showing an unsaved main.typ buffer and a unified diff](assets/screenshots/example-recovery-review.png)
 
 ### Set default document languages
 
-![Language settings with Latin set to English (United States) for new projects](assets/screenshots/demo-language-settings.png)
+![Language settings with the default document languages for new projects](assets/screenshots/example-language-defaults.png)
 
 ### Main-document outline and tab navigation
 
 The outline follows the configured main document while an included chapter is
 active. The tab-list menu reaches every open source tab.
 
-![Shared main-document outline while a chapter is active](assets/screenshots/demo-explorer.png)
+![Shared main-document outline while a chapter is active](assets/screenshots/example-shared-outline.png)
 
-![Tab list menu listing the main document and included chapters](assets/screenshots/demo-tab-list.png)
+![Tab list menu listing the main document and included chapters](assets/screenshots/example-tab-list.png)
+
+## Preview and media examples
+
+The `06-preview-and-media` examples cover Draft Preview, nested image helper
+chains, preview navigation, private fonts, and Markdown notes. In the image
+helper exercise, inverse sync selects the outermost call that supplied the
+image and Draft Preview substitutes that same call with a layout-preserving
+placeholder using the helper's resolved width and height.
+
+![Draft Preview showing placeholders for images forwarded through helpers](assets/screenshots/example-draft-preview.png)
+
+See [Draft Preview](tutorials/DRAFT_PREVIEW.md), [PDF preview and
+synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md), [Image
+Tools](tutorials/IMAGE_TOOLS.md), and [Markdown live
+preview](tutorials/MARKDOWN_PREVIEW.md).
 
 The previous v0.9.6 update improved Hunspell dictionary compatibility, added
 LibreOffice spelling variants, streamlined language-provider management, and
 fixed selection wrapping, paste, preview freshness, and stale diagnostic
 behavior. See the [v0.9.6 release notes](RELEASE_NOTES_V0.9.6.md).
+
+## Tools and templates examples
+
+The `08-tools-and-templates` examples cover project-owned Table Tools blocks,
+table export and import, and project creation from Universe, downloaded, and
+user templates. The linked-table exercise can recover a table model from its
+generated source when project metadata is missing.
+
+![Table Tools editing a linked table in the bundled example](assets/screenshots/example-table-tools.png)
+
+See [Table Tools](tutorials/TABLE_TOOLS.md), [Create from
+templates](tutorials/PROJECT_TEMPLATES.md), and [Project import and
+export](tutorials/PROJECT_IMPORT_AND_EXPORT.md).
 
 ## Start here
 

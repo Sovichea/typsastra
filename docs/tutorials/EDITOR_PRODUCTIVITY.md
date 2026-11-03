@@ -47,7 +47,7 @@ recompiling the preview or moving the PDF. History is kept for the current
 session and is cleared when the project closes. Scroll the tab bar with the
 wheel or trackpad; the chevron at its right edge opens a list of every open tab.
 
-![Tab list menu listing the main document and included chapters](../assets/screenshots/demo-tab-list.png)
+![Tab list menu listing the main document and included chapters](../assets/screenshots/example-tab-list.png)
 
 Pane focus and keyboard navigation let you move between the editor, preview,
 Explorer, Outline, and Spellcheck without reaching for the mouse.
@@ -75,7 +75,10 @@ can be kept with Save As. Saving removes only the matching snapshot revision;
 newer unsaved edits are retained. Corrupt records are reported separately and do
 not block other files.
 
-![Recovery review showing an unsaved main.typ buffer and a unified diff](../assets/screenshots/demo-recovery-review.png)
+![Recovery review showing an unsaved main.typ buffer and a unified diff](../assets/screenshots/example-recovery-review.png)
+
+Try the bundled `07-editor-workflows/01-project-search-and-recovery` example
+for recovery, outline, tab-list, and source-history exercises.
 
 ## Typst-aware editing
 

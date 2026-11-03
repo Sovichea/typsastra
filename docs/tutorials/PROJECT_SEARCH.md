@@ -6,9 +6,11 @@ reads UTF-8 files from disk otherwise.
 
 Open it from the magnifier in the activity bar, **Edit → Search Project**, or
 `Ctrl+Shift+F` (`Cmd+Shift+F` on macOS). The Search panel replaces the sidebar
-content; the editor and PDF preview stay visible.
+content; the editor and PDF preview stay visible. The bundled
+`07-editor-workflows/01-project-search-and-recovery` example is a three-file
+notebook designed for these exercises.
 
-![Project search sidebar with grouped file results and filters](../assets/screenshots/demo-project-search.png)
+![Project search across the bundled three-file notebook](../assets/screenshots/example-project-search.png)
 
 ## Search modes
 
@@ -61,7 +63,7 @@ Literal and Regex searches can replace selected matches across the project. Open
 the replace field with **Edit → Replace in Project** or `Ctrl+Shift+H`
 (`Cmd+Shift+H` on macOS), or type a replacement directly in the Search sidebar.
 
-![Reviewed replacement showing before and after lines across two files](../assets/screenshots/demo-project-replace.png)
+![Reviewed replacement showing before and after lines across files](../assets/screenshots/example-project-replace.png)
 
 1. Run a search and wait for it to finish. Replacement is unavailable while a
    search is still running, incomplete, truncated, or errored.

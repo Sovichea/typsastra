@@ -72,3 +72,22 @@ walkthrough.
 
 See the [demo project](demo-project/README.md) for a small workspace that
 combines included chapters, local images, Khmer text, and a linked table.
+
+## Bundled examples
+
+**Open Examples** installs a writable workspace organized by capability:
+
+- `01-basics` through `05-project-portability` cover Typst fundamentals,
+  multilingual writing, language providers, research projects, main documents,
+  and portable project state.
+- `06-preview-and-media` covers Normal/Draft preview, nested image helper chains
+  with width and height parameters, preview links, private fonts, and Markdown
+  notes.
+- `07-editor-workflows` covers project search and reviewed replacement,
+  unsaved-work recovery, the shared main-document outline, Back/Forward source
+  history, and document-language defaults.
+- `08-tools-and-templates` covers project-owned Table Tools blocks, table
+  export/import, and project creation from templates.
+
+Each example includes a README when setup or a guided exercise is useful. Start
+with `START-HERE.typ` in the installed workspace.

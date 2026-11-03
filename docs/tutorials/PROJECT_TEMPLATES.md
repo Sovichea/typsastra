@@ -38,3 +38,9 @@ metadata; generated previews and caches remain machine-local.
 In **User templates**, choose **Add** and select a `.typsastra` project archive
 to add it to the local template library. User templates are not silently
 published to Typst Universe or copied to another machine.
+
+## Try the bundled walkthrough
+
+Open `08-tools-and-templates/02-project-templates/README.md` in the writable
+examples workspace for a guided tour of the Universe, downloaded, user, and
+blank-project paths.

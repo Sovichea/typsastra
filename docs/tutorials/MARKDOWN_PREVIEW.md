@@ -1,6 +1,6 @@
 # Markdown live preview
 
-![Markdown source and live preview open side by side in Typsastra](../assets/screenshots/screenshot-markdown-preview.png)
+![Markdown source and live preview open side by side in Typsastra](../assets/screenshots/example-markdown-preview.png)
 
 Open a `.md` or `.markdown` file inside a Typsastra workspace to activate the
 Markdown editor and live preview. Markdown uses its own renderer: it does not
@@ -9,7 +9,7 @@ last successful PDF preview.
 
 ## Supported content
 
-The v0.7.0 renderer supports common GitHub-Flavored Markdown:
+The Markdown renderer supports common GitHub-Flavored Markdown:
 
 - headings, paragraphs, emphasis, strong text, and block quotes;
 - ordered, unordered, and task lists;
@@ -39,10 +39,10 @@ Project Markdown is treated as untrusted content. Typsastra sanitizes generated
 HTML and removes scripts, event handlers, forms, iframes, embedded objects,
 style injection, and unsafe resource attributes.
 
-v0.7.0 does not provide Markdown-to-Typst conversion, rich-text editing,
+Typsastra does not provide Markdown-to-Typst conversion, rich-text editing,
 Markdown PDF export, executable code blocks, diagrams, plugins, or source-to-
 preview synchronization. Typst-specific preview actions remain unavailable
 until a Typst or PDF document becomes active again.
 
-Try the bundled `07-v0.7-feature-showcase/01-markdown-live-preview` example for
-a table, task list, mixed scripts, code, workspace links, and a local image.
+Try the bundled `06-preview-and-media/05-markdown-notes` example for a table,
+task list, mixed scripts, code, workspace links, and a local image.
