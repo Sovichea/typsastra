@@ -351,6 +351,9 @@ export class PdfPreviewRenderController {
       void this.deps.draftPreview
         .inspectImageProfile(this.deps.getPreviewRootPath())
         .then(profile => this.deps.draftPreview.updateImageHeavyWarning(profile));
+      // Warm the hidden source-map task now instead of on the first inverse
+      // sync click, which would otherwise pay the Tinymist startup delay.
+      this.deps.scheduleSourceMapWarmup(this.generationValue);
       return true;
     } catch (error) {
       this.deps.log("warning", "preview scheduler", `Unable to restore cached preview PDF; compiling normally: ${String(error)}`);
@@ -435,10 +438,13 @@ export class PdfPreviewRenderController {
       }
       // Cached preview restores skip the full render path, so inspect the
       // image profile here to keep image/table gutter markers and the
-      // image-heavy warning available immediately after startup.
+      // image-heavy warning available immediately after startup. Also warm the
+      // hidden source-map task so the first inverse sync does not pay its
+      // Tinymist startup delay.
       void this.deps.draftPreview
         .inspectImageProfile(this.deps.getPreviewRootPath())
         .then(profile => this.deps.draftPreview.updateImageHeavyWarning(profile));
+      this.deps.scheduleSourceMapWarmup(this.generationValue);
       this.deps.log("info", "preview scheduler", `Restored live preview without compilation; status=${this.deps.freshness?.state.status ?? "unknown"}.`);
       return;
     }

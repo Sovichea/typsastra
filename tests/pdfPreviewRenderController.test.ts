@@ -153,6 +153,7 @@ describe("PDF preview render controller", () => {
     expect(cachedStart).toBeGreaterThan(-1);
     expect(cachedRestore).toContain("inspectImageProfile");
     expect(cachedRestore).toContain("updateImageHeavyWarning");
+    expect(cachedRestore).toContain("scheduleSourceMapWarmup");
 
     const keepStart = source.indexOf("const restoreExisting =");
     const keepEnd = source.indexOf("if (!await this.deps.ensureLargePreviewApproved", keepStart);
@@ -160,6 +161,7 @@ describe("PDF preview render controller", () => {
     expect(keepStart).toBeGreaterThan(-1);
     expect(keptPreview).toContain("inspectImageProfile");
     expect(keptPreview).toContain("updateImageHeavyWarning");
+    expect(keptPreview).toContain("scheduleSourceMapWarmup");
   });
 
   test("keeps appController as a thin delegate for render, load, schedule, and invalidation", async () => {

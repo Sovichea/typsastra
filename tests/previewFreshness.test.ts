@@ -143,6 +143,7 @@ describe("preview freshness", () => {
             inspectImageProfile: async () => null,
             updateImageHeavyWarning: () => {},
           },
+          scheduleSourceMapWarmup: () => {},
           typography: { fontUpdateInProgress: false },
           previewFrame: {
             retainMountedLivePreview: (identity: string) => { expect(identity).toBe("cache/render/main.typ"); return mounted; },
