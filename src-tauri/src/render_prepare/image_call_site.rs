@@ -712,6 +712,33 @@ mod tests {
     }
 
     #[test]
+    fn resolves_the_bundled_image_helper_example_to_the_outer_call() {
+        let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/examples/06-preview-and-media/02-image-helper-chains");
+        let main = workspace.join("main.typ");
+        let source = fs::read_to_string(&main).expect("read bundled example");
+        let site = resolve_image_call_site(
+            &workspace,
+            &main,
+            &main,
+            &source,
+            cursor_in(&source, "image(src, width: width)"),
+        )
+        .expect("resolve the bundled helper chain");
+
+        assert_eq!(site.function_name, "cover");
+        assert_eq!(
+            site.from_utf16,
+            utf16_offset(
+                &source,
+                source
+                    .find("cover(\"assets/typsastra-icon.png\")")
+                    .expect("find outer call")
+            )
+        );
+    }
+
+    #[test]
     fn follows_multiple_levels_across_reachable_files() {
         let workspace = tempfile::tempdir().expect("create workspace");
         let template = workspace.path().join("template.typ");

@@ -73,7 +73,7 @@ pub fn prepare_draft_images(
     let mut wrappers = HashMap::new();
     collect_image_wrappers(&root, 0, &mut wrappers);
     let mut calls = Vec::new();
-    collect_image_calls(&root, 0, &wrappers, &mut calls);
+    collect_image_calls(&root, 0, &wrappers, source, &mut calls);
     calls.sort_by_key(|call| call.replacement_start);
 
     let mut result = DraftPreparation::default();
@@ -164,7 +164,7 @@ pub fn prepare_draft_images(
         let mut block_arguments = call
             .layout_arguments
             .iter()
-            .map(|(start, end)| source[*start..*end].trim())
+            .map(|argument| argument.trim())
             .filter(|argument| !argument.is_empty())
             .map(|argument| format!("{argument},"))
             .collect::<Vec<_>>();
@@ -273,7 +273,7 @@ struct ImageCall {
     replacement_start: usize,
     replacement_end: usize,
     literal_path: Option<String>,
-    layout_arguments: Vec<(usize, usize)>,
+    layout_arguments: Vec<String>,
     has_width: bool,
     has_height: bool,
     has_stroke: bool,
@@ -290,15 +290,29 @@ struct CounterMove {
 
 #[derive(Debug, Clone)]
 struct ImageWrapper<'a> {
-    parameter: String,
+    parameters: Vec<WrapperParameter<'a>>,
     body: Expr<'a>,
     body_offset: usize,
+}
+
+#[derive(Debug, Clone)]
+struct WrapperParameter<'a> {
+    name: String,
+    positional: bool,
+    default: Option<Expr<'a>>,
+    default_offset: usize,
+}
+
+#[derive(Debug, Clone)]
+struct BoundValue {
+    literal: Option<String>,
+    text: String,
 }
 
 #[derive(Debug)]
 struct ResolvedWrapperImage {
     literal_path: String,
-    layout_arguments: Vec<(usize, usize)>,
+    layout_arguments: Vec<String>,
     has_width: bool,
     has_height: bool,
 }
@@ -311,16 +325,46 @@ fn collect_image_wrappers<'a>(
     if let Some(binding) = LetBinding::from_untyped(node) {
         if let LetBindingKind::Closure(name) = binding.kind() {
             if let Some(Expr::Closure(closure)) = binding.init() {
-                let mut params = closure.params().children();
-                if let (Some(Param::Pos(Pattern::Normal(Expr::Ident(parameter)))), None) =
-                    (params.next(), params.next())
-                {
+                let mut parameters = Vec::new();
+                let mut supported = true;
+                for param in closure.params().children() {
+                    match param {
+                        Param::Pos(Pattern::Normal(Expr::Ident(parameter))) => {
+                            parameters.push(WrapperParameter {
+                                name: parameter.as_str().to_string(),
+                                positional: true,
+                                default: None,
+                                default_offset: 0,
+                            });
+                        }
+                        Param::Named(named) => {
+                            let default = named.expr();
+                            let Some(relative) =
+                                relative_node_offset(node, default.to_untyped(), 0)
+                            else {
+                                supported = false;
+                                break;
+                            };
+                            parameters.push(WrapperParameter {
+                                name: named.name().as_str().to_string(),
+                                positional: false,
+                                default: Some(default),
+                                default_offset: offset + relative,
+                            });
+                        }
+                        Param::Pos(_) | Param::Spread(_) => {
+                            supported = false;
+                            break;
+                        }
+                    }
+                }
+                if supported && !parameters.is_empty() {
                     let body = closure.body();
                     if let Some(relative) = relative_node_offset(node, body.to_untyped(), 0) {
                         output.insert(
                             name.as_str().to_string(),
                             ImageWrapper {
-                                parameter: parameter.as_str().to_string(),
+                                parameters,
                                 body,
                                 body_offset: offset + relative,
                             },
@@ -338,20 +382,146 @@ fn collect_image_wrappers<'a>(
     }
 }
 
-fn bound_literal(expression: Expr<'_>, bindings: &HashMap<String, String>) -> Option<String> {
+fn bound_literal(expression: Expr<'_>, bindings: &HashMap<String, BoundValue>) -> Option<String> {
     match expression {
         Expr::Str(value) => Some(value.get().to_string()),
-        Expr::Ident(identifier) => bindings.get(identifier.as_str()).cloned(),
+        Expr::Ident(identifier) => bindings
+            .get(identifier.as_str())
+            .and_then(|value| value.literal.clone()),
         Expr::Parenthesized(group) => bound_literal(group.expr(), bindings),
         _ => None,
     }
+}
+
+fn expression_text(
+    expression: Expr<'_>,
+    offset: usize,
+    bindings: &HashMap<String, BoundValue>,
+    source: &str,
+) -> Option<String> {
+    node_text(expression.to_untyped(), offset, bindings, source, 0)
+}
+
+fn contains_bound_identifier(node: &SyntaxNode, bindings: &HashMap<String, BoundValue>) -> bool {
+    if let Some(identifier) = node.cast::<typst_syntax::ast::Ident>() {
+        if bindings.contains_key(identifier.as_str()) {
+            return true;
+        }
+    }
+    node.children()
+        .any(|child| contains_bound_identifier(child, bindings))
+}
+
+fn node_text(
+    node: &SyntaxNode,
+    offset: usize,
+    bindings: &HashMap<String, BoundValue>,
+    source: &str,
+    depth: usize,
+) -> Option<String> {
+    if depth > 32 {
+        return None;
+    }
+    if let Some(identifier) = node.cast::<typst_syntax::ast::Ident>() {
+        if let Some(value) = bindings.get(identifier.as_str()) {
+            return Some(value.text.clone());
+        }
+    }
+    if !contains_bound_identifier(node, bindings) {
+        return source.get(offset..offset + node.len()).map(str::to_string);
+    }
+    let mut result = String::new();
+    let mut child_offset = offset;
+    for child in node.children() {
+        result.push_str(&node_text(
+            child,
+            child_offset,
+            bindings,
+            source,
+            depth + 1,
+        )?);
+        child_offset += child.len();
+    }
+    Some(result)
+}
+
+fn argument_value(
+    expression: Expr<'_>,
+    offset: usize,
+    bindings: &HashMap<String, BoundValue>,
+    source: &str,
+) -> Option<BoundValue> {
+    Some(BoundValue {
+        literal: bound_literal(expression, bindings),
+        text: expression_text(expression, offset, bindings, source)?,
+    })
+}
+
+fn bind_wrapper_parameters<'a>(
+    call: FuncCall<'a>,
+    call_offset: usize,
+    wrapper: &ImageWrapper<'a>,
+    bindings: &HashMap<String, BoundValue>,
+    source: &str,
+) -> Option<HashMap<String, BoundValue>> {
+    let mut next = HashMap::new();
+    let mut positional = 0usize;
+    for argument in call.args().items() {
+        match argument {
+            Arg::Pos(expression) => {
+                if let Some(parameter) = wrapper
+                    .parameters
+                    .iter()
+                    .filter(|parameter| parameter.positional)
+                    .nth(positional)
+                {
+                    let offset = relative_node_offset(
+                        call.to_untyped(),
+                        expression.to_untyped(),
+                        call_offset,
+                    )?;
+                    let value = argument_value(expression, offset, bindings, source)?;
+                    next.insert(parameter.name.clone(), value);
+                }
+                positional += 1;
+            }
+            Arg::Named(named) => {
+                let name = named.name().as_str();
+                let Some(parameter) = wrapper
+                    .parameters
+                    .iter()
+                    .find(|parameter| parameter.name == name)
+                else {
+                    continue;
+                };
+                let expression = named.expr();
+                let offset =
+                    relative_node_offset(call.to_untyped(), expression.to_untyped(), call_offset)?;
+                let value = argument_value(expression, offset, bindings, source)?;
+                next.insert(parameter.name.clone(), value);
+            }
+            Arg::Spread(_) => return None,
+        }
+    }
+    for parameter in &wrapper.parameters {
+        if next.contains_key(&parameter.name) {
+            continue;
+        }
+        let Some(default) = parameter.default else {
+            return None;
+        };
+        let value = argument_value(default, parameter.default_offset, &next, source)?;
+        next.insert(parameter.name.clone(), value);
+    }
+    Some(next)
 }
 
 fn resolve_wrapper_image<'a>(
     call: FuncCall<'a>,
     call_offset: usize,
     wrappers: &HashMap<String, ImageWrapper<'a>>,
-    bindings: &HashMap<String, String>,
+    bindings: &HashMap<String, BoundValue>,
+    source: &str,
     depth: usize,
 ) -> Option<ResolvedWrapperImage> {
     if depth > 32 {
@@ -362,10 +532,10 @@ fn resolve_wrapper_image<'a>(
     };
     let callee = callee.as_str();
     if callee == "image" {
-        let first = call.args().items().next()?;
-        let Arg::Pos(first) = first else {
-            return None;
-        };
+        let first = call.args().items().find_map(|argument| match argument {
+            Arg::Pos(expression) => Some(expression),
+            _ => None,
+        })?;
         let literal_path = bound_literal(first, bindings)?;
         let mut layout_arguments = Vec::new();
         let mut has_width = false;
@@ -380,10 +550,11 @@ fn resolve_wrapper_image<'a>(
             }
             has_width |= name == "width";
             has_height |= name == "height";
-            let argument_node = named.to_untyped();
-            let argument_offset =
-                relative_node_offset(call.to_untyped(), argument_node, call_offset)?;
-            layout_arguments.push((argument_offset, argument_offset + argument_node.len()));
+            let expression = named.expr();
+            let offset =
+                relative_node_offset(call.to_untyped(), expression.to_untyped(), call_offset)?;
+            let text = expression_text(expression, offset, bindings, source)?;
+            layout_arguments.push(format!("{name}: {}", text.trim()));
         }
         return Some(ResolvedWrapperImage {
             literal_path,
@@ -394,19 +565,14 @@ fn resolve_wrapper_image<'a>(
     }
 
     let wrapper = wrappers.get(callee)?;
-    let first = call.args().items().next()?;
-    let Arg::Pos(first) = first else {
-        return None;
-    };
-    let literal_path = bound_literal(first, bindings)?;
-    let mut next_bindings = bindings.clone();
-    next_bindings.insert(wrapper.parameter.clone(), literal_path);
+    let next_bindings = bind_wrapper_parameters(call, call_offset, wrapper, bindings, source)?;
     match wrapper.body {
         Expr::FuncCall(inner) => resolve_wrapper_image(
             inner,
             wrapper.body_offset,
             wrappers,
             &next_bindings,
+            source,
             depth + 1,
         ),
         Expr::Parenthesized(group) => {
@@ -419,7 +585,14 @@ fn resolve_wrapper_image<'a>(
                 inner.to_untyped(),
                 wrapper.body_offset,
             )?;
-            resolve_wrapper_image(call, inner_offset, wrappers, &next_bindings, depth + 1)
+            resolve_wrapper_image(
+                call,
+                inner_offset,
+                wrappers,
+                &next_bindings,
+                source,
+                depth + 1,
+            )
         }
         _ => None,
     }
@@ -429,6 +602,7 @@ fn collect_image_calls<'a>(
     node: &'a SyntaxNode,
     offset: usize,
     wrappers: &HashMap<String, ImageWrapper<'a>>,
+    source: &str,
     output: &mut Vec<ImageCall>,
 ) {
     if let Some(binding) = LetBinding::from_untyped(node) {
@@ -438,18 +612,18 @@ fn collect_image_calls<'a>(
     }
 
     if let Some(call) = node.cast::<FuncCall>() {
-        if let Some(frame) = image_frame_call(node, call, offset) {
+        if let Some(frame) = image_frame_call(node, call, offset, source) {
             output.push(frame);
             return;
         }
         if matches!(call.callee(), Expr::Ident(ident) if ident.as_str() == "image") {
-            output.push(image_call(node, call, offset));
+            output.push(image_call(node, call, offset, source));
             return;
         }
         if let Expr::Ident(ident) = call.callee() {
             if wrappers.contains_key(ident.as_str()) {
                 if let Some(resolved) =
-                    resolve_wrapper_image(call, offset, wrappers, &HashMap::new(), 0)
+                    resolve_wrapper_image(call, offset, wrappers, &HashMap::new(), source, 0)
                 {
                     output.push(ImageCall {
                         image_start: offset,
@@ -472,12 +646,12 @@ fn collect_image_calls<'a>(
     }
     let mut child_offset = offset;
     for child in node.children() {
-        collect_image_calls(child, child_offset, wrappers, output);
+        collect_image_calls(child, child_offset, wrappers, source, output);
         child_offset += child.len();
     }
 }
 
-fn image_call(node: &SyntaxNode, call: FuncCall<'_>, offset: usize) -> ImageCall {
+fn image_call(node: &SyntaxNode, call: FuncCall<'_>, offset: usize, source: &str) -> ImageCall {
     let first = call.args().items().next();
     let literal_path = match first {
         Some(Arg::Pos(Expr::Str(value))) => Some(value.get().to_string()),
@@ -498,10 +672,11 @@ fn image_call(node: &SyntaxNode, call: FuncCall<'_>, offset: usize) -> ImageCall
         has_height |= name == "height";
         let argument_node = named.to_untyped();
         if let Some(argument_relative) = relative_node_offset(node, argument_node, 0) {
-            layout_arguments.push((
-                offset + argument_relative,
-                offset + argument_relative + argument_node.len(),
-            ));
+            let start = offset + argument_relative;
+            let end = start + argument_node.len();
+            if let Some(argument) = source.get(start..end) {
+                layout_arguments.push(argument.to_string());
+            }
         }
     }
     ImageCall {
@@ -520,7 +695,12 @@ fn image_call(node: &SyntaxNode, call: FuncCall<'_>, offset: usize) -> ImageCall
     }
 }
 
-fn image_frame_call(node: &SyntaxNode, call: FuncCall<'_>, offset: usize) -> Option<ImageCall> {
+fn image_frame_call(
+    node: &SyntaxNode,
+    call: FuncCall<'_>,
+    offset: usize,
+    source: &str,
+) -> Option<ImageCall> {
     if !matches!(call.callee(), Expr::Ident(ident) if ident.as_str() == "block") {
         return None;
     }
@@ -542,8 +722,9 @@ fn image_frame_call(node: &SyntaxNode, call: FuncCall<'_>, offset: usize) -> Opt
                 if name == "width" || name == "height" {
                     let argument_node = named.to_untyped();
                     let relative = relative_node_offset(node, argument_node, 0)?;
-                    layout_arguments
-                        .push((offset + relative, offset + relative + argument_node.len()));
+                    let start = offset + relative;
+                    let end = start + argument_node.len();
+                    layout_arguments.push(source.get(start..end)?.to_string());
                 }
             }
             Arg::Pos(Expr::ContentBlock(content)) if body.is_none() => body = Some(content),
@@ -567,7 +748,7 @@ fn image_frame_call(node: &SyntaxNode, call: FuncCall<'_>, offset: usize) -> Opt
     let image_relative = relative_node_offset(node, image_node, 0)?;
     let image_offset = offset + image_relative;
     let image = image_node.cast::<FuncCall>()?;
-    let mut result = image_call(image_node, image, image_offset);
+    let mut result = image_call(image_node, image, image_offset, source);
     result.layout_arguments = layout_arguments;
     result.has_width = true;
     result.has_height = true;
@@ -1108,6 +1289,161 @@ mod tests {
         let generated = &prepared.replacements[0].generated;
         assert!(generated.contains("width: 50%"));
         assert!(generated.contains("height: 4cm"));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    fn write_test_png(directory: &Path, name: &str, width: u32, height: u32) -> PathBuf {
+        let image = directory.join(name);
+        let mut png = vec![0u8; 24];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[16..20].copy_from_slice(&width.to_be_bytes());
+        png[20..24].copy_from_slice(&height.to_be_bytes());
+        fs::write(&image, png).unwrap();
+        image
+    }
+
+    #[test]
+    fn forwards_helper_layout_parameters() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "wide.png", 1600, 900);
+        let source = "\
+#let frame(src, width: 55%, height: 4cm) = image(src, width: width, height: height)
+#let cover(src) = frame(src, width: 46%, height: 5cm)
+#cover(\"wide.png\")";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        let replacement = &prepared.replacements[0];
+        let call_start = source.find("cover(\"wide.png\")").unwrap();
+        assert_eq!(replacement.start, call_start);
+        assert_eq!(replacement.end, call_start + "cover(\"wide.png\")".len());
+        assert!(replacement.generated.contains("width: 46%"));
+        assert!(replacement.generated.contains("height: 5cm"));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn binds_positional_parameters_by_declaration_kind() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "wide.png", 1600, 900);
+        let source = "\
+#let frame(width, src) = image(src, width: width)
+#let cover(src) = frame(46%, src)
+#cover(\"wide.png\")";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        assert!(prepared.replacements[0].generated.contains("width: 46%"));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn uses_helper_parameter_defaults_and_named_path_arguments() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "wide.png", 1600, 900);
+        let source = "\
+#let frame(src, width: 55%) = image(src, width: width)
+#let cover(src) = frame(src)
+#cover(src: \"wide.png\")";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        assert!(prepared.replacements[0].generated.contains("width: 55%"));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn substitutes_helper_parameters_inside_layout_expressions() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "wide.png", 1600, 900);
+        let source = "\
+#let frame(src, scale: 50%) = image(src, width: scale * 2)
+#let cover(src) = frame(src, scale: 40%)
+#cover(\"wide.png\")";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        assert!(prepared.replacements[0]
+            .generated
+            .contains("width: 40% * 2"));
+        let parsed = typst_syntax::parse(&format!("#{}", prepared.replacements[0].generated));
+        assert!(
+            parsed.errors_and_warnings().0.is_empty(),
+            "substituted helper layout must remain valid Typst syntax"
+        );
+    }
+
+    #[test]
+    fn replaces_only_the_helper_call_inside_a_figure() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "wide.png", 1600, 900);
+        let source = "\
+#let frame(src, width: 46%) = image(src, width: width)
+#let cover(src) = frame(src)
+#figure(cover(\"wide.png\"), caption: [A cover.])";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        let replacement = &prepared.replacements[0];
+        let call_start = source.find("cover(\"wide.png\")").unwrap();
+        assert_eq!(replacement.start, call_start);
+        assert_eq!(replacement.end, call_start + "cover(\"wide.png\")".len());
+        assert!(replacement.generated.contains("width: 46%"));
+    }
+
+    #[test]
+    fn prepares_the_bundled_image_helper_example() {
+        let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/examples/06-preview-and-media/02-image-helper-chains");
+        let source_path = workspace.join("main.typ");
+        let source = fs::read_to_string(&source_path).expect("read bundled example");
+        let prepared = prepare_draft_images(
+            &workspace,
+            &source_path,
+            &workspace.join("cache/render/main.typ"),
+            &workspace.join("cache/render"),
+            &source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 2);
+        assert!(prepared
+            .replacements
+            .iter()
+            .any(|replacement| replacement.generated.contains("width: 46%")));
+        assert!(prepared
+            .replacements
+            .iter()
+            .any(|replacement| replacement.generated.contains("width: 58%")));
         assert!(prepared.diagnostics.is_empty());
     }
 

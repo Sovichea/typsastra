@@ -16,7 +16,7 @@ use super::sourcemap::{MappingKind, SourceMap, SOURCE_MAP_VERSION};
 const RENDER_CACHE_LAYOUT_VERSION: &str = "4-original-source-render";
 const RENDER_CACHE_OWNER_SCHEMA_VERSION: u32 = 1;
 const RENDER_CACHE_OWNER_FILE: &str = "workspace-owner.json";
-pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 3;
+pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 4;
 const RENDER_CACHE_STORAGE_REPORT_VERSION: u32 = 1;
 const RENDER_CACHE_STORAGE_REPORT_FILE: &str = "render-storage.json";
 const LARGE_COPY_FALLBACK_THRESHOLD_BYTES: u64 = 64 * 1024 * 1024;
