@@ -26,11 +26,13 @@ type EditorInputProfile = {
 };
 
 type ScrollMarkerSeverity = "error" | "warning" | "info" | "related";
+type ScrollMarkerKind = "search" | "diagnostic" | "image" | "unused";
 type ScrollMarkerTarget = {
   line: number;
   severity: ScrollMarkerSeverity;
   from: number;
   to: number;
+  kind: ScrollMarkerKind;
 };
 
 export interface EditorControllerPort {
@@ -395,7 +397,7 @@ export class EditorController {
       }
     };
     for (const [line, range] of this.matchMarkerTargets) {
-      if (line >= 1 && line <= doc.lines) addMarker({ line, severity: "info", ...range });
+      if (line >= 1 && line <= doc.lines) addMarker({ line, severity: "info", ...range, kind: "search" });
     }
     for (const diagnostic of diagnostics) {
       if (diagnostic.severity !== "error"
@@ -407,6 +409,7 @@ export class EditorController {
         severity: diagnostic.severity,
         from: Math.max(0, Math.min(diagnostic.from, doc.length)),
         to: Math.max(0, Math.min(diagnostic.to, doc.length)),
+        kind: "diagnostic",
       });
     }
     imageWarnings?.between(0, doc.length, (from, to, marker) => {
@@ -416,7 +419,7 @@ export class EditorController {
         ? "info"
         : "warning";
       const line = doc.lineAt(Math.max(0, Math.min(from, doc.length))).number;
-      addMarker({ line, severity, from, to: Math.max(from, to) });
+      addMarker({ line, severity, from, to: Math.max(from, to), kind: "image" });
     });
     editor.state.field(unusedBindingMarkerField, false)?.between(0, doc.length, from => {
       const position = Math.max(0, Math.min(from, doc.length));
@@ -425,11 +428,12 @@ export class EditorController {
         severity: "warning",
         from: position,
         to: position,
+        kind: "unused",
       });
     });
 
     for (const target of lineMarkers.values()) {
-      const { line, severity } = target;
+      const { line, severity, kind } = target;
       const documentRatio = (line - 1) / Math.max(1, doc.lines - 1);
       const top = documentRatio * documentTrackRatio * Math.max(0, trackHeight - markerHeight);
       const marker = document.createElement("div");
@@ -439,6 +443,7 @@ export class EditorController {
           ? "rgba(241, 76, 76, 0.58)"
           : severity === "warning" ? "#cca700" : "#3794ff";
       marker.className = `editor-diagnostic-scroll-marker editor-diagnostic-scroll-marker-${severity}`;
+      marker.dataset.markerKind = kind;
       Object.assign(marker.style, {
         position: "absolute",
         right: "0",
@@ -450,7 +455,9 @@ export class EditorController {
         cursor: "pointer",
         pointerEvents: "auto",
       });
-      marker.title = t`${severity === "info" ? "Search match" : `${severity[0].toUpperCase()}${severity.slice(1)}`}: line ${line}`;
+      const title = this.scrollMarkerTitle(target);
+      marker.title = title;
+      marker.setAttribute("aria-label", title);
       marker.addEventListener("pointerdown", event => {
         if (event.button !== 0) return;
         event.preventDefault();
@@ -459,6 +466,22 @@ export class EditorController {
         this.navigateToScrollMarker(target);
       });
       layer.appendChild(marker);
+    }
+  }
+
+  private scrollMarkerTitle(target: ScrollMarkerTarget): string {
+    const line = target.line;
+    switch (target.kind) {
+      case "search":
+        return t`Search match: line ${line}`;
+      case "image":
+        return target.severity === "warning"
+          ? t`Image optimization: line ${line}`
+          : t`Image reference: line ${line}`;
+      case "unused":
+        return t`Unused symbol: line ${line}`;
+      case "diagnostic":
+        return t`${target.severity[0].toUpperCase()}${target.severity.slice(1)}: line ${line}`;
     }
   }
 
