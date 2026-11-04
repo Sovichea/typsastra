@@ -33,6 +33,7 @@ export interface EditorInitializationDependencies {
   activeLspUri(): string;
   flushPendingLspSync(): Promise<void>;
   navigateToLspLocation(uri: string, line: number, character: number): void;
+  navigateToTypstPath(sourcePath: string): boolean;
   appendDeveloperLog(entry: { kind: "info" | "warning"; source: string; message: string }): void;
   isLoadingFile(): boolean;
   activeFilePath(): string | null;
@@ -83,6 +84,7 @@ export class EditorInitializationController {
         () => deps.shortcuts(),
         position => deps.spellcheck.khmerWordAt(position),
         () => deps.pathContext(),
+        sourcePath => deps.navigateToTypstPath(sourcePath),
       ),
       deps.spellcheck.extension(),
       EditorView.updateListener.of(update => {

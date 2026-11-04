@@ -2183,6 +2183,7 @@ export class TypsastraWorkspaceController {
     activeLspUri: () => this.getActiveLspUri(),
     flushPendingLspSync: () => this.flushPendingLspSync(),
     navigateToLspLocation: (uri, line, character) => { void this.navigateToLspLocation(uri, line, character); },
+    navigateToTypstPath: sourcePath => this.navigateToTypstPath(sourcePath),
     appendDeveloperLog: entry => this.appendDeveloperLog(entry),
     isLoadingFile: () => this.isLoadingFile,
     activeFilePath: () => this.activeFilePath,
@@ -4467,6 +4468,10 @@ export class TypsastraWorkspaceController {
   }
   private navigateToLspLocation(uri: string, line: number, character: number): Promise<void> {
     return this.sourceLocationController.navigateToLspLocation(uri, line, character);
+  }
+
+  private navigateToTypstPath(sourcePath: string): boolean {
+    return this.sourceLocationController.navigateToTypstPath(sourcePath);
   }
 
   private navigateToEditorTab(path: string): Promise<void> {

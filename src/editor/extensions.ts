@@ -909,6 +909,7 @@ export function getEditorExtensions(
   getShortcuts: () => ShortcutOverrides = () => ({}),
   getKhmerWordAt?: (position: number) => { from: number; to: number } | null,
   getPathContext?: () => PathWarningContext | null,
+  onNavigateToTypstPath?: (sourcePath: string) => boolean,
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
@@ -966,15 +967,24 @@ export function getEditorExtensions(
       mousedown: (event, view) => {
         if (searchPanelOpen(view.state)) closeSearchPanel(view);
         if ((event.ctrlKey || event.metaKey) && event.button === 0) {
-          console.log("[Ctrl+Click] Detected! Pos:", view.posAtCoords({ x: event.clientX, y: event.clientY }));
+          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          // Import/include paths are local file navigation. Open them directly
+          // so Ctrl+click also works when the LSP is stopped or unavailable.
+          if (pos !== null && onNavigateToTypstPath) {
+            const pathRange = typstImportPathRange(view.state, pos);
+            if (pathRange) {
+              const sourcePath = view.state.sliceDoc(pathRange.from, pathRange.to);
+              if (onNavigateToTypstPath(sourcePath)) {
+                event.preventDefault();
+                return true;
+              }
+            }
+          }
           const client = getClient();
           const uri = getUri();
-          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
           if (client && uri && pos !== null && onNavigateToDefinition) {
             const lspPos = client.lspPositionFromEditorPosition(view.state.doc, pos);
-            console.log("[Ctrl+Click] Requesting definition for", uri, lspPos);
             void client.getDefinition(uri, lspPos).then((locations) => {
-              console.log("[Ctrl+Click] Definition result:", locations);
               if (locations && locations.length > 0) {
                 const loc = locations[0];
                 const targetUri = loc.targetUri ?? loc.uri;
@@ -983,9 +993,7 @@ export function getEditorExtensions(
                   onNavigateToDefinition(targetUri, targetRange.start.line, targetRange.start.character ?? 0);
                 }
               } else {
-                console.log("[Ctrl+Click] Requesting references for", uri, lspPos);
                 void client.getReferences(uri, lspPos).then((refs) => {
-                  console.log("[Ctrl+Click] References result:", refs);
                   if (refs && refs.length > 0) {
                     const loc = refs[0];
                     const targetUri = loc.targetUri ?? loc.uri;

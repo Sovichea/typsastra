@@ -81,3 +81,70 @@ export function remapFilePath(path: string, oldPath: string, newPath: string): s
   const base = newPath.replace(/[\\/]+$/, "");
   return `${base}${separator}${relative.replace(/[\\/]/g, separator)}`;
 }
+
+/**
+ * Resolves a Typst include/import path to an absolute file path.
+ *
+ * Typst treats a leading slash as the project root, not the host filesystem
+ * root, so `/chapters/one.typ` resolves inside the workspace. Package imports
+ * and URLs return null because they are not local file paths.
+ */
+export function resolveTypstPath(
+  documentPath: string,
+  workspaceRoot: string,
+  sourcePath: string,
+): string | null {
+  const unescaped = sourcePath.replace(/\\(["\\])/g, "$1");
+  const normalizedSource = unescaped.replace(/\\/g, "/");
+  const windowsAbsolute = /^[A-Za-z]:\//.test(normalizedSource);
+  if (!unescaped
+    || /^@/.test(unescaped)
+    || (!windowsAbsolute && /^[a-z][a-z0-9+.-]*:/i.test(unescaped))) {
+    return null;
+  }
+  let combined: string;
+  if (windowsAbsolute || normalizedSource.startsWith("//")) {
+    combined = normalizedSource;
+  } else if (normalizedSource.startsWith("/")) {
+    combined = `${workspaceRoot.replace(/[\\/]+$/, "")}/${normalizedSource.replace(/^\/+/, "")}`;
+  } else {
+    combined = `${portableDirname(documentPath)}/${normalizedSource}`;
+  }
+  return normalizeFilePath(combined);
+}
+
+function portableDirname(path: string): string {
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  const lastSlash = normalized.lastIndexOf("/");
+  return lastSlash > 0 ? normalized.slice(0, lastSlash) : "";
+}
+
+function normalizeFilePath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  let prefix = "";
+  let rest = normalized;
+  if (normalized.startsWith("//")) {
+    prefix = "//";
+    rest = normalized.slice(2);
+  } else if (/^[A-Za-z]:\//.test(normalized)) {
+    prefix = `${normalized.slice(0, 2)}/`;
+    rest = normalized.slice(3);
+  } else if (normalized.startsWith("/")) {
+    prefix = "/";
+    rest = normalized.slice(1);
+  }
+  const segments: string[] = [];
+  for (const part of rest.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (segments.length > 0 && segments[segments.length - 1] !== "..") {
+        segments.pop();
+      } else if (!prefix) {
+        segments.push("..");
+      }
+      continue;
+    }
+    segments.push(part);
+  }
+  return `${prefix}${segments.join("/")}`;
+}

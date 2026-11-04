@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { EditorView } from "@codemirror/view";
 import type { TinymistLspClient, LspSourcePosition } from "../compiler/lsp";
 import { isTypstDocumentPath } from "../platform/fileTypes";
-import { filePathFromUri, filePathKey, filePathToUri, isUntitledDocumentPath, nativeFilePath, relativeFilePath } from "../platform/paths";
+import { filePathFromUri, filePathKey, filePathToUri, isUntitledDocumentPath, nativeFilePath, relativeFilePath, resolveTypstPath } from "../platform/paths";
 import { decodeRustUnicodeEscapes } from "../compiler/previewError";
 import type { NavigationHistoryPort } from "./navigationHistoryController";
 
@@ -70,6 +70,28 @@ export class SourceLocationController {
   resolveLspDocument(path: string, originalContent: string): { uri: string; content: string } | null {
     if (isUntitledDocumentPath(path) || !isTypstDocumentPath(path)) return null;
     return { uri: filePathToUri(path), content: originalContent };
+  }
+
+  /**
+   * Opens a local Typst include/import path without asking the LSP. Returning
+   * false means the path is not a local file (for example a package import), so
+   * the caller can fall back to definition lookup when an LSP is available.
+   */
+  navigateToTypstPath(sourcePath: string): boolean {
+    const documentPath = this.deps.activeFilePath();
+    const workspaceRootPath = this.deps.workspaceRootPath();
+    if (!documentPath || !workspaceRootPath) return false;
+    const targetPath = resolveTypstPath(documentPath, workspaceRootPath, sourcePath);
+    if (!targetPath) return false;
+    const filePath = nativeFilePath(targetPath);
+    const action = () => this.deps.loadFile(filePath);
+    const history = this.deps.navigationHistory?.();
+    if (history) {
+      void history.run(action);
+    } else {
+      void action();
+    }
+    return true;
   }
 
   async navigateToLspLocation(uri: string, line: number, character: number): Promise<void> {

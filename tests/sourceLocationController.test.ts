@@ -79,6 +79,47 @@ describe("LSP URI navigation path identity", () => {
   });
 });
 
+describe("Typst path navigation without an LSP", () => {
+  test("opens a relative include path from the active document", () => {
+    const loaded: string[] = [];
+    const controller = navigationController({
+      activeFilePath: "C:\\Projects\\Demo\\main.typ",
+      loadFile: async path => {
+        loaded.push(path);
+      },
+    });
+
+    expect(controller.navigateToTypstPath("chapters/one.typ")).toBe(true);
+    expect(loaded).toEqual(["C:\\Projects\\Demo\\chapters\\one.typ"]);
+  });
+
+  test("opens a root-relative include path from the workspace root", () => {
+    const loaded: string[] = [];
+    const controller = navigationController({
+      activeFilePath: "C:\\Projects\\Demo\\chapters\\two.typ",
+      loadFile: async path => {
+        loaded.push(path);
+      },
+    });
+
+    expect(controller.navigateToTypstPath("/chapters/one.typ")).toBe(true);
+    expect(loaded).toEqual(["C:\\Projects\\Demo\\chapters\\one.typ"]);
+  });
+
+  test("leaves package imports to the LSP fallback", () => {
+    const loaded: string[] = [];
+    const controller = navigationController({
+      activeFilePath: "C:\\Projects\\Demo\\main.typ",
+      loadFile: async path => {
+        loaded.push(path);
+      },
+    });
+
+    expect(controller.navigateToTypstPath("@preview/example:1.0.0")).toBe(false);
+    expect(loaded).toEqual([]);
+  });
+});
+
 describe("source location cache mapping", () => {
   test("recognizes Rust-escaped mirror paths in Unicode workspaces", () => {
     const khmer = String.fromCodePoint(0x1781, 0x17d2, 0x1798, 0x17c2, 0x179a);

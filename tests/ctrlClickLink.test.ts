@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { EditorState } from "@codemirror/state";
 import { typstImportPathRange } from "../src/editor/extensions";
+
+const extensions = readFileSync(new URL("../src/editor/extensions.ts", import.meta.url), "utf8");
 
 describe("Ctrl-hover Typst links", () => {
   test("covers the complete include path across hyphens and dots", () => {
@@ -39,5 +42,17 @@ describe("Ctrl-hover Typst links", () => {
     const range = typstImportPathRange(state, position);
     expect(range).not.toBeNull();
     expect(state.sliceDoc(range!.from, range!.to)).toBe(expected);
+  });
+
+  test("resolves local Typst paths before asking the LSP", () => {
+    const handler = extensions.slice(
+      extensions.indexOf("mousedown: (event, view) =>"),
+      extensions.indexOf("foldService.of")
+    );
+    const pathNavigation = handler.indexOf("onNavigateToTypstPath");
+    const definitionLookup = handler.indexOf("getDefinition");
+    expect(pathNavigation).toBeGreaterThan(-1);
+    expect(definitionLookup).toBeGreaterThan(-1);
+    expect(pathNavigation).toBeLessThan(definitionLookup);
   });
 });
