@@ -6575,12 +6575,150 @@ fn low_memory_sync_line_is_heading(trimmed: &str) -> bool {
         )
 }
 
+#[derive(Clone, Copy)]
+enum LowMemorySyncElement {
+    Figure,
+    Table,
+    Image,
+}
+
+impl LowMemorySyncElement {
+    fn selector(self) -> &'static str {
+        match self {
+            Self::Figure => "figure",
+            Self::Table => "table",
+            Self::Image => "image",
+        }
+    }
+}
+
+struct LowMemorySyncElementAnchor {
+    start_line: usize,
+    end_line: usize,
+    indent: String,
+    element: LowMemorySyncElement,
+}
+
+fn low_memory_sync_element_context_is_markup(node: &typst_syntax::LinkedNode<'_>) -> bool {
+    use typst_syntax::SyntaxKind;
+
+    let mut parent = node.parent();
+    while let Some(ancestor) = parent {
+        match ancestor.kind() {
+            SyntaxKind::Markup
+            | SyntaxKind::ContentBlock
+            | SyntaxKind::ListItem
+            | SyntaxKind::EnumItem
+            | SyntaxKind::TermItem => {}
+            _ => return false,
+        }
+        parent = ancestor.parent();
+    }
+    true
+}
+
+fn low_memory_sync_element_anchors(
+    source: &str,
+    root: &typst_syntax::LinkedNode<'_>,
+) -> Vec<LowMemorySyncElementAnchor> {
+    let mut anchors = Vec::new();
+    collect_low_memory_sync_element_anchors(root, source, &mut anchors);
+    anchors
+}
+
+fn collect_low_memory_sync_element_anchors(
+    node: &typst_syntax::LinkedNode<'_>,
+    source: &str,
+    anchors: &mut Vec<LowMemorySyncElementAnchor>,
+) {
+    use typst_syntax::SyntaxKind;
+
+    if node.kind() == SyntaxKind::FuncCall {
+        if low_memory_sync_element_context_is_markup(node) {
+            if let Some(callee) = node.children().find(|child| !child.kind().is_trivia()) {
+                if callee.kind() == SyntaxKind::Ident {
+                    let element = match &source[callee.range()] {
+                        "figure" => Some(LowMemorySyncElement::Figure),
+                        "table" => Some(LowMemorySyncElement::Table),
+                        "image" => Some(LowMemorySyncElement::Image),
+                        _ => None,
+                    };
+                    if let Some(element) = element {
+                        let line_start = source[..node.offset()]
+                            .rfind('\n')
+                            .map_or(0, |index| index + 1);
+                        let prefix = &source[line_start..node.offset()];
+                        let indent = prefix.strip_suffix('#').filter(|indent| {
+                            indent
+                                .chars()
+                                .all(|character| character == ' ' || character == '\t')
+                        });
+                        if let Some(indent) = indent {
+                            let end_offset = node.offset() + node.len();
+                            anchors.push(LowMemorySyncElementAnchor {
+                                start_line: source[..node.offset()]
+                                    .bytes()
+                                    .filter(|byte| *byte == b'\n')
+                                    .count(),
+                                end_line: source[..end_offset.saturating_sub(1)]
+                                    .bytes()
+                                    .filter(|byte| *byte == b'\n')
+                                    .count(),
+                                indent: indent.to_string(),
+                                element,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    for child in node.children() {
+        collect_low_memory_sync_element_anchors(&child, source, anchors);
+    }
+}
+
+fn append_low_memory_sync_element_anchors(
+    output: &mut String,
+    anchors: &[LowMemorySyncElementAnchor],
+    line: usize,
+    file_id: usize,
+    anchor_count: &mut usize,
+) {
+    const MAX_LINES_PER_ELEMENT: usize = 64;
+    for anchor in anchors.iter().filter(|anchor| anchor.end_line == line) {
+        let last_line = anchor
+            .end_line
+            .min(anchor.start_line.saturating_add(MAX_LINES_PER_ELEMENT - 1));
+        for anchor_line in anchor.start_line..=last_line {
+            output.push_str(&anchor.indent);
+            output.push_str(&format!(
+                "#context metadata((typsastra_sync: true, file: {file_id}, line: {anchor_line}, pos: query(selector({}).before(here())).last().location().position())) <typsastra-sync>\n",
+                anchor.element.selector()
+            ));
+            *anchor_count += 1;
+        }
+        if last_line < anchor.end_line {
+            output.push_str(&anchor.indent);
+            output.push_str(&format!(
+                "#context metadata((typsastra_sync: true, file: {file_id}, line: {}, pos: query(selector({}).before(here())).last().location().position())) <typsastra-sync>\n",
+                anchor.end_line,
+                anchor.element.selector()
+            ));
+            *anchor_count += 1;
+        }
+    }
+}
+
 fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (String, usize) {
     // The staged file is written with LF endings. Parse that exact normalized
     // text as well so byte offsets remain correct for CRLF workspace files.
     let normalized_source = source_text.replace("\r\n", "\n").replace('\r', "\n");
     let syntax = typst_syntax::parse(&normalized_source);
     let root = typst_syntax::LinkedNode::new(&syntax);
+    let element_anchors = low_memory_sync_element_anchors(&normalized_source, &root);
     let mut output = String::with_capacity(normalized_source.len() + 256);
     let mut anchor_count = 0usize;
     let mut line_start = 0usize;
@@ -6614,6 +6752,13 @@ fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (Stri
                     "#context metadata((typsastra_sync: true, file: {file_id}, line: {line}, pos: query(selector(heading).before(here())).last().location().position())) <typsastra-sync>\n"
                 ));
                 anchor_count += 1;
+                append_low_memory_sync_element_anchors(
+                    &mut output,
+                    &element_anchors,
+                    line,
+                    file_id,
+                    &mut anchor_count,
+                );
                 line_start += text.len() + 1;
                 continue;
             }
@@ -6628,6 +6773,13 @@ fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (Stri
         }
         output.push_str(text);
         output.push('\n');
+        append_low_memory_sync_element_anchors(
+            &mut output,
+            &element_anchors,
+            line,
+            file_id,
+            &mut anchor_count,
+        );
         line_start += text.len() + 1;
     }
 
@@ -6700,6 +6852,66 @@ Raw text is not an anchor
         assert!(heading_anchor < body);
         assert!(body_anchor < body);
         assert!(!instrumented.contains("file: 0, line: 0, pos: here().position()"));
+    }
+
+    #[test]
+    fn anchors_top_level_figures_tables_and_images() {
+        let source = "\
+#figure(
+  image(\"a.png\"),
+  caption: [Cap],
+) <fig:a>
+#table(columns: 2, [a], [b])
+#image(\"b.png\")
+Text
+";
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 0);
+        assert_eq!(anchors, 7);
+        assert_eq!(instrumented.matches("selector(figure)").count(), 4);
+        assert_eq!(instrumented.matches("selector(table)").count(), 1);
+        assert_eq!(instrumented.matches("selector(image)").count(), 1);
+        assert!(instrumented.contains(") <fig:a>\n#context metadata"));
+        assert!(instrumented.contains("file: 0, line: 3, pos: query(selector(figure)"));
+        assert!(instrumented.contains("file: 0, line: 4, pos: query(selector(table)"));
+        assert!(instrumented.contains("file: 0, line: 5, pos: query(selector(image)"));
+    }
+
+    #[test]
+    fn anchors_figures_inside_markup_content_blocks_only() {
+        let source = "\
+#[
+  #figure(
+    table(columns: 2, [a], [b]),
+  )
+]
+#block(
+  figure(
+    table(columns: 2, [c], [d]),
+  ),
+)
+";
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 0);
+        assert_eq!(anchors, 3);
+        assert_eq!(instrumented.matches("selector(figure)").count(), 3);
+        assert!(instrumented.contains(
+            "  #context metadata((typsastra_sync: true, file: 0, line: 1, pos: query(selector(figure)"
+        ));
+    }
+
+    #[test]
+    fn anchors_figures_inside_list_items() {
+        let source = "\
++ item body
+  #figure(
+    table(columns: 2, [a], [b]),
+  )
+";
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 0);
+        assert_eq!(anchors, 4);
+        assert_eq!(instrumented.matches("selector(figure)").count(), 3);
+        assert!(instrumented.contains(
+            "  #context metadata((typsastra_sync: true, file: 0, line: 1, pos: query(selector(figure)"
+        ));
     }
 
     #[test]
@@ -6998,7 +7210,7 @@ fn low_memory_sync_index_path(
     preview_root: &Path,
 ) -> Result<PathBuf, String> {
     Ok(low_memory_preview_cache_directory(cache_root).join(format!(
-        "{}-sync-index-v2.json",
+        "{}-sync-index-v3.json",
         preview_cache_key(root, preview_root)?
     )))
 }
