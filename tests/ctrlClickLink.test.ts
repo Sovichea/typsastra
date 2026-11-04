@@ -50,9 +50,12 @@ describe("Ctrl-hover Typst links", () => {
       extensions.indexOf("foldService.of")
     );
     const pathNavigation = handler.indexOf("onNavigateToTypstPath");
+    const symbolNavigation = handler.indexOf("onNavigateToTypstSymbol");
     const definitionLookup = handler.indexOf("getDefinition");
     expect(pathNavigation).toBeGreaterThan(-1);
+    expect(symbolNavigation).toBeGreaterThan(-1);
     expect(definitionLookup).toBeGreaterThan(-1);
     expect(pathNavigation).toBeLessThan(definitionLookup);
+    expect(symbolNavigation).toBeLessThan(definitionLookup);
   });
 });

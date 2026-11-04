@@ -910,6 +910,7 @@ export function getEditorExtensions(
   getKhmerWordAt?: (position: number) => { from: number; to: number } | null,
   getPathContext?: () => PathWarningContext | null,
   onNavigateToTypstPath?: (sourcePath: string) => boolean,
+  onNavigateToTypstSymbol?: (state: EditorState, position: number) => boolean,
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
@@ -979,6 +980,12 @@ export function getEditorExtensions(
                 return true;
               }
             }
+          }
+          // Low-memory mode has no LSP. Resolve local function calls from let
+          // bindings and imports before falling through to definition lookup.
+          if (pos !== null && onNavigateToTypstSymbol?.(view.state, pos)) {
+            event.preventDefault();
+            return true;
           }
           const client = getClient();
           const uri = getUri();

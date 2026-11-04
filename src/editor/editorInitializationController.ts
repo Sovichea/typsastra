@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import type { Extension, Text } from "@codemirror/state";
+import type { EditorState, Extension, Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { completionStatus } from "@codemirror/autocomplete";
 import { editorMatchQuery, getEditorExtensions } from "./extensions";
@@ -34,6 +34,7 @@ export interface EditorInitializationDependencies {
   flushPendingLspSync(): Promise<void>;
   navigateToLspLocation(uri: string, line: number, character: number): void;
   navigateToTypstPath(sourcePath: string): boolean;
+  navigateToTypstSymbol(state: EditorState, position: number): boolean;
   appendDeveloperLog(entry: { kind: "info" | "warning"; source: string; message: string }): void;
   isLoadingFile(): boolean;
   activeFilePath(): string | null;
@@ -85,6 +86,7 @@ export class EditorInitializationController {
         position => deps.spellcheck.khmerWordAt(position),
         () => deps.pathContext(),
         sourcePath => deps.navigateToTypstPath(sourcePath),
+        (state, position) => deps.navigateToTypstSymbol(state, position),
       ),
       deps.spellcheck.extension(),
       EditorView.updateListener.of(update => {

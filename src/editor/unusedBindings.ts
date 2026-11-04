@@ -18,9 +18,12 @@ export type LetBindingDeclaration = {
 
 const bindingIdentifier = /^\s+([\p{L}_][\p{L}\p{N}_-]*)(?=\s*(?:\(|=|:))/u;
 
-export function findLetBindingDeclarations(state: EditorState): LetBindingDeclaration[] {
+export function findLetBindingDeclarations(
+  state: EditorState,
+  tree: ReturnType<typeof syntaxTree> = syntaxTree(state),
+): LetBindingDeclaration[] {
   const declarations: LetBindingDeclaration[] = [];
-  const cursor = syntaxTree(state).cursor();
+  const cursor = tree.cursor();
   do {
     if (cursor.name !== "keyword" || cursor.node.type.isAnonymous || state.doc.sliceString(cursor.from, cursor.to) !== "let") {
       continue;

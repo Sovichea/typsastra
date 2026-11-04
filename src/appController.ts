@@ -22,6 +22,7 @@ import { EditorController } from "./editor/editorController";
 import { EditorInitializationController } from "./editor/editorInitializationController";
 import { SurroundWithDiscoveryController } from "./editor/surroundWithDiscoveryController";
 import { isForwardSyncContentPosition } from "./editor/forwardSyncEligibility";
+import { resolveTypstSymbol, typstFunctionCallAt, type TypstSymbolDefinition } from "./editor/typstSymbolNavigation";
 import { setStandaloneDocumentEffect } from "./editor/standaloneDocument";
 import { standaloneLocalDependencies } from "./preview/standalonePreview";
 /** Payload of the workspace-wide `//@table:<id>` scan. */
@@ -53,7 +54,7 @@ import { type LspDiagnostic, type LspInverseSyncResult, type LspLogEntry, type L
 import type { AppSettings, DeveloperLogCategory, PreviewColorMode, PreviewRenderMode } from "./settings";
 import { SettingsController } from "./settingsController";
 import { SettingsRuntimeController } from "./settingsRuntimeController";
-import { fileNameFromPath, filePathKey, relativeFilePath } from "./platform/paths";
+import { fileNameFromPath, filePathKey, isUntitledDocumentPath, relativeFilePath } from "./platform/paths";
 import { isBinaryImagePath, isMarkdownDocumentPath, isTypstDocumentPath, fileExtension } from "./platform/fileTypes";
 import { createUntitledTab, nextUntitledTitle } from "./editor/untitledDocument";
 import { untitledIdFromRecoveryDocumentId } from "./recovery/recoveryIdentity";
@@ -2185,6 +2186,7 @@ export class TypsastraWorkspaceController {
     flushPendingLspSync: () => this.flushPendingLspSync(),
     navigateToLspLocation: (uri, line, character) => { void this.navigateToLspLocation(uri, line, character); },
     navigateToTypstPath: sourcePath => this.navigateToTypstPath(sourcePath),
+    navigateToTypstSymbol: (state, position) => this.navigateToTypstSymbol(state, position),
     appendDeveloperLog: entry => this.appendDeveloperLog(entry),
     isLoadingFile: () => this.isLoadingFile,
     activeFilePath: () => this.activeFilePath,
@@ -4473,6 +4475,58 @@ export class TypsastraWorkspaceController {
 
   private navigateToTypstPath(sourcePath: string): boolean {
     return this.sourceLocationController.navigateToTypstPath(sourcePath);
+  }
+
+  private navigateToTypstSymbol(state: EditorState, position: number): boolean {
+    if (!this.settingsController.value.preview.lowMemoryMode) return false;
+    const call = typstFunctionCallAt(state, position);
+    const activePath = this.activeFilePath;
+    const workspaceRootPath = this.workspaceRootPath;
+    if (!call
+      || !activePath
+      || !workspaceRootPath
+      || !activePath.toLowerCase().endsWith(".typ")
+      || isUntitledDocumentPath(activePath)) {
+      return false;
+    }
+    void this.navigationHistoryController.run(async () => {
+      const entries = [activePath];
+      if (
+        this.pinnedMainFilePath
+        && filePathKey(this.pinnedMainFilePath) !== filePathKey(activePath)
+      ) {
+        entries.push(this.pinnedMainFilePath);
+      }
+      let definition: TypstSymbolDefinition | null = null;
+      for (const [index, entryPath] of entries.entries()) {
+        definition = await resolveTypstSymbol(
+          call.name,
+          entryPath,
+          workspaceRootPath,
+          path => this.workspaceText(path).catch(() => null),
+          index === 0
+            ? { preferredOffset: call.from, entrySource: state.doc.toString() }
+            : {},
+        );
+        if (definition) break;
+      }
+      if (!definition) return;
+      if (filePathKey(definition.path) !== filePathKey(this.activeFilePath ?? "")) {
+        await this.loadFile(definition.path, { focusEditor: false });
+      }
+      if (!this.getActiveTab()?.contentLoaded) return;
+      const editor = this.editorInstance;
+      const line = editor.state.doc.line(
+        Math.max(1, Math.min(definition.line + 1, editor.state.doc.lines)),
+      );
+      const cursor = line.from + Math.max(0, Math.min(definition.character, line.length));
+      editor.dispatch({
+        selection: { anchor: cursor },
+        effects: EditorView.scrollIntoView(cursor, { y: "center" }),
+      });
+      editor.focus();
+    });
+    return true;
   }
 
   private navigateToEditorTab(path: string): Promise<void> {
