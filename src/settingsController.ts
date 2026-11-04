@@ -445,6 +445,9 @@ export class SettingsController {
     onChange("settings-low-memory-mode", (settings, control) => {
       settings.preview.lowMemoryMode = (control as HTMLInputElement).checked;
     });
+    onChange("settings-preview-draft-diagrams", (settings, control) => {
+      settings.preview.draftDiagrams = (control as HTMLInputElement).checked;
+    });
     onChange("settings-ctrl-wheel-zoom-step", (settings, control) => { settings.preview.ctrlWheelZoomStepPercent = Number(control.value); });
     onChange("settings-landscape-scale", (settings, control) => { settings.preview.landscapeScalePercent = Number(control.value); });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
@@ -802,6 +805,7 @@ export class SettingsController {
     this.populatePrivateFontDirectories();
     setChecked("settings-cursor-sync", preview.cursorSync);
     setChecked("settings-low-memory-mode", preview.lowMemoryMode);
+    setChecked("settings-preview-draft-diagrams", preview.draftDiagrams);
     setChecked("settings-preview-error-panel", preview.showErrorPanel);
     const cursorSync = document.getElementById("settings-cursor-sync") as HTMLInputElement | null;
     if (cursorSync) {

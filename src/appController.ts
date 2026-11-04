@@ -548,6 +548,7 @@ export class TypsastraWorkspaceController {
   private get managedPreviewPdfPathKeys(): ReadonlySet<string> { return this.pdfPreviewRenderController.managedPdfPathKeys; }
   private readonly managedImageToolPathKeys = new Set<string>();
   private lastBroadcastPreviewColorMode: PreviewColorMode | null = null;
+  private lastDraftDiagramsSetting: boolean | undefined;
   private readonly settingsController: SettingsController = new SettingsController(
     settings => this.applySettingsToRuntime(settings),
     providers => this.handleLanguageProvidersChanged(providers),
@@ -753,6 +754,7 @@ export class TypsastraWorkspaceController {
     mapToOriginalPath: path => this.mapToOriginalPath(path),
     getOpenTabs: () => this.openTabs,
     getPreviewRenderMode: () => this.effectivePreviewRenderMode,
+    draftDiagrams: () => this.settingsController.value.preview.draftDiagrams,
     getPreparationRevision: () => this.pdfPreparationRevision,
     getLspClient: () => this.lspClient,
     listOpenedDocumentUris: () => this.lspDocumentController.listOpenedUris(),
@@ -3114,6 +3116,16 @@ export class TypsastraWorkspaceController {
     this.editorToolbarController.setVisible(editor.visualToolbar);
     this.nativeAppMenu?.syncCheckState({ wordWrap: editor.wordWrap, editorToolbar: editor.visualToolbar });
     this.nativeAppMenu?.syncShortcuts(settings.shortcuts);
+    if (
+      this.lastDraftDiagramsSetting !== undefined
+      && this.lastDraftDiagramsSetting !== settings.preview.draftDiagrams
+    ) {
+      this.invalidatePreviewWork("Draft diagram setting changed");
+      if (this.draftPreviewController.mode === "draft") {
+        void this.refreshActivePreviewRoot(true);
+      }
+    }
+    this.lastDraftDiagramsSetting = settings.preview.draftDiagrams;
   }
 
   private updatePreviewColorModeButton(mode: PreviewColorMode): void {

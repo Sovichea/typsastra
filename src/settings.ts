@@ -75,6 +75,7 @@ export type AppSettings = {
     renderMode: PreviewRenderMode;
     colorMode: PreviewColorMode;
     lowMemoryMode: boolean;
+    draftDiagrams: boolean;
     showErrorPanel: boolean;
     undockedOutline: boolean;
     landscapeScalePercent: number;
@@ -148,6 +149,7 @@ export const defaultAppSettings: AppSettings = {
     renderMode: "on-save",
     colorMode: "document",
     lowMemoryMode: false,
+    draftDiagrams: true,
     showErrorPanel: false,
     undockedOutline: true,
     landscapeScalePercent: 30,
@@ -383,6 +385,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       renderMode: previewRenderMode(preview.renderMode),
       colorMode: previewColorMode(preview.colorMode),
       lowMemoryMode: booleanValue(preview.lowMemoryMode, defaultAppSettings.preview.lowMemoryMode),
+      draftDiagrams: booleanValue(preview.draftDiagrams, defaultAppSettings.preview.draftDiagrams),
       showErrorPanel: booleanValue(preview.showErrorPanel, defaultAppSettings.preview.showErrorPanel),
       undockedOutline: booleanValue(preview.undockedOutline, defaultAppSettings.preview.undockedOutline),
       ctrlWheelZoomStepPercent: Math.round(boundedNumber(preview.ctrlWheelZoomStepPercent, 10, 5, 100) / 5) * 5,

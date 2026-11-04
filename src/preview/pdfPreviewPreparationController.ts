@@ -79,6 +79,7 @@ export interface PdfPreviewPreparationDependencies {
   mapToOriginalPath(path: string): string;
   getOpenTabs(): readonly EditorTab[];
   getPreviewRenderMode(): PreviewRenderMode;
+  draftDiagrams(): boolean;
   getPreparationRevision(): number;
   getLspClient(): TinymistLspClient | null;
   listOpenedDocumentUris(): readonly string[];
@@ -166,6 +167,7 @@ export class PdfPreviewPreparationController {
         cacheRoot,
         generateSourceMap: true,
         previewContentMode: "normal",
+        draftDiagrams: this.deps.draftDiagrams(),
       });
       this.rememberPreviewDependencies(entryFile, result.previewDependencyFiles ?? []);
     } catch (error) {
@@ -204,6 +206,7 @@ export class PdfPreviewPreparationController {
       cacheRoot,
       generateSourceMap: true,
       previewContentMode: contentMode,
+      draftDiagrams: this.deps.draftDiagrams(),
     };
     const projectPreparationStartedAt = performance.now();
     const result = await prepareRenderProjectWithCopyGuard<RenderPreparationResult>(options);
@@ -265,12 +268,14 @@ export class PdfPreviewPreparationController {
       for (const asset of activeGenerated.draftAssets) draftAssets.set(asset.id, asset);
       draftDiagnostics.push(...activeGenerated.draftDiagnostics);
     }
+    const diagramCount = [...draftAssets.values()]
+      .filter(asset => asset.kind === "diagram").length;
     this.deps.log(
       "info",
       "preview scheduler",
       contentMode === "draft"
-        ? `Draft preparation replaced ${draftAssets.size} unique image asset(s); ${draftDiagnostics.length} image call(s) remained unchanged.`
-        : "Normal preview preparation retained all document images.",
+        ? `Draft preparation replaced ${draftAssets.size - diagramCount} unique image asset(s) and ${diagramCount} diagram(s); ${draftDiagnostics.length} call(s) remained unchanged.`
+        : "Normal preview preparation retained all document images and diagrams.",
     );
     return {
       path: result.generatedEntryFile,
