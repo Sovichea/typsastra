@@ -851,7 +851,7 @@ fn draft_diagram_placeholder(id: &str, label: &str, dimensions: Option<(f64, f64
         })
         .unwrap_or_else(|| "width: 6cm, height: 3cm".to_string());
     format!(
-        "link(\"{DRAFT_LINK_PREFIX}{id}\", box({size}, stroke: 1pt + rgb(\"#7b8491\"), inset: 4pt)[#align(center + horizon)[#text(size: 8pt, fill: rgb(\"#505762\"), font: \"New Computer Modern\", \"{label}\")]])",
+        "link(\"{DRAFT_LINK_PREFIX}{id}\", box({size}, stroke: 1pt + rgb(\"#7b8491\"), inset: 4pt)[#align(center + horizon)[#set par(justify: false)\n#text(size: 8pt, fill: rgb(\"#505762\"), font: \"New Computer Modern\", \"{label}\")]])",
         label = escape_typst_string(label),
     )
 }
@@ -863,7 +863,7 @@ fn fixed_draft_placeholder(
     call: &ImageCall,
 ) -> String {
     format!(
-        "link(\"{DRAFT_LINK_PREFIX}{id}\", block({arguments}{stroke}{inset}{clip})[#align(center + horizon)[#text(size: 8pt, fill: rgb(\"#505762\"), font: \"New Computer Modern\", \"{label}\")]])",
+        "link(\"{DRAFT_LINK_PREFIX}{id}\", block({arguments}{stroke}{inset}{clip})[#align(center + horizon)[#set par(justify: false)\n#text(size: 8pt, fill: rgb(\"#505762\"), font: \"New Computer Modern\", \"{label}\")]])",
         arguments = block_arguments.join(" "),
         stroke = if call.has_stroke {
             ""
@@ -892,7 +892,7 @@ fn intrinsic_ratio_draft_placeholder(
     let svg =
         format!("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {width} {height}'></svg>");
     format!(
-        "link(\"{DRAFT_LINK_PREFIX}{id}\", block({arguments}stroke: 1pt + rgb(\"#7b8491\"), clip: true)[#place(center + horizon)[#text(size: 8pt, fill: rgb(\"#505762\"), font: \"New Computer Modern\", \"{label}\")]#image(bytes(\"{svg}\"), {spacer_axis})])",
+        "link(\"{DRAFT_LINK_PREFIX}{id}\", block({arguments}stroke: 1pt + rgb(\"#7b8491\"), clip: true)[#place(center + horizon)[#set par(justify: false)\n#text(size: 8pt, fill: rgb(\"#505762\"), font: \"New Computer Modern\", \"{label}\")]#image(bytes(\"{svg}\"), {spacer_axis})])",
         arguments = block_arguments.join(" "),
         label = escape_typst_string(raw_path),
     )
@@ -1673,6 +1673,9 @@ mod tests {
         assert!(prepared.replacements[0]
             .generated
             .contains("text(size: 8pt"));
+        assert!(prepared.replacements[0]
+            .generated
+            .contains("#set par(justify: false)"));
         assert!(!prepared.replacements[0].generated.contains("fit:"));
     }
 
@@ -2189,6 +2192,10 @@ mod tests {
             .iter()
             .all(|replacement| replacement.generated.contains("Cetz canvas")
                 || replacement.generated.contains("Fletcher diagram")));
+        assert!(prepared
+            .replacements
+            .iter()
+            .all(|replacement| replacement.generated.contains("#set par(justify: false)")));
         assert!(!prepared
             .replacements
             .iter()
