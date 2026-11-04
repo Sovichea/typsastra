@@ -10,6 +10,24 @@ describe("release workflow publishing", () => {
     expect(workflow).toContain("uses: tauri-apps/tauri-action@v0");
   });
 
+  test("runs normal CI and contributor contracts before platform builds", async () => {
+    const workflow = await Bun.file(new URL("../.github/workflows/release.yml", import.meta.url)).text();
+    const ci = await Bun.file(new URL("../.github/workflows/ci.yml", import.meta.url)).text();
+    const contracts = await Bun.file(
+      new URL("../.github/workflows/contributor-contracts.yml", import.meta.url),
+    ).text();
+
+    expect(workflow).toContain("preflight-ci:");
+    expect(workflow).toContain("uses: ./.github/workflows/ci.yml");
+    expect(workflow).toContain("preflight-conformance:");
+    expect(workflow).toContain("uses: ./.github/workflows/contributor-contracts.yml");
+    expect(workflow).toContain("needs: [preflight-ci, preflight-conformance]");
+    expect(ci).toContain("workflow_call:");
+    expect(ci).toContain("ref: ${{ inputs.ref || github.ref }}");
+    expect(contracts).toContain("workflow_call:");
+    expect(contracts).toContain("ref: ${{ inputs.ref || github.ref }}");
+  });
+
   test("rebuilds AppImage staging and verifies launcher permissions", async () => {
     const workflow = await Bun.file(new URL("../.github/workflows/release.yml", import.meta.url)).text();
     const packageJson = await Bun.file(new URL("../package.json", import.meta.url)).json() as {

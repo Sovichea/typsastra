@@ -160,12 +160,15 @@ downloaded `.deb` files or a `src/` directory.
 
 ## Release checklist
 
-1. Publish the GitHub release with the MSI, `.deb`, and AppImage assets.
-2. Bump `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`
+1. Bump `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`
    to the release version.
-3. Run `bun run generate:packaging <version>`.
-4. Run `bun test tests/packagingManifests.test.ts`.
-5. Build and test the Chocolatey package with `choco pack`.
-6. Test the Scoop manifest in a disposable Windows environment.
-7. Test the AUR package with `makepkg -si` on Arch Linux.
-8. Publish Chocolatey, Scoop, and AUR metadata.
+2. Push the release tag only after normal CI and Contributor Contracts pass on
+   the release commit. The release workflow repeats both as preflight jobs and
+   will not start platform builds if either fails.
+3. Publish the GitHub release with the MSI, `.deb`, and AppImage assets.
+4. Run `bun run generate:packaging <version>`.
+5. Run `bun test tests/packagingManifests.test.ts`.
+6. Build and test the Chocolatey package with `choco pack`.
+7. Test the Scoop manifest in a disposable Windows environment.
+8. Test the AUR package with `makepkg -si` on Arch Linux.
+9. Publish Chocolatey, Scoop, and AUR metadata.

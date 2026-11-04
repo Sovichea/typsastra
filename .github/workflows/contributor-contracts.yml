@@ -2,6 +2,7 @@ name: Contributor Contracts
 
 on:
   push:
+    branches: [main]
     paths:
       - "src/editor/editingPolicies/**"
       - "src-tauri/src/segmentation/**"
@@ -21,6 +22,12 @@ on:
       - "tests/laoReference.test.ts"
       - "tests/languageSupport.test.ts"
       - "package.json"
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to check
+        required: false
+        type: string
 
 jobs:
   frontend-conformance:
@@ -29,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.ref }}
           submodules: recursive
 
       - name: Set up Bun
@@ -53,6 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.ref }}
           submodules: recursive
 
       - name: Set up Rust stable toolchain
@@ -80,6 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.ref }}
           submodules: recursive
 
       - name: Install Linux dependencies

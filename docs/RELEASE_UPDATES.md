@@ -45,6 +45,11 @@ signatures plus `latest.json` to the GitHub release. Releases are created as
 drafts. The updater endpoint does not expose a draft, so publish the draft only
 after every platform build is present and verified.
 
+Before any platform build starts, the release workflow runs the normal CI and
+Contributor Contracts checks as preflight jobs against the release ref. A
+format, native-library, frontend, provider-conformance, or license failure stops
+the release matrix before it can create or update a draft release.
+
 All application version declarations must match before pushing a release tag:
 
 - `package.json`

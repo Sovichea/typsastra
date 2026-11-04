@@ -18,8 +18,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Run the normal checks against the release ref before any draft release or
+  # platform artifact is created. This keeps conformance failures from racing
+  # the build matrix.
+  preflight-ci:
+    name: Release preflight / CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.release_tag || github.ref }}
+
+  preflight-conformance:
+    name: Release preflight / Contributor Contracts
+    uses: ./.github/workflows/contributor-contracts.yml
+    with:
+      ref: ${{ inputs.release_tag || github.ref }}
+
   release:
     name: Build Release (${{ matrix.name }})
+    needs: [preflight-ci, preflight-conformance]
     permissions:
       contents: write
     strategy:

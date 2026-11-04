@@ -132,4 +132,6 @@ The `contributor-contracts.yml` GitHub Actions workflow automatically checks:
 - `cargo test --lib examples` — example workspace integrity.
 - Khmer regression: `bun test tests/khmerReference.test.ts` must be unchanged.
 
-A PR that fails any of these checks cannot be merged.
+A PR that fails any of these checks cannot be merged. The release workflow also
+runs this workflow as a preflight gate, so release builds do not start until the
+same checks pass for the release ref.
