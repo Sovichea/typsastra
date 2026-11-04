@@ -159,6 +159,81 @@ describe("undocked preview outline navigator", () => {
     ]);
   });
 
+  test("matches math headings when source markup differs from PDF text", () => {
+    const headings: DocumentHeading[] = [
+      {
+        id: "1:Overview:1",
+        level: 1,
+        title: "Overview",
+        filePath: "C:/project/main.typ",
+        from: 0,
+        textFrom: 2,
+        to: 10,
+        line: 1,
+        children: [],
+      },
+      {
+        id: "2:Curves:1",
+        level: 1,
+        title: "Curves over $XX$",
+        filePath: "C:/project/chapters/curves.typ",
+        from: 0,
+        textFrom: 2,
+        to: 30,
+        line: 1,
+        children: [{
+          id: "3:Maps:1",
+          level: 2,
+          title: "Maps between $XX$ and $YY$",
+          filePath: "C:/project/chapters/curves.typ",
+          from: 31,
+          textFrom: 33,
+          to: 60,
+          line: 3,
+          children: [],
+        }],
+      },
+      {
+        id: "4:Appendix:1",
+        level: 1,
+        title: "Appendix",
+        filePath: "C:/project/main.typ",
+        from: 61,
+        textFrom: 63,
+        to: 70,
+        line: 5,
+        children: [],
+      },
+    ];
+
+    matchOutlinePreviewPositions(headings, [
+      {
+        title: "1. Overview",
+        bookmarkIndex: 0,
+        children: [],
+      },
+      {
+        title: "2. Curves over 𝕏",
+        bookmarkIndex: 1,
+        children: [{
+          title: "2.1. Maps between 𝕏 and 𝕐",
+          bookmarkIndex: 2,
+          children: [],
+        }],
+      },
+      {
+        title: "3. Appendix",
+        bookmarkIndex: 3,
+        children: [],
+      },
+    ]);
+
+    expect(headings[0].previewBookmarkIndex).toBe(0);
+    expect(headings[1].previewBookmarkIndex).toBe(1);
+    expect(headings[1].children[0].previewBookmarkIndex).toBe(2);
+    expect(headings[2].previewBookmarkIndex).toBe(3);
+  });
+
   test("wires live and standalone bookmarks into the undocked preview panel", () => {
     const app = read("src", "appController.ts");
     const bindings = read("src", "ui", "appEventBindings.ts");

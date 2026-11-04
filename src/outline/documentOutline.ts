@@ -329,6 +329,7 @@ export function matchOutlinePreviewPositions(
   }
   const rendered = flattenOutlinePreviewItems(items);
   const claimed = new Set<number>();
+  const matches: Array<{ headingIndex: number; renderedIndex: number }> = [];
   const renderedTitles = rendered.map(item => comparableTitle(item.title));
   const exactMatches = new Map<string, number[]>();
   rendered.forEach((item, index) => {
@@ -338,7 +339,8 @@ export function matchOutlinePreviewPositions(
     indexes.push(index);
     exactMatches.set(title, indexes);
   });
-  for (const heading of flatHeadings) {
+  for (let headingIndex = 0; headingIndex < flatHeadings.length; headingIndex++) {
+    const heading = flatHeadings[headingIndex];
     const title = comparableTitle(heading.title);
     const exact = exactMatches.get(title);
     let renderedIndex = exact?.shift() ?? -1;
@@ -356,6 +358,55 @@ export function matchOutlinePreviewPositions(
     }
     if (renderedIndex === -1) continue;
     claimed.add(renderedIndex);
+    matches.push({ headingIndex, renderedIndex });
+  }
+
+  // Source headings can contain Typst markup while PDF bookmarks contain the
+  // rendered text, for example `$XX$` versus `𝕏`. When exact titles do not
+  // match, pair the unmatched headings between two exact matches only if both
+  // sides have the same number of destinations. This keeps order-based
+  // recovery from shifting across missing or extra headings.
+  matches.sort((left, right) =>
+    left.headingIndex - right.headingIndex || left.renderedIndex - right.renderedIndex
+  );
+  const boundaries = [
+    { headingIndex: -1, renderedIndex: -1 },
+    ...matches,
+    { headingIndex: flatHeadings.length, renderedIndex: rendered.length },
+  ];
+  for (let index = 0; index < boundaries.length - 1; index++) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+    const headingIndexes: number[] = [];
+    for (
+      let headingIndex = start.headingIndex + 1;
+      headingIndex < end.headingIndex;
+      headingIndex++
+    ) {
+      headingIndexes.push(headingIndex);
+    }
+    if (headingIndexes.length === 0) continue;
+    const renderedIndexes: number[] = [];
+    for (
+      let renderedIndex = Math.max(start.renderedIndex + 1, 0);
+      renderedIndex < end.renderedIndex;
+      renderedIndex++
+    ) {
+      if (claimed.has(renderedIndex)) continue;
+      const item = rendered[renderedIndex];
+      if (item.position === undefined && item.bookmarkIndex === undefined) continue;
+      renderedIndexes.push(renderedIndex);
+    }
+    if (headingIndexes.length !== renderedIndexes.length) continue;
+    for (let offset = 0; offset < headingIndexes.length; offset++) {
+      const renderedIndex = renderedIndexes[offset];
+      claimed.add(renderedIndex);
+      matches.push({ headingIndex: headingIndexes[offset], renderedIndex });
+    }
+  }
+
+  for (const { headingIndex, renderedIndex } of matches) {
+    const heading = flatHeadings[headingIndex];
     heading.previewPosition = rendered[renderedIndex].position;
     heading.previewBookmarkIndex = rendered[renderedIndex].bookmarkIndex;
   }
