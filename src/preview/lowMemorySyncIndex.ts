@@ -13,7 +13,7 @@ export interface LowMemorySyncAnchor {
 }
 
 export interface LowMemorySyncIndex {
-  version: 1;
+  version: 2;
   rootFile: string;
   generationId: string;
   pdfHash: string;
@@ -39,7 +39,7 @@ function validAnchor(anchor: LowMemorySyncAnchor, files: readonly string[]): boo
 export function validateLowMemorySyncIndex(value: unknown): value is LowMemorySyncIndex {
   if (!value || typeof value !== "object") return false;
   const index = value as Partial<LowMemorySyncIndex>;
-  return index.version === 1
+  return index.version === 2
     && typeof index.rootFile === "string"
     && typeof index.generationId === "string"
     && typeof index.pdfHash === "string"

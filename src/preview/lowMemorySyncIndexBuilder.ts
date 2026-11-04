@@ -81,7 +81,7 @@ export async function buildLowMemorySyncIndex(options: {
     });
     const raw = await invoke<string>("read_workspace_file", { path: queryPath });
     const anchors = parseLowMemorySyncQuery(raw);
-    return { version: 1, rootFile: options.preparedRootPath, generationId: options.generationId, pdfHash: options.pdfHash, files: staging.files, anchors };
+    return { version: 2, rootFile: options.preparedRootPath, generationId: options.generationId, pdfHash: options.pdfHash, files: staging.files, anchors };
   } finally {
     await client.stop().catch(() => undefined);
     client.dispose();

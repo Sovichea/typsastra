@@ -6561,6 +6561,20 @@ fn low_memory_sync_line_is_list_continuation(
     false
 }
 
+fn low_memory_sync_line_is_heading(trimmed: &str) -> bool {
+    let marker_len = trimmed
+        .as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b'=')
+        .count();
+    marker_len > 0
+        && marker_len <= 6
+        && matches!(
+            trimmed[marker_len..].chars().next(),
+            Some(character) if character.is_whitespace()
+        )
+}
+
 fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (String, usize) {
     // The staged file is written with LF endings. Parse that exact normalized
     // text as well so byte offsets remain correct for CRLF workspace files.
@@ -6590,6 +6604,19 @@ fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (Stri
             && !low_memory_sync_line_is_list_continuation(&root, first_content_byte)
             && low_memory_sync_line_is_markup(&root, first_content_byte)
         {
+            if leading_bytes == 0 && low_memory_sync_line_is_heading(trimmed) {
+                // A heading that starts a new page would otherwise record the
+                // position at the end of the previous page. Emit the heading
+                // first, then query its location from the following line.
+                output.push_str(text);
+                output.push('\n');
+                output.push_str(&format!(
+                    "#context metadata((typsastra_sync: true, file: {file_id}, line: {line}, pos: query(selector(heading).before(here())).last().location().position())) <typsastra-sync>\n"
+                ));
+                anchor_count += 1;
+                line_start += text.len() + 1;
+                continue;
+            }
             // A separate metadata block before a continuation line inside a
             // multi-line list or enum item changes what its trailing label
             // attaches to, so references such as `@enum:...` stop resolving in
@@ -6654,6 +6681,25 @@ Raw text is not an anchor
         assert!(instrumented.contains(&format!("{MARKER} 0, line: 0")));
         assert!(!instrumented.contains(&format!("{MARKER} 0, line: 1")));
         assert!(!instrumented.contains(&format!("{MARKER} 0, line: 2")));
+    }
+
+    #[test]
+    fn anchors_headings_after_the_heading_line() {
+        let source = "= Visible heading\nBody text\n";
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 0);
+        assert_eq!(anchors, 2);
+        let heading = instrumented.find("= Visible heading").unwrap();
+        let heading_anchor = instrumented
+            .find("query(selector(heading).before(here())).last().location().position()")
+            .unwrap();
+        let body_anchor = instrumented
+            .find("file: 0, line: 1, pos: here().position()")
+            .unwrap();
+        let body = instrumented.find("Body text").unwrap();
+        assert!(heading < heading_anchor);
+        assert!(heading_anchor < body);
+        assert!(body_anchor < body);
+        assert!(!instrumented.contains("file: 0, line: 0, pos: here().position()"));
     }
 
     #[test]
@@ -6952,7 +6998,7 @@ fn low_memory_sync_index_path(
     preview_root: &Path,
 ) -> Result<PathBuf, String> {
     Ok(low_memory_preview_cache_directory(cache_root).join(format!(
-        "{}-sync-index-v1.json",
+        "{}-sync-index-v2.json",
         preview_cache_key(root, preview_root)?
     )))
 }
