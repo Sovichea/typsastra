@@ -16,7 +16,7 @@ use super::sourcemap::{MappingKind, SourceMap, SOURCE_MAP_VERSION};
 const RENDER_CACHE_LAYOUT_VERSION: &str = "4-original-source-render";
 const RENDER_CACHE_OWNER_SCHEMA_VERSION: u32 = 1;
 const RENDER_CACHE_OWNER_FILE: &str = "workspace-owner.json";
-pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 9;
+pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 10;
 fn default_draft_diagrams() -> bool {
     true
 }

@@ -2196,6 +2196,14 @@ mod tests {
             .replacements
             .iter()
             .all(|replacement| replacement.generated.contains("#set par(justify: false)")));
+        for replacement in &prepared.replacements {
+            let parsed = typst_syntax::parse(&format!("#{}", replacement.generated));
+            assert!(
+                parsed.errors_and_warnings().0.is_empty(),
+                "generated diagram placeholder must remain valid Typst syntax: {:?}",
+                parsed.errors_and_warnings().0
+            );
+        }
         assert!(!prepared
             .replacements
             .iter()
@@ -2279,6 +2287,12 @@ Text #diagram($ a edge(->, b) $) more
         assert!(prepared.replacements[0]
             .generated
             .contains("Fletcher diagram"));
+        let parsed = typst_syntax::parse(&format!("#{}", prepared.replacements[0].generated));
+        assert!(
+            parsed.errors_and_warnings().0.is_empty(),
+            "generated inline diagram placeholder must remain valid Typst syntax: {:?}",
+            parsed.errors_and_warnings().0
+        );
     }
 
     #[test]
