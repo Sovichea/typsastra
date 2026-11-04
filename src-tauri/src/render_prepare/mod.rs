@@ -1,5 +1,6 @@
 #![allow(unused_imports)]
 
+pub mod diagram_thumbnail;
 pub mod draft;
 pub mod draft_thumbnail;
 pub mod image_call_site;
@@ -7,7 +8,11 @@ pub mod mirror;
 pub mod scanner;
 pub mod sourcemap;
 
-pub use draft::{DraftImageAsset, DraftImageDiagnostic, PreviewContentMode};
+pub use diagram_thumbnail::{
+    cached_diagram_dimensions, get_draft_diagram_thumbnail, measure_draft_diagrams,
+    DraftDiagramThumbnailStatus, MeasureDraftDiagramsResult,
+};
+pub use draft::{DraftAssetKind, DraftImageAsset, DraftImageDiagnostic, PreviewContentMode};
 pub use draft_thumbnail::{
     cancel_draft_thumbnail_generation, get_draft_thumbnail_status, start_draft_thumbnail_generation,
 };

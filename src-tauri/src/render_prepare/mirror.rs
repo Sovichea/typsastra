@@ -8,15 +8,18 @@ use typst_syntax::ast::Expr;
 use typst_syntax::SyntaxNode;
 
 use super::draft::{
-    prepare_draft_images, DraftImageAsset, DraftImageDiagnostic, DraftPreparation,
-    PreviewContentMode,
+    merge_draft_preparations, prepare_draft_diagrams_with_size_lookup, prepare_draft_images,
+    DraftAssetKind, DraftImageAsset, DraftImageDiagnostic, DraftPreparation, PreviewContentMode,
 };
 use super::sourcemap::{MappingKind, SourceMap, SOURCE_MAP_VERSION};
 
 const RENDER_CACHE_LAYOUT_VERSION: &str = "4-original-source-render";
 const RENDER_CACHE_OWNER_SCHEMA_VERSION: u32 = 1;
 const RENDER_CACHE_OWNER_FILE: &str = "workspace-owner.json";
-pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 4;
+pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 9;
+fn default_draft_diagrams() -> bool {
+    true
+}
 const RENDER_CACHE_STORAGE_REPORT_VERSION: u32 = 1;
 const RENDER_CACHE_STORAGE_REPORT_FILE: &str = "render-storage.json";
 const LARGE_COPY_FALLBACK_THRESHOLD_BYTES: u64 = 64 * 1024 * 1024;
@@ -122,6 +125,7 @@ struct DraftDependencyStamp {
 #[serde(rename_all = "camelCase")]
 struct DraftPreparationCache {
     version: u32,
+    draft_diagrams: bool,
     source_digest: String,
     dependencies: Vec<DraftDependencyStamp>,
     prepared_text: String,
@@ -146,6 +150,8 @@ pub struct RenderPrepareOptions {
     pub generate_source_map: bool,
     #[serde(default)]
     pub preview_content_mode: PreviewContentMode,
+    #[serde(default = "default_draft_diagrams")]
+    pub draft_diagrams: bool,
     #[serde(default)]
     pub allow_large_copy_fallback: bool,
 }
@@ -802,9 +808,11 @@ pub fn prepare_single_in_memory_file(
     }
 
     if options.preview_content_mode == PreviewContentMode::Draft {
-        if let Some(cached) =
-            read_current_draft_cache(&draft_cache_path(&maps_dir, rel_path), source_code)
-        {
+        if let Some(cached) = read_current_draft_cache(
+            &draft_cache_path(&maps_dir, rel_path),
+            source_code,
+            options.draft_diagrams,
+        ) {
             restore_cached_draft_artifact(
                 &dest_path,
                 &derived_metadata_path(&maps_dir, rel_path, "map"),
@@ -845,11 +853,13 @@ pub fn prepare_single_in_memory_file(
     }
     if options.preview_content_mode == PreviewContentMode::Draft {
         write_draft_cache(
+            &options.cache_root,
             &draft_cache_path(&maps_dir, rel_path),
             source_code,
             &generated_content,
             &sourcemap,
             &draft,
+            options.draft_diagrams,
         )?;
     }
 
@@ -1110,6 +1120,17 @@ fn draft_cache_path(maps_dir: &Path, rel_path: &Path) -> PathBuf {
     derived_metadata_path(maps_dir, rel_path, "draft")
 }
 
+pub(crate) fn invalidate_draft_preparation_cache(
+    cache_root: &Path,
+    project_root: &Path,
+    source_path: &Path,
+) {
+    let Ok(relative) = source_path.strip_prefix(project_root) else {
+        return;
+    };
+    let _ = fs::remove_file(draft_cache_path(&cache_root.join("maps"), relative));
+}
+
 fn source_digest(source: &str) -> String {
     let mut digest = Sha256::new();
     digest.update(source.as_bytes());
@@ -1127,11 +1148,22 @@ fn dependency_stamp(path: &Path) -> Option<DraftDependencyStamp> {
     })
 }
 
+fn dependency_stamp_or_missing(path: &Path) -> DraftDependencyStamp {
+    dependency_stamp(path).unwrap_or_else(|| DraftDependencyStamp {
+        path: path.to_path_buf(),
+        length: 0,
+        modified_secs: 0,
+        modified_nanos: 0,
+    })
+}
+
 fn draft_cache_from_preparation(
+    cache_root: &Path,
     source: &str,
     prepared_text: &str,
     source_map: &SourceMap,
     draft: &DraftPreparation,
+    draft_diagrams: bool,
 ) -> Option<DraftPreparationCache> {
     // Unresolved calls are deliberately rechecked. A missing image may appear
     // without the Typst source changing, so caching that diagnostic could hide
@@ -1139,18 +1171,38 @@ fn draft_cache_from_preparation(
     if !draft.diagnostics.is_empty() {
         return None;
     }
-    let mut dependencies = draft
+    let unique_asset_paths = draft
         .assets
         .iter()
-        .filter_map(|asset| dependency_stamp(&asset.path))
-        .collect::<Vec<_>>();
-    if dependencies.len() != draft.assets.len() {
-        return None;
+        .map(|asset| asset.path.as_path())
+        .collect::<HashSet<_>>();
+    let mut dependencies = Vec::with_capacity(unique_asset_paths.len() + draft.assets.len());
+    for path in &unique_asset_paths {
+        dependencies.push(dependency_stamp(path)?);
+    }
+    for asset in &draft.assets {
+        if asset.kind != DraftAssetKind::Diagram {
+            continue;
+        }
+        let Some(diagram_kind) = asset.diagram_kind.as_deref() else {
+            continue;
+        };
+        if let Some(size_path) = super::diagram_thumbnail::diagram_size_cache_path(
+            cache_root,
+            &asset.path,
+            &asset.id,
+            &asset.name,
+            diagram_kind,
+            asset.diagram_setup.as_deref().unwrap_or_default(),
+        ) {
+            dependencies.push(dependency_stamp_or_missing(&size_path));
+        }
     }
     dependencies.sort_by(|left, right| left.path.cmp(&right.path));
     dependencies.dedup_by(|left, right| left.path == right.path);
     Some(DraftPreparationCache {
         version: DRAFT_PREPARATION_CACHE_VERSION,
+        draft_diagrams,
         source_digest: source_digest(source),
         dependencies,
         prepared_text: prepared_text.to_string(),
@@ -1160,16 +1212,21 @@ fn draft_cache_from_preparation(
     })
 }
 
-fn read_current_draft_cache(path: &Path, source: &str) -> Option<DraftPreparationCache> {
+fn read_current_draft_cache(
+    path: &Path,
+    source: &str,
+    draft_diagrams: bool,
+) -> Option<DraftPreparationCache> {
     let bytes = fs::read(path).ok()?;
     let cached = serde_json::from_slice::<DraftPreparationCache>(&bytes).ok()?;
     if cached.version != DRAFT_PREPARATION_CACHE_VERSION
+        || cached.draft_diagrams != draft_diagrams
         || cached.source_digest != source_digest(source)
         || !cached.diagnostics.is_empty()
         || cached
             .dependencies
             .iter()
-            .any(|expected| dependency_stamp(&expected.path).as_ref() != Some(expected))
+            .any(|expected| dependency_stamp_or_missing(&expected.path) != *expected)
     {
         return None;
     }
@@ -1177,13 +1234,22 @@ fn read_current_draft_cache(path: &Path, source: &str) -> Option<DraftPreparatio
 }
 
 fn write_draft_cache(
+    cache_root: &Path,
     path: &Path,
     source: &str,
     prepared_text: &str,
     source_map: &SourceMap,
     draft: &DraftPreparation,
+    draft_diagrams: bool,
 ) -> Result<(), String> {
-    let Some(cache) = draft_cache_from_preparation(source, prepared_text, source_map, draft) else {
+    let Some(cache) = draft_cache_from_preparation(
+        cache_root,
+        source,
+        prepared_text,
+        source_map,
+        draft,
+        draft_diagrams,
+    ) else {
         let _ = fs::remove_file(path);
         return Ok(());
     };
@@ -1235,9 +1301,11 @@ fn process_typ_file(
     let source_content = fs::read_to_string(src).map_err(|e| e.to_string())?;
     let current_source_digest = source_digest(&source_content);
     if options.preview_content_mode == PreviewContentMode::Draft {
-        if let Some(cached) =
-            read_current_draft_cache(&draft_cache_path(maps_dir, rel_path), &source_content)
-        {
+        if let Some(cached) = read_current_draft_cache(
+            &draft_cache_path(maps_dir, rel_path),
+            &source_content,
+            options.draft_diagrams,
+        ) {
             let changed = restore_cached_draft_artifact(
                 dest,
                 &derived_metadata_path(maps_dir, rel_path, "map"),
@@ -1308,11 +1376,13 @@ fn process_typ_file(
     }
     if options.preview_content_mode == PreviewContentMode::Draft {
         write_draft_cache(
+            &options.cache_root,
             &draft_cache_path(maps_dir, rel_path),
             &source_content,
             &generated_content,
             &sourcemap,
             &draft,
+            options.draft_diagrams,
         )?;
     }
 
@@ -1332,13 +1402,33 @@ fn draft_preparation(
     if options.preview_content_mode != PreviewContentMode::Draft {
         return DraftPreparation::default();
     }
-    prepare_draft_images(
+    let images = prepare_draft_images(
         &options.project_root,
         source_path,
         destination_path,
         &options.cache_root.join("render"),
         source,
-    )
+    );
+    if options.draft_diagrams {
+        let diagrams = prepare_draft_diagrams_with_size_lookup(
+            &options.project_root,
+            &options.entry_file,
+            source_path,
+            source,
+            |id, binding_name, diagram_kind, layout_key| {
+                super::diagram_thumbnail::cached_diagram_dimensions(
+                    &options.cache_root,
+                    source_path,
+                    id,
+                    binding_name,
+                    diagram_kind,
+                    layout_key,
+                )
+            },
+        );
+        return merge_draft_preparations(images, diagrams);
+    }
+    images
 }
 
 fn prepare_source_content(
@@ -1594,6 +1684,7 @@ mod tests {
             cache_root: workspace.join(".typsastra/cache"),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -1622,6 +1713,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -1665,6 +1757,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -1694,6 +1787,7 @@ mod tests {
             cache_root: root.join(".typsastra/cache"),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
         let prepared = mirror_project_cancellable(&options, || false).unwrap();
@@ -1716,6 +1810,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -1741,6 +1836,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -1978,6 +2074,7 @@ mod tests {
             cache_root,
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -2018,6 +2115,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Normal,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -2050,6 +2148,74 @@ mod tests {
     }
 
     #[test]
+    fn caches_multiple_draft_diagrams_defined_in_one_source_file() {
+        let workspace = tempfile::tempdir().unwrap();
+        let main = workspace.path().join("main.typ");
+        let cache_root = workspace.path().join(".typsastra/cache");
+        fs::write(
+            &main,
+            "#import \"@preview/cetz:0.5.2\"\n\
+             #let A = cetz.canvas({ line((0, 0), (1, 1)) })\n\
+             #let B = cetz.canvas({ line((0, 1), (1, 0)) })\n\
+             #A\n#B\n",
+        )
+        .unwrap();
+        let mut options = RenderPrepareOptions {
+            project_root: workspace.path().to_path_buf(),
+            entry_file: main,
+            cache_root: cache_root.clone(),
+            generate_source_map: true,
+            preview_content_mode: PreviewContentMode::Draft,
+            draft_diagrams: true,
+            allow_large_copy_fallback: false,
+        };
+
+        let first = mirror_project_cancellable(&options, || false).unwrap();
+        assert_eq!(first.draft_assets.len(), 2);
+        assert_eq!(first.draft_cache_hits, 0);
+        assert!(cache_root.join("maps/main.typ.draft.json").is_file());
+
+        let second = mirror_project_cancellable(&options, || false).unwrap();
+        assert_eq!(second.draft_assets, first.draft_assets);
+        assert_eq!(second.draft_cache_hits, 1);
+
+        let sized = first
+            .draft_assets
+            .iter()
+            .find(|asset| asset.name == "A")
+            .unwrap();
+        let size_path = crate::render_prepare::diagram_thumbnail::diagram_size_cache_path(
+            &cache_root,
+            &sized.path,
+            &sized.id,
+            &sized.name,
+            sized.diagram_kind.as_deref().unwrap(),
+            sized.diagram_setup.as_deref().unwrap_or_default(),
+        )
+        .unwrap();
+        fs::create_dir_all(size_path.parent().unwrap()).unwrap();
+        fs::write(&size_path, r#"{"width":122,"height":68}"#).unwrap();
+        let measured = mirror_project_cancellable(&options, || false).unwrap();
+        assert_eq!(measured.draft_cache_hits, 0);
+        assert!(fs::read_to_string(cache_root.join("render/main.typ"))
+            .unwrap()
+            .contains("width: 122pt, height: 68pt"));
+
+        options.draft_diagrams = false;
+        let without_diagrams = mirror_project_cancellable(&options, || false).unwrap();
+        assert!(without_diagrams.draft_assets.is_empty());
+        assert_eq!(without_diagrams.draft_cache_hits, 0);
+        assert!(fs::read_to_string(cache_root.join("render/main.typ"))
+            .unwrap()
+            .contains("cetz.canvas"));
+
+        options.draft_diagrams = true;
+        let restored = mirror_project_cancellable(&options, || false).unwrap();
+        assert_eq!(restored.draft_assets.len(), 2);
+        assert_eq!(restored.draft_cache_hits, 0);
+    }
+
+    #[test]
     fn reuses_unchanged_draft_manifest_and_invalidates_changed_images() {
         let workspace = tempfile::tempdir().unwrap();
         let main = workspace.path().join("main.typ");
@@ -2067,6 +2233,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Draft,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -2132,6 +2299,7 @@ mod tests {
             cache_root,
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Draft,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -2188,6 +2356,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Draft,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 
@@ -2275,6 +2444,7 @@ mod tests {
             cache_root: cache_root.clone(),
             generate_source_map: true,
             preview_content_mode: PreviewContentMode::Draft,
+            draft_diagrams: true,
             allow_large_copy_fallback: false,
         };
 

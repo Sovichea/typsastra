@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use typst_syntax::ast::{
-    Arg, AstNode, ContentBlock, Expr, FuncCall, LetBinding, LetBindingKind, Param, Pattern,
+    Arg, AstNode, ContentBlock, Expr, FuncCall, Imports, LetBinding, LetBindingKind, ModuleImport,
+    Param, Pattern,
 };
-use typst_syntax::SyntaxNode;
+use typst_syntax::{SyntaxKind, SyntaxNode};
 
 pub const DRAFT_LINK_PREFIX: &str = "https://draft-preview.typsastra.invalid/";
 
@@ -16,6 +17,14 @@ pub enum PreviewContentMode {
     #[default]
     Normal,
     Draft,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DraftAssetKind {
+    #[default]
+    Image,
+    Diagram,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -30,6 +39,18 @@ pub struct DraftImageReference {
 #[serde(rename_all = "camelCase")]
 pub struct DraftImageAsset {
     pub id: String,
+    #[serde(default)]
+    pub kind: DraftAssetKind,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub diagram_kind: Option<String>,
+    #[serde(default)]
+    pub diagram_expression: Option<String>,
+    #[serde(default)]
+    pub diagram_imports: Option<String>,
+    #[serde(default)]
+    pub diagram_setup: Option<String>,
     pub path: PathBuf,
     pub mime_type: String,
     pub width: u32,
@@ -209,6 +230,12 @@ pub fn prepare_draft_images(
         } else {
             result.assets.push(DraftImageAsset {
                 id,
+                kind: DraftAssetKind::Image,
+                name: String::new(),
+                diagram_kind: None,
+                diagram_expression: None,
+                diagram_imports: None,
+                diagram_setup: None,
                 path: image_path,
                 mime_type,
                 width,
@@ -222,6 +249,611 @@ pub fn prepare_draft_images(
         }
     }
     result
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DiagramKind {
+    Fletcher,
+    Cetz,
+}
+
+impl DiagramKind {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Fletcher => "fletcher",
+            Self::Cetz => "cetz",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Fletcher => "Fletcher diagram",
+            Self::Cetz => "Cetz canvas",
+        }
+    }
+}
+
+#[derive(Default)]
+struct DiagramContext {
+    namespaces: HashMap<String, DiagramKind>,
+    unqualified: HashMap<String, DiagramKind>,
+    aliases: HashMap<String, DiagramKind>,
+}
+
+#[derive(Clone)]
+struct DiagramBindingCandidate<'a> {
+    name: String,
+    init: Option<Expr<'a>>,
+    init_offset: usize,
+}
+
+/// Replaces statically resolvable Fletcher/Cetz diagram bindings with labeled
+/// placeholders while preserving the binding name and surrounding markup.
+#[cfg(test)]
+pub fn prepare_draft_diagrams(source_path: &Path, source: &str) -> DraftPreparation {
+    prepare_draft_diagrams_with_size_lookup(
+        Path::new("C:/project"),
+        Path::new("C:/project/main.typ"),
+        source_path,
+        source,
+        |_, _, _, _| None,
+    )
+}
+
+/// Like [`prepare_draft_diagrams`], but uses cached diagram measurements to
+/// preserve the original layout size when one is available.
+pub fn prepare_draft_diagrams_with_size_lookup<F>(
+    project_root: &Path,
+    document_root: &Path,
+    source_path: &Path,
+    source: &str,
+    mut size_lookup: F,
+) -> DraftPreparation
+where
+    F: FnMut(&str, &str, &str, &str) -> Option<(f64, f64)>,
+{
+    let setup = diagram_setup_block(document_root, project_root);
+    let root = typst_syntax::parse(source);
+    let mut context = DiagramContext::default();
+    // Many documents re-export the Fletcher/Cetz factories through a template
+    // wildcard import, so assume the canonical names when no local import or
+    // binding overrides them.
+    context
+        .unqualified
+        .insert("diagram".to_string(), DiagramKind::Fletcher);
+    context
+        .unqualified
+        .insert("canvas".to_string(), DiagramKind::Cetz);
+    collect_diagram_imports(&root, 0, &mut context);
+    let mut candidates = Vec::new();
+    collect_diagram_bindings(&root, 0, &mut candidates);
+
+    let mut concrete = Vec::new();
+    let mut skip_ranges = Vec::new();
+    let mut skip_until = 0usize;
+    for candidate in candidates {
+        if candidate.init_offset < skip_until {
+            continue;
+        }
+        let resolved = candidate
+            .init
+            .and_then(|init| diagram_func_call(init, candidate.init_offset))
+            .and_then(|(call, call_offset)| {
+                resolve_diagram_callee(&call, call_offset, source, &context)
+            });
+        match resolved {
+            Some((kind, partial)) => {
+                if let Some(init) = candidate.init {
+                    // Locals declared inside a diagram expression are scoped to
+                    // that diagram and must not shadow later factories.
+                    let init_end = candidate.init_offset + init.to_untyped().len();
+                    skip_until = skip_until.max(init_end);
+                    skip_ranges.push((candidate.init_offset, init_end));
+                }
+                if partial {
+                    context.aliases.insert(candidate.name.clone(), kind);
+                    context.unqualified.remove(&candidate.name);
+                } else {
+                    // A concrete diagram replaces any prior function binding
+                    // with the same name, so later calls cannot resolve it as a
+                    // factory.
+                    context.aliases.remove(&candidate.name);
+                    context.unqualified.remove(&candidate.name);
+                    concrete.push((candidate, kind));
+                }
+            }
+            None => {
+                // Any other binding shadows a same-named imported function.
+                context.aliases.remove(&candidate.name);
+                context.unqualified.remove(&candidate.name);
+            }
+        }
+    }
+
+    let mut result = DraftPreparation::default();
+    for (candidate, kind) in concrete {
+        let Some(init) = candidate.init else {
+            continue;
+        };
+        let start = candidate.init_offset;
+        let end = start + init.to_untyped().len();
+        if end > source.len() {
+            continue;
+        }
+        let id = draft_diagram_asset_id(source_path, &candidate.name, &source[start..end]);
+        let label = format!("{} · {}", kind.label(), candidate.name);
+        let dimensions = size_lookup(&id, &candidate.name, kind.key(), &setup);
+        result.replacements.push(DraftReplacement {
+            start,
+            end,
+            generated: draft_diagram_placeholder(&id, &label, dimensions),
+        });
+        result.assets.push(DraftImageAsset {
+            id,
+            kind: DraftAssetKind::Diagram,
+            name: candidate.name,
+            diagram_kind: Some(kind.key().to_string()),
+            diagram_expression: None,
+            diagram_imports: None,
+            diagram_setup: Some(setup.clone()),
+            path: source_path.to_path_buf(),
+            mime_type: String::new(),
+            width: 0,
+            height: 0,
+            source_bytes: fs::metadata(source_path)
+                .map(|metadata| metadata.len())
+                .unwrap_or(0),
+            estimated_decoded_bytes: 0,
+            references: vec![DraftImageReference {
+                source_path: source_path.to_path_buf(),
+                from_utf16: source[..start].encode_utf16().count(),
+                to_utf16: source[..end].encode_utf16().count(),
+            }],
+        });
+    }
+
+    let imports = diagram_import_block(&root, source, source_path, project_root);
+    let mut inline = Vec::new();
+    collect_inline_diagram_calls(&root, 0, source, &context, &skip_ranges, &mut inline);
+    for (call, offset, kind) in inline {
+        let start = offset;
+        let end = start + call.to_untyped().len();
+        if end > source.len() {
+            continue;
+        }
+        let expression = source[start..end].trim().to_string();
+        if expression.is_empty() {
+            continue;
+        }
+        let line = 1 + source[..start]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count();
+        let name = format!("inline-line-{line}-{start}");
+        let id = draft_diagram_asset_id(source_path, &format!("inline:{start}"), &expression);
+        let label = format!("{} · line {}", kind.label(), line);
+        let dimensions = size_lookup(&id, &name, kind.key(), &setup);
+        result.replacements.push(DraftReplacement {
+            start,
+            end,
+            generated: draft_diagram_placeholder(&id, &label, dimensions),
+        });
+        result.assets.push(DraftImageAsset {
+            id,
+            kind: DraftAssetKind::Diagram,
+            name,
+            diagram_kind: Some(kind.key().to_string()),
+            diagram_expression: Some(expression),
+            diagram_imports: Some(imports.clone()),
+            diagram_setup: Some(setup.clone()),
+            path: source_path.to_path_buf(),
+            mime_type: String::new(),
+            width: 0,
+            height: 0,
+            source_bytes: fs::metadata(source_path)
+                .map(|metadata| metadata.len())
+                .unwrap_or(0),
+            estimated_decoded_bytes: 0,
+            references: vec![DraftImageReference {
+                source_path: source_path.to_path_buf(),
+                from_utf16: source[..start].encode_utf16().count(),
+                to_utf16: source[..end].encode_utf16().count(),
+            }],
+        });
+    }
+    result
+}
+
+pub fn merge_draft_preparations(
+    mut base: DraftPreparation,
+    extra: DraftPreparation,
+) -> DraftPreparation {
+    base.replacements.extend(extra.replacements);
+    base.assets.extend(extra.assets);
+    base.diagnostics.extend(extra.diagnostics);
+    base.replacements
+        .sort_by_key(|replacement| (replacement.start, std::cmp::Reverse(replacement.end)));
+    let mut merged = Vec::new();
+    for replacement in base.replacements {
+        if merged.last().is_some_and(|last: &DraftReplacement| {
+            replacement.start >= last.start && replacement.end <= last.end
+        }) {
+            continue;
+        }
+        merged.push(replacement);
+    }
+    base.replacements = merged;
+    base
+}
+
+fn collect_diagram_imports(node: &SyntaxNode, offset: usize, context: &mut DiagramContext) {
+    if let Some(import) = ModuleImport::from_untyped(node) {
+        if let Expr::Str(path) = import.source() {
+            let spec = path.get();
+            let kind = if spec.starts_with("@preview/cetz") {
+                Some(DiagramKind::Cetz)
+            } else if spec.starts_with("@preview/fletcher") {
+                Some(DiagramKind::Fletcher)
+            } else {
+                None
+            };
+            if let Some(kind) = kind {
+                match import.imports() {
+                    None => {
+                        let name = import
+                            .new_name()
+                            .map(|name| name.as_str().to_string())
+                            .or_else(|| import.bare_name().ok().map(|name| name.to_string()));
+                        if let Some(name) = name {
+                            context.namespaces.insert(name, kind);
+                        }
+                    }
+                    Some(imports) => {
+                        if let Some(name) = import.new_name() {
+                            context.namespaces.insert(name.as_str().to_string(), kind);
+                        }
+                        match imports {
+                            Imports::Wildcard => {
+                                let name = if kind == DiagramKind::Fletcher {
+                                    "diagram"
+                                } else {
+                                    "canvas"
+                                };
+                                context.unqualified.insert(name.to_string(), kind);
+                            }
+                            Imports::Items(items) => {
+                                for item in items.iter() {
+                                    let original = item.original_name().as_str();
+                                    let bound = item.bound_name().as_str();
+                                    if (kind == DiagramKind::Fletcher && original == "diagram")
+                                        || (kind == DiagramKind::Cetz && original == "canvas")
+                                    {
+                                        context.unqualified.insert(bound.to_string(), kind);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut child_offset = offset;
+    for child in node.children() {
+        collect_diagram_imports(child, child_offset, context);
+        child_offset += child.len();
+    }
+}
+
+fn collect_diagram_bindings<'a>(
+    node: &'a SyntaxNode,
+    offset: usize,
+    output: &mut Vec<DiagramBindingCandidate<'a>>,
+) {
+    if let Some(binding) = LetBinding::from_untyped(node) {
+        match binding.kind() {
+            LetBindingKind::Normal(pattern) => {
+                let bindings = pattern.bindings();
+                let mut collected = false;
+                if bindings.len() == 1 {
+                    if let Some(init) = binding.init() {
+                        if let Some(init_offset) =
+                            relative_node_offset(node, init.to_untyped(), offset)
+                        {
+                            output.push(DiagramBindingCandidate {
+                                name: bindings[0].as_str().to_string(),
+                                init: Some(init),
+                                init_offset,
+                            });
+                            collected = true;
+                        }
+                    }
+                }
+                if !collected {
+                    for ident in bindings {
+                        output.push(DiagramBindingCandidate {
+                            name: ident.as_str().to_string(),
+                            init: None,
+                            init_offset: offset,
+                        });
+                    }
+                }
+            }
+            LetBindingKind::Closure(ident) => {
+                // Closure helpers are dynamic. Track the name so it shadows an
+                // imported diagram factory, but never replace the function body.
+                output.push(DiagramBindingCandidate {
+                    name: ident.as_str().to_string(),
+                    init: None,
+                    init_offset: offset,
+                });
+            }
+        }
+    }
+
+    let mut child_offset = offset;
+    for child in node.children() {
+        collect_diagram_bindings(child, child_offset, output);
+        child_offset += child.len();
+    }
+}
+
+fn diagram_import_block(
+    root: &SyntaxNode,
+    source: &str,
+    source_path: &Path,
+    project_root: &Path,
+) -> String {
+    let mut imports = Vec::new();
+    collect_diagram_import_block(root, 0, 0, source, source_path, project_root, &mut imports);
+    imports.join("\n")
+}
+
+fn diagram_setup_block(document_root: &Path, project_root: &Path) -> String {
+    let Ok(source) = fs::read_to_string(document_root) else {
+        return String::new();
+    };
+    let root = typst_syntax::parse(&source);
+    let imports = diagram_import_block(&root, &source, document_root, project_root);
+    let mut setup = Vec::new();
+    collect_document_setup(&root, 0, 0, &source, &mut setup);
+    if imports.is_empty() {
+        setup.join("\n")
+    } else {
+        format!("{imports}\n{}", setup.join("\n"))
+    }
+}
+
+fn collect_document_setup(
+    node: &SyntaxNode,
+    offset: usize,
+    depth: usize,
+    source: &str,
+    output: &mut Vec<String>,
+) {
+    if depth == 1
+        && matches!(
+            node.kind(),
+            SyntaxKind::LetBinding | SyntaxKind::SetRule | SyntaxKind::ShowRule
+        )
+    {
+        let start = offset;
+        let end = offset + node.len();
+        if end <= source.len() {
+            let hash_start = if start > 0 && source.as_bytes().get(start - 1) == Some(&b'#') {
+                start - 1
+            } else {
+                start
+            };
+            output.push(source[hash_start..end].to_string());
+        }
+    }
+
+    let mut child_offset = offset;
+    for child in node.children() {
+        collect_document_setup(child, child_offset, depth + 1, source, output);
+        child_offset += child.len();
+    }
+}
+
+fn collect_diagram_import_block(
+    node: &SyntaxNode,
+    offset: usize,
+    depth: usize,
+    source: &str,
+    source_path: &Path,
+    project_root: &Path,
+    imports: &mut Vec<String>,
+) {
+    if depth == 1 {
+        if let Some(import) = ModuleImport::from_untyped(node) {
+            if let Expr::Str(path) = import.source() {
+                let spec = path.get();
+                if !spec.starts_with('@') && !spec.starts_with('/') {
+                    let base = source_path.parent().unwrap_or(project_root);
+                    let resolved = base.join(spec.as_str());
+                    let root = dunce::canonicalize(project_root)
+                        .unwrap_or_else(|_| project_root.to_path_buf());
+                    let rewritten = dunce::canonicalize(&resolved).ok().and_then(|path| {
+                        path.strip_prefix(&root).ok().map(|relative| {
+                            format!("/{}", relative.to_string_lossy().replace('\\', "/"))
+                        })
+                    });
+                    if let Some(rewritten) = rewritten {
+                        let import_start = offset;
+                        let import_end = offset + node.len();
+                        let hash_start = if import_start > 0
+                            && source.as_bytes().get(import_start - 1) == Some(&b'#')
+                        {
+                            import_start - 1
+                        } else {
+                            import_start
+                        };
+                        let string_node = path.to_untyped();
+                        if let Some(string_start) =
+                            relative_node_offset(node, string_node, import_start)
+                        {
+                            let string_end = string_start + string_node.len();
+                            if string_end <= import_end && import_end <= source.len() {
+                                let mut statement = String::new();
+                                statement.push_str(&source[hash_start..string_start]);
+                                statement.push('"');
+                                statement.push_str(&escape_typst_string(&rewritten));
+                                statement.push('"');
+                                statement.push_str(&source[string_end..import_end]);
+                                imports.push(statement);
+                            }
+                        }
+                    }
+                } else {
+                    let import_start = offset;
+                    let hash_start = if import_start > 0
+                        && source.as_bytes().get(import_start - 1) == Some(&b'#')
+                    {
+                        import_start - 1
+                    } else {
+                        import_start
+                    };
+                    imports.push(source[hash_start..offset + node.len()].to_string());
+                }
+            }
+        }
+    }
+
+    let mut child_offset = offset;
+    for child in node.children() {
+        collect_diagram_import_block(
+            child,
+            child_offset,
+            depth + 1,
+            source,
+            source_path,
+            project_root,
+            imports,
+        );
+        child_offset += child.len();
+    }
+}
+
+fn collect_inline_diagram_calls<'a>(
+    node: &'a SyntaxNode,
+    offset: usize,
+    source: &str,
+    context: &DiagramContext,
+    skip_ranges: &[(usize, usize)],
+    output: &mut Vec<(FuncCall<'a>, usize, DiagramKind)>,
+) {
+    let node_start = offset;
+    let node_end = offset + node.len();
+    if skip_ranges
+        .iter()
+        .any(|(start, end)| node_start >= *start && node_end <= *end)
+    {
+        return;
+    }
+    if let Some(call) = FuncCall::from_untyped(node) {
+        if let Some((kind, partial)) = resolve_diagram_callee(&call, offset, source, context) {
+            if !partial {
+                output.push((call, offset, kind));
+            }
+            return;
+        }
+    }
+
+    let mut child_offset = offset;
+    for child in node.children() {
+        collect_inline_diagram_calls(child, child_offset, source, context, skip_ranges, output);
+        child_offset += child.len();
+    }
+}
+
+fn diagram_func_call<'a>(expression: Expr<'a>, offset: usize) -> Option<(FuncCall<'a>, usize)> {
+    match expression {
+        Expr::FuncCall(call) => Some((call, offset)),
+        Expr::Parenthesized(group) => {
+            let inner = group.expr();
+            let inner_offset =
+                relative_node_offset(group.to_untyped(), inner.to_untyped(), offset)?;
+            diagram_func_call(inner, inner_offset)
+        }
+        _ => None,
+    }
+}
+
+fn resolve_diagram_callee(
+    call: &FuncCall<'_>,
+    call_offset: usize,
+    source: &str,
+    context: &DiagramContext,
+) -> Option<(DiagramKind, bool)> {
+    let callee = call.callee();
+    let callee_offset = relative_node_offset(call.to_untyped(), callee.to_untyped(), call_offset)?;
+    let callee_text = source.get(callee_offset..callee_offset + callee.to_untyped().len())?;
+    let (base, partial) = if let Some(base) = callee_text.strip_suffix(".with") {
+        (base, true)
+    } else {
+        (callee_text, false)
+    };
+    let parts = base.split('.').collect::<Vec<_>>();
+    if parts.is_empty() {
+        return None;
+    }
+    if let Some(kind) = context.namespaces.get(parts[0]) {
+        if parts.len() >= 2
+            && ((*kind == DiagramKind::Cetz && parts[1] == "canvas")
+                || (*kind == DiagramKind::Fletcher && parts[1] == "diagram"))
+        {
+            return Some((*kind, partial));
+        }
+    }
+    if parts.len() == 1 {
+        if let Some(kind) = context
+            .aliases
+            .get(parts[0])
+            .or_else(|| context.unqualified.get(parts[0]))
+        {
+            return Some((*kind, partial));
+        }
+    }
+    None
+}
+
+fn draft_diagram_asset_id(path: &Path, name: &str, source: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(path.to_string_lossy().as_bytes());
+    digest.update([0]);
+    digest.update(name.as_bytes());
+    digest.update([0]);
+    digest.update(source.as_bytes());
+    format!("{:x}", digest.finalize())[..24].to_string()
+}
+
+fn format_points(value: f64) -> String {
+    let formatted = format!("{value:.4}");
+    let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+    if trimmed.is_empty() {
+        "0".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn draft_diagram_placeholder(id: &str, label: &str, dimensions: Option<(f64, f64)>) -> String {
+    let size = dimensions
+        .filter(|(width, height)| *width > 0.0 && *height > 0.0)
+        .map(|(width, height)| {
+            format!(
+                "width: {}pt, height: {}pt",
+                format_points(width),
+                format_points(height)
+            )
+        })
+        .unwrap_or_else(|| "width: 6cm, height: 3cm".to_string());
+    format!(
+        "link(\"{DRAFT_LINK_PREFIX}{id}\", box({size}, stroke: 1pt + rgb(\"#7b8491\"), inset: 4pt)[#align(center + horizon)[#text(size: 8pt, fill: rgb(\"#505762\"), font: \"New Computer Modern\", \"{label}\")]])",
+        label = escape_typst_string(label),
+    )
 }
 
 fn fixed_draft_placeholder(
@@ -956,7 +1588,7 @@ fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     None
 }
 
-fn svg_dimensions(text: &str) -> Option<(u32, u32)> {
+pub(crate) fn svg_dimensions_f64(text: &str) -> Option<(f64, f64)> {
     let svg_start = text.find("<svg")?;
     let tag_end = text[svg_start..].find('>')? + svg_start;
     let tag = &text[svg_start..=tag_end];
@@ -966,7 +1598,7 @@ fn svg_dimensions(text: &str) -> Option<(u32, u32)> {
             .filter_map(|value| value.parse::<f64>().ok())
             .collect::<Vec<_>>();
         if values.len() == 4 && values[2] > 0.0 && values[3] > 0.0 {
-            return Some((values[2].round() as u32, values[3].round() as u32));
+            return Some((values[2], values[3]));
         }
     }
     let width = numeric_svg_attribute(tag, "width")?;
@@ -974,14 +1606,18 @@ fn svg_dimensions(text: &str) -> Option<(u32, u32)> {
     Some((width, height))
 }
 
-fn numeric_svg_attribute(tag: &str, name: &str) -> Option<u32> {
+pub(crate) fn svg_dimensions(text: &str) -> Option<(u32, u32)> {
+    svg_dimensions_f64(text).map(|(width, height)| (width.round() as u32, height.round() as u32))
+}
+
+fn numeric_svg_attribute(tag: &str, name: &str) -> Option<f64> {
     let value = xml_attribute(tag, name)?;
     let number = value
         .trim()
         .trim_end_matches(|character: char| character.is_ascii_alphabetic() || character == '%')
         .parse::<f64>()
         .ok()?;
-    (number > 0.0).then_some(number.round() as u32)
+    (number > 0.0).then_some(number)
 }
 
 fn xml_attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
@@ -1515,5 +2151,190 @@ mod tests {
         );
         assert!(prepared.replacements.is_empty());
         assert!(prepared.diagnostics[0].reason.contains("outside"));
+    }
+
+    #[test]
+    fn prepares_fletcher_and_cetz_diagram_bindings() {
+        let source = r#"
+#import "@preview/cetz:0.5.2"
+#import "@preview/cetz:0.5.2": canvas
+#import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
+#let diagram = fletcher.diagram.with(label-sep: 0pt)
+#let rounded = diagram.with(node-corner-radius: 2pt)
+#let C = cetz.canvas({ line((0, 0), (1, 1)) })
+#let D = canvas({ line((0, 1), (1, 0)) })
+#let F = rounded((0, 0), [(1, 1)])
+#let plain = 1
+"#;
+        let prepared = prepare_draft_diagrams(Path::new("C:/project/diags.typ"), source);
+        assert_eq!(prepared.assets.len(), 3);
+        assert_eq!(prepared.replacements.len(), 3);
+        assert!(prepared.assets.iter().any(|asset| {
+            asset.name == "C"
+                && asset.kind == DraftAssetKind::Diagram
+                && asset.diagram_kind.as_deref() == Some("cetz")
+        }));
+        assert!(prepared.assets.iter().any(|asset| {
+            asset.name == "D"
+                && asset.kind == DraftAssetKind::Diagram
+                && asset.diagram_kind.as_deref() == Some("cetz")
+        }));
+        assert!(prepared.assets.iter().any(|asset| {
+            asset.name == "F"
+                && asset.kind == DraftAssetKind::Diagram
+                && asset.diagram_kind.as_deref() == Some("fletcher")
+        }));
+        assert!(prepared
+            .replacements
+            .iter()
+            .all(|replacement| replacement.generated.contains("Cetz canvas")
+                || replacement.generated.contains("Fletcher diagram")));
+        assert!(!prepared
+            .replacements
+            .iter()
+            .any(|replacement| replacement.generated.contains("plain")));
+    }
+
+    #[test]
+    fn uses_cached_diagram_dimensions_for_placeholders() {
+        let source = r#"
+#import "@preview/cetz:0.5.2"
+#let C = cetz.canvas({ line((0, 0), (1, 1)) })
+"#;
+        let prepared = prepare_draft_diagrams_with_size_lookup(
+            Path::new("C:/project"),
+            Path::new("C:/project/main.typ"),
+            Path::new("C:/project/diags.typ"),
+            source,
+            |_, name, _, _| (name == "C").then_some((121.9911, 68.3035)),
+        );
+        assert_eq!(prepared.replacements.len(), 1);
+        assert!(prepared.replacements[0]
+            .generated
+            .contains("width: 121.9911pt, height: 68.3035pt"));
+    }
+
+    #[test]
+    fn collects_document_setup_rules_for_measurement() {
+        let workspace = tempfile::tempdir().unwrap();
+        let template = workspace.path().join("template.typ");
+        let main = workspace.path().join("main.typ");
+        fs::write(&template, "#let imath(doc) = doc").unwrap();
+        fs::write(
+            &main,
+            "#import \"template.typ\": *\n#show: imath\n#set text(size: 14pt)\n= Body\n",
+        )
+        .unwrap();
+        let setup = diagram_setup_block(&main, workspace.path());
+        assert!(setup.contains("#import \"/template.typ\": *"));
+        assert!(setup.contains("#show: imath"));
+        assert!(setup.contains("#set text(size: 14pt)"));
+        assert!(!setup.contains("= Body"));
+    }
+
+    #[test]
+    fn prepares_inline_fletcher_calls_with_rewritten_imports() {
+        let workspace = tempfile::tempdir().unwrap();
+        let parts = workspace.path().join("parts");
+        let chapters = workspace.path().join("chapters");
+        fs::create_dir_all(&parts).unwrap();
+        fs::create_dir_all(&chapters).unwrap();
+        fs::write(parts.join("diags.typ"), "#let diagram = 1").unwrap();
+        let source_path = chapters.join("main.typ");
+        let source = r#"#import "../parts/diags.typ": diagram
+Text #diagram($ a edge(->, b) $) more
+"#;
+        let prepared = prepare_draft_diagrams_with_size_lookup(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &source_path,
+            source,
+            |_, _, _, _| None,
+        );
+        assert_eq!(prepared.assets.len(), 1);
+        assert_eq!(prepared.replacements.len(), 1);
+        let asset = &prepared.assets[0];
+        assert!(asset.name.starts_with("inline-line-2-"));
+        assert!(asset
+            .diagram_expression
+            .as_deref()
+            .unwrap()
+            .starts_with("diagram("));
+        assert!(
+            asset
+                .diagram_imports
+                .as_deref()
+                .unwrap()
+                .contains("#import \"/parts/diags.typ\": diagram"),
+            "imports={:?}",
+            asset.diagram_imports
+        );
+        assert!(prepared.replacements[0]
+            .generated
+            .contains("Fletcher diagram"));
+    }
+
+    #[test]
+    fn keeps_factories_after_locals_inside_a_diagram() {
+        let source = r#"
+#import "@preview/cetz:0.5.2"
+#import "@preview/fletcher:0.5.8" as fletcher: diagram
+#let diagram = fletcher.diagram.with(label-sep: 0pt)
+#let A = cetz.canvas({
+  let diagram = 1
+  line((0, 0), (1, 1))
+})
+#let B = diagram((0, 0), [(1, 1)])
+"#;
+        let prepared = prepare_draft_diagrams(Path::new("C:/project/main.typ"), source);
+        assert_eq!(prepared.assets.len(), 2);
+        assert!(prepared.assets.iter().any(|asset| asset.name == "A"));
+        assert!(prepared.assets.iter().any(|asset| asset.name == "B"));
+    }
+
+    #[test]
+    fn ignores_shadowed_diagram_factories() {
+        let source = r#"
+#import "@preview/fletcher:0.5.8": diagram
+#let diagram = 42
+#let not-diagram = diagram(1)
+#let diagram(x) = x
+#let still-not-a-diagram = diagram(2)
+"#;
+        let prepared = prepare_draft_diagrams(Path::new("C:/project/main.typ"), source);
+        assert!(prepared.replacements.is_empty());
+        assert!(prepared.assets.is_empty());
+    }
+
+    #[test]
+    fn keeps_diagram_preparations_when_image_replacements_overlap() {
+        let base = DraftPreparation {
+            replacements: vec![DraftReplacement {
+                start: 10,
+                end: 100,
+                generated: "diagram".into(),
+            }],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        let extra = DraftPreparation {
+            replacements: vec![
+                DraftReplacement {
+                    start: 10,
+                    end: 100,
+                    generated: "duplicate".into(),
+                },
+                DraftReplacement {
+                    start: 20,
+                    end: 40,
+                    generated: "nested image".into(),
+                },
+            ],
+            assets: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        let merged = merge_draft_preparations(base, extra);
+        assert_eq!(merged.replacements.len(), 1);
+        assert_eq!(merged.replacements[0].generated, "diagram");
     }
 }

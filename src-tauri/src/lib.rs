@@ -45,8 +45,9 @@ use project_text::{
 };
 use recovery::{RecoveryDeleteResult, RecoveryListing, RecoveryRecord, RecoveryWriteResult};
 use render_prepare::{
-    cancel_draft_thumbnail_generation, cancel_render_preparation, get_draft_thumbnail_status,
-    map_generated_to_source, map_source_to_generated, prepare_render_file, prepare_render_project,
+    cancel_draft_thumbnail_generation, cancel_render_preparation, get_draft_diagram_thumbnail,
+    get_draft_thumbnail_status, map_generated_to_source, map_source_to_generated,
+    measure_draft_diagrams, prepare_render_file, prepare_render_project,
     start_draft_thumbnail_generation, validate_existing_render_cache_owner,
     workspace_render_cache_root, DraftImageAsset, DraftImageDiagnostic, PreviewContentMode,
 };
@@ -7330,6 +7331,8 @@ struct PreviewPdfCacheManifest {
     #[serde(default)]
     draft_preparation_version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    draft_diagram_sizes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     draft: Option<DraftPreviewCacheMetadata>,
 }
 
@@ -7378,6 +7381,7 @@ fn collect_workspace_signature_files(
         let name = file_name.to_string_lossy();
         if name == ".typsastra"
             || name == ".git"
+            || name.starts_with(".typsastra-")
             || (name.starts_with('.')
                 && (name.contains("typsastra-preview") || name.contains("typsastra-check")))
         {
@@ -7578,6 +7582,7 @@ async fn persist_low_memory_preview_cache(
         source_signature: current_source_signature,
         pdf_path: destination.to_string_lossy().into_owned(),
         draft_preparation_version: render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION,
+        draft_diagram_sizes: None,
         draft: None,
     };
     let manifest_temporary = directory.join(format!("{key}.json.tmp"));
@@ -7652,8 +7657,12 @@ async fn restore_preview_pdf_cache(
         return Ok(None);
     }
     if content_mode == PreviewContentMode::Draft
-        && manifest.draft_preparation_version
+        && (manifest.draft_preparation_version
             != render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION
+            || manifest.draft_diagram_sizes.as_deref()
+                != Some(
+                    render_prepare::diagram_thumbnail::diagram_size_signature(&cache_root).as_str(),
+                ))
     {
         return Ok(None);
     }
@@ -7738,6 +7747,8 @@ async fn persist_preview_pdf_cache(
         source_signature: current_source_signature,
         pdf_path: destination.to_string_lossy().into_owned(),
         draft_preparation_version: render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION,
+        draft_diagram_sizes: (content_mode == PreviewContentMode::Draft)
+            .then(|| render_prepare::diagram_thumbnail::diagram_size_signature(&cache_root)),
         draft,
     };
     let manifest_temporary = directory.join(format!("{key}.json.tmp"));
@@ -7836,6 +7847,11 @@ mod low_memory_cache_root_tests {
             "= Generated",
         )
         .expect("write generated preview");
+        std::fs::write(
+            workspace.path().join(".typsastra-d-1234.typ"),
+            "#set page(width: auto)",
+        )
+        .expect("write transient diagram snippet");
         assert_eq!(
             calculate_workspace_preview_signature(workspace.path()).expect("sign unchanged"),
             baseline
@@ -7902,12 +7918,18 @@ mod preview_pdf_cache_tests {
         preview_pdf_cache_key, DraftImageAsset, DraftPreviewCacheMetadata, PreviewContentMode,
         PreviewPdfCacheManifest,
     };
-    use crate::render_prepare::draft::DraftImageReference;
+    use crate::render_prepare::draft::{DraftAssetKind, DraftImageReference};
     use std::path::PathBuf;
 
     fn asset(id: &str) -> DraftImageAsset {
         DraftImageAsset {
             id: id.into(),
+            kind: DraftAssetKind::Image,
+            name: String::new(),
+            diagram_kind: None,
+            diagram_expression: None,
+            diagram_imports: None,
+            diagram_setup: None,
             path: PathBuf::from(format!("C:/project/{id}.png")),
             mime_type: "image/png".into(),
             width: 640,
@@ -7932,6 +7954,7 @@ mod preview_pdf_cache_tests {
             pdf_path: "C:/cache/main-draft.pdf".into(),
             draft_preparation_version:
                 crate::render_prepare::mirror::DRAFT_PREPARATION_CACHE_VERSION,
+            draft_diagram_sizes: Some("diagram-sizes".into()),
             draft: Some(DraftPreviewCacheMetadata {
                 assets: vec![asset("cover")],
                 diagnostics: Vec::new(),
@@ -7945,6 +7968,10 @@ mod preview_pdf_cache_tests {
         let decoded: PreviewPdfCacheManifest =
             serde_json::from_str(&encoded).expect("deserialize draft manifest");
         assert_eq!(decoded.content_mode, PreviewContentMode::Draft);
+        assert_eq!(
+            decoded.draft_diagram_sizes.as_deref(),
+            Some("diagram-sizes")
+        );
         let draft = decoded.draft.expect("draft metadata");
         assert_eq!(draft.assets[0].id, "cover");
         assert_eq!(draft.assets[0].references[0].from_utf16, 4);
@@ -9515,6 +9542,8 @@ pub fn run() {
             cancel_render_preparation,
             start_draft_thumbnail_generation,
             get_draft_thumbnail_status,
+            get_draft_diagram_thumbnail,
+            measure_draft_diagrams,
             cancel_draft_thumbnail_generation,
             map_generated_to_source,
             map_source_to_generated,

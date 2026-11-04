@@ -1,4 +1,4 @@
-use super::draft::DraftImageAsset;
+use super::draft::{DraftAssetKind, DraftImageAsset};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use image::metadata::Orientation;
@@ -151,7 +151,14 @@ pub async fn start_draft_thumbnail_generation(
         .collect::<HashMap<_, _>>();
     let displayed = displayed_order.keys().cloned().collect::<HashSet<_>>();
 
-    let indexed = ordered_assets(request.assets, &displayed_order);
+    let indexed = ordered_assets(
+        request
+            .assets
+            .into_iter()
+            .filter(|asset| asset.kind == DraftAssetKind::Image)
+            .collect(),
+        &displayed_order,
+    );
 
     let mut entries = HashMap::new();
     let mut jobs = Vec::new();
@@ -695,6 +702,12 @@ mod tests {
     ) -> DraftImageAsset {
         DraftImageAsset {
             id: id.into(),
+            kind: DraftAssetKind::Image,
+            name: String::new(),
+            diagram_kind: None,
+            diagram_expression: None,
+            diagram_imports: None,
+            diagram_setup: None,
             path: PathBuf::from(format!("{id}.png")),
             mime_type: "image/png".into(),
             width,
