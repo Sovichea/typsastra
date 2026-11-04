@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { EditorState, Text } from "@codemirror/state";
 import { looksLikeStalePrefixDiagnostic } from "../src/editor/diagnostics";
 import {
+  compactLogDirectory,
+  compactLogFileName,
   countedLogTotals,
   duplicatesStructuredDiagnostic,
   persistentLogsAfterManualClear,
@@ -77,6 +79,29 @@ describe("diagnostic log deduplication", () => {
       { channel: "dev", message: "file not found" },
       diagnostics
     )).toBe(false);
+  });
+});
+
+describe("log console group header labels", () => {
+  test("keeps ordinary filenames intact", () => {
+    expect(compactLogFileName("non-hausdorff_Y.typ")).toBe("non-hausdorff_Y.typ");
+  });
+
+  test("shortens long filenames without dropping the extension", () => {
+    const compacted = compactLogFileName(`${"a".repeat(80)}.typ`, 24);
+    expect(compacted).toBe(`${"a".repeat(10)}…${"a".repeat(9)}.typ`);
+    expect(compacted.length).toBe(24);
+    expect(compacted.endsWith(".typ")).toBe(true);
+  });
+
+  test("keeps only the meaningful tail of an absolute cache path", () => {
+    const directory = String.raw`C:\Users\Sovichea\AppData\Local\com.typsastra.editor.dev\workspace-cache\7c70646633d32ee09e030f958a27f6c0\low-memory-sync\5f3dd7091a66ba2a4dcb5738083a5ad504d35e4e9fc5ff4535088636289c3eb3\render\chapters`;
+    expect(compactLogDirectory(directory)).toBe("…/5f3dd709…/render/chapters");
+  });
+
+  test("leaves short relative directories readable", () => {
+    expect(compactLogDirectory("chapters")).toBe("chapters");
+    expect(compactLogDirectory("src/diagnostics")).toBe("src/diagnostics");
   });
 });
 

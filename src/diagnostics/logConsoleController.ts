@@ -86,6 +86,50 @@ export function persistentLogsAfterManualClear<
   );
 }
 
+const LOG_GROUP_FILE_NAME_LIMIT = 64;
+const LOG_GROUP_DIRECTORY_SEGMENTS = 3;
+
+/**
+ * Keeps long diagnostic filenames readable in the one-line group header while
+ * preserving the extension and the end of the name.
+ */
+export function compactLogFileName(
+  fileName: string,
+  limit = LOG_GROUP_FILE_NAME_LIMIT
+): string {
+  if (fileName.length <= limit) return fileName;
+  const dot = fileName.lastIndexOf(".");
+  const extension = dot > 0 && fileName.length - dot <= 12 ? fileName.slice(dot) : "";
+  const stem = extension ? fileName.slice(0, dot) : fileName;
+  const available = Math.max(0, limit - extension.length - 1);
+  if (available === 0) return `…${extension}`;
+  const head = Math.ceil(available / 2);
+  const tail = available - head;
+  return `${stem.slice(0, head)}…${tail > 0 ? stem.slice(-tail) : ""}${extension}`;
+}
+
+/**
+ * Collapses machine-specific prefixes and cache hashes so the group header
+ * shows the meaningful tail of a diagnostic directory instead of wrapping an
+ * absolute cache path over several lines.
+ */
+export function compactLogDirectory(
+  directory: string,
+  tailSegments = LOG_GROUP_DIRECTORY_SEGMENTS
+): string {
+  const normalized = directory
+    .replace(/\\/g, "/")
+    .replace(/\/{2,}/g, "/")
+    .replace(/\/+$/, "");
+  const segments = normalized.split("/").filter(Boolean);
+  if (!segments.length) return "";
+  const compacted = segments.map(segment =>
+    /^[0-9a-f]{16,}$/i.test(segment) ? `${segment.slice(0, 8)}…` : segment
+  );
+  const tail = compacted.slice(-Math.max(1, tailSegments));
+  return compacted.length > tail.length ? `…/${tail.join("/")}` : tail.join("/");
+}
+
 function canonicalDiagnosticMessage(message: string): string {
   let msg = message
     .normalize("NFKC")
@@ -332,17 +376,20 @@ export class LogConsoleController {
     header.type = "button";
 
     const first = entries[0];
-    const fileName = first.fileName ?? groupKey;
+    const fileName = first.fileName ?? this.basename(groupKey);
     const directory = first.filePath ? this.dirname(first.filePath) : "";
     const name = document.createElement("span");
     name.className = "log-group-filename";
-    name.textContent = fileName;
+    name.textContent = compactLogFileName(fileName);
+    name.title = fileName;
     const directoryName = document.createElement("span");
     directoryName.className = "log-group-dirname";
-    directoryName.textContent = directory;
+    directoryName.textContent = compactLogDirectory(directory);
+    directoryName.title = directory;
     const count = document.createElement("span");
     count.className = "log-group-count";
     count.textContent = String(entries.length);
+    header.title = first.filePath ?? fileName;
     header.append(name, directoryName, count);
 
     const items = document.createElement("div");
@@ -369,6 +416,7 @@ export class LogConsoleController {
     const source = document.createElement("span");
     source.className = "log-entry-source";
     source.textContent = entry.source ? `typst(${entry.source})` : "";
+    source.title = source.textContent;
     const location = document.createElement("span");
     location.className = "log-entry-position";
     if (entry.locations?.length) {
@@ -452,5 +500,11 @@ export class LogConsoleController {
     const normalized = path.replace(/\\/g, "/");
     const lastSlash = normalized.lastIndexOf("/");
     return lastSlash > 0 ? normalized.slice(0, lastSlash) : "";
+  }
+
+  private basename(path: string): string {
+    const normalized = path.replace(/\\/g, "/");
+    const lastSlash = normalized.lastIndexOf("/");
+    return lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
   }
 }

@@ -4938,6 +4938,8 @@ body.table-tools-active #code-render-pane {
   gap: 8px;
   text-align: left;
   color: var(--ui-text);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .log-group-header:hover {
@@ -4945,11 +4947,21 @@ body.table-tools-active #code-render-pane {
 }
 
 .log-group-filename {
+  flex: 0 0 auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: bold;
   color: var(--ui-text);
 }
 
 .log-group-dirname {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ui-header-text);
   font-size: 0.9em;
 }
@@ -4958,6 +4970,8 @@ body.table-tools-active #code-render-pane {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  margin-left: auto;
   background: var(--ui-border);
   color: var(--ui-text);
   font-size: 11px;
@@ -5048,12 +5062,17 @@ body.table-tools-active #code-render-pane {
 }
 
 .log-entry-source {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ui-header-text);
   font-size: 0.9em;
   flex-shrink: 0;
 }
 
 .log-entry-position {
+  white-space: nowrap;
   color: var(--ui-header-text);
   font-size: 0.9em;
   flex-shrink: 0;

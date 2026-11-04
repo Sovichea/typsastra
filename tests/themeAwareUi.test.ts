@@ -22,6 +22,27 @@ describe("theme-aware application accents", () => {
     expect(actions).toContain("font: 11px var(--font-family-sans)");
   });
 
+  test("keeps long log-console group paths on one line", () => {
+    const header = style.slice(
+      style.indexOf(".log-group-header {"),
+      style.indexOf(".log-group-header:hover")
+    );
+    expect(header).toContain("white-space: nowrap");
+    expect(header).toContain("overflow: hidden");
+    const filename = style.slice(
+      style.indexOf(".log-group-filename {"),
+      style.indexOf(".log-group-dirname {")
+    );
+    expect(filename).toContain("text-overflow: ellipsis");
+    const directory = style.slice(
+      style.indexOf(".log-group-dirname {"),
+      style.indexOf(".log-group-count {")
+    );
+    expect(directory).toContain("min-width: 0");
+    expect(directory).toContain("text-overflow: ellipsis");
+    expect(directory).toContain("white-space: nowrap");
+  });
+
   test("uses the active theme for the no-main-file placeholder", () => {
     expect(controller).toContain("preview-disabled-title preview-accent-title");
     expect(controller).not.toContain("color:#3db489");
