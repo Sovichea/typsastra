@@ -218,20 +218,23 @@ export class PreviewSourceNavigationController {
     return target.fromUtf16;
   }
 
-  public revealCursorInPreviewManually(): void {
+  public revealCursorInPreviewManually(): boolean {
     const path = this.deps.getActiveFilePath();
     if (!path?.toLowerCase().endsWith(".typ")) {
       this.deps.setPreviewReadyStatus("Open a Typst file to reveal it in preview");
-      return;
+      return false;
     }
     const cursor = this.deps.getEditor().state.selection.main.head;
     if (this.deps.isLowMemoryMode()) {
-      if (!this.deps.lowMemorySync.followEditor(path, this.deps.getEditor(), cursor, true)) {
+      const revealed = this.deps.lowMemorySync.followEditor(path, this.deps.getEditor(), cursor, true);
+      if (!revealed) {
         this.deps.setPreviewReadyStatus("No low-memory sync index is available for this preview yet");
       }
-      return;
+      return revealed;
     }
+    const available = this.deps.previewSync.canRevealManually();
     this.deps.previewSync.requestManual(path, cursor);
+    return available;
   }
 
   public cancelManualForwardSync(): void {

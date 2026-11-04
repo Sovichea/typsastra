@@ -9,6 +9,8 @@ describe("preview source navigation controller", () => {
     expect(source).toContain("export interface PreviewSourceNavigationDependencies");
     expect(source).toContain("public async handleInverseSync(");
     expect(source).toContain("public async forwardSyncTarget(");
+    expect(source).toContain("public revealCursorInPreviewManually(): boolean");
+    expect(source).toContain("return revealed;");
     expect(source).toContain("public async handlePdfPreviewClick(");
     expect(source).toContain("private async applyInverseSyncSelection(");
     expect(source).not.toContain(": any");

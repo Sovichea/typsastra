@@ -1651,7 +1651,7 @@ export class TypsastraWorkspaceController {
     serializeWysiwym: () => this.mapWysiwymToMarkup(),
     renderWysiwym: markup => this.mapMarkupToWysiwym(markup),
     save: () => this.saveActiveFile(),
-    revealCursorInPreview: () => this.revealCursorInPreviewManually(),
+    revealCursorInPreview: () => { this.revealCursorInPreviewManually(); },
     applyTypography: (config, target) => this.applyTypography(config, target),
     getWorkspaceRoot: () => this.workspaceRootPath,
     onWorkspacePrivateFontDirectoriesChanged: () => this.typographyController.privateFontDirectoriesChanged()
@@ -1803,6 +1803,7 @@ export class TypsastraWorkspaceController {
     loadFile: (path, options) => this.loadFile(path, options),
     activeTabContentLoaded: () => this.getActiveTab()?.contentLoaded === true,
     switchToCodeMode: () => { if (this.activeMode === "WYSIWYM") this.switchViewLayoutMode(); },
+    revealCursorInPreview: () => this.revealCursorInPreviewManually(),
     outline: () => this.documentOutlineController,
     previewSync: () => this.previewSyncController,
     previewFrame: () => this.previewFrame,
@@ -4283,8 +4284,8 @@ export class TypsastraWorkspaceController {
     return this.previewSourceNavigationController.handleInverseSync(uri, position);
   }
 
-  private revealCursorInPreviewManually(): void {
-    this.previewSourceNavigationController.revealCursorInPreviewManually();
+  private revealCursorInPreviewManually(): boolean {
+    return this.previewSourceNavigationController.revealCursorInPreviewManually();
   }
 
   private cancelManualForwardSync(): void {

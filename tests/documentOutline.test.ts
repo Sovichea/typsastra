@@ -299,6 +299,7 @@ describe("document outline", () => {
     );
     expect(appSource).toContain("cursorSyncEnabled: () => this.settingsController.value.preview.cursorSync");
     expect(navigationSource).toContain("revealInPreview(heading: DocumentHeading): void");
+    expect(navigationSource).toContain("if (this.deps.revealCursorInPreview()) {");
     expect(navigationSource).toContain("scrollToOutlineBookmark(heading.previewBookmarkIndex)");
     expect(navigationSource).toContain("this.revealPreviewPosition(heading.previewPosition)");
     expect(navigationSource).toContain("frame.revealDocumentPosition(position, { ripple: true })");

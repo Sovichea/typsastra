@@ -15,6 +15,7 @@ export interface OutlineNavigationDependencies {
   loadFile(path: string, options: { focusEditor?: boolean }): Promise<void>;
   activeTabContentLoaded(): boolean;
   switchToCodeMode(): void;
+  revealCursorInPreview(): boolean;
   outline(): DocumentOutlineController;
   previewSync(): PreviewSyncController;
   previewFrame(): PreviewFrame;
@@ -59,6 +60,9 @@ export class OutlineNavigationController {
       effects: EditorView.scrollIntoView(cursor, { y: "start", yMargin: 28 }),
     });
     outline.setCursorPosition(cursor, this.deps.activeFilePath());
+    if (this.deps.revealCursorInPreview()) {
+      return;
+    }
     this.revealInPreview(currentHeading);
     outline.waitForPreviewPosition(currentHeading);
   }
