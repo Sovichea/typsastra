@@ -21,6 +21,7 @@ const contextMenus = readFileSync(
 );
 const styles = readFileSync(join(root, "src", "style.css"), "utf8");
 const html = readFileSync(join(root, "index.html"), "utf8");
+const settings = readFileSync(join(root, "src", "settings.ts"), "utf8");
 const plan = readFileSync(join(root, "docs", "V0_6_0_DRAFT_PREVIEW_IMPLEMENTATION_PLAN.md"), "utf8");
 
 describe("Draft Preview", () => {
@@ -143,6 +144,26 @@ describe("Draft Preview", () => {
     expect(previewWindowController).toContain('data-preview-action="open-external"');
     expect(previewWindowController).toContain('data-preview-action="dock"');
     expect(appEventBindings).toContain('listenEvent<"export-pdf" | "open-external" | "recompile">("preview-window-action"');
+  });
+
+  test("lets users keep Fletcher and Cetz diagrams rendered in Draft Preview", () => {
+    expect(html).toContain('id="settings-preview-draft-diagrams"');
+    expect(controller).toContain("draftDiagrams: () => this.settingsController.value.preview.draftDiagrams");
+    expect(controller).toContain('this.invalidatePreviewWork("Draft diagram setting changed")');
+    expect(pdfPreparationController).toContain("draftDiagrams: this.deps.draftDiagrams()");
+    expect(settings).toContain("draftDiagrams: true");
+  });
+
+  test("measures diagram sizes once and refreshes Draft Preview", async () => {
+    const mirror = await Bun.file(
+      new URL("../src-tauri/src/render_prepare/mirror.rs", import.meta.url)
+    ).text();
+
+    expect(draftController).toContain('invoke<DraftDiagramMeasurementResult>("measure_draft_diagrams"');
+    expect(draftController).toContain("this.scheduleDiagramMeasurement(input.generation)");
+    expect(draftController).toContain('invalidatePreviewWork("Draft diagram sizes measured")');
+    expect(mirror).toContain("cached_diagram_dimensions");
+    expect(mirror).toContain("diagram_size_cache_path");
   });
 
   test("starts one fixed native thumbnail queue after Draft presentation", () => {

@@ -33,6 +33,7 @@ export type DraftPreviewImage = {
   width: number;
   height: number;
   sourceBytes: number;
+  label?: string;
 };
 
 export type DraftPreviewImageResult = DraftPreviewImage | {
@@ -3792,7 +3793,8 @@ export class PreviewFrame {
     preview.style.height = `${renderedImageHeight}px`;
     const label = doc.createElement("div");
     label.className = "draft-image-popover-label";
-    label.textContent = t`${image.width.toLocaleString()} × ${image.height.toLocaleString()} px · ${formatFileSize(image.sourceBytes)} source`;
+    label.textContent = image.label
+      ?? t`${image.width.toLocaleString()} × ${image.height.toLocaleString()} px · ${formatFileSize(image.sourceBytes)} source`;
     popover.append(preview, label);
     popover.style.width = `${renderedImageWidth + 16}px`;
     doc.body.append(popover);

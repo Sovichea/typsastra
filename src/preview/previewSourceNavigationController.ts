@@ -454,7 +454,7 @@ export class PreviewSourceNavigationController {
     await this.deps.navigateToLogEntry({
       kind: "info",
       source: "inverse sync",
-      message: "Draft Preview image",
+      message: asset.kind === "diagram" ? "Draft Preview diagram" : "Draft Preview image",
       filePath: reference.sourcePath,
       fileName: fileNameFromPath(reference.sourcePath),
       offset: reference.fromUtf16,

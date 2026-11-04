@@ -45,8 +45,16 @@ export type DraftImageReference = {
   toUtf16: number;
 };
 
+export type DraftAssetKind = "image" | "diagram";
+
 export type DraftImageAsset = {
   id: string;
+  kind?: DraftAssetKind;
+  name?: string;
+  diagramKind?: string | null;
+  diagramExpression?: string | null;
+  diagramImports?: string | null;
+  diagramSetup?: string | null;
   path: string;
   mimeType: string;
   width: number;
@@ -75,6 +83,30 @@ type DraftThumbnailQueueSummary = {
   generation: number;
   cacheHits: number;
   queued: number;
+};
+
+type DraftDiagramThumbnailStatus = {
+  status: "ready" | "failed";
+  path?: string;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  message?: string;
+};
+
+type DraftDiagramMeasurement = {
+  sourcePath: string;
+  id: string;
+  bindingName: string;
+  diagramKind: string;
+  expression?: string;
+  imports?: string;
+  setup?: string;
+};
+
+type DraftDiagramMeasurementResult = {
+  changed: boolean;
+  measured: number;
 };
 
 export type DraftThumbnailQueueMetric = {
@@ -130,6 +162,8 @@ export class DraftPreviewController {
   private assetRootPathValue: string | null = null;
   private thumbnailDocumentRootPath: string | null = null;
   private thumbnailGenerationValue = 0;
+  private diagramMeasurementTimer: number | null = null;
+  private failedDiagramMeasurementKey: string | null = null;
 
   constructor(
     private readonly dialog: AppDialogController,
@@ -184,8 +218,10 @@ export class DraftPreviewController {
     if (input.mode === "draft") {
       this.thumbnailGenerationValue = input.generation;
       await this.startThumbnailQueue(input.generation);
+      this.scheduleDiagramMeasurement(input.generation);
     } else {
       this.thumbnailGenerationValue = 0;
+      this.cancelDiagramMeasurement();
       void invoke("cancel_draft_thumbnail_generation").catch(() => {});
     }
     this.updateControl(false);
@@ -201,6 +237,8 @@ export class DraftPreviewController {
     this.assetRootPathValue = null;
     this.thumbnailDocumentRootPath = null;
     this.thumbnailGenerationValue = 0;
+    this.cancelDiagramMeasurement();
+    this.failedDiagramMeasurementKey = null;
     void invoke("cancel_draft_thumbnail_generation").catch(() => {});
     this.updateControl();
     this.updateImageHeavyWarning(null);
@@ -332,10 +370,13 @@ export class DraftPreviewController {
       ? t("Draft Preview active; switch to Normal Preview")
       : t("Normal Preview active; switch to Draft Preview"));
     const mismatch = this.presentedModeValue !== this.modeValue;
+    const diagramCount = [...this.assetsValue.values()]
+      .filter(asset => asset.kind === "diagram").length;
+    const imageCount = this.assetsValue.size - diagramCount;
     toggle.title = this.compiling || mismatch
       ? t`Preparing ${t(this.modeValue === "draft" ? "Draft" : "Normal")} Preview. The last successful ${t(this.presentedModeValue === "draft" ? "Draft" : "Normal")} Preview remains visible.`
       : this.modeValue === "draft"
-        ? t`Draft Preview is active. Click to return to Normal Preview. ${this.assetsValue.size} image asset(s) use ratio-preserving placeholders; ${this.diagnosticsValue.length} call(s) remain unchanged.`
+        ? t`Draft Preview is active. Click to return to Normal Preview. ${imageCount} image placeholder(s), ${diagramCount} diagram placeholder(s); ${this.diagnosticsValue.length} call(s) remain unchanged.`
         : t("Normal Preview is active. Click to switch to Draft Preview.");
   }
 
@@ -393,8 +434,10 @@ export class DraftPreviewController {
   async loadImage(id: string) {
     if (this.presentedModeValue !== "draft" || !/^[a-f0-9]{24}$/.test(id)) return null;
     const asset = this.assetsValue.get(id);
+    if (!asset) return null;
+    if (asset.kind === "diagram") return this.loadDiagramThumbnail(asset);
     const workspaceRoot = this.port.workspaceRootPath();
-    if (!asset || !workspaceRoot || this.thumbnailGenerationValue < 1) return null;
+    if (!workspaceRoot || this.thumbnailGenerationValue < 1) return null;
     const status = await invoke<DraftThumbnailStatus>("get_draft_thumbnail_status", {
       generation: this.thumbnailGenerationValue,
       workspaceRoot,
@@ -423,19 +466,79 @@ export class DraftPreviewController {
     };
   }
 
+  private async loadDiagramThumbnail(asset: DraftImageAsset) {
+    const workspaceRoot = this.port.workspaceRootPath();
+    const cacheRootPath = this.port.cacheRootPath();
+    if (!workspaceRoot) {
+      return { status: "failed" as const, message: "The Draft diagram preview cache is unavailable." };
+    }
+    const status = await invoke<DraftDiagramThumbnailStatus>("get_draft_diagram_thumbnail", {
+      request: {
+        workspaceRoot,
+        cacheRootPath: cacheRootPath ?? undefined,
+        id: asset.id,
+        sourcePath: asset.path,
+        bindingName: asset.name ?? "",
+        diagramKind: asset.diagramKind ?? "",
+        expression: asset.diagramExpression ?? undefined,
+        imports: asset.diagramImports ?? undefined,
+        setup: asset.diagramSetup ?? undefined,
+      },
+    }).catch(error => ({
+      status: "failed" as const,
+      message: String(error),
+    }));
+    if (status.status !== "ready" || !status.path) {
+      return {
+        status: "failed" as const,
+        message: status.message ?? "Diagram preview could not be prepared.",
+      };
+    }
+    const response = await invoke<ArrayBuffer | Uint8Array | number[]>("read_binary_file", { path: status.path });
+    const bytes = response instanceof Uint8Array
+      ? response
+      : response instanceof ArrayBuffer
+        ? new Uint8Array(response)
+        : new Uint8Array(response);
+    const diagramLabel = asset.diagramKind === "fletcher"
+      ? "Fletcher diagram"
+      : asset.diagramKind === "cetz"
+        ? "Cetz canvas"
+        : "Diagram";
+    const inlineLine = asset.diagramExpression
+      ? asset.name?.match(/^inline-line-(\d+)/)?.[1]
+      : null;
+    return {
+      status: "ready" as const,
+      bytes,
+      mimeType: status.mimeType ?? "image/svg+xml",
+      filename: `${asset.name ?? "Diagram"}.svg`,
+      width: status.width ?? 0,
+      height: status.height ?? 0,
+      sourceBytes: asset.sourceBytes,
+      label: inlineLine
+        ? `${diagramLabel} · line ${inlineLine}`
+        : `${diagramLabel} · ${asset.name ?? "Untitled"}`,
+    };
+  }
+
   async startThumbnailQueue(generation: number): Promise<void> {
     const workspaceRoot = this.port.workspaceRootPath();
     const cacheRootPath = this.port.cacheRootPath();
+    const imageAssets = [...this.assetsValue.values()]
+      .filter(asset => asset.kind !== "diagram");
     if (
       generation !== this.port.previewGeneration()
       || this.presentedModeValue !== "draft"
-      || !workspaceRoot
-      || !cacheRootPath
-      || !this.thumbnailDocumentRootPath
-      || this.assetsValue.size === 0
     ) return;
+    if (!workspaceRoot || !cacheRootPath || !this.thumbnailDocumentRootPath) return;
+    if (imageAssets.length === 0) {
+      void invoke("cancel_draft_thumbnail_generation").catch(() => {});
+      return;
+    }
     const displayedPage = Math.max(1, this.port.previewPageStatus().currentPage || 1);
-    const displayedPageAssetIds = await this.port.previewFrame().draftImageIdsForPage(displayedPage);
+    const displayedPageAssetIds = (await this.port.previewFrame().draftImageIdsForPage(displayedPage))
+      .filter(id => imageAssets.some(asset => asset.id === id));
     if (generation !== this.port.previewGeneration() || this.presentedModeValue !== "draft") return;
     const summary = await invoke<DraftThumbnailQueueSummary>("start_draft_thumbnail_generation", {
       request: {
@@ -443,7 +546,7 @@ export class DraftPreviewController {
         workspaceRoot,
         cacheRootPath,
         documentRootPath: this.thumbnailDocumentRootPath,
-        assets: [...this.assetsValue.values()],
+        assets: imageAssets,
         displayedPageAssetIds,
       },
     }).catch(error => {
@@ -501,19 +604,117 @@ export class DraftPreviewController {
     ].join(" ");
   }
 
+  private diagramMeasurementAssets(): DraftDiagramMeasurement[] {
+    return [...this.assetsValue.values()]
+      .filter(asset => asset.kind === "diagram")
+      .filter(asset =>
+        asset.name
+        && (asset.diagramKind === "fletcher" || asset.diagramKind === "cetz")
+      )
+      .map(asset => ({
+        sourcePath: asset.path,
+        id: asset.id,
+        bindingName: asset.name!,
+        diagramKind: asset.diagramKind!,
+        expression: asset.diagramExpression ?? undefined,
+        imports: asset.diagramImports ?? undefined,
+        setup: asset.diagramSetup ?? undefined,
+      }));
+  }
+
+  private scheduleDiagramMeasurement(generation: number): void {
+    this.cancelDiagramMeasurement();
+    const diagrams = this.diagramMeasurementAssets();
+    if (diagrams.length === 0) return;
+    this.diagramMeasurementTimer = window.setTimeout(() => {
+      this.diagramMeasurementTimer = null;
+      void this.measureDiagramSizes(generation, diagrams);
+    }, 1500);
+  }
+
+  private cancelDiagramMeasurement(): void {
+    if (this.diagramMeasurementTimer === null) return;
+    window.clearTimeout(this.diagramMeasurementTimer);
+    this.diagramMeasurementTimer = null;
+  }
+
+  private async measureDiagramSizes(
+    generation: number,
+    diagrams: readonly DraftDiagramMeasurement[],
+  ): Promise<void> {
+    if (
+      generation !== this.thumbnailGenerationValue
+      || this.presentedModeValue !== "draft"
+      || this.modeValue !== "draft"
+    ) return;
+    const workspaceRoot = this.port.workspaceRootPath();
+    if (!workspaceRoot) return;
+    const attemptKey = diagrams
+      .map(diagram => `${diagram.sourcePath}\u0000${diagram.id}\u0000${diagram.bindingName}`)
+      .join("\u0000");
+    if (attemptKey === this.failedDiagramMeasurementKey) return;
+    const groups = new Map<string, DraftDiagramMeasurement[]>();
+    for (const diagram of diagrams) {
+      const group = groups.get(diagram.sourcePath) ?? [];
+      group.push(diagram);
+      groups.set(diagram.sourcePath, group);
+    }
+    const cacheRootPath = this.port.cacheRootPath() ?? undefined;
+    const results = await Promise.allSettled(
+      [...groups.values()].map(group =>
+        invoke<DraftDiagramMeasurementResult>("measure_draft_diagrams", {
+          request: { workspaceRoot, cacheRootPath, diagrams: group },
+        }),
+      ),
+    );
+    if (
+      generation !== this.thumbnailGenerationValue
+      || this.presentedModeValue !== "draft"
+      || this.modeValue !== "draft"
+      || this.compiling
+    ) return;
+    let changed = false;
+    let measured = 0;
+    let failed = false;
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        changed ||= result.value.changed;
+        measured += result.value.measured;
+      } else {
+        failed = true;
+        this.port.log(
+          "warning",
+          "draft diagrams",
+          `Could not measure Draft diagram sizes: ${String(result.reason)}`,
+        );
+      }
+    }
+    this.failedDiagramMeasurementKey = failed ? attemptKey : null;
+    if (!changed) return;
+    this.port.log(
+      "info",
+      "draft diagrams",
+      `Cached exact sizes for ${measured} diagram(s); refreshing Draft Preview.`,
+    );
+    this.port.invalidatePreviewWork("Draft diagram sizes measured");
+    await this.port.refreshActivePreviewRoot(true);
+  }
+
   private async showDraftDetails(): Promise<void> {
     const assets = [...this.assetsValue.values()];
-    const sourceBytes = assets.reduce((total, asset) => total + asset.sourceBytes, 0);
-    const decodedBytes = assets.reduce((total, asset) => total + asset.estimatedDecodedBytes, 0);
+    const imageAssets = assets.filter(asset => asset.kind !== "diagram");
+    const diagramAssets = assets.filter(asset => asset.kind === "diagram");
+    const sourceBytes = imageAssets.reduce((total, asset) => total + asset.sourceBytes, 0);
+    const decodedBytes = imageAssets.reduce((total, asset) => total + asset.estimatedDecodedBytes, 0);
     const unresolved = this.diagnosticsValue.slice(0, 5).map(diagnostic =>
       `${fileNameFromPath(diagnostic.sourcePath)}: ${diagnostic.reason}`);
     const unresolvedSummary = this.diagnosticsValue.length === 0
-      ? "All statically detectable local image calls were replaced."
-      : `${this.diagnosticsValue.length} image call(s) remain unchanged.\n\n${unresolved.join("\n")}${this.diagnosticsValue.length > unresolved.length ? `\n…and ${this.diagnosticsValue.length - unresolved.length} more.` : ""}`;
+      ? "All statically detectable local image and diagram calls were replaced."
+      : `${this.diagnosticsValue.length} call(s) remain unchanged.\n\n${unresolved.join("\n")}${this.diagnosticsValue.length > unresolved.length ? `\n…and ${this.diagnosticsValue.length - unresolved.length} more.` : ""}`;
     await this.dialog.show({
       title: t("Draft Preview"),
-      subtitle: t`${assets.length.toLocaleString()} ratio-preserving placeholder${assets.length === 1 ? "" : "s"}`,
-      description: t`Draft Preview keeps each source image's intrinsic aspect ratio and preserves the document's image sizing, fitting, and placement arguments. Hover or keyboard-focus a placeholder in the preview to inspect the original image.\n\nThe replaced images total ${formatFileSize(sourceBytes)} on disk and approximately ${formatFileSize(decodedBytes)} when decoded.\n\n${unresolvedSummary}\n\nPDF export always uses the original images.`,
+      subtitle: t`${imageAssets.length.toLocaleString()} image placeholder${imageAssets.length === 1 ? "" : "s"}, ${diagramAssets.length.toLocaleString()} diagram placeholder${diagramAssets.length === 1 ? "" : "s"}`,
+      description: t`Draft Preview keeps each source image's intrinsic aspect ratio and preserves the document's image sizing, fitting, and placement arguments. Fletcher diagrams and Cetz canvases are replaced by labeled placeholders; their original sizes are measured in the background and cached, and hovering or keyboard-focusing one renders a cached preview.\n\nThe replaced images total ${formatFileSize(sourceBytes)} on disk and approximately ${formatFileSize(decodedBytes)} when decoded.\n\n${unresolvedSummary}\n\nPDF export always uses the original images and diagrams.`,
       actions: [{ id: "close", label: t("Close"), primary: true }],
       cancelAction: "close",
     });
