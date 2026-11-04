@@ -6535,6 +6535,32 @@ fn low_memory_sync_line_is_markup(
     )
 }
 
+fn low_memory_sync_line_is_list_continuation(
+    root: &typst_syntax::LinkedNode<'_>,
+    first_content_byte: usize,
+) -> bool {
+    use typst_syntax::SyntaxKind;
+
+    let Some(leaf) = root.leaf_at(first_content_byte, typst_syntax::Side::After) else {
+        return false;
+    };
+    let mut ancestor = Some(&leaf);
+    while let Some(node) = ancestor {
+        if matches!(
+            node.kind(),
+            SyntaxKind::ListItem | SyntaxKind::EnumItem | SyntaxKind::TermItem
+        ) && node.offset() < first_content_byte
+        {
+            // This line is either a continuation of a list item or a nested
+            // item. A separate metadata block here can change labels attached
+            // to the enclosing item.
+            return true;
+        }
+        ancestor = node.parent();
+    }
+    false
+}
+
 fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (String, usize) {
     // The staged file is written with LF endings. Parse that exact normalized
     // text as well so byte offsets remain correct for CRLF workspace files.
@@ -6560,7 +6586,14 @@ fn instrument_low_memory_sync_source(source_text: &str, file_id: usize) -> (Stri
             && !trimmed.starts_with("/*")
             && !trimmed.starts_with('`')
             && !matches!(trimmed.chars().next(), Some(']') | Some('}') | Some(')'));
-        if visible_markup && low_memory_sync_line_is_markup(&root, first_content_byte) {
+        if visible_markup
+            && !low_memory_sync_line_is_list_continuation(&root, first_content_byte)
+            && low_memory_sync_line_is_markup(&root, first_content_byte)
+        {
+            // A separate metadata block before a continuation line inside a
+            // multi-line list or enum item changes what its trailing label
+            // attaches to, so references such as `@enum:...` stop resolving in
+            // the staging mirror. Those lines fall back to the nearest anchor.
             output.push_str(&format!(
                 "#context metadata((typsastra_sync: true, file: {file_id}, line: {line}, pos: here().position())) <typsastra-sync>\n"
             ));
@@ -6607,6 +6640,20 @@ Raw text is not an anchor
         assert!(instrumented.contains(&format!("{MARKER} 4, line: 9")));
         assert!(!instrumented.contains(&format!("{MARKER} 4, line: 4")));
         assert!(!instrumented.contains(&format!("{MARKER} 4, line: 14")));
+    }
+
+    #[test]
+    fn skips_continuation_lines_inside_list_items() {
+        let source = "\
++ first item <enum:test:1>
+  continued text <enum:test:2>
+  + nested item <enum:test:3>
+";
+        let (instrumented, anchors) = instrument_low_memory_sync_source(source, 0);
+        assert_eq!(anchors, 1);
+        assert!(instrumented.contains(&format!("{MARKER} 0, line: 0")));
+        assert!(!instrumented.contains(&format!("{MARKER} 0, line: 1")));
+        assert!(!instrumented.contains(&format!("{MARKER} 0, line: 2")));
     }
 
     #[test]
