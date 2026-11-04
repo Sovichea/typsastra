@@ -12,7 +12,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.10.0.
+Typsastra is currently beta software. The latest release is v0.10.1.
 
 ### Open an unsigned macOS release
 
@@ -47,9 +47,18 @@ that globally disable Gatekeeper. If Typsastra still cannot be opened after a
 fresh download and this targeted removal, report the release filename, Mac
 model, processor architecture, and macOS version.
 
-### Install with Windows Package Manager
+### Install with Scoop
 
-If the manifest has been merged into the
+Scoop users can install from the project bucket:
+
+```powershell
+scoop bucket add typsastra https://github.com/Sovichea/scoop-typsastra
+scoop install typsastra
+```
+
+### Windows Package Manager (pending upstream review)
+
+The winget manifest is not yet available. After it is merged into the
 [winget-pkgs](https://github.com/microsoft/winget-pkgs) community repository,
 Windows can install the matching architecture directly:
 
@@ -62,13 +71,6 @@ installers are not code signed, so SmartScreen shows a warning on first
 launch. See [WINGET.md](./WINGET.md) for manifest maintenance.
 
 ### Other package managers
-
-Scoop users can install from the project bucket:
-
-```powershell
-scoop bucket add typsastra https://github.com/Sovichea/scoop-typsastra
-scoop install typsastra
-```
 
 Packaging metadata for Chocolatey, Scoop, and the Arch User Repository is
 maintained in the repository under `packaging/`. See

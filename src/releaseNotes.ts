@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.10.1": {
+    version: "0.10.1",
+    title: "Image helper chains and editor polish",
+    highlights: [
+      "Inverse sync follows nested image helpers to the outermost call that supplied the path, and Draft Preview resolves helper width and height parameters.",
+      "Cached preview restores warm the source map before the first synchronization click, and scrollbar markers identify their source after restores and tab changes.",
+      "Path-taking Typst functions warn about parent-relative paths and offer a root-relative quick fix. Missing toolchains use a non-blocking title-bar badge.",
+      "The writable examples are reorganized by capability, with new image-helper, search/recovery, language-default, linked-table, and template exercises."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.10.1"
+  },
   "0.10.0": {
     version: "0.10.0",
     title: "Search, recovery, and navigation",

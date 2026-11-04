@@ -60,6 +60,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Release notes:
+      - v0.10.1 — Image helper chains and editor polish: RELEASE_NOTES_V0.10.1.md
       - v0.10.0 — Search, recovery, and navigation: RELEASE_NOTES_V0.10.0.md
       - v0.9.6 — Language and editing fixes: RELEASE_NOTES_V0.9.6.md
       - v0.9.5 — UX and performance: RELEASE_NOTES_V0.9.5.md
@@ -67,6 +68,7 @@ nav:
       - v0.9.3: RELEASE_NOTES_V0.9.3.md
   - Tutorials:
       - Start here:
+          - Install Typsastra: INSTALL.md
           - Getting started: tutorials/GETTING_STARTED.md
           - Feature demo project: demo-project/README.md
       - Projects and files:

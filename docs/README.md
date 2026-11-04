@@ -4,29 +4,30 @@ Typsastra is a complex-script-first Typst environment for research and long-
 form multilingual writing. Start with a tutorial when learning a workflow; use
 the reference documents when you need exact behavior or contributor contracts.
 
-## Tutorials
+## Start here
 
-1. [Getting started](tutorials/GETTING_STARTED.md)
-2. [Projects and main files](tutorials/PROJECTS_AND_MAIN_FILES.md)
-3. [Create from templates](tutorials/PROJECT_TEMPLATES.md)
-4. [Explorer and project files](tutorials/EXPLORER_AND_PROJECTS.md)
-5. [Editor and PDF preview](tutorials/EDITOR_AND_PREVIEW.md)
-6. [Editor productivity](tutorials/EDITOR_PRODUCTIVITY.md)
-7. [Standalone files and PDFs](tutorials/STANDALONE_FILES_AND_PDFS.md)
-8. [PDF preview and source synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md)
-9. [Draft Preview](tutorials/DRAFT_PREVIEW.md)
-10. [Image Tools](tutorials/IMAGE_TOOLS.md)
-11. [Table Tools](tutorials/TABLE_TOOLS.md)
-12. [Multilingual spellcheck](tutorials/MULTILINGUAL_SPELLCHECK.md)
-13. [Document-script word completion](tutorials/KEYBOARD_LANGUAGE_COMPLETION.md)
-14. [Document typography](tutorials/DOCUMENT_TYPOGRAPHY.md)
-15. [Toolchain and storage](tutorials/TOOLCHAIN_AND_STORAGE.md)
-16. [Installing language providers](tutorials/LANGUAGE_PROVIDER_INSTALLATION.md)
-17. [Long-document workflow](tutorials/LONG_DOCUMENT_WORKFLOW.md)
-18. [Low-Memory Mode](tutorials/LOW_MEMORY_MODE.md)
-19. [Markdown live preview](tutorials/MARKDOWN_PREVIEW.md)
-20. [Project import and export](tutorials/PROJECT_IMPORT_AND_EXPORT.md)
-21. [Troubleshooting guide](tutorials/TROUBLESHOOTING.md)
+1. [Install Typsastra](INSTALL.md)
+2. [Getting started](tutorials/GETTING_STARTED.md)
+3. [Projects and main files](tutorials/PROJECTS_AND_MAIN_FILES.md)
+4. [Create from templates](tutorials/PROJECT_TEMPLATES.md)
+5. [Explorer and project files](tutorials/EXPLORER_AND_PROJECTS.md)
+6. [Editor and PDF preview](tutorials/EDITOR_AND_PREVIEW.md)
+7. [Editor productivity](tutorials/EDITOR_PRODUCTIVITY.md)
+8. [Standalone files and PDFs](tutorials/STANDALONE_FILES_AND_PDFS.md)
+9. [PDF preview and source synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md)
+10. [Draft Preview](tutorials/DRAFT_PREVIEW.md)
+11. [Image Tools](tutorials/IMAGE_TOOLS.md)
+12. [Table Tools](tutorials/TABLE_TOOLS.md)
+13. [Multilingual spellcheck](tutorials/MULTILINGUAL_SPELLCHECK.md)
+14. [Document-script word completion](tutorials/KEYBOARD_LANGUAGE_COMPLETION.md)
+15. [Document typography](tutorials/DOCUMENT_TYPOGRAPHY.md)
+16. [Toolchain and storage](tutorials/TOOLCHAIN_AND_STORAGE.md)
+17. [Installing language providers](tutorials/LANGUAGE_PROVIDER_INSTALLATION.md)
+18. [Long-document workflow](tutorials/LONG_DOCUMENT_WORKFLOW.md)
+19. [Low-Memory Mode](tutorials/LOW_MEMORY_MODE.md)
+20. [Markdown live preview](tutorials/MARKDOWN_PREVIEW.md)
+21. [Project import and export](tutorials/PROJECT_IMPORT_AND_EXPORT.md)
+22. [Troubleshooting guide](tutorials/TROUBLESHOOTING.md)
 
 ## User reference
 
@@ -53,6 +54,7 @@ the reference documents when you need exact behavior or contributor contracts.
 
 ## Releases and plans
 
+- [v0.10.1 release notes](RELEASE_NOTES_V0.10.1.md)
 - [v0.10.0 release notes](RELEASE_NOTES_V0.10.0.md)
 - [Enhanced Unicode Engine v0.4.1 release notes](ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.1.md)
 - [Enhanced Unicode Engine v0.4.0 release notes](ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.0.md)

@@ -4,11 +4,19 @@ Typsastra publishes prebuilt Windows and Linux packages from GitHub Releases.
 This page covers the repository-side metadata for the package managers that can
 reuse those artifacts:
 
-| Channel | Platform | Artifact | Publish target |
-| --- | --- | --- | --- |
-| Chocolatey | Windows | x64 and ARM64 MSI | [chocolatey.org](https://community.chocolatey.org/) |
-| Scoop | Windows | x64 and ARM64 MSI, extracted into the Scoop app directory | A Scoop bucket or [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras) |
-| AUR | Arch Linux | x86_64 and aarch64 `.deb`, repacked as `typsastra-bin` | [AUR](https://aur.archlinux.org/) |
+| Channel | Platform | Artifact | Publish target | Status |
+| --- | --- | --- | --- | --- |
+| Chocolatey | Windows | x64 and ARM64 MSI | [chocolatey.org](https://community.chocolatey.org/) | Prepared, not published |
+| Scoop | Windows | x64 and ARM64 MSI, extracted into the Scoop app directory | A Scoop bucket or [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras) | Live in the project bucket |
+| AUR | Arch Linux | x86_64 and aarch64 `.deb`, repacked as `typsastra-bin` | [AUR](https://aur.archlinux.org/) | Prepared, not published |
+
+Scoop is the current published Windows package-manager channel. The checked-in
+metadata is regenerated from a published release, so it may still describe the
+previous version until the new assets exist.
+
+Windows Package Manager metadata is maintained separately in
+[WINGET.md](./WINGET.md) and is still pending upstream review. It is not a
+current install channel.
 
 macOS is not listed because the current DMG is unsigned and unnotarized.
 Homebrew Cask requires a Gatekeeper-compliant app; see

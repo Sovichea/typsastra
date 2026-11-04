@@ -6,7 +6,31 @@ technical documentation, theses, books, and multilingual long-form writing.
 This site brings together step-by-step workflows, tool references, language
 guides, and contributor documentation.
 
-## New in v0.10.0
+## New in v0.10.1
+
+Typsastra v0.10.1 extends image helper handling in both preview directions,
+removes the first-click delay after a cached preview restore, and refreshes the
+writable examples and documentation.
+
+Read the [v0.10.1 release notes](RELEASE_NOTES_V0.10.1.md).
+
+### Image helper chains
+
+Inverse sync follows nested image helpers to the outermost call that supplied
+the path, including forwarded parameters, defaults, and named arguments. Draft
+Preview resolves same-file helper chains and preserves their width and height
+values in the placeholder.
+
+![Draft Preview showing placeholders for images forwarded through nested helpers](assets/screenshots/example-draft-preview.png)
+
+### Preview and editor reliability
+
+Cached preview restores warm the source map before the first inverse-sync click,
+and scrollbar and gutter markers identify their source after restores and tab
+changes. Path-taking Typst functions warn about parent-relative paths and offer
+a root-relative quick fix. Missing toolchains use a non-blocking title-bar badge.
+
+## v0.10.0: Search, recovery, and navigation
 
 Typsastra v0.10.0 adds project-wide search and reviewed replacement, a shared
 main-document outline, Back/Forward source navigation, unsaved-work recovery,
@@ -45,12 +69,11 @@ active. The tab-list menu reaches every open source tab.
 ## Preview and media examples
 
 The `06-preview-and-media` examples cover Draft Preview, nested image helper
-chains, preview navigation, private fonts, and Markdown notes. In the image
-helper exercise, inverse sync selects the outermost call that supplied the
-image and Draft Preview substitutes that same call with a layout-preserving
-placeholder using the helper's resolved width and height.
+chains, preview navigation, private fonts, and Markdown notes. The Markdown note
+exercises sanitized GFM rendering, task lists, tables, workspace links and
+images, mixed scripts, and blocked remote content.
 
-![Draft Preview showing placeholders for images forwarded through helpers](assets/screenshots/example-draft-preview.png)
+![Markdown note source and live preview in Typsastra](assets/screenshots/example-markdown-preview.png)
 
 See [Draft Preview](tutorials/DRAFT_PREVIEW.md), [PDF preview and
 synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md), [Image
@@ -77,6 +100,7 @@ export](tutorials/PROJECT_IMPORT_AND_EXPORT.md).
 
 ## Start here
 
+- [Install Typsastra](INSTALL.md) — download a release or install from the project Scoop bucket.
 - [Getting started](tutorials/GETTING_STARTED.md) — open or create your first project.
 - [Projects and main files](tutorials/PROJECTS_AND_MAIN_FILES.md) — understand multi-file projects and main documents.
 - [Create from templates](tutorials/PROJECT_TEMPLATES.md) — browse Universe, offline, and user templates.

@@ -1,7 +1,11 @@
 # Windows Package Manager (winget)
 
 Typsastra ships a [winget](https://learn.microsoft.com/windows/package-manager/winget/)
-manifest. Once it is merged into the
+manifest. It is not yet available in the community repository because the
+upstream pull request is still under review. This page documents the manifest
+and the future submission process.
+
+Once the manifest is merged into the
 [winget-pkgs](https://github.com/microsoft/winget-pkgs) community repository,
 Windows users can install the x64 or ARM64 build with the standard client:
 

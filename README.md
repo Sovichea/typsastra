@@ -14,12 +14,16 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.10.0.
+Typsastra is currently beta software. The latest release is v0.10.1.
 
-Windows users can also install through
-[Windows Package Manager](https://learn.microsoft.com/windows/package-manager/winget/)
-with `winget install --id Typsastra.Typsastra` after the manifest is available
-in the community repository.
+Windows users can install from the project Scoop bucket:
+
+```powershell
+scoop bucket add typsastra https://github.com/Sovichea/scoop-typsastra
+scoop install typsastra
+```
+
+The winget manifest is still awaiting upstream review and is not available yet.
 
 Typsastra is an open-source project and does not plan to purchase Apple
 Developer ID signing or notarization. On macOS, Gatekeeper may therefore report
@@ -47,6 +51,22 @@ The name combines Typst, the typesetting system at the center of the project, wi
 It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typsastra focuses on Unicode-safe editing, script-aware interaction, responsive PDF preview, extensible language tools, and multi-file project workflows while keeping the underlying Typst source portable.
 
 Khmer is the first language with deep support, including tailored cursor and deletion behavior, spellcheck, and word completion. Khmer demonstrates the depth Typsastra aims to provide; it is not the boundary of the project. The editing-policy and language-provider architecture is designed so other languages can add their own behavior without changing or weakening Khmer support.
+
+## v0.10.1: Image helper chains and editor polish
+
+Typsastra v0.10.1 makes nested image helpers work consistently in both preview
+directions. Inverse sync selects the outermost call that supplied the image,
+and Draft Preview resolves same-file helper chains with their width and height
+parameters.
+
+Cached preview restores now warm the source map before the first inverse-sync
+click. Path-taking Typst functions warn about parent-relative paths and offer a
+root-relative quick fix, and missing toolchains use a non-blocking title-bar
+badge instead of a startup modal.
+
+<img src="./assets/screenshot-example-draft.png" alt="Draft Preview placeholders for images forwarded through nested helpers" width="800"/>
+
+See the [v0.10.1 release notes](./docs/RELEASE_NOTES_V0.10.1.md).
 
 ## v0.10.0: Search, recovery, and navigation
 
