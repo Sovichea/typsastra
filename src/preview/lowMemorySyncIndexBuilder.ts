@@ -13,6 +13,7 @@ type QueryLength = number | string;
 type QueryEntry = {
   file?: number;
   line?: number;
+  line_end?: number;
   pos?: {
     // Tinymist serializes a `location` position as `page`, `x`, and `y`.
     // Dimensions are emitted as strings such as `"56.69pt"`.
@@ -43,7 +44,16 @@ export function parseLowMemorySyncQuery(raw: string): LowMemorySyncAnchor[] {
     const y = pdfPoints(pos?.y);
     return Number.isInteger(value.file) && Number.isInteger(value.line)
       && Number.isInteger(pageNo) && pageNo! > 0 && x !== null && y !== null
-      ? [{ fileId: value.file!, line: value.line!, pageNo: pageNo!, x, y }]
+      ? [{
+        fileId: value.file!,
+        line: value.line!,
+        ...(Number.isInteger(value.line_end) && value.line_end! >= value.line!
+          ? { lineEnd: value.line_end! }
+          : {}),
+        pageNo: pageNo!,
+        x,
+        y,
+      }]
       : [];
   });
 }
@@ -81,7 +91,7 @@ export async function buildLowMemorySyncIndex(options: {
     });
     const raw = await invoke<string>("read_workspace_file", { path: queryPath });
     const anchors = parseLowMemorySyncQuery(raw);
-    return { version: 3, rootFile: options.preparedRootPath, generationId: options.generationId, pdfHash: options.pdfHash, files: staging.files, anchors };
+    return { version: 5, rootFile: options.preparedRootPath, generationId: options.generationId, pdfHash: options.pdfHash, files: staging.files, anchors };
   } finally {
     await client.stop().catch(() => undefined);
     client.dispose();

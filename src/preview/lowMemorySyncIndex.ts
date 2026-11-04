@@ -6,6 +6,8 @@ export interface LowMemorySyncAnchor {
   fileId: number;
   /** Zero-based source line. */
   line: number;
+  /** Optional inclusive end line for table cells and figure captions. */
+  lineEnd?: number;
   /** One-based PDF page. */
   pageNo: number;
   x: number;
@@ -13,7 +15,7 @@ export interface LowMemorySyncAnchor {
 }
 
 export interface LowMemorySyncIndex {
-  version: 3;
+  version: 5;
   rootFile: string;
   generationId: string;
   pdfHash: string;
@@ -30,6 +32,8 @@ function validAnchor(anchor: LowMemorySyncAnchor, files: readonly string[]): boo
     && anchor.fileId < files.length
     && Number.isInteger(anchor.line)
     && anchor.line >= 0
+    && (anchor.lineEnd === undefined
+      || (Number.isInteger(anchor.lineEnd) && anchor.lineEnd >= anchor.line))
     && Number.isInteger(anchor.pageNo)
     && anchor.pageNo > 0
     && Number.isFinite(anchor.x)
@@ -39,7 +43,7 @@ function validAnchor(anchor: LowMemorySyncAnchor, files: readonly string[]): boo
 export function validateLowMemorySyncIndex(value: unknown): value is LowMemorySyncIndex {
   if (!value || typeof value !== "object") return false;
   const index = value as Partial<LowMemorySyncIndex>;
-  return index.version === 3
+  return index.version === 5
     && typeof index.rootFile === "string"
     && typeof index.generationId === "string"
     && typeof index.pdfHash === "string"
@@ -61,6 +65,24 @@ function nearestByLine(anchors: readonly LowMemorySyncAnchor[], line: number): L
   const previous = anchors[Math.max(0, low - 1)];
   const next = anchors[Math.min(anchors.length - 1, low)];
   return Math.abs(previous.line - line) <= Math.abs(next.line - line) ? previous : next;
+}
+
+function containingByLine(
+  anchors: readonly LowMemorySyncAnchor[],
+  line: number,
+): LowMemorySyncAnchor | null {
+  let best: LowMemorySyncAnchor | null = null;
+  let bestSpan = Infinity;
+  for (const anchor of anchors) {
+    const end = anchor.lineEnd ?? anchor.line;
+    if (line < anchor.line || line > end) continue;
+    const span = end - anchor.line;
+    if (span < bestSpan || (span === bestSpan && anchor.line > (best?.line ?? -1))) {
+      best = anchor;
+      bestSpan = span;
+    }
+  }
+  return best;
 }
 
 function nearestByY(anchors: readonly LowMemorySyncAnchor[], y: number): LowMemorySyncAnchor | null {
@@ -101,7 +123,8 @@ export class LowMemorySyncIndexRuntime {
   }
 
   public findSource(path: string, line: number): IndexedSourceLocation | null {
-    const anchor = nearestByLine(this.byFile.get(filePathKey(path)) ?? [], line);
+    const anchors = this.byFile.get(filePathKey(path)) ?? [];
+    const anchor = containingByLine(anchors, line) ?? nearestByLine(anchors, line);
     return anchor ? { ...anchor, path: this.index.files[anchor.fileId] } : null;
   }
 
