@@ -36,8 +36,8 @@ walkthrough.
   configure color, page navigation, links, and source mapping.
 - [Low-Memory Mode](tutorials/LOW_MEMORY_MODE.md) — compile long documents with
   a one-shot compiler and indexed navigation.
-- [Draft Preview](tutorials/DRAFT_PREVIEW.md) — preview image-heavy documents
-  with layout-preserving image placeholders.
+- [Draft Preview](tutorials/DRAFT_PREVIEW.md) — preview image- and diagram-heavy
+  documents with layout-preserving placeholders.
 - [Document typography](tutorials/DOCUMENT_TYPOGRAPHY.md) — configure fonts and
   script-specific typography.
 - [Toolchain and storage](tutorials/TOOLCHAIN_AND_STORAGE.md) — manage Tinymist,

@@ -264,7 +264,7 @@ cache behavior, synchronization details, and current limitations.
 
 ### Draft Preview
 
-Draft Preview replaces supported image calls in Typsastra’s private render mirror with lightweight, layout-preserving placeholders. Hover over a placeholder to inspect a cached thumbnail without adding the full image to the draft document. Normal Preview and exported PDFs continue to use the original images.
+Draft Preview replaces supported image calls, Fletcher diagrams, and CeTZ canvases in Typsastra’s private render mirror with lightweight, layout-preserving placeholders. Hover over a placeholder to inspect a cached thumbnail without adding the full asset to the draft document. Normal Preview and exported PDFs continue to use the original images and diagrams.
 
 
 

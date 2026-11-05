@@ -117,7 +117,7 @@ export](tutorials/PROJECT_IMPORT_AND_EXPORT.md).
 
 ### Draft Preview
 
-See image placeholders preserve document layout while you work:
+See image and diagram placeholders preserve document layout while you work:
 
 <video controls preload="none" playsinline width="100%">
   <source src="https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db" type="video/mp4">

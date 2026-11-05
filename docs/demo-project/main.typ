@@ -23,10 +23,12 @@ Tools anchor. Explore the project in the editor while watching the preview.
 - Images that are referenced by the main document.
 - A table anchor that can be connected to a Table Tools sample.
 - A short multilingual excerpt for script-aware editing.
+- Fletcher diagrams and a CeTZ canvas for Draft Preview.
 
 #include "chapters/01-workflow.typ"
 #include "chapters/02-language.typ"
 #include "chapters/03-media-and-data.typ"
+#include "chapters/04-diagrams.typ"
 
 == Research summary
 
