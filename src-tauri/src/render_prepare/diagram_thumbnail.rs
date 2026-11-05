@@ -11,7 +11,7 @@ use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use super::draft::{svg_dimensions, svg_dimensions_f64};
 
 const DIAGRAM_THUMBNAIL_CACHE_VERSION: &str = "v4";
-const DIAGRAM_COMPILE_CONCURRENCY: usize = 2;
+const DIAGRAM_COMPILE_CONCURRENCY: usize = 4;
 const DIAGRAM_THUMBNAIL_CHUNK_SIZE: usize = 6;
 
 static TEMP_SNIPPET_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -1369,8 +1369,14 @@ fn diagram_thumbnail_worker_count() -> usize {
     let available = std::thread::available_parallelism()
         .map(|value| value.get())
         .unwrap_or(1);
-    if available >= 4 {
-        DIAGRAM_COMPILE_CONCURRENCY
+    diagram_thumbnail_worker_count_for(available)
+}
+
+fn diagram_thumbnail_worker_count_for(available: usize) -> usize {
+    if available >= 6 {
+        4
+    } else if available >= 3 {
+        2
     } else {
         1
     }
@@ -1440,6 +1446,17 @@ fn escape_typst_string(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scales_diagram_workers_for_device_class() {
+        assert_eq!(diagram_thumbnail_worker_count_for(1), 1);
+        assert_eq!(diagram_thumbnail_worker_count_for(2), 1);
+        assert_eq!(diagram_thumbnail_worker_count_for(3), 2);
+        assert_eq!(diagram_thumbnail_worker_count_for(4), 2);
+        assert_eq!(diagram_thumbnail_worker_count_for(5), 2);
+        assert_eq!(diagram_thumbnail_worker_count_for(6), 4);
+        assert_eq!(diagram_thumbnail_worker_count_for(22), 4);
+    }
 
     #[test]
     fn accepts_typst_binding_names_and_rejects_source_injection() {
