@@ -32,7 +32,7 @@ describe("preview content controller", () => {
     expect(source).toContain("this.previewContentController.restoreMarkdownPreviewIfActive()");
     expect(source).toContain("return this.previewContentController.noMainFileMessage();");
     expect(source).toContain("this.previewContentController.renderImageToolPreview(source, imagePath);");
-    expect(source).toContain("return this.previewContentController.refreshActivePreviewRoot(forceRender);");
+    expect(source).toContain("return this.previewContentController.refreshActivePreviewRoot(forceRender, forceCompile);");
     expect(source).toContain("isTableToolActive: () => this.sidebarController.activeTool === \"tables\",");
     // Document preview rendering is blocked while the table tool owns the pane.
     expect(source).toContain("if (this.sidebarController.activeTool === \"tables\") return Promise.resolve();");

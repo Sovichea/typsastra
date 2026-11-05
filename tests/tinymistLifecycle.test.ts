@@ -56,8 +56,12 @@ describe("Tinymist workspace lifecycle", () => {
       new URL("../src/session/lspSyncController.ts", import.meta.url),
     ).text();
     expect(source).toContain("private restoreActiveDocumentAfterTinymistRestart");
-    expect(source).toContain("return this.lspSyncController.restoreActiveDocumentAfterRestart(forcePreview)");
-    expect(lspSyncSource).toContain("async restoreActiveDocumentAfterRestart(forcePreview = true)");
+    expect(source).toContain("return this.lspSyncController.restoreActiveDocumentAfterRestart(");
+    expect(source).toContain("forcePreview,");
+    expect(source).toContain("forceCompile,");
+    expect(lspSyncSource).toContain("async restoreActiveDocumentAfterRestart(");
+    expect(lspSyncSource).toContain("forceCompile = false,");
+    expect(lspSyncSource).toContain("await this.deps.refreshActivePreviewRoot(forcePreview, forceCompile);");
     expect(lspSyncSource).toContain("await this.deps.updatePinnedMain(mainPath, true)");
     expect(pinnedMainSource).toContain("if (mainChanged && (!path || mainWasAlreadyActive))");
     expect(pinnedMainSource).toContain("await deps.restoreActiveDocumentAfterRestart(mainWasAlreadyActive)");

@@ -52,7 +52,9 @@ describe("continued app controller extraction", () => {
 
     expect(app).toContain("this.lspSyncController.queueContentMutation(rawText)");
     expect(app).toContain("return this.lspSyncController.flushPending()");
-    expect(app).toContain("return this.lspSyncController.restoreActiveDocumentAfterRestart(forcePreview)");
+    expect(app).toContain("return this.lspSyncController.restoreActiveDocumentAfterRestart(");
+    expect(app).toContain("forcePreview,");
+    expect(app).toContain("forceCompile,");
     expect(sync).toContain("export interface LspSyncDependencies");
     expect(sync).toContain("this.deps.session().queueDocumentSync(");
     expect(sync).toContain("session.isSyncRequestCurrent(requestKey, expectedGeneration)");

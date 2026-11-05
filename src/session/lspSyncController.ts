@@ -29,7 +29,7 @@ export interface LspSyncDependencies {
   resolveLspDocument(path: string, text: string): Promise<LspDocumentResolution>;
   updatePinnedMain(path: string | null, force?: boolean): Promise<boolean>;
   recheckActiveDocumentAfterPin(text: string): Promise<void>;
-  refreshActivePreviewRoot(force?: boolean): Promise<void>;
+  refreshActivePreviewRoot(force?: boolean, forceCompile?: boolean): Promise<void>;
   appendLog(entry: LspLogEntry): void;
 }
 
@@ -121,7 +121,10 @@ export class LspSyncController {
     await client.notifyTextChange(lspRes.uri, lspRes.content, version);
   }
 
-  async restoreActiveDocumentAfterRestart(forcePreview = true): Promise<void> {
+  async restoreActiveDocumentAfterRestart(
+    forcePreview = true,
+    forceCompile = false,
+  ): Promise<void> {
     const activePath = this.deps.activeFilePath();
     const workspaceRootPath = this.deps.workspaceRootPath();
     const client = this.deps.client();
@@ -153,7 +156,7 @@ export class LspSyncController {
       }
 
       await this.deps.recheckActiveDocumentAfterPin(contents);
-      await this.deps.refreshActivePreviewRoot(forcePreview);
+      await this.deps.refreshActivePreviewRoot(forcePreview, forceCompile);
       this.deps.appendLog({
         kind: "info",
         source: "lsp lifecycle",

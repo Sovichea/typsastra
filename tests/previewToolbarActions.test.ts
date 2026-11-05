@@ -78,7 +78,7 @@ describe("preview toolbar actions", () => {
     const restart = recompile.indexOf('await this.restartTinymistSession("Restarting Tinymist and recompiling preview...")');
     const sessionGuard = recompile.indexOf("const samePreviewSession = filePathKey(this.activeFilePath");
     const preserve = recompile.indexOf("this.previewFrame.preserveViewportForNextLoad(viewportAnchor, scrollTop)");
-    const restore = recompile.indexOf("await this.restoreActiveDocumentAfterTinymistRestart(true)");
+    const restore = recompile.indexOf("await this.restoreActiveDocumentAfterTinymistRestart(true, true)");
 
     expect(captureAnchor).toBeGreaterThan(-1);
     expect(captureScroll).toBeGreaterThan(captureAnchor);

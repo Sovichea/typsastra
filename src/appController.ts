@@ -731,7 +731,8 @@ export class TypsastraWorkspaceController {
     resolveLspDocument: (path, text) => this.getLspUriAndContent(path, text),
     updatePinnedMain: (path, force) => this.updatePinnedMain(path, force),
     recheckActiveDocumentAfterPin: text => this.recheckActiveDocumentAfterPin(text),
-    refreshActivePreviewRoot: force => this.refreshActivePreviewRoot(force),
+    refreshActivePreviewRoot: (force, forceCompile) =>
+      this.refreshActivePreviewRoot(force, forceCompile),
     appendLog: entry => this.appendDeveloperLog(entry),
   });
   private get lspClient(): TinymistLspClient {
@@ -2170,7 +2171,8 @@ export class TypsastraWorkspaceController {
     applyPreviewTargetToTab: (tab, target) => this.applyPreviewTargetToTab(tab, target),
     configureDocumentLanguageTools: contents => this.configureDocumentLanguageTools(contents),
     invalidatePreviewWork: reason => this.invalidatePreviewWork(reason),
-    renderPdfPreview: (contents, restoreOnly) => this.renderPdfPreview(contents, false, restoreOnly),
+    renderPdfPreview: (contents, restoreOnly, forceCompile) =>
+      this.renderPdfPreview(contents, forceCompile === true, restoreOnly),
     loadPdfPath: (path, identity) => this.loadPdfPath(path, identity),
     setPreviewPaneHtml: html => { this.previewPane.innerHTML = html; },
   });
@@ -4080,7 +4082,7 @@ export class TypsastraWorkspaceController {
       if (samePreviewSession && previewSessionKey) {
         this.previewFrame.preserveViewportForNextLoad(viewportAnchor, scrollTop);
       }
-      await this.restoreActiveDocumentAfterTinymistRestart(true);
+      await this.restoreActiveDocumentAfterTinymistRestart(true, true);
     } catch (error) {
       this.lspReady = false;
       this.setLspStatus({
@@ -4282,9 +4284,13 @@ export class TypsastraWorkspaceController {
   }
 
   private restoreActiveDocumentAfterTinymistRestart(
-    forcePreview = true
+    forcePreview = true,
+    forceCompile = false,
   ): Promise<void> {
-    return this.lspSyncController.restoreActiveDocumentAfterRestart(forcePreview);
+    return this.lspSyncController.restoreActiveDocumentAfterRestart(
+      forcePreview,
+      forceCompile,
+    );
   }
 
   private clearPendingLspSync(): void {
@@ -4866,12 +4872,15 @@ export class TypsastraWorkspaceController {
     this.previewContentController.renderInteractiveImageViewer(src, previewPath);
   }
 
-  private refreshActivePreviewRoot(forceRender = false): Promise<void> {
+  private refreshActivePreviewRoot(
+    forceRender = false,
+    forceCompile = false,
+  ): Promise<void> {
     if (this.activeDocumentIsStandalone()
       && this.blockStandalonePreview(this.editorInstance.state.doc.toString())) {
       return Promise.resolve();
     }
-    return this.previewContentController.refreshActivePreviewRoot(forceRender);
+    return this.previewContentController.refreshActivePreviewRoot(forceRender, forceCompile);
   }
 
   private reportWorkspaceWatchError(error: unknown): void {
