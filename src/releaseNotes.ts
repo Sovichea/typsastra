@@ -210,6 +210,12 @@ export function releaseSummaryForVersion(version: string): ReleaseSummary | null
   return releaseSummaries[version] ?? null;
 }
 
-export function shouldShowReleaseSummary(version: string, lastSeenVersion: string | null): boolean {
-  return releaseSummaryForVersion(version) !== null && lastSeenVersion !== version;
+export function shouldShowReleaseSummary(
+  version: string,
+  lastSeenVersion: string | null,
+  hasPreviousInstall = true,
+): boolean {
+  return hasPreviousInstall
+    && releaseSummaryForVersion(version) !== null
+    && lastSeenVersion !== version;
 }
