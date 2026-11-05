@@ -1,7 +1,8 @@
 import { cpus, totalmem, release, type } from "node:os";
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { dlopen, FFIType, ptr } from "bun:ffi";
 import { Text } from "@codemirror/state";
 import { expandSpellcheckRange } from "../src/editor/spellcheck";
 import { PERFORMANCE_BUDGETS } from "../src/performance/diagnostics";
@@ -70,6 +71,310 @@ async function directorySize(path: string): Promise<number | null> {
   }
 }
 
+type ProcessMemorySample = {
+  workingSetBytes: number;
+  peakWorkingSetBytes: number;
+};
+
+type WindowsMemoryApi = {
+  openProcess(pid: number): number;
+  closeHandle(handle: number): void;
+  readMemory(handle: number): ProcessMemorySample | null;
+};
+
+function loadWindowsMemoryApi(): WindowsMemoryApi | null {
+  if (process.platform !== "win32") return null;
+  try {
+    const kernel = dlopen("kernel32.dll", {
+      OpenProcess: {
+        args: [FFIType.u32, FFIType.bool, FFIType.u32],
+        returns: FFIType.ptr,
+      },
+      CloseHandle: {
+        args: [FFIType.ptr],
+        returns: FFIType.bool,
+      },
+    }).symbols as {
+      OpenProcess: (access: number, inherit: boolean, pid: number) => number;
+      CloseHandle: (handle: number) => boolean;
+    };
+    const psapi = dlopen("psapi.dll", {
+      GetProcessMemoryInfo: {
+        args: [FFIType.ptr, FFIType.ptr, FFIType.u32],
+        returns: FFIType.bool,
+      },
+    }).symbols as {
+      GetProcessMemoryInfo: (handle: number, counters: unknown, size: number) => boolean;
+    };
+    return {
+      openProcess: pid => kernel.OpenProcess(0x0410, false, pid),
+      closeHandle: handle => { kernel.CloseHandle(handle); },
+      readMemory: handle => {
+        const counters = new Uint8Array(72);
+        new DataView(counters.buffer).setUint32(0, counters.byteLength, true);
+        if (!psapi.GetProcessMemoryInfo(handle, ptr(counters), counters.byteLength)) {
+          return null;
+        }
+        const view = new DataView(counters.buffer);
+        return {
+          peakWorkingSetBytes: Number(view.getBigUint64(8, true)),
+          workingSetBytes: Number(view.getBigUint64(16, true)),
+        };
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+const windowsMemoryApi = loadWindowsMemoryApi();
+
+async function readProcessMemory(pid: number): Promise<ProcessMemorySample | null> {
+  if (windowsMemoryApi) {
+    const handle = windowsMemoryApi.openProcess(pid);
+    if (!handle) return null;
+    try {
+      return windowsMemoryApi.readMemory(handle);
+    } finally {
+      windowsMemoryApi.closeHandle(handle);
+    }
+  }
+  if (process.platform === "linux") {
+    try {
+      const status = await readFile(`/proc/${pid}/status`, "utf8");
+      const rss = /VmRSS:\s+(\d+)\s+kB/i.exec(status);
+      const peak = /VmHWM:\s+(\d+)\s+kB/i.exec(status);
+      if (!rss) return null;
+      return {
+        workingSetBytes: Number(rss[1]) * 1024,
+        peakWorkingSetBytes: Number(peak?.[1] ?? rss[1]) * 1024,
+      };
+    } catch {
+      return null;
+    }
+  }
+  if (process.platform === "darwin") {
+    try {
+      const child = Bun.spawn(["ps", "-o", "rss=", "-p", String(pid)], {
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      if (await child.exited !== 0) return null;
+      const kilobytes = Number((await new Response(child.stdout).text()).trim());
+      if (!Number.isFinite(kilobytes) || kilobytes <= 0) return null;
+      return {
+        workingSetBytes: kilobytes * 1024,
+        peakWorkingSetBytes: kilobytes * 1024,
+      };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function findManagedTinymist(): Promise<string | null> {
+  const localData = process.env.LOCALAPPDATA;
+  if (!localData) return null;
+  const toolchainRoot = join(localData, "com.typsastra.editor.dev", "toolchain");
+  try {
+    const versions = await readdir(toolchainRoot, { withFileTypes: true });
+    const candidates = versions
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
+    for (const version of candidates) {
+      const executable = join(toolchainRoot, version, "tinymist.exe");
+      if ((await stat(executable)).isFile()) return executable;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function resolveTinymistBinary(): Promise<string | null> {
+  const configured = process.env.TINYMIST_BIN?.trim();
+  if (configured && (await stat(configured).catch(() => null))?.isFile()) return configured;
+  const onPath = Bun.which("tinymist");
+  if (onPath) return onPath;
+  return findManagedTinymist();
+}
+
+type ThumbnailWorkerRun = {
+  workers: number;
+  jobs: number;
+  wallMs: number;
+  medianJobMs: number;
+  maxProcessPeakMiB: number | null;
+  maxAggregatePeakMiB: number | null;
+};
+
+type ThumbnailWorkerBenchmark = {
+  available: boolean;
+  binary: string | null;
+  version: string | null;
+  fixture: string;
+  jobsPerRun: number;
+  diagramsPerJob: number;
+  runs: ThumbnailWorkerRun[];
+  speedup: number | null;
+  reason: string | null;
+};
+
+const THUMBNAIL_WORKER_COUNTS = [1, 2] as const;
+const THUMBNAIL_JOBS_PER_RUN = 6;
+const THUMBNAIL_DIAGRAMS_PER_JOB = 6;
+
+function summarizeThumbnailRun(
+  workers: number,
+  wallMs: number,
+  durations: number[],
+  peaks: number[],
+  aggregatePeakBytes: number,
+): ThumbnailWorkerRun {
+  const sorted = [...durations].sort((left, right) => left - right);
+  const median = sorted[Math.max(0, Math.floor(sorted.length / 2))] ?? 0;
+  return {
+    workers,
+    jobs: durations.length,
+    wallMs: Number(wallMs.toFixed(2)),
+    medianJobMs: Number(median.toFixed(2)),
+    maxProcessPeakMiB: peaks.length > 0
+      ? Number((Math.max(...peaks) / 1024 / 1024).toFixed(2))
+      : null,
+    maxAggregatePeakMiB: aggregatePeakBytes > 0
+      ? Number((aggregatePeakBytes / 1024 / 1024).toFixed(2))
+      : null,
+  };
+}
+
+async function benchmarkTinymistThumbnailWorkers(): Promise<ThumbnailWorkerBenchmark> {
+  const binary = await resolveTinymistBinary();
+  const empty = {
+    available: false,
+    binary,
+    version: null,
+    fixture: "benchmarks/fixtures/thumbnail-worker.typ",
+    jobsPerRun: THUMBNAIL_JOBS_PER_RUN,
+    diagramsPerJob: THUMBNAIL_DIAGRAMS_PER_JOB,
+    runs: [] as ThumbnailWorkerRun[],
+    speedup: null,
+    reason: null as string | null,
+  };
+  if (!binary) {
+    return { ...empty, reason: "Tinymist CLI was not found; set TINYMIST_BIN to enable this section." };
+  }
+  const version = await commandOutput([binary, "--version"]).catch(error => {
+    empty.reason = `Tinymist CLI could not be inspected: ${String(error)}`;
+    return null;
+  });
+  if (!version) return empty;
+
+  const fixture = join(root, "benchmarks", "fixtures", "thumbnail-worker.typ");
+  const fixtureRoot = join(root, "benchmarks", "fixtures");
+  const outputRoot = join(output, "thumbnail-workers");
+  await mkdir(outputRoot, { recursive: true });
+  let sequence = 0;
+  const runJob = async (active: Set<number>): Promise<number> => {
+    const job = sequence++;
+    const jobDirectory = join(outputRoot, `job-${job}`);
+    await rm(jobDirectory, { recursive: true, force: true });
+    await mkdir(jobDirectory, { recursive: true });
+    const destination = join(jobDirectory, "page-{p}.svg");
+    const startedAt = performance.now();
+    const child = Bun.spawn([
+      binary,
+      "compile",
+      fixture,
+      destination,
+      "--root",
+      fixtureRoot,
+      "--format",
+      "svg",
+    ], {
+      stdout: "ignore",
+      stderr: "pipe",
+      env: { ...process.env, RAYON_NUM_THREADS: "1" },
+    });
+    if (child.pid) active.add(child.pid);
+    const exitCode = await child.exited;
+    if (child.pid) active.delete(child.pid);
+    const stderr = (await new Response(child.stderr).text()).trim();
+    await rm(jobDirectory, { recursive: true, force: true });
+    if (exitCode !== 0) {
+      throw new Error(`Tinymist thumbnail compile failed: ${stderr}`);
+    }
+    return performance.now() - startedAt;
+  };
+
+  try {
+    await runJob(new Set());
+  } catch (error) {
+    return {
+      ...empty,
+      available: false,
+      version,
+      reason: `Tinymist thumbnail fixture could not compile: ${String(error)}`,
+    };
+  }
+  const runs: ThumbnailWorkerRun[] = [];
+  for (const workers of THUMBNAIL_WORKER_COUNTS) {
+    const active = new Set<number>();
+    const peaks = new Map<number, number>();
+    let aggregatePeakBytes = 0;
+    let monitoring = true;
+    const monitor = (async () => {
+      while (monitoring) {
+        let aggregate = 0;
+        for (const pid of active) {
+          const sample = await readProcessMemory(pid);
+          if (!sample) continue;
+          peaks.set(pid, Math.max(peaks.get(pid) ?? 0, sample.peakWorkingSetBytes));
+          aggregate += sample.workingSetBytes;
+        }
+        aggregatePeakBytes = Math.max(aggregatePeakBytes, aggregate);
+        await Bun.sleep(15);
+      }
+    })();
+    const durations: number[] = [];
+    const jobs = Array.from({ length: THUMBNAIL_JOBS_PER_RUN }, (_, index) => index);
+    const startedAt = performance.now();
+    await Promise.all(Array.from({ length: workers }, async () => {
+      while (jobs.length > 0) {
+        jobs.shift();
+        durations.push(await runJob(active));
+      }
+    }));
+    const wallMs = performance.now() - startedAt;
+    monitoring = false;
+    await monitor;
+    const perProcessPeaks = [...peaks.values()];
+    runs.push(summarizeThumbnailRun(
+      workers,
+      wallMs,
+      durations,
+      perProcessPeaks,
+      aggregatePeakBytes,
+    ));
+  }
+  const single = runs.find(run => run.workers === 1);
+  const double = runs.find(run => run.workers === 2);
+  return {
+    available: true,
+    binary,
+    version,
+    fixture: "benchmarks/fixtures/thumbnail-worker.typ",
+    jobsPerRun: THUMBNAIL_JOBS_PER_RUN,
+    diagramsPerJob: THUMBNAIL_DIAGRAMS_PER_JOB,
+    runs,
+    speedup: single && double && double.wallMs > 0
+      ? Number((single.wallMs / double.wallMs).toFixed(2))
+      : null,
+    reason: null,
+  };
+}
+
 const typstVersion = await commandOutput(["typst", "--version"]);
 const tinymistPackage = await Bun.file(join(root, "node_modules", "tinymist", "package.json")).json();
 const gitRevision = await commandOutput(["git", "rev-parse", "--short", "HEAD"]);
@@ -104,11 +409,13 @@ for (let run = 0; run < incrementalIterations; run += 1) {
   incrementalSamples.push(performance.now() - startedAt);
 }
 
+const tinymistThumbnailWorkers = await benchmarkTinymistThumbnailWorkers();
+
 const processor = cpus()[0];
 const report = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   generatedAt: new Date().toISOString(),
-  scope: "CLI compiler, incremental-range calculation, and built frontend artifacts; not total desktop runtime",
+  scope: "CLI compiler, Tinymist thumbnail workers, incremental-range calculation, and built frontend artifacts; not total desktop runtime",
   source: {
     gitRevision,
     workingTreeDirty: gitStatus.length > 0
@@ -124,7 +431,8 @@ const report = {
   tools: {
     bun: Bun.version,
     typst: typstVersion,
-    tinymistPackage: String(tinymistPackage.version)
+    tinymistPackage: String(tinymistPackage.version),
+    tinymistCli: tinymistThumbnailWorkers.version
   },
   budgets: PERFORMANCE_BUDGETS,
   compile: {
@@ -132,6 +440,7 @@ const report = {
     firstProcessOnePageMs: Number(firstProcessCompileMs.toFixed(2)),
     warm: compile
   },
+  tinymistThumbnailWorkers,
   incrementalSpellcheck: {
     documentUtf16: doc.length,
     editsPerIteration: 1_000,
@@ -146,7 +455,10 @@ const report = {
     "The first-process compile does not clear operating-system filesystem caches.",
     "Typst CLI process timings are not equivalent to in-app Tinymist preview latency.",
     "Frontend dist size is not installer size.",
-    "Desktop, WebView, PDF renderer, GPU, and Tinymist memory are not measured by this harness."
+    "Desktop, WebView, PDF renderer, GPU, and long-lived LSP memory are not measured by this harness.",
+    "Tinymist thumbnail worker memory is reported as peak working set and excludes the main LSP process.",
+    "Thumbnail worker runs use a small Fletcher fixture; larger diagrams or Cetz canvases may use more memory.",
+    "Aggregate worker memory is an upper bound because shared pages can be counted more than once."
   ]
 };
 
@@ -156,6 +468,27 @@ const thirty = report.compile.warm["30-pages"];
 const hundred = report.compile.warm["100-pages"];
 const spellcheck = report.incrementalSpellcheck.timing;
 const mib = (bytes: number | null) => bytes === null ? "not built" : `${(bytes / 1024 / 1024).toFixed(2)} MiB`;
+const workerMiB = (value: number | null) => value === null ? "n/a" : `${value.toFixed(2)} MiB`;
+const thumbnailWorkers = report.tinymistThumbnailWorkers;
+const thumbnailSection = thumbnailWorkers.available
+  ? `## Tinymist thumbnail workers
+
+Each run launches ${thumbnailWorkers.jobsPerRun} fresh Tinymist CLI processes against \`${thumbnailWorkers.fixture}\`, with the requested number of workers pulling from a shared queue. Each process compiles ${thumbnailWorkers.diagramsPerJob} diagram pages, matching the app's chunk size. No LSP is started.
+
+| Workers | Jobs | Wall time | Median job | Max process peak | Max aggregate peak |
+|---:|---:|---:|---:|---:|---:|
+${thumbnailWorkers.runs.map(run =>
+  `| ${run.workers} | ${run.jobs} | ${run.wallMs.toFixed(2)} ms | ${run.medianJobMs.toFixed(2)} ms | ${workerMiB(run.maxProcessPeakMiB)} | ${workerMiB(run.maxAggregatePeakMiB)} |`
+).join("\n")}
+
+- Two-worker speedup: **${thumbnailWorkers.speedup === null ? "n/a" : `${thumbnailWorkers.speedup.toFixed(2)}×`}**.
+- The main Typsastra Tinymist LSP is not running during this measurement.
+- Peak working set is sampled while each process is alive; very short-lived processes can be under-sampled.
+`
+  : `## Tinymist thumbnail workers
+
+Tinymist CLI measurements were skipped: ${thumbnailWorkers.reason ?? "Tinymist CLI is unavailable."}
+`;
 const markdown = `# Typsastra benchmark report
 
 Generated: ${report.generatedAt}<br>
@@ -163,7 +496,7 @@ Revision: \`${gitRevision}\`${report.source.workingTreeDirty ? " (working tree h
 
 ## Scope
 
-This report measures CLI compiler process time, incremental spellcheck-range calculation, and built frontend artifact size. It does **not** claim to measure total Typsastra desktop memory or end-to-end WebView preview latency.
+This report measures CLI compiler process time, dedicated Tinymist thumbnail worker time and memory, incremental spellcheck-range calculation, and built frontend artifact size. It does **not** claim to measure total Typsastra desktop memory, the long-lived LSP, or end-to-end WebView preview latency.
 
 ## Machine and tools
 
@@ -174,7 +507,8 @@ This report measures CLI compiler process time, incremental spellcheck-range cal
 | Installed memory | ${(report.machine.totalMemoryBytes / 1024 / 1024 / 1024).toFixed(2)} GiB |
 | Bun | ${report.tools.bun} |
 | Typst | ${report.tools.typst} |
-| Tinymist npm package | ${report.tools.tinymistPackage} (managed runtime not exercised by this harness) |
+| Tinymist npm package | ${report.tools.tinymistPackage} |
+| Tinymist CLI | ${report.tools.tinymistCli ?? "not found"} |
 
 ## Results
 
@@ -192,6 +526,7 @@ Each warm compiler result contains ${compileIterations} fresh Typst CLI processe
 - Largest submitted incremental spellcheck range: **${maximumSubmittedRange} UTF-16 units** from a ${doc.length.toLocaleString("en-US")}-unit document.
 - Built frontend \`dist/\` size: **${mib(report.artifacts.frontendDistBytes)}**. This is not installer size.
 
+${thumbnailSection}
 ## Limitations
 
 ${report.limitations.map(item => `- ${item}`).join("\n")}
