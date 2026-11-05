@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental, unsigned and unnotarized build
 
-Typsastra is currently beta software. The latest release is v0.10.1.
+Typsastra is currently beta software. The latest release is v0.10.2.
 
 Windows users can install from the project Scoop bucket:
 
@@ -51,6 +51,22 @@ The name combines Typst, the typesetting system at the center of the project, wi
 It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typsastra focuses on Unicode-safe editing, script-aware interaction, responsive PDF preview, extensible language tools, and multi-file project workflows while keeping the underlying Typst source portable.
 
 Khmer is the first language with deep support, including tailored cursor and deletion behavior, spellcheck, and word completion. Khmer demonstrates the depth Typsastra aims to provide; it is not the boundary of the project. The editing-policy and language-provider architecture is designed so other languages can add their own behavior without changing or weakening Khmer support.
+
+## v0.10.2: Draft diagrams and workflow polish
+
+Typsastra v0.10.2 extends Draft Preview to Fletcher diagrams and CeTZ canvases.
+Supported diagrams become measured placeholders with hover thumbnails, while
+visible-page work is prioritized as thumbnail caches fill in the background.
+
+Manual Recompile now forces a fresh compilation, Draft inverse sync places the
+caret at the start of the source expression without selecting it, and new or
+externally created projects inherit the global document-language defaults on
+first open. Fresh installs start without a release summary, and **Create New
+Project** is available with `Ctrl+Shift+N` or `Cmd+Shift+N`.
+
+<img src="./docs/assets/screenshots/example-draft-diagrams.png" alt="Draft Preview placeholders for Fletcher diagrams and a CeTZ canvas" width="800"/>
+
+See the [v0.10.2 release notes](./docs/RELEASE_NOTES_V0.10.2.md).
 
 ## v0.10.1: Image helper chains and editor polish
 

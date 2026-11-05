@@ -129,6 +129,32 @@ than a universal faster mode. Its largest benefit is isolating authoring
 responsiveness from individual images whose decode or rendering cost is
 disproportionate to their encoded PDF size.
 
+### Draft diagram benchmark
+
+Recorded on 2026-11-05 using the Windows development build. The fixture is a
+98-page document containing 40 Fletcher diagrams and 6 CeTZ canvases. Compile
+timings use the CLI benchmark and exclude PDF presentation and WebView
+rendering.
+
+| Mode | Median compile |
+|---|---:|
+| Normal | 4,973.71 ms |
+| Draft | 1,109.25 ms |
+
+Draft compilation was 4.48× faster for this document. In the running app,
+Normal and Draft PDF loading and first-page WebView rendering were effectively
+equal:
+
+| Metric | Normal | Draft |
+|---|---:|---:|
+| PDF load | 118.20 ms | 114.80 ms |
+| First page | 32.30 ms | 32.10 ms |
+
+Thumbnail worker memory measured approximately 45 MiB for one Tinymist worker,
+87 MiB for two, and 178 MiB for four. Typsastra therefore scales diagram
+thumbnail workers from one to four according to the available logical
+processors.
+
 ### Thumbnail cache observation
 
 Thumbnail creation runs outside the readiness estimate.

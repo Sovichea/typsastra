@@ -6,6 +6,17 @@ export type ReleaseSummary = {
 };
 
 const releaseSummaries: Record<string, ReleaseSummary> = {
+  "0.10.2": {
+    version: "0.10.2",
+    title: "Draft diagrams and workflow polish",
+    highlights: [
+      "Draft Preview replaces Fletcher diagrams and CeTZ canvases with layout-preserving placeholders, including hover thumbnails and visible-page priority.",
+      "Manual Recompile always compiles again, and Draft inverse sync places the caret at the start of the source expression without selecting it.",
+      "New and externally created projects receive the global document-language defaults on first open, and Create New Project has a Ctrl/Cmd+Shift+N shortcut.",
+      "Fresh installs no longer open the release summary. Thumbnail workers scale to the device, and the documentation demo project now includes diagram examples."
+    ],
+    detailsUrl: "https://github.com/Sovichea/typsastra/releases/tag/v0.10.2"
+  },
   "0.10.1": {
     version: "0.10.1",
     title: "Image helper chains and editor polish",

@@ -19,8 +19,11 @@ Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: { localStorage: localStorageStub },
 });
+const { version } = await Bun.file(new URL("../package.json", import.meta.url)).json() as {
+  version: string;
+};
 mock.module("@tauri-apps/api/app", () => ({
-  getVersion: async () => "0.10.1",
+  getVersion: async () => version,
 }));
 mock.module("@tauri-apps/plugin-shell", () => ({
   open: async () => {},
@@ -35,6 +38,6 @@ describe("release summary controller", () => {
     await new ReleaseSummaryController().showIfNeeded();
 
     expect(storage.get("typsastra:release-summary-installed")).toBe("1");
-    expect(storage.get("typsastra:release-summary-seen:0.10.1")).toBe("1");
+    expect(storage.get(`typsastra:release-summary-seen:${version}`)).toBe("1");
   });
 });

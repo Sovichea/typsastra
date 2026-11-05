@@ -6,7 +6,30 @@ technical documentation, theses, books, and multilingual long-form writing.
 This site brings together step-by-step workflows, tool references, language
 guides, and contributor documentation.
 
-## New in v0.10.1
+## New in v0.10.2
+
+Typsastra v0.10.2 extends Draft Preview to Fletcher diagrams and CeTZ canvases,
+improves manual recompilation and source synchronization, and adds workflow
+polish for new projects.
+
+Read the [v0.10.2 release notes](RELEASE_NOTES_V0.10.2.md).
+
+### Diagram placeholders
+
+Draft Preview replaces supported Fletcher diagrams and CeTZ canvases with
+measured placeholders. Hover a placeholder to inspect its cached thumbnail, and
+use the Normal/Draft control to compare rendered output.
+
+![Draft Preview showing Fletcher and CeTZ placeholders](assets/screenshots/example-draft-diagrams.png)
+
+### Workflow and preview fixes
+
+Manual Recompile always compiles again. Draft inverse sync places the caret at
+the start of the source expression, first-open projects inherit the global
+document-language defaults, and **Create New Project** has a `Ctrl+Shift+N` /
+`Cmd+Shift+N` shortcut. Fresh installs start without the release summary.
+
+## v0.10.1: Image helper chains and editor polish
 
 Typsastra v0.10.1 extends image helper handling in both preview directions,
 removes the first-click delay after a cached preview restore, and refreshes the

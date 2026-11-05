@@ -54,6 +54,7 @@ the reference documents when you need exact behavior or contributor contracts.
 
 ## Releases and plans
 
+- [v0.10.2 release notes](RELEASE_NOTES_V0.10.2.md)
 - [v0.10.1 release notes](RELEASE_NOTES_V0.10.1.md)
 - [v0.10.0 release notes](RELEASE_NOTES_V0.10.0.md)
 - [Enhanced Unicode Engine v0.4.1 release notes](ENHANCED_UNICODE_ENGINE_RELEASE_NOTES_V0.4.1.md)
