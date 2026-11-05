@@ -219,10 +219,11 @@ type ThumbnailWorkerBenchmark = {
   diagramsPerJob: number;
   runs: ThumbnailWorkerRun[];
   speedup: number | null;
+  speedupTwo: number | null;
   reason: string | null;
 };
 
-const THUMBNAIL_WORKER_COUNTS = [1, 2] as const;
+const THUMBNAIL_WORKER_COUNTS = [1, 2, 4] as const;
 const THUMBNAIL_JOBS_PER_RUN = 6;
 const THUMBNAIL_DIAGRAMS_PER_JOB = 6;
 
@@ -260,6 +261,7 @@ async function benchmarkTinymistThumbnailWorkers(): Promise<ThumbnailWorkerBench
     diagramsPerJob: THUMBNAIL_DIAGRAMS_PER_JOB,
     runs: [] as ThumbnailWorkerRun[],
     speedup: null,
+    speedupTwo: null,
     reason: null as string | null,
   };
   if (!binary) {
@@ -360,6 +362,7 @@ async function benchmarkTinymistThumbnailWorkers(): Promise<ThumbnailWorkerBench
   }
   const single = runs.find(run => run.workers === 1);
   const double = runs.find(run => run.workers === 2);
+  const quad = runs.find(run => run.workers === 4);
   return {
     available: true,
     binary,
@@ -368,7 +371,10 @@ async function benchmarkTinymistThumbnailWorkers(): Promise<ThumbnailWorkerBench
     jobsPerRun: THUMBNAIL_JOBS_PER_RUN,
     diagramsPerJob: THUMBNAIL_DIAGRAMS_PER_JOB,
     runs,
-    speedup: single && double && double.wallMs > 0
+    speedup: single && quad && quad.wallMs > 0
+      ? Number((single.wallMs / quad.wallMs).toFixed(2))
+      : null,
+    speedupTwo: single && double && double.wallMs > 0
       ? Number((single.wallMs / double.wallMs).toFixed(2))
       : null,
     reason: null,
@@ -481,7 +487,8 @@ ${thumbnailWorkers.runs.map(run =>
   `| ${run.workers} | ${run.jobs} | ${run.wallMs.toFixed(2)} ms | ${run.medianJobMs.toFixed(2)} ms | ${workerMiB(run.maxProcessPeakMiB)} | ${workerMiB(run.maxAggregatePeakMiB)} |`
 ).join("\n")}
 
-- Two-worker speedup: **${thumbnailWorkers.speedup === null ? "n/a" : `${thumbnailWorkers.speedup.toFixed(2)}×`}**.
+- Two-worker speedup: **${thumbnailWorkers.speedupTwo === null ? "n/a" : `${thumbnailWorkers.speedupTwo.toFixed(2)}×`}**.
+- Four-worker speedup: **${thumbnailWorkers.speedup === null ? "n/a" : `${thumbnailWorkers.speedup.toFixed(2)}×`}**.
 - The main Typsastra Tinymist LSP is not running during this measurement.
 - Peak working set is sampled while each process is alive; very short-lived processes can be under-sampled.
 `
