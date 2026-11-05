@@ -12,6 +12,9 @@ describe("Draft diagram thumbnail padding", () => {
     expect(padded).toContain('viewBox="-8 -8 116 66"');
     expect(padded).toContain('width="116pt"');
     expect(padded).toContain('height="66pt"');
+    expect(padded).toContain(
+      '<rect x="-8" y="-8" width="116" height="66" fill="#ffffff"/>'
+    );
     expect(padded).toContain('<path d="M 0 0 L 100 50"/>');
   });
 
@@ -20,6 +23,9 @@ describe("Draft diagram thumbnail padding", () => {
       '<svg viewBox="-10 -5 100 50" width="100pt" height="50pt"><path d="M 0 0"/></svg>';
     const padded = decode(padDiagramThumbnailSvg(encode(source)));
     expect(padded).toContain('viewBox="-18 -13 116 66"');
+    expect(padded).toContain(
+      '<rect x="-18" y="-13" width="116" height="66" fill="#ffffff"/>'
+    );
   });
 
   test("adds intrinsic dimensions when the root only has a viewBox", () => {

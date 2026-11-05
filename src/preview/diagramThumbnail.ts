@@ -38,9 +38,15 @@ export function padDiagramThumbnailSvg(bytes: Uint8Array): Uint8Array {
     .replace(/\s+height=(["']).*?\1/gi, "")
     .replace(/\bviewBox=(["']).*?\1/i, `viewBox="${nextViewBox}"`)
     .replace(/\s*>$/, ` width="${formatNumber(nextWidth)}pt" height="${formatNumber(nextHeight)}pt">`);
+  const background =
+    `<rect x="${formatNumber(minX - padding)}" y="${formatNumber(minY - padding)}" ` +
+    `width="${formatNumber(nextWidth)}" height="${formatNumber(nextHeight)}" fill="#ffffff"/>`;
 
   return new TextEncoder().encode(
-    text.slice(0, rootMatch.index) + nextRoot + text.slice(rootMatch.index + root.length)
+    text.slice(0, rootMatch.index) +
+      nextRoot +
+      background +
+      text.slice(rootMatch.index + root.length)
   );
 }
 
