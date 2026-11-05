@@ -434,6 +434,7 @@ These are defaults, before any customizations:
 | Action | Windows and Linux | macOS |
 | --- | --- | --- |
 | New File | `Ctrl+N` | `Cmd+N` |
+| Create New Project | `Ctrl+Shift+N` | `Cmd+Shift+N` |
 | Open Project | `Ctrl+O` | `Cmd+O` |
 | Save | `Ctrl+S` | `Cmd+S` |
 | Save As | `Ctrl+Shift+S` | `Cmd+Shift+S` |

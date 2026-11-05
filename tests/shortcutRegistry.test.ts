@@ -36,6 +36,11 @@ describe("programmable shortcuts", () => {
     }
   });
 
+  test("binds Create New Project to Mod-Shift-N", () => {
+    expect(shortcutFor("action-new-project", {}, false)).toBe("Mod-Shift-N");
+    expect(shortcutFor("action-new-project", {}, true)).toBe("Mod-Shift-N");
+  });
+
   test("matches the physical key across layouts and preserves macOS Ctrl versus Cmd", () => {
     const event = key("KeyF", { ctrlKey: true, shiftKey: true });
     expect(shortcutFromEvent(event, false)).toBe("Mod-Shift-F");

@@ -447,6 +447,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("action-import-project")?.addEventListener("click", () => void actions.importProject());
   document.getElementById("action-restart-workspace")?.addEventListener("click", () => void actions.restartWorkspace());
   document.getElementById("action-close-project")?.addEventListener("click", () => void actions.closeProject());
+  document.getElementById("action-new-project")?.addEventListener("click", () => void actions.createProjectFromTemplate());
   document.getElementById("action-new-file")?.addEventListener("click", () => void actions.createUntitledFile());
 
   document.getElementById("action-save-file")?.addEventListener("click", () => void actions.saveActiveFile());

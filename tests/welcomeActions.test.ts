@@ -31,6 +31,20 @@ describe("welcome project actions", () => {
     expect(gettingStarted.match(/<\/button>/g)).toHaveLength(4);
   });
 
+  test("shares the Create New Project shortcut with the File menu", async () => {
+    const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
+    const bindings = await Bun.file(
+      new URL("../src/ui/appEventBindings.ts", import.meta.url),
+    ).text();
+
+    expect(html).toContain('id="action-new-project"');
+    expect(html.match(/data-shortcut="Mod\+Shift\+N"/g)).toHaveLength(2);
+    expect(html).toContain('data-shortcut="Mod+Shift+N">Ctrl+Shift+N<');
+    expect(bindings).toContain(
+      'getElementById("action-new-project")?.addEventListener("click", () => void actions.createProjectFromTemplate());',
+    );
+  });
+
   test("exposes the create-new-project template browser", async () => {
     const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
     expect(html).toContain('id="welcome-create-project"');

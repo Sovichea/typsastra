@@ -8,7 +8,8 @@ user template.
 
 ## Browse and search
 
-Open **File → New Project**. The browser has three catalogs:
+Open **File → Create New Project** (`Ctrl+Shift+N` on Windows and Linux,
+`Cmd+Shift+N` on macOS). The browser has three catalogs:
 
 - **All templates** searches the Typst Universe template catalog.
 - **Downloaded** reuses Universe templates already cached on this machine.
