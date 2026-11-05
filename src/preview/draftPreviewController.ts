@@ -8,6 +8,7 @@ import type { PreviewFrame, PreviewPageStatus } from "./previewFrame";
 import type { AppDialogController } from "../ui/appDialog";
 import type { ImageOptimizationWarning } from "../editor/imageWarnings";
 import type { LogConsoleEntryInput } from "../diagnostics/logConsoleController";
+import { padDiagramThumbnailSvg } from "./diagramThumbnail";
 import { t } from "../i18n";
 
 export type PreviewContentMode = "normal" | "draft";
@@ -500,6 +501,7 @@ export class DraftPreviewController {
       : response instanceof ArrayBuffer
         ? new Uint8Array(response)
         : new Uint8Array(response);
+    const paddedBytes = padDiagramThumbnailSvg(bytes);
     const diagramLabel = asset.diagramKind === "fletcher"
       ? "Fletcher diagram"
       : asset.diagramKind === "cetz"
@@ -510,7 +512,7 @@ export class DraftPreviewController {
       : null;
     return {
       status: "ready" as const,
-      bytes,
+      bytes: paddedBytes,
       mimeType: status.mimeType ?? "image/svg+xml",
       filename: `${asset.name ?? "Diagram"}.svg`,
       width: status.width ?? 0,
