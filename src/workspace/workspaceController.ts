@@ -55,6 +55,12 @@ export interface WorkspaceViewportInput {
   standalone?: boolean;
 }
 
+export type LoadedWorkspaceMetadata = {
+  metadata: WorkspaceMetadata;
+  /** The project had no Typsastra metadata and no legacy state to migrate. */
+  firstOpen: boolean;
+};
+
 export interface WorkspaceControllerPort {
   ensureDockedPreviewVisible(): void;
   applySidebarVisibility(): void;
@@ -148,16 +154,16 @@ export class WorkspaceController {
     });
   }
 
-  async loadMetadata(workspacePath: string): Promise<WorkspaceMetadata> {
+  async loadMetadata(workspacePath: string): Promise<LoadedWorkspaceMetadata> {
     const stored = await this.stateStore.load(workspacePath);
-    if (stored) return stored;
+    if (stored) return { metadata: stored, firstOpen: false };
     const legacy = this.stateStore.loadLegacy(workspacePath);
     const metadata = legacy
       ? this.migrateLegacyState(workspacePath, legacy)
       : normalizeWorkspaceMetadata({ project: null, workspace: null });
     await this.stateStore.save(workspacePath, metadata);
     if (legacy) this.stateStore.removeLegacy(workspacePath);
-    return metadata;
+    return { metadata, firstOpen: legacy === null };
   }
 
   absolutePath(workspacePath: string, relativePath: string | null): Promise<string | null> {

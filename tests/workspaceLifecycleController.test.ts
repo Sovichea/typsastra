@@ -290,6 +290,7 @@ describe("WorkspaceLifecycleController behavior", () => {
     ).text();
 
     expect(lifecycle).toContain("app.applyDefaultDocumentLanguages()");
+    expect(lifecycle).toContain("if (loadedMetadata.firstOpen) app.applyDefaultDocumentLanguages();");
     expect(lifecycle).toContain("async completeCreatedProject(project: CreatedProject)");
   });
 });

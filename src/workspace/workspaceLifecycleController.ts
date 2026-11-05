@@ -11,6 +11,7 @@ import type { ImportedTypsastraProject } from "../projectArchive";
 import type { CreatedProject } from "../projectTemplates";
 import type { ToolchainStatus } from "../toolchain/toolchainController";
 import { workspaceRestoreCandidates, type StoredUndockedPreviewWindow, type WorkspaceMetadata } from "./workspaceStateStore";
+import type { LoadedWorkspaceMetadata } from "./workspaceController";
 import type { EditorTab } from "../editor/editorTab";
 import type { DocumentTypography } from "../editor/documentTypography";
 import type { PreviewRenderMode } from "../settings";
@@ -105,7 +106,7 @@ export interface WorkspaceLifecycleServices {
   projectSearchController: { reset(): void };
   workspaceController: {
     absolutePath(root: string, path: string | null): Promise<string | null>;
-    loadMetadata(root: string): Promise<WorkspaceMetadata>;
+    loadMetadata(root: string): Promise<LoadedWorkspaceMetadata>;
     startWatching(root: string): Promise<void>;
     stopWatching(): void;
   };
@@ -371,7 +372,8 @@ export class WorkspaceLifecycleController {
         workspaceRootPath: selected,
       });
       app.lspReady = false;
-      app.workspaceMetadata = await app.workspaceController.loadMetadata(selected);
+      const loadedMetadata = await app.workspaceController.loadMetadata(selected);
+      app.workspaceMetadata = loadedMetadata.metadata;
       app.workspaceMetadata.workspace.previewRenderMode ??= app.settingsController.value.preview.renderMode;
       app.settingsController.setWorkspacePreviewRenderMode(
         app.workspaceMetadata.workspace.previewRenderMode,
@@ -402,6 +404,10 @@ export class WorkspaceLifecycleController {
       app.tableToolController.setWorkspace(app.workspaceMetadata.project.tables);
       if (app.sidebarController.activeTool === "tables") app.tableToolController.show();
       if (app.activeFilePath) await app.explorer.revealPath(app.activeFilePath);
+      // Projects created outside Typsastra still receive the global language
+      // defaults on their first open. Existing project assignments remain
+      // untouched, including an explicitly empty assignment list.
+      if (loadedMetadata.firstOpen) app.applyDefaultDocumentLanguages();
       await app.saveWorkspaceState();
       await app.explorer.loadWorkspace(selected);
       await app.workspaceController.startWatching(selected);
