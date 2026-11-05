@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use typst_syntax::ast::{
@@ -86,15 +86,42 @@ pub struct DraftPreparation {
 pub fn prepare_draft_images(
     project_root: &Path,
     source_path: &Path,
+    destination_path: &Path,
+    render_dir: &Path,
+    source: &str,
+) -> DraftPreparation {
+    let mut paths =
+        crate::render_prepare::mirror::collect_reachable_typst_files(project_root, source_path);
+    let parent = source_path.parent().unwrap_or(project_root);
+    paths.extend(crate::local_typst_dependencies(
+        source,
+        parent,
+        project_root,
+    ));
+    let image_aliases = collect_image_aliases_from_paths_and_source(paths, source_path, source);
+    prepare_draft_images_with_aliases(
+        project_root,
+        source_path,
+        destination_path,
+        render_dir,
+        source,
+        &image_aliases,
+    )
+}
+
+pub(crate) fn prepare_draft_images_with_aliases(
+    project_root: &Path,
+    source_path: &Path,
     _destination_path: &Path,
     _render_dir: &Path,
     source: &str,
+    image_aliases: &HashSet<String>,
 ) -> DraftPreparation {
     let root = typst_syntax::parse(source);
     let mut wrappers = HashMap::new();
     collect_image_wrappers(&root, 0, &mut wrappers);
     let mut calls = Vec::new();
-    collect_image_calls(&root, 0, &wrappers, source, &mut calls);
+    collect_image_calls(&root, 0, &wrappers, image_aliases, source, &mut calls);
     calls.sort_by_key(|call| call.replacement_start);
 
     let mut result = DraftPreparation::default();
@@ -249,6 +276,78 @@ pub fn prepare_draft_images(
         }
     }
     result
+}
+
+fn collect_image_alias_edges(node: &SyntaxNode, edges: &mut HashMap<String, String>) {
+    if let Some(binding) = LetBinding::from_untyped(node) {
+        if let LetBindingKind::Normal(Pattern::Normal(Expr::Ident(name))) = binding.kind() {
+            if let Some(Expr::Ident(target)) = binding.init() {
+                edges.insert(name.as_str().to_string(), target.as_str().to_string());
+            }
+        }
+    }
+
+    for child in node.children() {
+        collect_image_alias_edges(child, edges);
+    }
+}
+
+fn resolve_image_aliases(edges: &HashMap<String, String>) -> HashSet<String> {
+    let mut aliases = HashSet::new();
+    loop {
+        let mut changed = false;
+        for (name, target) in edges {
+            let is_image = target == "image" || aliases.contains(target);
+            if is_image && aliases.insert(name.clone()) {
+                changed = true;
+            }
+        }
+        if !changed {
+            return aliases;
+        }
+    }
+}
+
+fn canonical_alias_path(path: &Path) -> PathBuf {
+    dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+pub(crate) fn collect_image_aliases_from_paths(
+    paths: impl IntoIterator<Item = PathBuf>,
+) -> HashSet<String> {
+    collect_image_aliases_from_paths_and_optional_source(paths, None)
+}
+
+fn collect_image_aliases_from_paths_and_source(
+    paths: impl IntoIterator<Item = PathBuf>,
+    source_path: &Path,
+    source: &str,
+) -> HashSet<String> {
+    collect_image_aliases_from_paths_and_optional_source(paths, Some((source_path, source)))
+}
+
+fn collect_image_aliases_from_paths_and_optional_source(
+    paths: impl IntoIterator<Item = PathBuf>,
+    source: Option<(&Path, &str)>,
+) -> HashSet<String> {
+    let source_path = source.map(|(path, _)| canonical_alias_path(path));
+    let mut edges = HashMap::new();
+    for path in paths {
+        let path = canonical_alias_path(&path);
+        if source_path.as_ref().is_some_and(|source| source == &path) {
+            continue;
+        }
+        let Ok(source) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let root = typst_syntax::parse(&source);
+        collect_image_alias_edges(&root, &mut edges);
+    }
+    if let Some((_, source)) = source {
+        let root = typst_syntax::parse(source);
+        collect_image_alias_edges(&root, &mut edges);
+    }
+    resolve_image_aliases(&edges)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1234,6 +1333,7 @@ fn collect_image_calls<'a>(
     node: &'a SyntaxNode,
     offset: usize,
     wrappers: &HashMap<String, ImageWrapper<'a>>,
+    image_aliases: &HashSet<String>,
     source: &str,
     output: &mut Vec<ImageCall>,
 ) {
@@ -1248,12 +1348,10 @@ fn collect_image_calls<'a>(
             output.push(frame);
             return;
         }
-        if matches!(call.callee(), Expr::Ident(ident) if ident.as_str() == "image") {
-            output.push(image_call(node, call, offset, source));
-            return;
-        }
         if let Expr::Ident(ident) = call.callee() {
-            if wrappers.contains_key(ident.as_str()) {
+            let name = ident.as_str();
+            let has_wrapper = wrappers.contains_key(name);
+            if has_wrapper {
                 if let Some(resolved) =
                     resolve_wrapper_image(call, offset, wrappers, &HashMap::new(), source, 0)
                 {
@@ -1274,11 +1372,17 @@ fn collect_image_calls<'a>(
                     return;
                 }
             }
+            if (name == "image" || image_aliases.contains(name))
+                && (!has_wrapper || name == "image")
+            {
+                output.push(image_call(node, call, offset, source));
+                return;
+            }
         }
     }
     let mut child_offset = offset;
     for child in node.children() {
-        collect_image_calls(child, child_offset, wrappers, source, output);
+        collect_image_calls(child, child_offset, wrappers, image_aliases, source, output);
         child_offset += child.len();
     }
 }
@@ -2083,6 +2187,67 @@ mod tests {
             .replacements
             .iter()
             .any(|replacement| replacement.generated.contains("width: 58%")));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn prepares_images_through_a_local_image_alias() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "artwork.png", 800, 1000);
+        let source = "\
+#let PptxImage = image
+#let Artwork = PptxImage
+#Artwork(\"artwork.png\", width: 800pt, height: 1000pt, fit: \"stretch\")";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        let replacement = &prepared.replacements[0];
+        let call = "Artwork(\"artwork.png\", width: 800pt, height: 1000pt, fit: \"stretch\")";
+        let call_start = source.find(call).unwrap();
+        assert_eq!(replacement.start, call_start);
+        assert_eq!(replacement.end, call_start + call.len());
+        assert!(replacement.generated.contains("width: 800pt"));
+        assert!(replacement.generated.contains("height: 1000pt"));
+        assert!(replacement.generated.contains("artwork.png"));
+        assert!(!replacement.generated.contains("fit:"));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn prepares_images_through_an_imported_image_alias() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "artwork.png", 800, 1000);
+        fs::write(
+            workspace.path().join("template.typ"),
+            "#let PptxImage = image\n",
+        )
+        .unwrap();
+        let source_path = workspace.path().join("main.typ");
+        let source = "\
+#import \"template.typ\": *
+#PptxImage(\"artwork.png\", width: 800pt, height: 1000pt, fit: \"stretch\")
+";
+        fs::write(&source_path, source).unwrap();
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &source_path,
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        let replacement = &prepared.replacements[0];
+        assert!(!replacement.generated.contains("PptxImage"));
+        assert!(replacement.generated.contains("width: 800pt"));
+        assert!(replacement.generated.contains("height: 1000pt"));
+        assert!(replacement.generated.contains("artwork.png"));
         assert!(prepared.diagnostics.is_empty());
     }
 

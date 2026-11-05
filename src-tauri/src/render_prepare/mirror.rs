@@ -8,15 +8,17 @@ use typst_syntax::ast::Expr;
 use typst_syntax::SyntaxNode;
 
 use super::draft::{
-    merge_draft_preparations, prepare_draft_diagrams_with_size_lookup, prepare_draft_images,
-    DraftAssetKind, DraftImageAsset, DraftImageDiagnostic, DraftPreparation, PreviewContentMode,
+    collect_image_aliases_from_paths, merge_draft_preparations,
+    prepare_draft_diagrams_with_size_lookup, prepare_draft_images,
+    prepare_draft_images_with_aliases, DraftAssetKind, DraftImageAsset, DraftImageDiagnostic,
+    DraftPreparation, PreviewContentMode,
 };
 use super::sourcemap::{MappingKind, SourceMap, SOURCE_MAP_VERSION};
 
 const RENDER_CACHE_LAYOUT_VERSION: &str = "4-original-source-render";
 const RENDER_CACHE_OWNER_SCHEMA_VERSION: u32 = 1;
 const RENDER_CACHE_OWNER_FILE: &str = "workspace-owner.json";
-pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 10;
+pub const DRAFT_PREPARATION_CACHE_VERSION: u32 = 11;
 fn default_draft_diagrams() -> bool {
     true
 }
@@ -255,6 +257,11 @@ pub fn mirror_project_cancellable(
     let discovery_ms = discovery_started_at.elapsed().as_secs_f64() * 1_000.0;
     let discovered_files = files_to_process.len();
     let draft_reachable_files = collect_reachable_typst_files(project_root, &options.entry_file);
+    let image_aliases = if options.preview_content_mode == PreviewContentMode::Draft {
+        collect_image_aliases_from_paths(draft_reachable_files.iter().cloned())
+    } else {
+        HashSet::new()
+    };
 
     for (rel_path, is_dir) in files_to_process {
         if is_cancelled() {
@@ -273,7 +280,14 @@ pub fn mirror_project_cancellable(
             if rel_path.extension().and_then(|s| s.to_str()) == Some("typ") {
                 typ_files += 1;
                 let typ_started_at = Instant::now();
-                let result = process_typ_file(&src_path, &dest_path, &rel_path, &maps_dir, options);
+                let result = process_typ_file(
+                    &src_path,
+                    &dest_path,
+                    &rel_path,
+                    &maps_dir,
+                    options,
+                    &image_aliases,
+                );
                 typ_processing_ms += typ_started_at.elapsed().as_secs_f64() * 1_000.0;
                 match result {
                     Ok(processed) => {
@@ -838,7 +852,7 @@ pub fn prepare_single_in_memory_file(
     );
     sourcemap.source_digest = source_digest(source_code);
     sourcemap.preview_content_mode = content_mode_key(options.preview_content_mode).into();
-    let draft = draft_preparation(options, file_path, &dest_path, source_code);
+    let draft = draft_preparation(options, file_path, &dest_path, source_code, None);
     let generated_content = prepare_source_content(source_code, &draft, &mut sourcemap);
 
     fs::write(&dest_path, &generated_content).map_err(|e| e.to_string())?;
@@ -1297,6 +1311,7 @@ fn process_typ_file(
     rel_path: &Path,
     maps_dir: &Path,
     options: &RenderPrepareOptions,
+    image_aliases: &HashSet<String>,
 ) -> Result<ProcessedTypFile, String> {
     let source_content = fs::read_to_string(src).map_err(|e| e.to_string())?;
     let current_source_digest = source_digest(&source_content);
@@ -1361,7 +1376,7 @@ fn process_typ_file(
 
     sourcemap.source_digest = current_source_digest;
     sourcemap.preview_content_mode = content_mode_key(options.preview_content_mode).into();
-    let draft = draft_preparation(options, src, dest, &source_content);
+    let draft = draft_preparation(options, src, dest, &source_content, Some(image_aliases));
     let generated_content = prepare_source_content(&source_content, &draft, &mut sourcemap);
 
     fs::write(dest, &generated_content).map_err(|e| e.to_string())?;
@@ -1398,17 +1413,28 @@ fn draft_preparation(
     source_path: &Path,
     destination_path: &Path,
     source: &str,
+    image_aliases: Option<&HashSet<String>>,
 ) -> DraftPreparation {
     if options.preview_content_mode != PreviewContentMode::Draft {
         return DraftPreparation::default();
     }
-    let images = prepare_draft_images(
-        &options.project_root,
-        source_path,
-        destination_path,
-        &options.cache_root.join("render"),
-        source,
-    );
+    let images = match image_aliases {
+        Some(image_aliases) => prepare_draft_images_with_aliases(
+            &options.project_root,
+            source_path,
+            destination_path,
+            &options.cache_root.join("render"),
+            source,
+            image_aliases,
+        ),
+        None => prepare_draft_images(
+            &options.project_root,
+            source_path,
+            destination_path,
+            &options.cache_root.join("render"),
+            source,
+        ),
+    };
     if options.draft_diagrams {
         let diagrams = prepare_draft_diagrams_with_size_lookup(
             &options.project_root,
@@ -2078,7 +2104,7 @@ mod tests {
             allow_large_copy_fallback: false,
         };
 
-        process_typ_file(&source, &render, relative, &maps, &options).unwrap();
+        process_typ_file(&source, &render, relative, &maps, &options, &HashSet::new()).unwrap();
         let map_path = derived_metadata_path(&maps, relative, "map");
         let mut stale_map: SourceMap =
             serde_json::from_str(&fs::read_to_string(&map_path).unwrap()).unwrap();
@@ -2089,7 +2115,8 @@ mod tests {
             .to_string();
         fs::write(&map_path, serde_json::to_string_pretty(&stale_map).unwrap()).unwrap();
 
-        let result = process_typ_file(&source, &render, relative, &maps, &options).unwrap();
+        let result =
+            process_typ_file(&source, &render, relative, &maps, &options, &HashSet::new()).unwrap();
         assert!(result.changed);
         let refreshed: SourceMap =
             serde_json::from_str(&fs::read_to_string(map_path).unwrap()).unwrap();
@@ -2145,6 +2172,44 @@ mod tests {
         assert!(draft_source.contains("draft-preview.typsastra.invalid"));
         assert!(draft_source.contains("font: \"New Computer Modern\", \"photo.png\""));
         assert!(!draft_source.contains("#raw("));
+    }
+
+    #[test]
+    fn replaces_images_called_through_an_imported_alias() {
+        let workspace = tempfile::tempdir().unwrap();
+        let main = workspace.path().join("main.typ");
+        let template = workspace.path().join("template.typ");
+        let cache_root = workspace.path().join(".typsastra/cache");
+        let mut png = vec![0u8; 24];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[16..20].copy_from_slice(&800u32.to_be_bytes());
+        png[20..24].copy_from_slice(&1000u32.to_be_bytes());
+        fs::write(workspace.path().join("artwork.png"), png).unwrap();
+        fs::write(&template, "#let PptxImage = image\n").unwrap();
+        fs::write(
+            &main,
+            "#import \"template.typ\": *\n\
+             #PptxImage(\"artwork.png\", width: 800pt, height: 1000pt, fit: \"stretch\")\n",
+        )
+        .unwrap();
+        let options = RenderPrepareOptions {
+            project_root: workspace.path().to_path_buf(),
+            entry_file: main,
+            cache_root: cache_root.clone(),
+            generate_source_map: true,
+            preview_content_mode: PreviewContentMode::Draft,
+            draft_diagrams: true,
+            allow_large_copy_fallback: false,
+        };
+
+        let result = mirror_project_cancellable(&options, || false).unwrap();
+        assert_eq!(result.draft_assets.len(), 1);
+        assert!(result.draft_diagnostics.is_empty());
+        let draft_source = fs::read_to_string(cache_root.join("render/main.typ")).unwrap();
+        assert!(draft_source.contains("draft-preview.typsastra.invalid"));
+        assert!(draft_source.contains("width: 800pt"));
+        assert!(draft_source.contains("height: 1000pt"));
+        assert!(!draft_source.contains("#PptxImage("));
     }
 
     #[test]
