@@ -1037,6 +1037,14 @@ struct ImageWrapper<'a> {
     body_offset: usize,
 }
 
+fn wrapper_has_direct_image_body(wrapper: &ImageWrapper<'_>) -> bool {
+    match wrapper.body {
+        Expr::FuncCall(_) => true,
+        Expr::Parenthesized(group) => matches!(group.expr(), Expr::FuncCall(_)),
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone)]
 struct WrapperParameter<'a> {
     name: String,
@@ -1349,8 +1357,16 @@ fn collect_image_calls<'a>(
     output: &mut Vec<ImageCall>,
 ) {
     if let Some(binding) = LetBinding::from_untyped(node) {
-        if matches!(binding.kind(), LetBindingKind::Closure(_)) {
-            return;
+        if let LetBindingKind::Closure(name) = binding.kind() {
+            // A parameterized image wrapper is replaced at its call sites.
+            // Other functions can still contain static images (for example a
+            // logo in a template header), so keep walking their bodies.
+            if wrappers
+                .get(name.as_str())
+                .is_some_and(wrapper_has_direct_image_body)
+            {
+                return;
+            }
         }
     }
 
@@ -2198,6 +2214,33 @@ mod tests {
             .replacements
             .iter()
             .any(|replacement| replacement.generated.contains("width: 58%")));
+        assert!(prepared.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn prepares_static_images_inside_function_bodies() {
+        let workspace = tempfile::tempdir().unwrap();
+        write_test_png(workspace.path(), "logo.png", 100, 50);
+        let source = "\
+#let quotation(body) = {
+  set page(header: [
+    #image(\"logo.png\", width: 2cm)
+  ])
+  body
+}
+#quotation([Text])";
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            source,
+        );
+
+        assert_eq!(prepared.replacements.len(), 1);
+        let replacement = &prepared.replacements[0];
+        assert!(replacement.generated.contains("logo.png"));
+        assert!(replacement.generated.contains("width: 2cm"));
         assert!(prepared.diagnostics.is_empty());
     }
 
