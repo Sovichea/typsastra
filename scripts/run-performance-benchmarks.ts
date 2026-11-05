@@ -381,6 +381,193 @@ async function benchmarkTinymistThumbnailWorkers(): Promise<ThumbnailWorkerBench
   };
 }
 
+type PreviewCompilationBenchmark = {
+  available: boolean;
+  normalRoot: string | null;
+  draftRoot: string | null;
+  iterations: number;
+  pages: number | null;
+  fletcherDiagrams: number | null;
+  cetzCanvases: number | null;
+  normal: ReturnType<typeof summarize> | null;
+  draft: ReturnType<typeof summarize> | null;
+  speedup: number | null;
+  reason: string | null;
+};
+
+type DiagramPlaceholderCounts = {
+  fletcher: number;
+  cetz: number;
+};
+
+async function countDraftDiagramPlaceholders(
+  root: string,
+): Promise<DiagramPlaceholderCounts> {
+  let fletcher = 0;
+  let cetz = 0;
+  const pending = [root];
+  while (pending.length > 0) {
+    const directory = pending.pop()!;
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(path);
+      } else if (entry.isFile() && entry.name.endsWith(".typ")) {
+        const source = await readFile(path, "utf8").catch(() => "");
+        fletcher += source.match(/Fletcher diagram/g)?.length ?? 0;
+        cetz += source.match(/Cetz canvas/g)?.length ?? 0;
+      }
+    }
+  }
+  return { fletcher, cetz };
+}
+
+async function compilePreviewProject(
+  tinymist: string,
+  root: string,
+  destination: string,
+): Promise<number> {
+  await rm(destination, { force: true });
+  const startedAt = performance.now();
+  const child = Bun.spawn([
+    tinymist,
+    "compile",
+    "main.typ",
+    destination,
+    "--root",
+    root,
+    "--format",
+    "pdf",
+  ], {
+    cwd: root,
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const exitCode = await child.exited;
+  if (exitCode !== 0) {
+    const stderr = (await new Response(child.stderr).text()).trim();
+    throw new Error(`Tinymist preview compile failed: ${stderr}`);
+  }
+  return performance.now() - startedAt;
+}
+
+async function countPreviewPages(
+  tinymist: string,
+  root: string,
+  pagesDirectory: string,
+): Promise<number> {
+  await rm(pagesDirectory, { recursive: true, force: true });
+  await mkdir(pagesDirectory, { recursive: true });
+  const destination = join(pagesDirectory, "page-{p}.svg");
+  const child = Bun.spawn([
+    tinymist,
+    "compile",
+    "main.typ",
+    destination,
+    "--root",
+    root,
+    "--format",
+    "svg",
+  ], {
+    cwd: root,
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const exitCode = await child.exited;
+  if (exitCode !== 0) {
+    const stderr = (await new Response(child.stderr).text()).trim();
+    throw new Error(`Tinymist page-count compile failed: ${stderr}`);
+  }
+  const files = await readdir(pagesDirectory).catch(() => []);
+  await rm(pagesDirectory, { recursive: true, force: true });
+  return files.filter(file => /^page-\d+\.svg$/.test(file)).length;
+}
+
+async function benchmarkPreviewCompilation(): Promise<PreviewCompilationBenchmark> {
+  const normalRoot = process.env.BENCHMARK_PREVIEW_PROJECT?.trim() || null;
+  const draftRoot = process.env.BENCHMARK_PREVIEW_DRAFT_ROOT?.trim() || null;
+  const iterations = Math.max(
+    1,
+    Math.min(10, Number(process.env.BENCHMARK_PREVIEW_ITERATIONS ?? 3) || 3),
+  );
+  const empty: PreviewCompilationBenchmark = {
+    available: false,
+    normalRoot,
+    draftRoot,
+    iterations,
+    pages: null,
+    fletcherDiagrams: null,
+    cetzCanvases: null,
+    normal: null,
+    draft: null,
+    speedup: null,
+    reason: null,
+  };
+  if (!normalRoot || !draftRoot) {
+    return {
+      ...empty,
+      reason: "Set BENCHMARK_PREVIEW_PROJECT and BENCHMARK_PREVIEW_DRAFT_ROOT to enable preview compilation measurements.",
+    };
+  }
+  const tinymist = await resolveTinymistBinary();
+  if (!tinymist) {
+    return { ...empty, reason: "Tinymist CLI was not found." };
+  }
+  const outputRoot = join(output, "preview-compilation");
+  await rm(outputRoot, { recursive: true, force: true });
+  await mkdir(outputRoot, { recursive: true });
+  try {
+    await compilePreviewProject(tinymist, normalRoot, join(outputRoot, "normal-warmup.pdf"));
+    await compilePreviewProject(tinymist, draftRoot, join(outputRoot, "draft-warmup.pdf"));
+    const pages = await countPreviewPages(
+      tinymist,
+      normalRoot,
+      join(outputRoot, "pages"),
+    );
+    const placeholders = await countDraftDiagramPlaceholders(draftRoot);
+    const normalSamples: number[] = [];
+    const draftSamples: number[] = [];
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      normalSamples.push(
+        await compilePreviewProject(
+          tinymist,
+          normalRoot,
+          join(outputRoot, `normal-${iteration}.pdf`),
+        ),
+      );
+      draftSamples.push(
+        await compilePreviewProject(
+          tinymist,
+          draftRoot,
+          join(outputRoot, `draft-${iteration}.pdf`),
+        ),
+      );
+    }
+    const normal = summarize(normalSamples);
+    const draft = summarize(draftSamples);
+    return {
+      available: true,
+      normalRoot,
+      draftRoot,
+      iterations,
+      pages,
+      fletcherDiagrams: placeholders.fletcher,
+      cetzCanvases: placeholders.cetz,
+      normal,
+      draft,
+      speedup: draft.medianMs > 0
+        ? Number((normal.medianMs / draft.medianMs).toFixed(2))
+        : null,
+      reason: null,
+    };
+  } catch (error) {
+    return { ...empty, reason: String(error) };
+  }
+}
+
+const previewCompilation = await benchmarkPreviewCompilation();
+
 const typstVersion = await commandOutput(["typst", "--version"]);
 const tinymistPackage = await Bun.file(join(root, "node_modules", "tinymist", "package.json")).json();
 const gitRevision = await commandOutput(["git", "rev-parse", "--short", "HEAD"]);
@@ -419,9 +606,9 @@ const tinymistThumbnailWorkers = await benchmarkTinymistThumbnailWorkers();
 
 const processor = cpus()[0];
 const report = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   generatedAt: new Date().toISOString(),
-  scope: "CLI compiler, Tinymist thumbnail workers, incremental-range calculation, and built frontend artifacts; not total desktop runtime",
+  scope: "CLI compiler, Tinymist thumbnail workers, normal vs Draft preview compilation, incremental-range calculation, and built frontend artifacts; not total desktop runtime",
   source: {
     gitRevision,
     workingTreeDirty: gitStatus.length > 0
@@ -447,6 +634,7 @@ const report = {
     warm: compile
   },
   tinymistThumbnailWorkers,
+  previewCompilation,
   incrementalSpellcheck: {
     documentUtf16: doc.length,
     editsPerIteration: 1_000,
@@ -464,7 +652,9 @@ const report = {
     "Desktop, WebView, PDF renderer, GPU, and long-lived LSP memory are not measured by this harness.",
     "Tinymist thumbnail worker memory is reported as peak working set and excludes the main LSP process.",
     "Thumbnail worker runs use a small Fletcher fixture; larger diagrams or Cetz canvases may use more memory.",
-    "Aggregate worker memory is an upper bound because shared pages can be counted more than once."
+    "Aggregate worker memory is an upper bound because shared pages can be counted more than once.",
+    "Normal vs Draft preview timings use fresh Tinymist CLI processes and a prepared Draft mirror; they exclude PDF presentation and WebView rendering.",
+    "Preview compilation iterations reuse the same prepared inputs and do not simulate editing between runs."
   ]
 };
 
@@ -496,6 +686,24 @@ ${thumbnailWorkers.runs.map(run =>
 
 Tinymist CLI measurements were skipped: ${thumbnailWorkers.reason ?? "Tinymist CLI is unavailable."}
 `;
+const preview = report.previewCompilation;
+const previewSection = preview.available
+  ? `## Preview compilation
+
+Document: **${preview.pages ?? "unknown"} pages**, **${preview.fletcherDiagrams ?? "unknown"} Fletcher diagrams**, and **${preview.cetzCanvases ?? "unknown"} Cetz canvases**.
+
+| Mode | Minimum | Median | p95 / maximum |
+|---|---:|---:|---:|
+| Normal preview | ${preview.normal!.minimumMs.toFixed(2)} ms | ${preview.normal!.medianMs.toFixed(2)} ms | ${preview.normal!.p95Ms.toFixed(2)} ms |
+| Draft preview | ${preview.draft!.minimumMs.toFixed(2)} ms | ${preview.draft!.medianMs.toFixed(2)} ms | ${preview.draft!.p95Ms.toFixed(2)} ms |
+
+- Draft preview speedup: **${preview.speedup === null ? "n/a" : `${preview.speedup.toFixed(2)}×`}**.
+- Each mode was warmed up once and measured ${preview.iterations} time(s) with a fresh Tinymist CLI process.
+`
+  : `## Preview compilation
+
+Preview compilation measurements were skipped: ${preview.reason ?? "project roots are unavailable."}
+`;
 const markdown = `# Typsastra benchmark report
 
 Generated: ${report.generatedAt}<br>
@@ -503,7 +711,7 @@ Revision: \`${gitRevision}\`${report.source.workingTreeDirty ? " (working tree h
 
 ## Scope
 
-This report measures CLI compiler process time, dedicated Tinymist thumbnail worker time and memory, incremental spellcheck-range calculation, and built frontend artifact size. It does **not** claim to measure total Typsastra desktop memory, the long-lived LSP, or end-to-end WebView preview latency.
+This report measures CLI compiler process time, dedicated Tinymist thumbnail worker time and memory, normal vs Draft preview compilation time, incremental spellcheck-range calculation, and built frontend artifact size. It does **not** claim to measure total Typsastra desktop memory, the long-lived LSP, or end-to-end WebView preview latency.
 
 ## Machine and tools
 
@@ -534,6 +742,7 @@ Each warm compiler result contains ${compileIterations} fresh Typst CLI processe
 - Built frontend \`dist/\` size: **${mib(report.artifacts.frontendDistBytes)}**. This is not installer size.
 
 ${thumbnailSection}
+${previewSection}
 ## Limitations
 
 ${report.limitations.map(item => `- ${item}`).join("\n")}
