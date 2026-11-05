@@ -86,6 +86,32 @@ type DraftThumbnailQueueSummary = {
   queued: number;
 };
 
+type DraftThumbnailProgress = {
+  generation: number;
+  total: number;
+  ready: number;
+  failed: number;
+  pending: number;
+  generating: number;
+};
+
+type DraftDiagramThumbnailQueueSummary = {
+  generation: number;
+  total: number;
+  cacheHits: number;
+  queued: number;
+};
+
+type DraftDiagramThumbnailProgress = {
+  generation: number;
+  total: number;
+  ready: number;
+  failed: number;
+  pending: number;
+  generating: number;
+  generated: number;
+};
+
 type DraftDiagramThumbnailStatus = {
   status: "ready" | "failed";
   path?: string;
@@ -151,6 +177,8 @@ const MAX_RECOMMENDED_UNIQUE_PREVIEW_IMAGES = 50;
 const AGGREGATE_IMAGE_CONTRIBUTOR_BYTES = 32 * 1024 * 1024;
 const MAX_RECOMMENDED_SINGLE_IMAGE_SOURCE_BYTES = 8 * 1024 * 1024;
 const MAX_AGGREGATE_IMAGE_OPTIMIZATION_SUGGESTIONS = 5;
+const THUMBNAIL_PRIORITY_DEBOUNCE_MS = 250;
+const THUMBNAIL_PROGRESS_POLL_MS = 250;
 
 /** Owns Draft Preview state, image warnings, and generation-scoped thumbnails. */
 export class DraftPreviewController {
@@ -163,6 +191,18 @@ export class DraftPreviewController {
   private assetRootPathValue: string | null = null;
   private thumbnailDocumentRootPath: string | null = null;
   private thumbnailGenerationValue = 0;
+  private pendingThumbnailPage = 0;
+  private pendingDiagramPage = 0;
+  private thumbnailPriorityTimer: number | null = null;
+  private thumbnailProgressTimer: number | null = null;
+  private thumbnailProgressHideTimer: number | null = null;
+  private thumbnailProgressBusy = false;
+  private imageThumbnailProgressActive = false;
+  private diagramThumbnailProgressActive = false;
+  private diagramProgressTimer: number | null = null;
+  private diagramProgressHideTimer: number | null = null;
+  private diagramProgressBusy = false;
+  private diagramProgressRefreshed = false;
   private diagramMeasurementTimer: number | null = null;
   private failedDiagramMeasurementKey: string | null = null;
 
@@ -219,11 +259,15 @@ export class DraftPreviewController {
     if (input.mode === "draft") {
       this.thumbnailGenerationValue = input.generation;
       await this.startThumbnailQueue(input.generation);
-      this.scheduleDiagramMeasurement(input.generation);
+      void this.startDiagramThumbnailQueue(input.generation);
     } else {
       this.thumbnailGenerationValue = 0;
       this.cancelDiagramMeasurement();
+      this.stopThumbnailProgress();
+      this.stopDiagramThumbnailProgress();
+      this.cancelThumbnailPriority();
       void invoke("cancel_draft_thumbnail_generation").catch(() => {});
+      void invoke("cancel_draft_diagram_thumbnail_generation").catch(() => {});
     }
     this.updateControl(false);
   }
@@ -238,9 +282,15 @@ export class DraftPreviewController {
     this.assetRootPathValue = null;
     this.thumbnailDocumentRootPath = null;
     this.thumbnailGenerationValue = 0;
+    this.pendingThumbnailPage = 0;
+    this.pendingDiagramPage = 0;
     this.cancelDiagramMeasurement();
+    this.stopThumbnailProgress();
+    this.stopDiagramThumbnailProgress();
+    this.cancelThumbnailPriority();
     this.failedDiagramMeasurementKey = null;
     void invoke("cancel_draft_thumbnail_generation").catch(() => {});
+    void invoke("cancel_draft_diagram_thumbnail_generation").catch(() => {});
     this.updateControl();
     this.updateImageHeavyWarning(null);
     this.publishWarnings(null);
@@ -386,6 +436,16 @@ export class DraftPreviewController {
     if (mode === this.modeValue) {
       if (mode === "draft" && this.presentedModeValue === "draft") await this.showDraftDetails();
       return;
+    }
+    if (mode === "draft") {
+      const page = Math.max(1, this.port.previewPageStatus().currentPage || 1);
+      this.pendingThumbnailPage = page;
+      this.pendingDiagramPage = page;
+    } else {
+      this.stopThumbnailProgress();
+      this.stopDiagramThumbnailProgress();
+      this.cancelThumbnailPriority();
+      void invoke("cancel_draft_diagram_thumbnail_generation").catch(() => {});
     }
     this.modeValue = mode;
     this.updateControl(true);
@@ -535,10 +595,13 @@ export class DraftPreviewController {
     ) return;
     if (!workspaceRoot || !cacheRootPath || !this.thumbnailDocumentRootPath) return;
     if (imageAssets.length === 0) {
+      this.stopThumbnailProgress();
       void invoke("cancel_draft_thumbnail_generation").catch(() => {});
       return;
     }
-    const displayedPage = Math.max(1, this.port.previewPageStatus().currentPage || 1);
+    const currentPage = Math.max(1, this.port.previewPageStatus().currentPage || 1);
+    const displayedPage = this.pendingThumbnailPage > 0 ? this.pendingThumbnailPage : currentPage;
+    this.pendingThumbnailPage = 0;
     const displayedPageAssetIds = (await this.port.previewFrame().draftImageIdsForPage(displayedPage))
       .filter(id => imageAssets.some(asset => asset.id === id));
     if (generation !== this.port.previewGeneration() || this.presentedModeValue !== "draft") return;
@@ -556,7 +619,289 @@ export class DraftPreviewController {
       return null;
     });
     if (!summary || generation !== this.port.previewGeneration()) return;
+    if (summary.queued > 0) this.startThumbnailProgress(generation);
+    else this.stopThumbnailProgress();
     this.port.log("info", "draft thumbnails", `Draft thumbnail queue ${generation} started: ${summary.cacheHits} cache hit(s), ${summary.queued} queued, ${displayedPageAssetIds.length} image(s) on page ${displayedPage}.`);
+  }
+
+  /** Reorders pending image thumbnails around the page the user is viewing. */
+  public prioritizeThumbnailPage(page: number): void {
+    if (this.presentedModeValue !== "draft" || this.thumbnailGenerationValue < 1) return;
+    if (!Number.isFinite(page) || page < 1) return;
+    if (this.thumbnailPriorityTimer !== null) window.clearTimeout(this.thumbnailPriorityTimer);
+    this.thumbnailPriorityTimer = window.setTimeout(() => {
+      this.thumbnailPriorityTimer = null;
+      void this.applyThumbnailPriority(page);
+      void this.applyDiagramThumbnailPriority(page);
+    }, THUMBNAIL_PRIORITY_DEBOUNCE_MS);
+  }
+
+  private cancelThumbnailPriority(): void {
+    if (this.thumbnailPriorityTimer !== null) {
+      window.clearTimeout(this.thumbnailPriorityTimer);
+      this.thumbnailPriorityTimer = null;
+    }
+  }
+
+  private async applyThumbnailPriority(page: number): Promise<void> {
+    if (this.presentedModeValue !== "draft" || this.thumbnailGenerationValue < 1) return;
+    const workspaceRoot = this.port.workspaceRootPath();
+    if (!workspaceRoot) return;
+    const imageAssets = [...this.assetsValue.values()]
+      .filter(asset => asset.kind !== "diagram");
+    if (imageAssets.length === 0) return;
+    const generation = this.thumbnailGenerationValue;
+    const displayedPageAssetIds = (await this.port.previewFrame().draftImageIdsForPage(page))
+      .filter(id => imageAssets.some(asset => asset.id === id));
+    if (
+      generation !== this.thumbnailGenerationValue
+      || this.presentedModeValue !== "draft"
+    ) return;
+    await invoke("prioritize_draft_thumbnails", {
+      generation,
+      workspaceRoot,
+      displayedPageAssetIds,
+    }).catch(error => {
+      this.port.log("warning", "draft thumbnails", `Could not prioritize Draft thumbnails for page ${page}: ${String(error)}`);
+    });
+  }
+
+  private async startDiagramThumbnailQueue(generation: number): Promise<void> {
+    if (
+      generation !== this.thumbnailGenerationValue
+      || this.presentedModeValue !== "draft"
+    ) return;
+    const diagrams = this.diagramMeasurementAssets();
+    const workspaceRoot = this.port.workspaceRootPath();
+    if (diagrams.length === 0 || !workspaceRoot) {
+      this.stopDiagramThumbnailProgress();
+      return;
+    }
+    const cacheRootPath = this.port.cacheRootPath() ?? undefined;
+    const currentPage = Math.max(1, this.port.previewPageStatus().currentPage || 1);
+    const displayedPage = this.pendingDiagramPage > 0 ? this.pendingDiagramPage : currentPage;
+    this.pendingDiagramPage = 0;
+    const diagramAssets = [...this.assetsValue.values()]
+      .filter(asset => asset.kind === "diagram");
+    const displayedPageAssetIds = (await this.port.previewFrame().draftImageIdsForPage(displayedPage))
+      .filter(id => diagramAssets.some(asset => asset.id === id));
+    if (
+      generation !== this.thumbnailGenerationValue
+      || this.presentedModeValue !== "draft"
+    ) return;
+    const summary = await invoke<DraftDiagramThumbnailQueueSummary>(
+      "start_draft_diagram_thumbnail_generation",
+      {
+        request: {
+          generation,
+          workspaceRoot,
+          cacheRootPath,
+          diagrams,
+          displayedPageAssetIds,
+        },
+      },
+    ).catch(error => {
+      this.port.log(
+        "warning",
+        "draft diagrams",
+        `Could not start Draft diagram thumbnail generation: ${String(error)}`,
+      );
+      return null;
+    });
+    if (!summary) {
+      this.scheduleDiagramMeasurement(generation);
+      return;
+    }
+    if (summary.queued > 0) this.startDiagramThumbnailProgress(generation);
+    else this.stopDiagramThumbnailProgress();
+    this.port.log(
+      "info",
+      "draft diagrams",
+      `Draft diagram thumbnail queue ${generation} started: ${summary.cacheHits} cache hit(s), ${summary.queued} queued, ${displayedPageAssetIds.length} diagram(s) on page ${displayedPage}.`,
+    );
+  }
+
+  private async applyDiagramThumbnailPriority(page: number): Promise<void> {
+    if (this.presentedModeValue !== "draft" || this.thumbnailGenerationValue < 1) return;
+    const workspaceRoot = this.port.workspaceRootPath();
+    if (!workspaceRoot) return;
+    const diagramAssets = [...this.assetsValue.values()]
+      .filter(asset => asset.kind === "diagram");
+    if (diagramAssets.length === 0) return;
+    const generation = this.thumbnailGenerationValue;
+    const displayedPageAssetIds = (await this.port.previewFrame().draftImageIdsForPage(page))
+      .filter(id => diagramAssets.some(asset => asset.id === id));
+    if (
+      generation !== this.thumbnailGenerationValue
+      || this.presentedModeValue !== "draft"
+    ) return;
+    await invoke("prioritize_draft_diagram_thumbnails", {
+      generation,
+      workspaceRoot,
+      displayedPageAssetIds,
+    }).catch(error => {
+      this.port.log(
+        "warning",
+        "draft diagrams",
+        `Could not prioritize Draft diagram thumbnails for page ${page}: ${String(error)}`,
+      );
+    });
+  }
+
+  private startDiagramThumbnailProgress(generation: number): void {
+    this.stopDiagramThumbnailProgress();
+    const progress = document.getElementById("draft-diagram-thumbnail-progress");
+    if (!progress) return;
+    this.diagramProgressRefreshed = false;
+    this.diagramThumbnailProgressActive = true;
+    this.updateThumbnailStatusVisibility();
+    progress.textContent = "Diagrams 0/0";
+    const poll = async () => {
+      if (this.diagramProgressBusy) return;
+      const workspaceRoot = this.port.workspaceRootPath();
+      if (
+        !workspaceRoot
+        || this.presentedModeValue !== "draft"
+        || generation !== this.thumbnailGenerationValue
+      ) {
+        this.stopDiagramThumbnailProgress();
+        return;
+      }
+      this.diagramProgressBusy = true;
+      try {
+        const next = await invoke<DraftDiagramThumbnailProgress>(
+          "get_draft_diagram_thumbnail_progress",
+          { generation, workspaceRoot },
+        );
+        if (
+          generation !== this.thumbnailGenerationValue
+          || this.presentedModeValue !== "draft"
+        ) {
+          this.stopDiagramThumbnailProgress();
+          return;
+        }
+        const completed = next.ready + next.failed;
+        progress.textContent = `Diagrams ${completed}/${next.total}`;
+        if (next.pending === 0 && next.generating === 0) {
+          if (this.diagramProgressTimer !== null) {
+            window.clearInterval(this.diagramProgressTimer);
+            this.diagramProgressTimer = null;
+          }
+          if (next.generated > 0 && !this.diagramProgressRefreshed) {
+            this.diagramProgressRefreshed = true;
+            this.port.log(
+              "info",
+              "draft diagrams",
+              `Prepared ${next.generated} diagram thumbnail(s); refreshing Draft Preview.`,
+            );
+            this.port.invalidatePreviewWork("Draft diagram thumbnails prepared");
+            void this.port.refreshActivePreviewRoot(true);
+          }
+          this.diagramProgressHideTimer = window.setTimeout(
+            () => this.stopDiagramThumbnailProgress(),
+            900,
+          );
+        }
+      } catch {
+        this.stopDiagramThumbnailProgress();
+      } finally {
+        this.diagramProgressBusy = false;
+      }
+    };
+    void poll();
+    this.diagramProgressTimer = window.setInterval(poll, THUMBNAIL_PROGRESS_POLL_MS);
+  }
+
+  private stopDiagramThumbnailProgress(): void {
+    if (this.diagramProgressTimer !== null) {
+      window.clearInterval(this.diagramProgressTimer);
+      this.diagramProgressTimer = null;
+    }
+    if (this.diagramProgressHideTimer !== null) {
+      window.clearTimeout(this.diagramProgressHideTimer);
+      this.diagramProgressHideTimer = null;
+    }
+    this.diagramProgressBusy = false;
+    this.diagramThumbnailProgressActive = false;
+    this.updateThumbnailStatusVisibility();
+  }
+
+  private startThumbnailProgress(generation: number): void {
+    this.stopThumbnailProgress();
+    const progress = document.getElementById("draft-image-thumbnail-progress");
+    if (!progress) return;
+    this.imageThumbnailProgressActive = true;
+    this.updateThumbnailStatusVisibility();
+    progress.textContent = "Images 0/0";
+    const poll = async () => {
+      if (this.thumbnailProgressBusy) return;
+      const workspaceRoot = this.port.workspaceRootPath();
+      if (
+        !workspaceRoot
+        || this.presentedModeValue !== "draft"
+        || generation !== this.thumbnailGenerationValue
+      ) {
+        this.stopThumbnailProgress();
+        return;
+      }
+      this.thumbnailProgressBusy = true;
+      try {
+        const next = await invoke<DraftThumbnailProgress>("get_draft_thumbnail_progress", {
+          generation,
+          workspaceRoot,
+        });
+        if (
+          generation !== this.thumbnailGenerationValue
+          || this.presentedModeValue !== "draft"
+        ) {
+          this.stopThumbnailProgress();
+          return;
+        }
+        const completed = next.ready + next.failed;
+        progress.textContent = `Images ${completed}/${next.total}`;
+        if (next.pending === 0 && next.generating === 0) {
+          if (this.thumbnailProgressTimer !== null) {
+            window.clearInterval(this.thumbnailProgressTimer);
+            this.thumbnailProgressTimer = null;
+          }
+          this.thumbnailProgressHideTimer = window.setTimeout(
+            () => this.stopThumbnailProgress(),
+            900
+          );
+        }
+      } catch {
+        this.stopThumbnailProgress();
+      } finally {
+        this.thumbnailProgressBusy = false;
+      }
+    };
+    void poll();
+    this.thumbnailProgressTimer = window.setInterval(poll, THUMBNAIL_PROGRESS_POLL_MS);
+  }
+
+  private stopThumbnailProgress(): void {
+    if (this.thumbnailProgressTimer !== null) {
+      window.clearInterval(this.thumbnailProgressTimer);
+      this.thumbnailProgressTimer = null;
+    }
+    if (this.thumbnailProgressHideTimer !== null) {
+      window.clearTimeout(this.thumbnailProgressHideTimer);
+      this.thumbnailProgressHideTimer = null;
+    }
+    this.thumbnailProgressBusy = false;
+    this.imageThumbnailProgressActive = false;
+    this.updateThumbnailStatusVisibility();
+  }
+
+  private updateThumbnailStatusVisibility(): void {
+    const status = document.getElementById("draft-thumbnail-status");
+    if (status) {
+      status.hidden = !this.imageThumbnailProgressActive && !this.diagramThumbnailProgressActive;
+    }
+    const imageProgress = document.getElementById("draft-image-thumbnail-progress");
+    if (imageProgress) imageProgress.hidden = !this.imageThumbnailProgressActive;
+    const diagramProgress = document.getElementById("draft-diagram-thumbnail-progress");
+    if (diagramProgress) diagramProgress.hidden = !this.diagramThumbnailProgressActive;
   }
 
   private recommendedAssets(profile: PreviewImageProfile): PreviewImageAsset[] {

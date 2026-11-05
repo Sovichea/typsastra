@@ -1,18 +1,25 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 use tauri::Manager;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 use super::draft::{svg_dimensions, svg_dimensions_f64};
 
-const DIAGRAM_THUMBNAIL_CACHE_VERSION: &str = "v3";
+const DIAGRAM_THUMBNAIL_CACHE_VERSION: &str = "v4";
+const DIAGRAM_COMPILE_CONCURRENCY: usize = 2;
+const DIAGRAM_THUMBNAIL_CHUNK_SIZE: usize = 6;
 
 static TEMP_SNIPPET_COUNTER: AtomicU64 = AtomicU64::new(0);
-static DIAGRAM_COMPILE_LOCK: LazyLock<tokio::sync::Mutex<()>> =
-    LazyLock::new(|| tokio::sync::Mutex::new(()));
+static DIAGRAM_QUEUE_EPOCH: AtomicU64 = AtomicU64::new(0);
+static DIAGRAM_QUEUE_STATE: LazyLock<Mutex<DiagramThumbnailState>> =
+    LazyLock::new(|| Mutex::new(DiagramThumbnailState::default()));
+static DIAGRAM_COMPILE_SEMAPHORE: LazyLock<Semaphore> =
+    LazyLock::new(|| Semaphore::new(DIAGRAM_COMPILE_CONCURRENCY));
 
 struct FileCleanup(PathBuf);
 
@@ -60,6 +67,39 @@ pub struct MeasureDraftDiagramsResult {
     pub measured: usize,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartDraftDiagramThumbnailRequest {
+    pub generation: u64,
+    pub workspace_root: String,
+    #[serde(default)]
+    pub cache_root_path: Option<String>,
+    pub diagrams: Vec<DraftDiagramMeasurement>,
+    #[serde(default)]
+    pub displayed_page_asset_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftDiagramThumbnailQueueSummary {
+    pub generation: u64,
+    pub total: usize,
+    pub cache_hits: usize,
+    pub queued: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftDiagramThumbnailProgress {
+    pub generation: u64,
+    pub total: usize,
+    pub ready: usize,
+    pub failed: usize,
+    pub pending: usize,
+    pub generating: usize,
+    pub generated: usize,
+}
+
 struct MeasurementEntry {
     source_path: PathBuf,
     binding_name: String,
@@ -67,6 +107,41 @@ struct MeasurementEntry {
     imports: Option<String>,
     setup: Option<String>,
     size_path: PathBuf,
+}
+
+#[derive(Default)]
+struct DiagramThumbnailState {
+    generation: u64,
+    workspace_root: PathBuf,
+    entries: HashMap<String, DiagramThumbnailEntry>,
+    displayed_order: HashMap<String, usize>,
+    generated: usize,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DiagramThumbnailStatus {
+    Pending,
+    Generating,
+    Ready,
+    Failed,
+}
+
+#[derive(Clone)]
+struct DiagramThumbnailEntry {
+    source_path: PathBuf,
+    binding_name: String,
+    expression: Option<String>,
+    imports: Option<String>,
+    setup: Option<String>,
+    svg_path: PathBuf,
+    size_path: PathBuf,
+    status: DiagramThumbnailStatus,
+}
+
+#[derive(Clone)]
+struct DiagramThumbnailJob {
+    id: String,
+    entry: DiagramThumbnailEntry,
 }
 
 struct DirectoryCleanup(PathBuf);
@@ -335,7 +410,10 @@ pub async fn get_draft_diagram_thumbnail(
     let cache_dir = diagram_thumbnail_cache_dir(&cache_root);
     fs::create_dir_all(&cache_dir)
         .map_err(|error| format!("Unable to prepare the Draft diagram cache: {error}"))?;
-    let _compile_guard = DIAGRAM_COMPILE_LOCK.lock().await;
+    let _compile_permit = DIAGRAM_COMPILE_SEMAPHORE
+        .acquire()
+        .await
+        .map_err(|_| "The Draft diagram compiler is unavailable.".to_string())?;
     let (cache_path, size_path) = cache_paths(&cache_dir, &stable_key, &cache_digest);
     if let Ok(bytes) = fs::read(&cache_path) {
         if is_svg(&bytes) {
@@ -447,7 +525,7 @@ pub async fn get_draft_diagram_thumbnail(
             command.env("TYPST_FONT_PATHS", value);
         }
     }
-    crate::configure_background_compiler(&mut command);
+    configure_thumbnail_compiler(&mut command);
     #[cfg(windows)]
     command.creation_flags(crate::CREATE_NO_WINDOW);
 
@@ -486,6 +564,479 @@ pub async fn get_draft_diagram_thumbnail(
 }
 
 #[tauri::command]
+pub async fn start_draft_diagram_thumbnail_generation(
+    app_handle: tauri::AppHandle,
+    request: StartDraftDiagramThumbnailRequest,
+) -> Result<DraftDiagramThumbnailQueueSummary, String> {
+    let workspace_root = dunce::canonicalize(&request.workspace_root)
+        .map_err(|error| format!("Unable to resolve the workspace root: {error}"))?;
+    if !workspace_root.is_dir() {
+        return Err("The Draft diagram workspace root is unavailable.".into());
+    }
+    let app_local_data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get app data directory: {error}"))?;
+    let cache_root = resolve_diagram_cache_root(
+        &app_local_data_dir,
+        &workspace_root,
+        request.cache_root_path.as_deref(),
+    )?;
+    let cache_dir = diagram_thumbnail_cache_dir(&cache_root);
+    fs::create_dir_all(&cache_dir)
+        .map_err(|error| format!("Unable to prepare the Draft diagram cache: {error}"))?;
+    let executable = crate::active_tinymist(&app_local_data_dir)
+        .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
+
+    let displayed_order = request
+        .displayed_page_asset_ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (id.clone(), index))
+        .collect::<HashMap<_, _>>();
+    let generation = request.generation;
+    let mut entries = HashMap::new();
+    let mut jobs = Vec::new();
+    let mut cache_hits = 0;
+    for diagram in request.diagrams {
+        let Some((id, entry)) = diagram_thumbnail_entry(&workspace_root, &cache_dir, diagram)
+        else {
+            continue;
+        };
+        if entry.svg_path.is_file() && entry.size_path.is_file() {
+            cache_hits += 1;
+            entries.insert(
+                id,
+                DiagramThumbnailEntry {
+                    status: DiagramThumbnailStatus::Ready,
+                    ..entry
+                },
+            );
+        } else {
+            jobs.push(DiagramThumbnailJob {
+                id: id.clone(),
+                entry: entry.clone(),
+            });
+            entries.insert(id, entry);
+        }
+    }
+    let total = entries.len();
+    let epoch = DIAGRAM_QUEUE_EPOCH.fetch_add(1, Ordering::AcqRel) + 1;
+    {
+        let mut state = DIAGRAM_QUEUE_STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *state = DiagramThumbnailState {
+            generation,
+            workspace_root: workspace_root.clone(),
+            entries,
+            displayed_order,
+            generated: 0,
+        };
+    }
+    let queued = jobs.len();
+    if !jobs.is_empty() {
+        let queue = Arc::new(AsyncMutex::new(jobs));
+        let worker_count = diagram_thumbnail_worker_count();
+        for _ in 0..worker_count {
+            let app_handle = app_handle.clone();
+            let executable = executable.clone();
+            let workspace_root = workspace_root.clone();
+            let cache_root = cache_root.clone();
+            let cache_dir = cache_dir.clone();
+            let queue = Arc::clone(&queue);
+            tauri::async_runtime::spawn(async move {
+                run_diagram_thumbnail_worker(
+                    app_handle,
+                    executable,
+                    epoch,
+                    generation,
+                    workspace_root,
+                    cache_root,
+                    cache_dir,
+                    queue,
+                )
+                .await;
+            });
+        }
+    }
+    Ok(DraftDiagramThumbnailQueueSummary {
+        generation,
+        total,
+        cache_hits,
+        queued,
+    })
+}
+
+#[tauri::command]
+pub fn prioritize_draft_diagram_thumbnails(
+    generation: u64,
+    workspace_root: String,
+    displayed_page_asset_ids: Vec<String>,
+) -> Result<(), String> {
+    let requested_root = dunce::canonicalize(&workspace_root)
+        .map_err(|error| format!("Unable to resolve the workspace root: {error}"))?;
+    let mut state = DIAGRAM_QUEUE_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.generation != generation || state.workspace_root != requested_root {
+        return Err("The Draft diagram thumbnail generation is no longer active.".into());
+    }
+    state.displayed_order = displayed_page_asset_ids
+        .into_iter()
+        .enumerate()
+        .map(|(index, id)| (id, index))
+        .collect();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_draft_diagram_thumbnail_progress(
+    generation: u64,
+    workspace_root: String,
+) -> Result<DraftDiagramThumbnailProgress, String> {
+    let requested_root = dunce::canonicalize(&workspace_root)
+        .map_err(|error| format!("Unable to resolve the workspace root: {error}"))?;
+    let state = DIAGRAM_QUEUE_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.generation != generation || state.workspace_root != requested_root {
+        return Err("The Draft diagram thumbnail generation is no longer active.".into());
+    }
+    let total = state.entries.len();
+    let mut ready = 0;
+    let mut failed = 0;
+    let mut pending = 0;
+    let mut generating = 0;
+    for entry in state.entries.values() {
+        match entry.status {
+            DiagramThumbnailStatus::Ready => ready += 1,
+            DiagramThumbnailStatus::Failed => failed += 1,
+            DiagramThumbnailStatus::Pending => pending += 1,
+            DiagramThumbnailStatus::Generating => generating += 1,
+        }
+    }
+    Ok(DraftDiagramThumbnailProgress {
+        generation,
+        total,
+        ready,
+        failed,
+        pending,
+        generating,
+        generated: state.generated,
+    })
+}
+
+#[tauri::command]
+pub fn cancel_draft_diagram_thumbnail_generation() {
+    DIAGRAM_QUEUE_EPOCH.fetch_add(1, Ordering::AcqRel);
+    let mut state = DIAGRAM_QUEUE_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *state = DiagramThumbnailState::default();
+}
+
+fn diagram_thumbnail_entry(
+    workspace_root: &Path,
+    cache_dir: &Path,
+    diagram: DraftDiagramMeasurement,
+) -> Option<(String, DiagramThumbnailEntry)> {
+    if !diagram
+        .id
+        .chars()
+        .all(|character| character.is_ascii_hexdigit())
+        || diagram.id.len() != 24
+        || !is_valid_binding_name(&diagram.binding_name)
+        || diagram.binding_name.starts_with('_')
+        || (diagram.diagram_kind != "fletcher" && diagram.diagram_kind != "cetz")
+    {
+        return None;
+    }
+    let source_path = dunce::canonicalize(&diagram.source_path).ok()?;
+    if !source_path.is_file()
+        || !source_path.starts_with(workspace_root)
+        || source_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_none_or(|extension| !extension.eq_ignore_ascii_case("typ"))
+    {
+        return None;
+    }
+    let expression = diagram
+        .expression
+        .map(|expression| expression.trim().to_string())
+        .filter(|expression| !expression.is_empty());
+    if expression
+        .as_ref()
+        .is_some_and(|expression| expression.len() > 256 * 1024)
+    {
+        return None;
+    }
+    let imports = diagram
+        .imports
+        .map(|imports| imports.trim().to_string())
+        .filter(|imports| !imports.is_empty());
+    if imports
+        .as_ref()
+        .is_some_and(|imports| imports.len() > 256 * 1024)
+    {
+        return None;
+    }
+    let setup = diagram
+        .setup
+        .map(|setup| setup.trim().to_string())
+        .filter(|setup| !setup.is_empty());
+    if setup.as_ref().is_some_and(|setup| setup.len() > 256 * 1024) {
+        return None;
+    }
+    let (stable_key, cache_digest) = cache_identity(
+        &source_path,
+        &diagram.id,
+        &diagram.binding_name,
+        &diagram.diagram_kind,
+        setup.as_deref().unwrap_or_default(),
+    )?;
+    let (svg_path, size_path) = cache_paths(cache_dir, &stable_key, &cache_digest);
+    Some((
+        diagram.id,
+        DiagramThumbnailEntry {
+            source_path,
+            binding_name: diagram.binding_name,
+            expression,
+            imports,
+            setup,
+            svg_path,
+            size_path,
+            status: DiagramThumbnailStatus::Pending,
+        },
+    ))
+}
+
+async fn run_diagram_thumbnail_worker(
+    app_handle: tauri::AppHandle,
+    executable: PathBuf,
+    epoch: u64,
+    generation: u64,
+    workspace_root: PathBuf,
+    cache_root: PathBuf,
+    cache_dir: PathBuf,
+    queue: Arc<AsyncMutex<Vec<DiagramThumbnailJob>>>,
+) {
+    loop {
+        if DIAGRAM_QUEUE_EPOCH.load(Ordering::Acquire) != epoch {
+            return;
+        }
+        let chunk = {
+            let mut jobs = queue.lock().await;
+            if jobs.is_empty() {
+                return;
+            }
+            let displayed_order = DIAGRAM_QUEUE_STATE
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .displayed_order
+                .clone();
+            sort_diagram_jobs(&mut jobs, &displayed_order);
+            let take = jobs.len().min(DIAGRAM_THUMBNAIL_CHUNK_SIZE);
+            jobs.drain(0..take).collect::<Vec<_>>()
+        };
+        for job in &chunk {
+            update_diagram_status(generation, &job.id, DiagramThumbnailStatus::Generating);
+        }
+        let result = compile_diagram_chunk(
+            &app_handle,
+            &executable,
+            &workspace_root,
+            &cache_dir,
+            &chunk,
+        )
+        .await;
+        match result {
+            Ok(pages) => {
+                let mut measured_sources = HashSet::new();
+                for (index, bytes) in pages {
+                    let Some(job) = chunk.get(index) else {
+                        continue;
+                    };
+                    let written = fs::write(&job.entry.svg_path, &bytes).is_ok()
+                        && std::str::from_utf8(&bytes)
+                            .ok()
+                            .and_then(svg_dimensions_f64)
+                            .is_some_and(|(width, height)| {
+                                write_size_cache(&job.entry.size_path, width, height).is_ok()
+                            });
+                    if written {
+                        update_diagram_status(generation, &job.id, DiagramThumbnailStatus::Ready);
+                        mark_diagram_generated(generation);
+                        measured_sources.insert(job.entry.source_path.clone());
+                    } else {
+                        update_diagram_status(generation, &job.id, DiagramThumbnailStatus::Failed);
+                    }
+                }
+                for source_path in measured_sources {
+                    super::mirror::invalidate_draft_preparation_cache(
+                        &cache_root,
+                        &workspace_root,
+                        &source_path,
+                    );
+                }
+            }
+            Err(_) => {
+                for job in &chunk {
+                    update_diagram_status(generation, &job.id, DiagramThumbnailStatus::Failed);
+                }
+            }
+        }
+    }
+}
+
+async fn compile_diagram_chunk(
+    app_handle: &tauri::AppHandle,
+    executable: &Path,
+    workspace_root: &Path,
+    cache_dir: &Path,
+    chunk: &[DiagramThumbnailJob],
+) -> Result<Vec<(usize, Vec<u8>)>, String> {
+    let entries = chunk
+        .iter()
+        .map(|job| MeasurementEntry {
+            source_path: job.entry.source_path.clone(),
+            binding_name: job.entry.binding_name.clone(),
+            expression: job.entry.expression.clone(),
+            imports: job.entry.imports.clone(),
+            setup: job.entry.setup.clone(),
+            size_path: job.entry.size_path.clone(),
+        })
+        .collect::<Vec<_>>();
+    let (document, page_entries) = build_measurement_document(workspace_root, &entries)?;
+    let nonce = TEMP_SNIPPET_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let snippet_name = format!(".typsastra-dq-{:x}-{:x}.typ", std::process::id(), nonce);
+    let snippet_path = workspace_root.join(&snippet_name);
+    let _snippet_cleanup = FileCleanup(snippet_path.clone());
+    fs::write(&snippet_path, document)
+        .map_err(|error| format!("Unable to write the Draft diagram queue source: {error}"))?;
+    let output_dir = cache_dir.join(format!("queue-{:x}-{:x}", std::process::id(), nonce));
+    fs::create_dir_all(&output_dir)
+        .map_err(|error| format!("Unable to prepare the Draft diagram queue output: {error}"))?;
+    let _output_cleanup = DirectoryCleanup(output_dir.clone());
+    let output_template = output_dir.join("page-{p}.svg");
+
+    let _permit = DIAGRAM_COMPILE_SEMAPHORE
+        .acquire()
+        .await
+        .map_err(|_| "The Draft diagram compiler is unavailable.".to_string())?;
+    let mut command = tokio::process::Command::new(executable);
+    command
+        .arg("compile")
+        .current_dir(workspace_root)
+        .arg(&snippet_name)
+        .arg(&output_template)
+        .arg("--root")
+        .arg(workspace_root)
+        .arg("--format")
+        .arg("svg")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    let font_paths = crate::compiler_font_directories(
+        app_handle,
+        &app_handle
+            .path()
+            .app_local_data_dir()
+            .map_err(|error| format!("Failed to get app data directory: {error}"))?,
+        workspace_root,
+    );
+    if !font_paths.is_empty() {
+        if let Ok(value) = std::env::join_paths(font_paths) {
+            command.env("TYPST_FONT_PATHS", value);
+        }
+    }
+    configure_thumbnail_compiler(&mut command);
+    #[cfg(windows)]
+    command.creation_flags(crate::CREATE_NO_WINDOW);
+
+    let result = command
+        .output()
+        .await
+        .map_err(|error| format!("Failed to start the Draft diagram queue: {error}"))?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("Draft diagram queue failed with {}.", result.status)
+        } else {
+            stderr
+        });
+    }
+
+    let mut pages = Vec::new();
+    for entry in fs::read_dir(&output_dir)
+        .map_err(|error| format!("Unable to read the Draft diagram queue output: {error}"))?
+        .flatten()
+    {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let Some(number) = name
+            .strip_prefix("page-")
+            .and_then(|rest| rest.strip_suffix(".svg"))
+            .and_then(|value| value.parse::<usize>().ok())
+        else {
+            continue;
+        };
+        let bytes = fs::read(&path)
+            .map_err(|error| format!("Unable to read a Draft diagram queue page: {error}"))?;
+        pages.push((number, bytes));
+    }
+    pages.sort_by_key(|(number, _)| *number);
+    if pages.len() != page_entries.len() {
+        return Err(format!(
+            "Draft diagram queue produced {} page(s) for {} diagram(s).",
+            pages.len(),
+            page_entries.len()
+        ));
+    }
+    Ok(pages
+        .into_iter()
+        .zip(page_entries)
+        .map(|((_, bytes), (entry_index, _))| (entry_index, bytes))
+        .collect())
+}
+
+fn sort_diagram_jobs(jobs: &mut [DiagramThumbnailJob], displayed_order: &HashMap<String, usize>) {
+    jobs.sort_by(|left, right| {
+        let left_order = displayed_order.get(&left.id).copied();
+        let right_order = displayed_order.get(&right.id).copied();
+        match (left_order, right_order) {
+            (Some(left), Some(right)) => left.cmp(&right),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    });
+}
+
+fn update_diagram_status(generation: u64, id: &str, status: DiagramThumbnailStatus) {
+    let mut state = DIAGRAM_QUEUE_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.generation == generation {
+        if let Some(entry) = state.entries.get_mut(id) {
+            entry.status = status;
+        }
+    }
+}
+
+fn mark_diagram_generated(generation: u64) {
+    let mut state = DIAGRAM_QUEUE_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.generation == generation {
+        state.generated += 1;
+    }
+}
+
+#[tauri::command]
 pub async fn measure_draft_diagrams(
     app_handle: tauri::AppHandle,
     request: MeasureDraftDiagramsRequest,
@@ -507,7 +1058,10 @@ pub async fn measure_draft_diagrams(
     let cache_dir = diagram_thumbnail_cache_dir(&cache_root);
     fs::create_dir_all(&cache_dir)
         .map_err(|error| format!("Unable to prepare the Draft diagram cache: {error}"))?;
-    let _compile_guard = DIAGRAM_COMPILE_LOCK.lock().await;
+    let _compile_permit = DIAGRAM_COMPILE_SEMAPHORE
+        .acquire()
+        .await
+        .map_err(|_| "The Draft diagram compiler is unavailable.".to_string())?;
 
     let mut seen = std::collections::HashSet::new();
     let mut pending = Vec::new();
@@ -631,7 +1185,7 @@ pub async fn measure_draft_diagrams(
             command.env("TYPST_FONT_PATHS", value);
         }
     }
-    crate::configure_background_compiler(&mut command);
+    configure_thumbnail_compiler(&mut command);
     #[cfg(windows)]
     command.creation_flags(crate::CREATE_NO_WINDOW);
 
@@ -804,6 +1358,24 @@ fn resolve_diagram_cache_root(
     }
 }
 
+fn configure_thumbnail_compiler(command: &mut tokio::process::Command) {
+    crate::configure_background_compiler(command);
+    // Several thumbnail compilers may run at once. Keep each process to one
+    // Rayon worker so they do not oversubscribe the machine.
+    command.env("RAYON_NUM_THREADS", "1");
+}
+
+fn diagram_thumbnail_worker_count() -> usize {
+    let available = std::thread::available_parallelism()
+        .map(|value| value.get())
+        .unwrap_or(1);
+    if available >= 4 {
+        DIAGRAM_COMPILE_CONCURRENCY
+    } else {
+        1
+    }
+}
+
 fn is_svg(bytes: &[u8]) -> bool {
     bytes.starts_with(b"<svg") || bytes.windows(4).any(|window| window == b"<svg")
 }
@@ -911,6 +1483,42 @@ mod tests {
         .unwrap();
         assert_eq!(status.width, 170);
         assert_eq!(status.height, 240);
+    }
+
+    fn diagram_job(id: &str) -> DiagramThumbnailJob {
+        DiagramThumbnailJob {
+            id: id.into(),
+            entry: DiagramThumbnailEntry {
+                source_path: PathBuf::from(format!("{id}.typ")),
+                binding_name: id.into(),
+                expression: None,
+                imports: None,
+                setup: None,
+                svg_path: PathBuf::from(format!("{id}.svg")),
+                size_path: PathBuf::from(format!("{id}.json")),
+                status: DiagramThumbnailStatus::Pending,
+            },
+        }
+    }
+
+    #[test]
+    fn prioritizes_displayed_diagram_jobs() {
+        let mut jobs = vec![
+            diagram_job("page-1-a"),
+            diagram_job("page-31-b"),
+            diagram_job("page-1-b"),
+            diagram_job("page-31-a"),
+        ];
+        let displayed = [("page-31-b".to_string(), 0), ("page-31-a".to_string(), 1)]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        sort_diagram_jobs(&mut jobs, &displayed);
+
+        assert_eq!(
+            jobs.iter().map(|job| job.id.as_str()).collect::<Vec<_>>(),
+            ["page-31-b", "page-31-a", "page-1-a", "page-1-b"]
+        );
     }
 
     #[test]

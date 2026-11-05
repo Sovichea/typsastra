@@ -2195,6 +2195,17 @@
                     <span class="status-text">Preparing toolchain</span>
                 </div>
                 <div
+                    id="draft-thumbnail-status"
+                    class="status-item"
+                    title="Draft thumbnail generation progress"
+                    aria-live="off"
+                    hidden
+                >
+                    <span class="status-label">Thumbnails</span>
+                    <span class="status-count" id="draft-image-thumbnail-progress">Images 0/0</span>
+                    <span class="status-count" id="draft-diagram-thumbnail-progress">Diagrams 0/0</span>
+                </div>
+                <div
                     id="cursor-position-status"
                     class="status-item cursor-position-status"
                     title="Current cursor row and Unicode grapheme column"

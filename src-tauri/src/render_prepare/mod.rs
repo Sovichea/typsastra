@@ -9,12 +9,16 @@ pub mod scanner;
 pub mod sourcemap;
 
 pub use diagram_thumbnail::{
-    cached_diagram_dimensions, get_draft_diagram_thumbnail, measure_draft_diagrams,
-    DraftDiagramThumbnailStatus, MeasureDraftDiagramsResult,
+    cached_diagram_dimensions, cancel_draft_diagram_thumbnail_generation,
+    get_draft_diagram_thumbnail, get_draft_diagram_thumbnail_progress, measure_draft_diagrams,
+    prioritize_draft_diagram_thumbnails, start_draft_diagram_thumbnail_generation,
+    DraftDiagramThumbnailProgress, DraftDiagramThumbnailQueueSummary, DraftDiagramThumbnailStatus,
+    MeasureDraftDiagramsResult,
 };
 pub use draft::{DraftAssetKind, DraftImageAsset, DraftImageDiagnostic, PreviewContentMode};
 pub use draft_thumbnail::{
-    cancel_draft_thumbnail_generation, get_draft_thumbnail_status, start_draft_thumbnail_generation,
+    cancel_draft_thumbnail_generation, get_draft_thumbnail_progress, get_draft_thumbnail_status,
+    prioritize_draft_thumbnails, start_draft_thumbnail_generation, DraftThumbnailProgress,
 };
 pub use image_call_site::{resolve_image_call_site, ImageCallSite};
 pub use mirror::{

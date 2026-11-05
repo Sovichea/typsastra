@@ -154,24 +154,31 @@ describe("Draft Preview", () => {
     expect(settings).toContain("draftDiagrams: true");
   });
 
-  test("measures diagram sizes once and refreshes Draft Preview", async () => {
+  test("queues diagram thumbnails and refreshes after preparing sizes", async () => {
     const mirror = await Bun.file(
       new URL("../src-tauri/src/render_prepare/mirror.rs", import.meta.url)
     ).text();
 
-    expect(draftController).toContain('invoke<DraftDiagramMeasurementResult>("measure_draft_diagrams"');
-    expect(draftController).toContain("this.scheduleDiagramMeasurement(input.generation)");
-    expect(draftController).toContain('invalidatePreviewWork("Draft diagram sizes measured")');
+    expect(draftController).toContain("this.startDiagramThumbnailQueue(input.generation)");
+    expect(draftController).toContain("start_draft_diagram_thumbnail_generation");
+    expect(draftController).toContain('invalidatePreviewWork("Draft diagram thumbnails prepared")');
     expect(mirror).toContain("cached_diagram_dimensions");
     expect(mirror).toContain("diagram_size_cache_path");
   });
 
-  test("starts one fixed native thumbnail queue after Draft presentation", () => {
+  test("prioritizes thumbnail queues for the visible page", () => {
     expect(draftController).toContain('invoke<DraftThumbnailQueueSummary>("start_draft_thumbnail_generation"');
     expect(draftController).toContain("displayedPageAssetIds");
-    expect(draftController).toContain('invoke("cancel_draft_thumbnail_generation")');
-    expect(draftController).not.toContain("reprioritize_draft_thumbnail");
-    expect(plan).toContain("one immutable queue");
+    expect(draftController).toContain("prioritizeThumbnailPage");
+    expect(draftController).toContain('"prioritize_draft_thumbnails"');
+    expect(draftController).toContain('"prioritize_draft_diagram_thumbnails"');
+    expect(draftController).toContain('"get_draft_thumbnail_progress"');
+    expect(draftController).toContain('"get_draft_diagram_thumbnail_progress"');
+    expect(controller).toContain(
+      "this.draftPreviewController.prioritizeThumbnailPage(status.currentPage)"
+    );
+    expect(html).toContain('id="draft-image-thumbnail-progress"');
+    expect(html).toContain('id="draft-diagram-thumbnail-progress"');
   });
 
   test("writes Draft thumbnails to the machine-local cache", async () => {

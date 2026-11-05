@@ -32,6 +32,7 @@ struct ThumbnailState {
     generation: u64,
     workspace_root: PathBuf,
     entries: HashMap<String, ThumbnailEntry>,
+    displayed_order: HashMap<String, usize>,
 }
 
 #[derive(Clone)]
@@ -43,6 +44,7 @@ struct ThumbnailEntry {
     width: u32,
     height: u32,
     source_bytes: u64,
+    large: bool,
     queue_class: String,
 }
 
@@ -71,6 +73,17 @@ pub struct DraftThumbnailQueueSummary {
     pub generation: u64,
     pub cache_hits: usize,
     pub queued: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftThumbnailProgress {
+    pub generation: u64,
+    pub total: usize,
+    pub ready: usize,
+    pub failed: usize,
+    pub pending: usize,
+    pub generating: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -199,6 +212,7 @@ pub async fn start_draft_thumbnail_generation(
             width: source_width,
             height: source_height,
             source_bytes: asset.source_bytes,
+            large: is_large(&asset),
             queue_class,
         };
         if ready {
@@ -228,6 +242,7 @@ pub async fn start_draft_thumbnail_generation(
             generation: request.generation,
             workspace_root,
             entries,
+            displayed_order,
         };
     }
     let queued = jobs.len();
@@ -344,12 +359,140 @@ pub fn get_draft_thumbnail_status(
 }
 
 #[tauri::command]
+pub fn prioritize_draft_thumbnails(
+    generation: u64,
+    workspace_root: String,
+    displayed_page_asset_ids: Vec<String>,
+) -> Result<(), String> {
+    let requested_root = canonical_path(Path::new(&workspace_root))
+        .ok_or_else(|| "The thumbnail workspace root is unavailable.".to_string())?;
+    let mut state = THUMBNAIL_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.generation != generation || state.workspace_root != requested_root {
+        return Err("The Draft thumbnail generation is no longer active.".into());
+    }
+    let displayed_order = displayed_page_asset_ids
+        .into_iter()
+        .enumerate()
+        .map(|(index, id)| (id, index))
+        .collect::<HashMap<_, _>>();
+    for (id, entry) in state.entries.iter_mut() {
+        let displayed = displayed_order.contains_key(id);
+        entry.queue_class = if displayed && entry.large {
+            "displayed-large"
+        } else if displayed {
+            "displayed"
+        } else {
+            "remaining"
+        }
+        .into();
+    }
+    state.displayed_order = displayed_order;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_draft_thumbnail_progress(
+    generation: u64,
+    workspace_root: String,
+) -> Result<DraftThumbnailProgress, String> {
+    let requested_root = canonical_path(Path::new(&workspace_root))
+        .ok_or_else(|| "The thumbnail workspace root is unavailable.".to_string())?;
+    let state = THUMBNAIL_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.generation != generation || state.workspace_root != requested_root {
+        return Err("The Draft thumbnail generation is no longer active.".into());
+    }
+    let total = state.entries.len();
+    let mut ready = 0;
+    let mut failed = 0;
+    let mut pending = 0;
+    let mut generating = 0;
+    for entry in state.entries.values() {
+        match entry.status {
+            ThumbnailStatus::Ready => ready += 1,
+            ThumbnailStatus::Failed => failed += 1,
+            ThumbnailStatus::Pending => pending += 1,
+            ThumbnailStatus::Generating => generating += 1,
+        }
+    }
+    Ok(DraftThumbnailProgress {
+        generation,
+        total,
+        ready,
+        failed,
+        pending,
+        generating,
+    })
+}
+
+#[tauri::command]
 pub fn cancel_draft_thumbnail_generation() {
     THUMBNAIL_EPOCH.fetch_add(1, Ordering::AcqRel);
     let mut state = THUMBNAIL_STATE
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     *state = ThumbnailState::default();
+}
+
+fn next_thumbnail_job(jobs: &mut Vec<ThumbnailJob>, generation: u64) -> Option<ThumbnailJob> {
+    let displayed_order = {
+        let state = THUMBNAIL_STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if state.generation != generation {
+            return None;
+        }
+        state.displayed_order.clone()
+    };
+    sort_jobs_by_priority(jobs, &displayed_order);
+    if jobs.is_empty() {
+        None
+    } else {
+        Some(jobs.remove(0))
+    }
+}
+
+fn sort_jobs_by_priority(jobs: &mut [ThumbnailJob], displayed_order: &HashMap<String, usize>) {
+    jobs.sort_by(|left, right| {
+        let left_order = displayed_order.get(&left.id);
+        let right_order = displayed_order.get(&right.id);
+        let left_class = if left_order.is_some() && left.entry.large {
+            0
+        } else if left_order.is_some() {
+            1
+        } else {
+            2
+        };
+        let right_class = if right_order.is_some() && right.entry.large {
+            0
+        } else if right_order.is_some() {
+            1
+        } else {
+            2
+        };
+        let left_decoded = u64::from(left.entry.width)
+            .saturating_mul(u64::from(left.entry.height))
+            .saturating_mul(4);
+        let right_decoded = u64::from(right.entry.width)
+            .saturating_mul(u64::from(right.entry.height))
+            .saturating_mul(4);
+        left_class.cmp(&right_class).then_with(|| {
+            if left_class < 2 {
+                left_order
+                    .copied()
+                    .unwrap_or(usize::MAX)
+                    .cmp(&right_order.copied().unwrap_or(usize::MAX))
+            } else {
+                right_decoded
+                    .cmp(&left_decoded)
+                    .then_with(|| right.entry.source_bytes.cmp(&left.entry.source_bytes))
+                    .then_with(|| left.id.cmp(&right.id))
+            }
+        })
+    });
 }
 
 fn run_thumbnail_queue(
@@ -362,7 +505,7 @@ fn run_thumbnail_queue(
     total_images: usize,
     cache_hits: usize,
     cached_output_bytes: u64,
-    jobs: Vec<ThumbnailJob>,
+    mut jobs: Vec<ThumbnailJob>,
 ) {
     let _worker = THUMBNAIL_WORKER_LOCK
         .lock()
@@ -376,11 +519,15 @@ fn run_thumbnail_queue(
     let mut resize_ms = 0.0;
     let mut encode_ms = 0.0;
     let mut interrupted = false;
-    for job in jobs {
+    while !jobs.is_empty() {
         if THUMBNAIL_EPOCH.load(Ordering::Acquire) != epoch {
             interrupted = true;
             break;
         }
+        let Some(job) = next_thumbnail_job(&mut jobs, generation) else {
+            interrupted = true;
+            break;
+        };
         update_status(generation, &job.id, ThumbnailStatus::Generating);
         let result = generate_thumbnail(&job.entry.source_path, &job.entry.cache_path);
         let status = if result.is_ok() {
@@ -716,6 +863,56 @@ mod tests {
             estimated_decoded_bytes: decoded_bytes,
             references: Vec::new(),
         }
+    }
+
+    fn thumbnail_job(id: &str, width: u32, height: u32, source_bytes: u64) -> ThumbnailJob {
+        ThumbnailJob {
+            id: id.into(),
+            entry: ThumbnailEntry {
+                cache_path: PathBuf::from(format!("{id}.jpg")),
+                source_path: PathBuf::from(format!("{id}.png")),
+                status: ThumbnailStatus::Pending,
+                mime_type: "image/jpeg".into(),
+                width,
+                height,
+                source_bytes,
+                large: width >= LARGE_DIMENSION
+                    || height >= LARGE_DIMENSION
+                    || source_bytes >= LARGE_SOURCE_BYTES,
+                queue_class: "remaining".into(),
+            },
+        }
+    }
+
+    #[test]
+    fn reprioritizes_pending_jobs_for_the_displayed_page() {
+        let mut jobs = vec![
+            thumbnail_job("page-1", 100, 100, 10),
+            thumbnail_job("page-20-small", 400, 400, 20),
+            thumbnail_job("page-20-large", 1200, 700, 30),
+            thumbnail_job("remaining", 900, 900, 40),
+        ];
+
+        let page_20 = [
+            ("page-20-large".to_string(), 0),
+            ("page-20-small".to_string(), 1),
+        ]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+        sort_jobs_by_priority(&mut jobs, &page_20);
+        assert_eq!(
+            jobs.iter().map(|job| job.id.as_str()).collect::<Vec<_>>(),
+            ["page-20-large", "page-20-small", "remaining", "page-1"]
+        );
+
+        let page_1 = [("page-1".to_string(), 0)]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        sort_jobs_by_priority(&mut jobs, &page_1);
+        assert_eq!(
+            jobs.iter().map(|job| job.id.as_str()).collect::<Vec<_>>(),
+            ["page-1", "page-20-large", "remaining", "page-20-small"]
+        );
     }
 
     #[test]

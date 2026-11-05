@@ -45,11 +45,14 @@ use project_text::{
 };
 use recovery::{RecoveryDeleteResult, RecoveryListing, RecoveryRecord, RecoveryWriteResult};
 use render_prepare::{
-    cancel_draft_thumbnail_generation, cancel_render_preparation, get_draft_diagram_thumbnail,
-    get_draft_thumbnail_status, map_generated_to_source, map_source_to_generated,
-    measure_draft_diagrams, prepare_render_file, prepare_render_project,
-    start_draft_thumbnail_generation, validate_existing_render_cache_owner,
-    workspace_render_cache_root, DraftImageAsset, DraftImageDiagnostic, PreviewContentMode,
+    cancel_draft_diagram_thumbnail_generation, cancel_draft_thumbnail_generation,
+    cancel_render_preparation, get_draft_diagram_thumbnail, get_draft_diagram_thumbnail_progress,
+    get_draft_thumbnail_progress, get_draft_thumbnail_status, map_generated_to_source,
+    map_source_to_generated, measure_draft_diagrams, prepare_render_file, prepare_render_project,
+    prioritize_draft_diagram_thumbnails, prioritize_draft_thumbnails,
+    start_draft_diagram_thumbnail_generation, start_draft_thumbnail_generation,
+    validate_existing_render_cache_owner, workspace_render_cache_root, DraftImageAsset,
+    DraftImageDiagnostic, PreviewContentMode,
 };
 use segmentation::{
     analyze_language_ranges, complete_language_word, get_provider_capabilities,
@@ -9633,7 +9636,13 @@ pub fn run() {
             cancel_render_preparation,
             start_draft_thumbnail_generation,
             get_draft_thumbnail_status,
+            get_draft_thumbnail_progress,
+            prioritize_draft_thumbnails,
             get_draft_diagram_thumbnail,
+            start_draft_diagram_thumbnail_generation,
+            get_draft_diagram_thumbnail_progress,
+            prioritize_draft_diagram_thumbnails,
+            cancel_draft_diagram_thumbnail_generation,
             measure_draft_diagrams,
             cancel_draft_thumbnail_generation,
             map_generated_to_source,

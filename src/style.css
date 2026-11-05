@@ -5096,6 +5096,12 @@ body.table-tools-active #code-render-pane {
   display: none;
 }
 
+#draft-thumbnail-status[hidden],
+#draft-image-thumbnail-progress[hidden],
+#draft-diagram-thumbnail-progress[hidden] {
+  display: none;
+}
+
 #status-bar.welcome-screen-active > #settings-status-button {
   display: inline-flex;
   margin-left: auto;

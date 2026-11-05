@@ -4339,6 +4339,7 @@ export class TypsastraWorkspaceController {
 
   private updatePreviewPageStatus(status: PreviewPageStatus): void {
     this.previewUiController.updatePageStatus(status);
+    this.draftPreviewController.prioritizeThumbnailPage(status.currentPage);
     if (this.activeFilePath) {
       this.editorFileGuardController.updatePdfPageCount(this.activeFilePath, status.pageCount);
     }
