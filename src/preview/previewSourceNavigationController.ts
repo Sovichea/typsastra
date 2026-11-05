@@ -457,8 +457,9 @@ export class PreviewSourceNavigationController {
       message: asset.kind === "diagram" ? "Draft Preview diagram" : "Draft Preview image",
       filePath: reference.sourcePath,
       fileName: fileNameFromPath(reference.sourcePath),
+      // Inverse sync should place the caret at the definition or inline call
+      // without selecting the whole diagram/image expression.
       offset: reference.fromUtf16,
-      toOffset: reference.toUtf16,
     });
   }
 }

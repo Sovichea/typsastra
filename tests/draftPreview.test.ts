@@ -85,6 +85,7 @@ describe("Draft Preview", () => {
     expect(previewFrame).toContain('name: "preview.draft-hover"');
     expect(previewFrame).toContain("this.onPreviewClick({ draftImageId: annotationTarget.id })");
     expect(sourceNavigationController).toContain("await this.navigateToDraftPreviewImage(point.draftImageId)");
+    expect(sourceNavigationController).not.toContain("toOffset: reference.toUtf16");
     expect(previewFrame).not.toContain('if (this.annotationTargets.get(annotationLink)?.kind === "draft-image")');
     expect(plan).toContain("including its fixed-size path label");
   });
