@@ -312,6 +312,17 @@ fn canonical_alias_path(path: &Path) -> PathBuf {
     dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+pub(crate) fn collect_image_aliases_from_sources<'a>(
+    sources: impl IntoIterator<Item = &'a str>,
+) -> HashSet<String> {
+    let mut edges = HashMap::new();
+    for source in sources {
+        let root = typst_syntax::parse(source);
+        collect_image_alias_edges(&root, &mut edges);
+    }
+    resolve_image_aliases(&edges)
+}
+
 pub(crate) fn collect_image_aliases_from_paths(
     paths: impl IntoIterator<Item = PathBuf>,
 ) -> HashSet<String> {

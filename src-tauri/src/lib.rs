@@ -3239,6 +3239,7 @@ fn local_typst_images(
     contents: &str,
     parent: &std::path::Path,
     project_root: &std::path::Path,
+    image_aliases: &std::collections::HashSet<String>,
 ) -> Vec<StaticTypstImageReference> {
     let bytes = contents.as_bytes();
     let mut images = Vec::new();
@@ -3306,21 +3307,31 @@ fn local_typst_images(
         }
         let previous_is_identifier =
             index > 0 && (bytes[index - 1].is_ascii_alphanumeric() || bytes[index - 1] == b'_');
-        if previous_is_identifier || !bytes[index..].starts_with(b"image") {
+        if previous_is_identifier {
             index += 1;
             continue;
         }
+        let mut name_end = None;
+        for name in std::iter::once("image").chain(image_aliases.iter().map(String::as_str)) {
+            if !bytes[index..].starts_with(name.as_bytes()) {
+                continue;
+            }
+            let end = index + name.len();
+            if end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                continue;
+            }
+            name_end = Some(end);
+            break;
+        }
+        let Some(mut cursor) = name_end else {
+            index += 1;
+            continue;
+        };
         let call_start = if index > 0 && bytes[index - 1] == b'#' {
             index - 1
         } else {
             index
         };
-        let mut cursor = index + 5;
-        if cursor < bytes.len() && (bytes[cursor].is_ascii_alphanumeric() || bytes[cursor] == b'_')
-        {
-            index += 1;
-            continue;
-        }
         while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
             cursor += 1;
         }
@@ -3619,14 +3630,23 @@ fn project_image_index_blocking(
     let mut image_files = Vec::new();
     collect_project_files(&root, &mut typst_files, &mut image_files);
 
+    let typst_sources = typst_files
+        .iter()
+        .filter_map(|path| {
+            std::fs::read_to_string(path)
+                .ok()
+                .map(|contents| (path.clone(), contents))
+        })
+        .collect::<Vec<_>>();
+    let image_aliases = crate::render_prepare::draft::collect_image_aliases_from_sources(
+        typst_sources.iter().map(|(_, contents)| contents.as_str()),
+    );
+
     let mut references: HashMap<std::path::PathBuf, Vec<PreviewImageReference>> = HashMap::new();
     let mut referenced_by_current = std::collections::HashSet::new();
-    for source_path in &typst_files {
-        let Ok(contents) = std::fs::read_to_string(source_path) else {
-            continue;
-        };
+    for (source_path, contents) in &typst_sources {
         let parent = source_path.parent().unwrap_or(std::path::Path::new(""));
-        for image_reference in local_typst_images(&contents, parent, &root) {
+        for image_reference in local_typst_images(contents, parent, &root, &image_aliases) {
             if !image_reference.path.starts_with(&root) {
                 continue;
             }
@@ -4065,6 +4085,27 @@ fn image_tool_update_references(
         return Err("Choose a replacement image inside the active project".into());
     }
 
+    let mut alias_sources = Vec::new();
+    let mut alias_visited = std::collections::HashSet::new();
+    let mut alias_pending = source_paths
+        .iter()
+        .map(|path| normalized_existing_path(std::path::Path::new(path)))
+        .collect::<Vec<_>>();
+    while let Some(path) = alias_pending.pop() {
+        if !alias_visited.insert(path.clone()) {
+            continue;
+        }
+        let Ok(contents) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let parent = path.parent().unwrap_or(std::path::Path::new(""));
+        alias_pending.extend(local_typst_dependencies(&contents, parent, &root));
+        alias_sources.push(contents);
+    }
+    let image_aliases = crate::render_prepare::draft::collect_image_aliases_from_sources(
+        alias_sources.iter().map(String::as_str),
+    );
+
     let mut updated = 0;
     let mut visited = std::collections::HashSet::new();
     for source_path in source_paths {
@@ -4085,7 +4126,7 @@ fn image_tool_update_references(
                 replacement.display()
             )
         })?;
-        let mut ranges = local_typst_images(&contents, parent, &root)
+        let mut ranges = local_typst_images(&contents, parent, &root, &image_aliases)
             .into_iter()
             .filter(|reference| reference.path == original)
             .map(|reference| (reference.path_from_byte, reference.path_to_byte))
@@ -4371,9 +4412,10 @@ fn collect_preview_image_profile_with_override(
     use std::collections::{HashMap, HashSet, VecDeque};
     use std::time::UNIX_EPOCH;
 
+    let project_root = root_path.parent().unwrap_or(std::path::Path::new(""));
     let mut visited_sources = HashSet::new();
     let mut pending = VecDeque::from([normalized_existing_path(root_path)]);
-    let mut images_by_path: HashMap<std::path::PathBuf, PreviewImageAsset> = HashMap::new();
+    let mut sources = Vec::new();
     while let Some(path) = pending.pop_front() {
         if !visited_sources.insert(path.clone()) {
             continue;
@@ -4391,13 +4433,17 @@ fn collect_preview_image_profile_with_override(
             contents
         };
         let parent = path.parent().unwrap_or(std::path::Path::new(""));
-        pending.extend(local_typst_dependencies(
-            &contents,
-            parent,
-            root_path.parent().unwrap_or(parent),
-        ));
-        let project_root = root_path.parent().unwrap_or(parent);
-        for image_reference in local_typst_images(&contents, parent, project_root) {
+        pending.extend(local_typst_dependencies(&contents, parent, project_root));
+        sources.push((path, contents));
+    }
+    let image_aliases = crate::render_prepare::draft::collect_image_aliases_from_sources(
+        sources.iter().map(|(_, contents)| contents.as_str()),
+    );
+
+    let mut images_by_path: HashMap<std::path::PathBuf, PreviewImageAsset> = HashMap::new();
+    for (path, contents) in sources {
+        let parent = path.parent().unwrap_or(std::path::Path::new(""));
+        for image_reference in local_typst_images(&contents, parent, project_root, &image_aliases) {
             let source_prefix = &contents[..image_reference.from_byte];
             let line_start = source_prefix.rfind('\n').map_or(0, |index| index + 1);
             let reference = PreviewImageReference {
@@ -5981,10 +6027,30 @@ mod preview_main_tests {
             "#image(\"hero.png\")\n// #image(\"ignored.png\")\n#let sample = \"image(\\\"also-ignored.png\\\")\"\n",
             parent,
             parent,
+            &std::collections::HashSet::new(),
         );
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0].path, parent.join("hero.png"));
         assert_eq!(paths[0].from_utf16, 0);
+    }
+
+    #[test]
+    fn finds_static_images_through_aliases() {
+        let parent = std::path::Path::new("/workspace");
+        let aliases = crate::render_prepare::draft::collect_image_aliases_from_sources([
+            "#let PptxImage = image\n",
+            "#let Artwork = PptxImage\n",
+        ]);
+        let paths = local_typst_images(
+            "#PptxImage(\"hero.png\", width: 10pt)\n#Artwork(\"other.png\")\n#image(\"plain.png\")\n",
+            parent,
+            parent,
+            &aliases,
+        );
+        assert_eq!(paths.len(), 3);
+        assert_eq!(paths[0].path, parent.join("hero.png"));
+        assert_eq!(paths[1].path, parent.join("other.png"));
+        assert_eq!(paths[2].path, parent.join("plain.png"));
     }
 
     #[test]
@@ -6069,6 +6135,31 @@ mod preview_main_tests {
         );
         assert_eq!(profile.unique_image_count, 1);
         assert_eq!(profile.reference_count, 1);
+    }
+
+    #[test]
+    fn image_profile_resolves_imported_image_aliases() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let main_path = workspace.path().join("main.typ");
+        let template_path = workspace.path().join("template.typ");
+        let image_path = workspace.path().join("artwork.png");
+        std::fs::write(&template_path, "#let PptxImage = image\n").expect("write template");
+        std::fs::write(
+            &main_path,
+            "#import \"template.typ\": *\n\
+             #PptxImage(\"artwork.png\", width: 800pt, height: 1000pt, fit: \"stretch\")\n",
+        )
+        .expect("write main");
+        let mut png = vec![0u8; 24];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[16..20].copy_from_slice(&800u32.to_be_bytes());
+        png[20..24].copy_from_slice(&1000u32.to_be_bytes());
+        std::fs::write(image_path, png).expect("write png");
+
+        let profile = collect_preview_image_profile_with_override(&main_path, None);
+        assert_eq!(profile.unique_image_count, 1);
+        assert_eq!(profile.reference_count, 1);
+        assert_eq!(profile.images[0].references[0].line, 2);
     }
 
     #[test]
