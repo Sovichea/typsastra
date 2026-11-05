@@ -14,6 +14,7 @@
     "i18n:template": "bun scripts/extract-i18n-strings.ts --template --out src/i18n/locales/locale.template.ts",
     "conform": "bun test tests/editingPolicies.test.ts tests/khmerReference.test.ts tests/laoReference.test.ts tests/languageSupport.test.ts",
     "benchmark:performance": "bun scripts/run-performance-benchmarks.ts",
+    "benchmark:app-preview": "bun scripts/run-app-preview-benchmark.ts",
     "validate:enhanced-unicode": "bun scripts/run-enhanced-unicode-validation.ts",
     "validate:pdfium-unicode": "bun scripts/run-pdfium-unicode-validation.ts",
     "release:enhanced-unicode:manifest": "bun scripts/enhanced-unicode-release-manifest.ts",
