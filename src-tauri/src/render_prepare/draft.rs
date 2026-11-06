@@ -190,7 +190,13 @@ pub(crate) fn prepare_draft_images_with_aliases(
             continue;
         }
         let image_path = display_path(&image_io_path);
-        let Some((width, height, mime_type)) = read_image_dimensions(&image_io_path) else {
+        let Some(ImageDimensions {
+            width,
+            height,
+            mime_type,
+            dpi,
+        }) = read_image_dimensions(&image_io_path)
+        else {
             result.diagnostics.push(DraftImageDiagnostic {
                 source_path: source_path.to_path_buf(),
                 from_utf16: reference.from_utf16,
@@ -226,14 +232,32 @@ pub(crate) fn prepare_draft_images_with_aliases(
             .map(|argument| format!("{argument},"))
             .collect::<Vec<_>>();
         let uses_default_width = !call.has_width && !call.has_height;
-        if uses_default_width {
-            // Match Typst's implicit image layout: an image without either
-            // dimension fills the available width and derives its height from
-            // the intrinsic aspect ratio.
-            block_arguments.push("width: 100%,".into());
-        }
+        let raster_dpi = dpi.filter(|dpi| dpi.is_finite() && *dpi > 0.0);
         let mut generated = if uses_default_width {
-            intrinsic_ratio_draft_placeholder(&id, &raw_path, width, height, &block_arguments, true)
+            // Match Typst's implicit raster image layout: no dimensions means
+            // the image's physical size, derived from its pixel size and DPI.
+            if let Some(dpi) = raster_dpi {
+                let mut sized_arguments = block_arguments.clone();
+                sized_arguments.push(format!(
+                    "width: {}pt,",
+                    format_points(f64::from(width) * 72.0 / dpi)
+                ));
+                sized_arguments.push(format!(
+                    "height: {}pt,",
+                    format_points(f64::from(height) * 72.0 / dpi)
+                ));
+                fixed_draft_placeholder(&id, &raw_path, &sized_arguments, &call)
+            } else {
+                block_arguments.push("width: 100%,".into());
+                intrinsic_ratio_draft_placeholder(
+                    &id,
+                    &raw_path,
+                    width,
+                    height,
+                    &block_arguments,
+                    true,
+                )
+            }
         } else if call.has_width == call.has_height {
             fixed_draft_placeholder(&id, &raw_path, &block_arguments, &call)
         } else {
@@ -1648,53 +1672,143 @@ fn display_path(path: &Path) -> PathBuf {
     dunce::simplified(path).to_path_buf()
 }
 
-fn read_image_dimensions(path: &Path) -> Option<(u32, u32, String)> {
+struct ImageDimensions {
+    width: u32,
+    height: u32,
+    mime_type: String,
+    /// Dots per inch declared by the image, or the raster default when absent.
+    /// Vector images keep the previous fill-the-box layout.
+    dpi: Option<f64>,
+}
+
+const DEFAULT_RASTER_DPI: f64 = 96.0;
+
+fn read_image_dimensions(path: &Path) -> Option<ImageDimensions> {
     use std::io::Read;
     let file = fs::File::open(path).ok()?;
     let mut bytes = Vec::new();
     file.take(1024 * 1024).read_to_end(&mut bytes).ok()?;
     if bytes.len() >= 24 && bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Some((
-            u32::from_be_bytes(bytes[16..20].try_into().ok()?),
-            u32::from_be_bytes(bytes[20..24].try_into().ok()?),
-            "image/png".into(),
-        ));
+        return Some(ImageDimensions {
+            width: u32::from_be_bytes(bytes[16..20].try_into().ok()?),
+            height: u32::from_be_bytes(bytes[20..24].try_into().ok()?),
+            mime_type: "image/png".into(),
+            dpi: Some(png_dpi(&bytes).unwrap_or(DEFAULT_RASTER_DPI)),
+        });
     }
     if bytes.len() >= 10 && (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
-        return Some((
-            u16::from_le_bytes(bytes[6..8].try_into().ok()?) as u32,
-            u16::from_le_bytes(bytes[8..10].try_into().ok()?) as u32,
-            "image/gif".into(),
-        ));
+        return Some(ImageDimensions {
+            width: u16::from_le_bytes(bytes[6..8].try_into().ok()?) as u32,
+            height: u16::from_le_bytes(bytes[8..10].try_into().ok()?) as u32,
+            mime_type: "image/gif".into(),
+            dpi: Some(DEFAULT_RASTER_DPI),
+        });
     }
     if bytes.len() >= 26 && bytes.starts_with(b"BM") {
-        return Some((
-            i32::from_le_bytes(bytes[18..22].try_into().ok()?).unsigned_abs(),
-            i32::from_le_bytes(bytes[22..26].try_into().ok()?).unsigned_abs(),
-            "image/bmp".into(),
-        ));
+        return Some(ImageDimensions {
+            width: i32::from_le_bytes(bytes[18..22].try_into().ok()?).unsigned_abs(),
+            height: i32::from_le_bytes(bytes[22..26].try_into().ok()?).unsigned_abs(),
+            mime_type: "image/bmp".into(),
+            dpi: Some(DEFAULT_RASTER_DPI),
+        });
     }
     if bytes.len() >= 30
         && bytes.starts_with(b"RIFF")
         && &bytes[8..12] == b"WEBP"
         && &bytes[12..16] == b"VP8X"
     {
-        return Some((
-            1 + u32::from_le_bytes([bytes[24], bytes[25], bytes[26], 0]),
-            1 + u32::from_le_bytes([bytes[27], bytes[28], bytes[29], 0]),
-            "image/webp".into(),
-        ));
+        return Some(ImageDimensions {
+            width: 1 + u32::from_le_bytes([bytes[24], bytes[25], bytes[26], 0]),
+            height: 1 + u32::from_le_bytes([bytes[27], bytes[28], bytes[29], 0]),
+            mime_type: "image/webp".into(),
+            dpi: Some(DEFAULT_RASTER_DPI),
+        });
     }
     if bytes.starts_with(b"\xff\xd8") {
         if let Some((width, height)) = jpeg_dimensions(&bytes) {
-            return Some((width, height, "image/jpeg".into()));
+            return Some(ImageDimensions {
+                width,
+                height,
+                mime_type: "image/jpeg".into(),
+                dpi: Some(jpeg_dpi(&bytes).unwrap_or(DEFAULT_RASTER_DPI)),
+            });
         }
     }
     let text = std::str::from_utf8(&bytes).ok()?;
     if text.trim_start().starts_with("<svg") || text.contains("<svg") {
         if let Some((width, height)) = svg_dimensions(text) {
-            return Some((width, height, "image/svg+xml".into()));
+            return Some(ImageDimensions {
+                width,
+                height,
+                mime_type: "image/svg+xml".into(),
+                dpi: None,
+            });
         }
+    }
+    None
+}
+
+/// Reads the physical resolution from a PNG `pHYs` chunk.
+fn png_dpi(bytes: &[u8]) -> Option<f64> {
+    let mut offset = 8usize;
+    while offset + 12 <= bytes.len() {
+        let length = u32::from_be_bytes(bytes.get(offset..offset + 4)?.try_into().ok()?) as usize;
+        let kind = bytes.get(offset + 4..offset + 8)?;
+        let data_start = offset + 8;
+        let data_end = data_start.checked_add(length)?;
+        if data_end > bytes.len() {
+            return None;
+        }
+        if kind == b"pHYs" && length >= 9 {
+            let x_pixels_per_unit =
+                u32::from_be_bytes(bytes.get(data_start..data_start + 4)?.try_into().ok()?);
+            if bytes[data_start + 8] == 1 && x_pixels_per_unit > 0 {
+                return Some(f64::from(x_pixels_per_unit) * 0.0254);
+            }
+        }
+        if kind == b"IDAT" || kind == b"IEND" {
+            break;
+        }
+        offset = data_end.checked_add(4)?;
+    }
+    None
+}
+
+/// Reads the physical resolution from a JFIF APP0 segment.
+fn jpeg_dpi(bytes: &[u8]) -> Option<f64> {
+    let mut cursor = 2usize;
+    while cursor + 4 <= bytes.len() {
+        if bytes[cursor] != 0xff {
+            cursor += 1;
+            continue;
+        }
+        let marker = *bytes.get(cursor + 1)?;
+        cursor += 2;
+        if marker == 0xd8 || marker == 0xd9 || marker == 0x01 {
+            continue;
+        }
+        let length = u16::from_be_bytes(bytes.get(cursor..cursor + 2)?.try_into().ok()?) as usize;
+        if length < 2 || cursor + length > bytes.len() {
+            return None;
+        }
+        if marker == 0xe0 && length >= 14 {
+            let segment = bytes.get(cursor + 2..cursor + length)?;
+            if segment.starts_with(b"JFIF\0") {
+                let units = segment.get(7).copied()?;
+                let x_density = u16::from_be_bytes(segment.get(8..10)?.try_into().ok()?) as f64;
+                if x_density > 0.0 {
+                    return match units {
+                        1 => Some(x_density),
+                        2 => Some(x_density * 2.54),
+                        _ => None,
+                    };
+                }
+            }
+        }
+        if marker == 0xda {
+            break;
+        }
+        cursor += length;
     }
     None
 }
@@ -1835,7 +1949,7 @@ mod tests {
     }
 
     #[test]
-    fn uses_full_available_width_when_image_size_is_implicit() {
+    fn uses_intrinsic_image_size_when_dimensions_are_implicit() {
         let workspace = tempfile::tempdir().unwrap();
         let image = workspace.path().join("wide.png");
         let mut png = vec![0u8; 24];
@@ -1851,16 +1965,49 @@ mod tests {
             "#image(\"wide.png\")",
         );
         let generated = &prepared.replacements[0].generated;
-        assert!(generated.contains("block(width: 100%,"));
-        assert!(generated.contains("viewBox='0 0 1600 900'"));
-        assert!(generated.contains("#image(bytes("));
-        assert!(generated.contains("width: 100%)"));
-        assert!(!generated.contains("height: 100pt"));
+        assert!(generated.contains("width: 1200pt"));
+        assert!(generated.contains("height: 675pt"));
+        assert!(!generated.contains("viewBox="));
+        assert!(!generated.contains("#image(bytes("));
         let parsed = typst_syntax::parse(&format!("#{generated}"));
         assert!(
             parsed.errors_and_warnings().0.is_empty(),
             "generated implicit-size placeholder must remain valid Typst syntax"
         );
+    }
+
+    #[test]
+    fn uses_declared_dpi_for_implicit_raster_sizes() {
+        let workspace = tempfile::tempdir().unwrap();
+        let image = workspace.path().join("photo.png");
+        let mut png = Vec::new();
+        png.extend_from_slice(b"\x89PNG\r\n\x1a\n");
+        png.extend_from_slice(&13u32.to_be_bytes());
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&464u32.to_be_bytes());
+        png.extend_from_slice(&615u32.to_be_bytes());
+        png.extend_from_slice(&[8, 6, 0, 0, 0]);
+        png.extend_from_slice(&[0, 0, 0, 0]);
+        png.extend_from_slice(&9u32.to_be_bytes());
+        png.extend_from_slice(b"pHYs");
+        png.extend_from_slice(&5905u32.to_be_bytes());
+        png.extend_from_slice(&5905u32.to_be_bytes());
+        png.push(1);
+        png.extend_from_slice(&[0, 0, 0, 0]);
+        fs::write(&image, png).unwrap();
+        let prepared = prepare_draft_images(
+            workspace.path(),
+            &workspace.path().join("main.typ"),
+            &workspace.path().join("cache/render/main.typ"),
+            &workspace.path().join("cache/render"),
+            "#image(\"photo.png\")",
+        );
+        let generated = &prepared.replacements[0].generated;
+        let dpi = 5905.0 * 0.0254;
+        let expected_width = format_points(464.0 * 72.0 / dpi);
+        let expected_height = format_points(615.0 * 72.0 / dpi);
+        assert!(generated.contains(&format!("width: {expected_width}pt")));
+        assert!(generated.contains(&format!("height: {expected_height}pt")));
     }
 
     #[test]
@@ -2049,8 +2196,8 @@ mod tests {
         let call_start = source.find("y(\"wide.png\")").unwrap();
         assert_eq!(replacement.start, call_start);
         assert_eq!(replacement.end, call_start + "y(\"wide.png\")".len());
-        assert!(replacement.generated.contains("width: 100%"));
-        assert!(replacement.generated.contains("viewBox='0 0 1600 900'"));
+        assert!(replacement.generated.contains("width: 1200pt"));
+        assert!(replacement.generated.contains("height: 675pt"));
         assert_eq!(prepared.assets.len(), 1);
         assert_eq!(prepared.assets[0].width, 1600);
         assert_eq!(prepared.assets[0].height, 900);
