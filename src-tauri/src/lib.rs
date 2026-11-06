@@ -32,7 +32,9 @@ mod templates;
 mod toolchain;
 mod webview_storage;
 use compatibility::{get_linux_renderer_compatibility, prepare_linux_renderer_relaunch};
-use dev_log_api::{DevLogBuffer, DevLogInput, DevProjectState};
+use dev_log_api::{
+    dev_api_state_response, DevLogBuffer, DevLogInput, DevProjectState, DevStateRequests,
+};
 use examples::prepare_examples_workspace;
 use formatted_clipboard::write_formatted_clipboard;
 use pdfium_preview::{
@@ -9411,6 +9413,7 @@ pub fn run() {
         })
         .manage(pending_launch_requests)
         .manage(dev_log_buffer)
+        .manage(DevStateRequests::default())
         .manage(dev_project_state)
         .manage(ProjectImportOperations::default())
         .manage(PdfRangeSources::default())
@@ -9609,6 +9612,7 @@ pub fn run() {
             remove_hunspell_dictionary,
             open_devtools,
             publish_dev_log,
+            dev_api_state_response,
             set_dev_project_context,
             complete_language_word,
             prepare_examples_workspace,

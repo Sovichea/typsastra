@@ -134,7 +134,7 @@ function fuzzyTokenScore(text: string, token: string): number | null {
     + Math.max(0, textCharacters.length - tokenCharacters.length) * 0.01;
 }
 
-function projectName(path: string): string {
+export function projectName(path: string): string {
   return path.split(/[/\\]/).filter(Boolean).pop() || path;
 }
 
@@ -206,6 +206,10 @@ export class RecentProjectsController {
 
   public visibleEntries(): readonly string[] {
     return this.read().slice(0, visibleRecentProjects);
+  }
+
+  public entries(): readonly string[] {
+    return this.read();
   }
 
   public open(path: string): void {

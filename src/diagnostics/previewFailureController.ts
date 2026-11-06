@@ -31,12 +31,25 @@ export type PreviewCompilerRelatedDiagnostic = {
   severity?: "error" | "warning" | "related";
 };
 
+export type PreviewFailureSnapshot = {
+  message: string;
+  filePath?: string;
+  line?: number;
+  column?: number;
+};
+
 /** Resolves package dependency failures and publishes user-facing compiler problems. */
 export class PreviewFailureController {
+  private lastFailureValue: PreviewFailureSnapshot | null = null;
+
   constructor(
     private readonly logConsole: LogConsoleController,
     private readonly port: PreviewFailureControllerPort,
   ) {}
+
+  public get lastFailure(): PreviewFailureSnapshot | null {
+    return this.lastFailureValue;
+  }
 
   async packageFailureHint(
     failure: PreviewCompilerFailure,
@@ -81,6 +94,12 @@ export class PreviewFailureController {
     packageHint: PreviewPackageFailureHint | null,
     displayedMessage = failure.message,
   ): void {
+    this.lastFailureValue = {
+      message: failure.message,
+      filePath: failure.location?.filePath,
+      line: failure.location?.line,
+      column: failure.location?.column,
+    };
     this.logConsole.clearLogsBySource(["compiler call site"]);
     const diagnostic = parsePreviewCompilerDiagnostic(displayedMessage);
     const primary = diagnostic?.frames[0] ?? null;
@@ -153,6 +172,7 @@ export class PreviewFailureController {
   }
 
   clear(): void {
+    this.lastFailureValue = null;
     this.port.setCompilerRelatedDiagnostics([]);
     this.logConsole.clearLogsBySource(["compiler call site"]);
   }

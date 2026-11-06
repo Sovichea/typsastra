@@ -26,6 +26,10 @@ export class AppDialogController {
   ];
   private active = false;
 
+  public get isActive(): boolean {
+    return this.active;
+  }
+
   public show(options: AppDialogOptions): Promise<string> {
     if (!this.overlay || !this.title || !this.subtitle || !this.description || this.buttons.some(button => !button)) {
       return Promise.resolve(options.cancelAction);

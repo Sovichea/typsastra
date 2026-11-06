@@ -107,7 +107,9 @@ import { EditorTabActivationController, type ActivateEditorTabOptions } from "./
 import { AppDialogController } from "./ui/appDialog";
 import { LayoutController } from "./layout/layoutController";
 import type { StoredUndockedPreviewWindow, WorkspaceMetadata } from "./workspace/workspaceStateStore";
-import { RecentProjectsController } from "./workspace/recentProjectsController";
+import { RecentProjectsController, projectName } from "./workspace/recentProjectsController";
+import { workspaceViewportState } from "./workspace/workspaceVisibility";
+import { installDevApiStateBridge } from "./devApiStateBridge";
 import {
   type WorkspaceChange
 } from "./workspace/workspaceWatcher";
@@ -507,6 +509,7 @@ export class TypsastraWorkspaceController {
   private readonly offProjectPreviewRoots = new Map<string, string>();
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
+  private startupComplete = false;
   private recoveryReviewAutoShowReady = false;
   private projectReplacementInProgress = false;
   private projectReplacementBatch: ProjectReplacementBatch | null = null;
@@ -2382,12 +2385,71 @@ export class TypsastraWorkspaceController {
     await this.saveWorkspaceState();
   }
 
+  /** Live workspace snapshot served by the development-only HTTP API. */
+  public devApiState(): Record<string, unknown> {
+    const activeTab = this.getActiveTab();
+    const viewport = workspaceViewportState(
+      this.activeFilePath,
+      this.workspaceRootPath,
+      this.workspaceLoading,
+    );
+    const preview = this.previewPageStatus;
+    return {
+      version: 1,
+      screen: !this.startupComplete
+        ? "starting"
+        : viewport.showWelcome
+          ? "welcome"
+          : viewport.showLoading
+            ? "loading"
+            : "workspace",
+      ready: this.startupComplete
+        && !this.workspaceLoading
+        && (viewport.showWelcome || (this.lspReady && activeTab?.contentLoaded === true)),
+      project: this.workspaceRootPath
+        ? {
+            path: this.workspaceRootPath,
+            name: projectName(this.workspaceRootPath),
+            loading: this.workspaceLoading,
+          }
+        : null,
+      mainFile: this.pinnedMainFilePath,
+      activeFile: this.activeFilePath,
+      openTabs: this.openTabs.map(tab => ({
+        path: tab.path,
+        title: tab.title ?? null,
+        active: tab === activeTab,
+        loaded: tab.contentLoaded,
+        dirty: tab.isDirty,
+        untitled: tab.untitled === true,
+      })),
+      preview: {
+        mode: this.draftPreviewController.mode,
+        presentedMode: this.draftPreviewController.presentedMode,
+        page: preview.currentPage,
+        pageCount: preview.pageCount,
+        busy: this.pdfPreviewRunning,
+        pending: this.pdfPreviewRenderController.pending,
+        queued: this.pdfPreviewRenderController.queued,
+        hasPdf: Boolean(this.previewFrame.currentUrl),
+        failure: this.previewFailureController.lastFailure,
+      },
+      recentProjects: this.recentProjectsController.entries().map(path => ({
+        name: projectName(path),
+        path,
+      })),
+      dialogOpen: this.appDialogController.isActive,
+      lspReady: this.lspReady,
+    };
+  }
+
   public async bootstrap() {
     const isPreviewWindow = this.previewWindowController.isPreviewOnlyWindow();
     if (isPreviewWindow) {
       await this.bootstrapPreviewWindow();
       return;
     }
+    installDevApiStateBridge(() => this.devApiState());
     await initializePreviewGenerationSession();
     document.documentElement.classList.remove("preview-only-mode");
     document.body.classList.remove("preview-only-mode");
@@ -2441,6 +2503,7 @@ export class TypsastraWorkspaceController {
     this.performanceController.timeStartupSync("update workspace visibility", () => this.updateWorkspaceViewportVisibility());
 
     await this.performanceController.timeStartup("show main window", () => getCurrentWindow().show());
+    this.startupComplete = true;
     this.appUpdateController.initialize();
     if (this.toolchainRequiredBadge) {
       this.toolchainRequiredBadge.textContent = t("Tinymist required");

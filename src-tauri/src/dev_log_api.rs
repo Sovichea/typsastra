@@ -10,13 +10,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::oneshot;
 
 const DEFAULT_ADDRESS: &str = "127.0.0.1:17342";
 const MAX_ENTRIES: usize = 10_000;
@@ -501,6 +503,66 @@ impl DevLogBuffer {
     }
 }
 
+/// Pending `GET /state` requests waiting for the frontend to report its state.
+#[derive(Default)]
+pub struct DevStateRequests {
+    next_id: AtomicU64,
+    pending: Mutex<HashMap<u64, oneshot::Sender<Value>>>,
+}
+
+async fn request_app_state(
+    app: &tauri::AppHandle,
+    requests: &DevStateRequests,
+) -> Result<Value, String> {
+    let request_id = requests.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+    let (sender, receiver) = oneshot::channel();
+    requests
+        .pending
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(request_id, sender);
+    if let Err(error) = app.emit(
+        "typsastra-dev-api-state-request",
+        json!({ "requestId": request_id }),
+    ) {
+        requests
+            .pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&request_id);
+        return Err(format!("Could not request the application state: {error}"));
+    }
+    match tokio::time::timeout(Duration::from_secs(2), receiver).await {
+        Ok(Ok(state)) => Ok(state),
+        Ok(Err(_)) => Err("The application state response channel closed.".into()),
+        Err(_) => {
+            requests
+                .pending
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(&request_id);
+            Err("Timed out waiting for the application state.".into())
+        }
+    }
+}
+
+/// Completes a pending `GET /state` request with the frontend's snapshot.
+#[tauri::command]
+pub fn dev_api_state_response(
+    request_id: u64,
+    state: Value,
+    requests: tauri::State<'_, DevStateRequests>,
+) {
+    if let Some(sender) = requests
+        .pending
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id)
+    {
+        let _ = sender.send(state);
+    }
+}
+
 /// Starts the local JSON API. The socket is loopback-only; requests from a
 /// browser origin are additionally restricted to Typsastra's local dev origins.
 pub async fn serve(
@@ -615,6 +677,21 @@ async fn handle_connection(
     let path = target.split('?').next().unwrap_or_default();
     let (status, reason, content_type, body) = match (method, path) {
         ("GET", "/health") => (200, "OK", "application/json", br#"{"ok":true}"#.to_vec()),
+        ("GET", "/state") => {
+            let requests = app.state::<DevStateRequests>();
+            match request_app_state(&app, &requests).await {
+                Ok(state) => match serde_json::to_vec(&state) {
+                    Ok(body) => (200, "OK", "application/json; charset=utf-8", body),
+                    Err(error) => (
+                        500,
+                        "Internal Server Error",
+                        "text/plain",
+                        error.to_string().into_bytes(),
+                    ),
+                },
+                Err(error) => (503, "Service Unavailable", "text/plain", error.into_bytes()),
+            }
+        }
         ("POST", "/recovery/demo") => match project_state.context() {
             Ok(context) => match write_demo_recovery(&app, &context) {
                 Ok(result) => match serde_json::to_vec(&result) {
@@ -843,9 +920,9 @@ async fn handle_connection(
             200,
             "OK",
             "text/plain; charset=utf-8",
-            b"Typsastra developer API. GET /logs?after=<sequence>, GET /settings, PATCH /settings, GET /project/files, GET /project/images, GET /project/tables, POST /project/open, PUT /project/main, POST /project/open-document, POST /ui/action, POST /recovery/demo, DELETE /recovery/demo, GET /screenshot/window, GET /screenshot/region?x=&y=&width=&height=, GET /health.\n".to_vec(),
+            b"Typsastra developer API. GET /logs?after=<sequence>, GET /state, GET /settings, PATCH /settings, GET /project/files, GET /project/images, GET /project/tables, POST /project/open, PUT /project/main, POST /project/open-document, POST /ui/action, POST /recovery/demo, DELETE /recovery/demo, GET /screenshot/window, GET /screenshot/region?x=&y=&width=&height=, GET /health.\n".to_vec(),
         ),
-        (_, "/logs" | "/settings" | "/health" | "/project/files" | "/project/images" | "/project/tables" | "/project/open" | "/project/main" | "/project/open-document" | "/ui/action" | "/recovery/demo" | "/screenshot/window" | "/screenshot/region") => (
+        (_, "/logs" | "/state" | "/settings" | "/health" | "/project/files" | "/project/images" | "/project/tables" | "/project/open" | "/project/main" | "/project/open-document" | "/ui/action" | "/recovery/demo" | "/screenshot/window" | "/screenshot/region") => (
             405,
             "Method Not Allowed",
             "text/plain",
