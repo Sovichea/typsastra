@@ -86,6 +86,7 @@ debug app to use another loopback bind address. The API is not started in releas
 
 - `GET /health` returns `{ "ok": true }`.
 - `GET /logs?after=<sequence>` returns buffered entries after the optional sequence number.
+- `GET /state` returns the frontend's live workspace snapshot: screen and readiness, project and main file, open tabs, active file, preview mode/page/work state, recent projects, and dialog state.
 - `GET /settings` returns `developerMode` and the `developerLogs` category flags.
 - `PATCH /settings` updates either setting, for example:
   `{"developerMode":true,"developerLogs":{"preview":false}}`.

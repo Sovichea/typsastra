@@ -15,7 +15,8 @@ Use the **Normal / Draft** control in the live preview toolbar. Normal mode
 renders the original images, diagrams, and canvases. Draft mode shows
 lightweight placeholders while keeping their measured dimensions and positions
 in the document. Switch back to Normal before export or final visual review; PDF
-export uses original assets.
+export uses original assets. Switching modes compiles the selected mode; the
+last successful preview stays visible until the new PDF is ready.
 
 Hovering an image placeholder reveals its cached thumbnail without loading the
 original image into the Draft document:
@@ -28,9 +29,11 @@ original image into the Draft document:
 </video>
 
 Hover over a draft image or diagram placeholder to inspect a bounded cached
-thumbnail and its original dimensions and encoded size. Missing or unsupported
-assets retain their layout space and report a diagnostic rather than silently
-shifting the document.
+thumbnail and its original dimensions and encoded size. Raster images without
+explicit dimensions keep their intrinsic physical size, using PNG or JPEG DPI
+metadata, so Draft and Normal Preview share the same page layout. Missing or
+unsupported assets retain their layout space and report a diagnostic rather
+than silently shifting the document.
 
 Try the bundled
 `06-preview-and-media/02-image-helper-chains` example to see a nested helper

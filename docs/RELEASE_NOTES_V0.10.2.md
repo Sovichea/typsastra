@@ -30,10 +30,15 @@ for new projects and the welcome screen.
 
 - Manual Recompile now forces a fresh compilation instead of restoring a cached
   PDF for an unchanged workspace.
+- Switching between Normal and Draft compiles the selected mode while keeping
+  the last successful preview visible until the new PDF is ready.
 - Draft inverse sync places the caret at the beginning of the definition or
   inline diagram/image call without selecting the expression.
 - Static images inside template functions, such as page-header logos, become
   Draft placeholders.
+- Draft image placeholders without explicit dimensions use the image's intrinsic
+  physical size from PNG or JPEG DPI metadata, keeping page counts aligned with
+  Normal Preview.
 - Image aliases and same-file helper chains continue to resolve to their
   outermost source call.
 - Placeholder labels remain unjustified and keep their original padding and
