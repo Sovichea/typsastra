@@ -163,6 +163,15 @@ The manifest also sets `UpgradeBehavior: uninstallPrevious` so WinGet removes
 the previous MSI before installing a major upgrade, rather than leaving both
 versions registered in Apps & Features.
 
+## Visual C++ runtime
+
+The Windows executable imports `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll`.
+Clean validation machines do not always include the Visual C++ runtime, so the
+installer manifest declares `Microsoft.VCRedist.2015+.x64` or
+`Microsoft.VCRedist.2015+.arm64` as an architecture-specific package
+dependency. Without it, Typsastra exits with `STATUS_DLL_NOT_FOUND`
+(`0xC0000135`) before opening a window.
+
 ## Code signing
 
 Windows installers are not code signed, so SmartScreen shows a warning on

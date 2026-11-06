@@ -171,6 +171,17 @@ describe("winget manifests", () => {
         expect(installerManifest.get("ReleaseDate")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       });
 
+      test("declares the Visual C++ runtime for current manifests", () => {
+        const [major, minor] = version.split(".").map(value => Number(value));
+        if (major === 0 && minor < 10) return;
+        const expected = ["Microsoft.VCRedist.2015+.x64", "Microsoft.VCRedist.2015+.arm64"];
+        expected.forEach((packageIdentifier, index) => {
+          const prefix = `Installers.${index}.Dependencies.PackageDependencies.0`;
+          expect(installerManifest.get(`${prefix}.PackageIdentifier`)).toBe(packageIdentifier);
+          expect(installerManifest.get(`${prefix}.MinimumVersion`)).toBe("14.29.30139.0");
+        });
+      });
+
       test("uses one UpgradeCode across architectures so upgrades switch arch", () => {
         const codes = ["Installers.0.AppsAndFeaturesEntries.0.UpgradeCode", "Installers.1.AppsAndFeaturesEntries.0.UpgradeCode"]
           .map(key => installerManifest.get(key));

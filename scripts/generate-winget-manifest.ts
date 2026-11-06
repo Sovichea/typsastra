@@ -256,10 +256,20 @@ function installerYaml(entries: InstallerEntry[], releaseDate: string): string {
     "Installers:",
   ];
   for (const entry of entries) {
+    const vcRedist = entry.architecture === "arm64"
+      ? "Microsoft.VCRedist.2015+.arm64"
+      : "Microsoft.VCRedist.2015+.x64";
     lines.push(
       `  - Architecture: ${entry.architecture}`,
       `    InstallerUrl: ${entry.url}`,
       `    InstallerSha256: ${entry.sha256}`,
+      // The MSVC-linked executable imports VCRUNTIME140.dll and
+      // VCRUNTIME140_1.dll. Validation machines often start without the
+      // Visual C++ runtime, so winget must install it first.
+      "    Dependencies:",
+      "      PackageDependencies:",
+      `        - PackageIdentifier: ${vcRedist}`,
+      `          MinimumVersion: 14.29.30139.0`,
       `    ProductCode: '${entry.productCode}'`,
       "    AppsAndFeaturesEntries:",
       `      - ProductCode: '${entry.productCode}'`,
