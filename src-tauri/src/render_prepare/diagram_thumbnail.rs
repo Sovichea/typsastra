@@ -10,7 +10,7 @@ use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 use super::draft::{svg_dimensions, svg_dimensions_f64};
 
-const DIAGRAM_THUMBNAIL_CACHE_VERSION: &str = "v5";
+const DIAGRAM_THUMBNAIL_CACHE_VERSION: &str = "v6";
 const DIAGRAM_COMPILE_CONCURRENCY: usize = 4;
 const DIAGRAM_THUMBNAIL_CHUNK_SIZE: usize = 6;
 const BLANK_DIAGRAM_PAGE_SETUP: &str = concat!(
@@ -53,6 +53,12 @@ pub struct DraftDiagramMeasurement {
     pub imports: Option<String>,
     #[serde(default)]
     pub setup: Option<String>,
+    /// The placeholder width embedded in the currently presented Draft PDF.
+    #[serde(default)]
+    pub used_width: Option<f64>,
+    /// The placeholder height embedded in the currently presented Draft PDF.
+    #[serde(default)]
+    pub used_height: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,15 +108,21 @@ pub struct DraftDiagramThumbnailProgress {
     pub pending: usize,
     pub generating: usize,
     pub generated: usize,
+    /// Number of measured sizes that differ from the placeholders in the
+    /// currently presented Draft PDF. A nonzero value requires a recompile.
+    pub size_changed: usize,
 }
 
 struct MeasurementEntry {
     source_path: PathBuf,
+    stable_key: String,
     binding_name: String,
     expression: Option<String>,
     imports: Option<String>,
     setup: Option<String>,
     size_path: PathBuf,
+    used_width: Option<f64>,
+    used_height: Option<f64>,
 }
 
 #[derive(Default)]
@@ -120,6 +132,7 @@ struct DiagramThumbnailState {
     entries: HashMap<String, DiagramThumbnailEntry>,
     displayed_order: HashMap<String, usize>,
     generated: usize,
+    size_changed: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -133,12 +146,15 @@ enum DiagramThumbnailStatus {
 #[derive(Clone)]
 struct DiagramThumbnailEntry {
     source_path: PathBuf,
+    stable_key: String,
     binding_name: String,
     expression: Option<String>,
     imports: Option<String>,
     setup: Option<String>,
     svg_path: PathBuf,
     size_path: PathBuf,
+    used_width: Option<f64>,
+    used_height: Option<f64>,
     status: DiagramThumbnailStatus,
 }
 
@@ -170,40 +186,34 @@ fn cache_identity(
     layout_key: &str,
 ) -> Option<(String, String)> {
     let source_path = dunce::canonicalize(source_path).ok()?;
-    let metadata = fs::metadata(&source_path).ok()?;
-    Some(cache_identity_with_metadata(
+    let source_digest = source_content_digest(&source_path)?;
+    Some(cache_identity_with_digest(
         &source_path,
         id,
         binding_name,
         diagram_kind,
         layout_key,
-        &metadata,
+        &source_digest,
     ))
 }
 
-fn cache_identity_with_metadata(
+fn source_content_digest(source_path: &Path) -> Option<String> {
+    let bytes = fs::read(source_path).ok()?;
+    Some(format!("{:x}", Sha256::digest(&bytes)))
+}
+
+fn cache_identity_with_digest(
     source_path: &Path,
     id: &str,
     binding_name: &str,
     diagram_kind: &str,
     layout_key: &str,
-    metadata: &fs::Metadata,
+    source_digest: &str,
 ) -> (String, String) {
-    let modified = metadata
-        .modified()
-        .ok()
-        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
     let layout_digest = format!("{:x}", Sha256::digest(layout_key.as_bytes()));
     let cache_key = format!(
-        "{}:{}:{}:{}:{}:{}",
-        id,
-        binding_name,
-        diagram_kind,
-        metadata.len(),
-        modified,
-        layout_digest
+        "{}:{}:{}:{}:{}",
+        id, binding_name, diagram_kind, source_digest, layout_digest
     );
     let cache_digest = format!("{:x}", Sha256::digest(cache_key.as_bytes()))[..16].to_string();
     let mut stable_digest = Sha256::new();
@@ -232,6 +242,48 @@ fn write_size_cache(path: &Path, width: f64, height: f64) -> Result<(), String> 
         .map_err(|error| format!("Unable to encode the Draft diagram size: {error}"))?;
     fs::write(path, bytes)
         .map_err(|error| format!("Unable to cache the Draft diagram size: {error}"))
+}
+
+/// Placeholder dimensions are formatted to four decimals, so a measured size
+/// within a hundredth of a point is indistinguishable in the compiled PDF.
+const DIAGRAM_SIZE_EPSILON: f64 = 0.01;
+
+fn diagram_size_matches(
+    used_width: Option<f64>,
+    used_height: Option<f64>,
+    width: f64,
+    height: f64,
+) -> bool {
+    match (used_width, used_height) {
+        (Some(used_width), Some(used_height)) => {
+            (used_width - width).abs() <= DIAGRAM_SIZE_EPSILON
+                && (used_height - height).abs() <= DIAGRAM_SIZE_EPSILON
+        }
+        _ => false,
+    }
+}
+
+fn latest_size_cache_path(directory: &Path, stable_key: &str) -> PathBuf {
+    directory.join(format!("latest-{stable_key}.json"))
+}
+
+fn read_latest_size_cache(directory: &Path, stable_key: &str) -> Option<(f64, f64)> {
+    read_size_cache(&latest_size_cache_path(directory, stable_key))
+}
+
+fn write_latest_size_cache(
+    directory: &Path,
+    stable_key: &str,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let path = latest_size_cache_path(directory, stable_key);
+    if read_size_cache(&path).is_some_and(|(cached_width, cached_height)| {
+        diagram_size_matches(Some(cached_width), Some(cached_height), width, height)
+    }) {
+        return Ok(());
+    }
+    write_size_cache(&path, width, height)
 }
 
 fn combine_diagram_blocks<'a>(blocks: impl IntoIterator<Item = &'a str>) -> (String, bool) {
@@ -268,6 +320,12 @@ pub fn diagram_size_signature(cache_root: &Path) -> String {
             let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
                 continue;
             };
+            // Only the last-known size per diagram describes the dimensions
+            // embedded in a persisted Draft PDF. Per-key measurement files may
+            // be added without changing the rendered layout.
+            if !name.starts_with("latest-") {
+                continue;
+            }
             let metadata = entry.metadata().ok();
             let length = metadata
                 .as_ref()
@@ -321,10 +379,20 @@ pub fn cached_diagram_dimensions(
     if let Some(size) = read_size_cache(&size_path) {
         return Some(size);
     }
-    let bytes = fs::read(svg_path).ok()?;
-    let text = std::str::from_utf8(&bytes).ok()?;
-    let (width, height) = svg_dimensions_f64(text)?;
-    (width > 0.0 && height > 0.0).then_some((width, height))
+    if let Ok(bytes) = fs::read(&svg_path) {
+        if let Some((width, height)) = std::str::from_utf8(&bytes)
+            .ok()
+            .and_then(svg_dimensions_f64)
+            .filter(|(width, height)| *width > 0.0 && *height > 0.0)
+        {
+            return Some((width, height));
+        }
+    }
+    // A lost cache identity (an unrelated edit, a setup change, or a changed
+    // diagram body) should not fall back to the fixed placeholder when this
+    // binding has a measured size. The previous measurement is the closest
+    // available layout and is replaced as soon as the new one is ready.
+    read_latest_size_cache(&directory, &stable_key)
 }
 
 #[derive(Debug, Deserialize)]
@@ -392,16 +460,14 @@ pub async fn get_draft_diagram_thumbnail(
         return Err("The Draft diagram source must be a Typst file inside the workspace.".into());
     }
 
-    let metadata = fs::metadata(&source_path)
-        .map_err(|error| format!("Unable to inspect the Draft diagram source: {error}"))?;
-    let (stable_key, cache_digest) = cache_identity_with_metadata(
+    let (stable_key, cache_digest) = cache_identity(
         &source_path,
         &request.id,
         &request.binding_name,
         &request.diagram_kind,
         request.setup.as_deref().unwrap_or_default(),
-        &metadata,
-    );
+    )
+    .ok_or_else(|| "Unable to inspect the Draft diagram source.".to_string())?;
     let app_local_data_dir = app_handle
         .path()
         .app_local_data_dir()
@@ -428,6 +494,7 @@ pub async fn get_draft_diagram_thumbnail(
                     .and_then(svg_dimensions_f64)
                 {
                     let _ = write_size_cache(&size_path, width, height);
+                    let _ = write_latest_size_cache(&cache_dir, &stable_key, width, height);
                     super::mirror::invalidate_draft_preparation_cache(
                         &cache_root,
                         &workspace_root,
@@ -555,6 +622,7 @@ pub async fn get_draft_diagram_thumbnail(
         .ok_or_else(|| "The compiled Draft diagram has no valid size.".to_string())?;
     let had_size = size_path.is_file();
     write_size_cache(&size_path, width, height)?;
+    write_latest_size_cache(&cache_dir, &stable_key, width, height)?;
     if !had_size {
         super::mirror::invalidate_draft_preparation_cache(
             &cache_root,
@@ -635,6 +703,7 @@ pub async fn start_draft_diagram_thumbnail_generation(
             entries,
             displayed_order,
             generated: 0,
+            size_changed: 0,
         };
     }
     let queued = jobs.len();
@@ -727,6 +796,7 @@ pub fn get_draft_diagram_thumbnail_progress(
         pending,
         generating,
         generated: state.generated,
+        size_changed: state.size_changed,
     })
 }
 
@@ -804,12 +874,15 @@ fn diagram_thumbnail_entry(
         diagram.id,
         DiagramThumbnailEntry {
             source_path,
+            stable_key,
             binding_name: diagram.binding_name,
             expression,
             imports,
             setup,
             svg_path,
             size_path,
+            used_width: diagram.used_width,
+            used_height: diagram.used_height,
             status: DiagramThumbnailStatus::Pending,
         },
     ))
@@ -856,32 +929,59 @@ async fn run_diagram_thumbnail_worker(
         .await;
         match result {
             Ok(pages) => {
-                let mut measured_sources = HashSet::new();
+                let mut changed_sources = HashSet::new();
+                let mut ready_jobs = Vec::new();
+                let mut failed_jobs = Vec::new();
                 for (index, bytes) in pages {
                     let Some(job) = chunk.get(index) else {
                         continue;
                     };
-                    let written = fs::write(&job.entry.svg_path, &bytes).is_ok()
-                        && std::str::from_utf8(&bytes)
-                            .ok()
-                            .and_then(svg_dimensions_f64)
-                            .is_some_and(|(width, height)| {
-                                write_size_cache(&job.entry.size_path, width, height).is_ok()
-                            });
+                    let measured = std::str::from_utf8(&bytes)
+                        .ok()
+                        .and_then(svg_dimensions_f64);
+                    let written = measured.is_some_and(|(width, height)| {
+                        fs::write(&job.entry.svg_path, &bytes).is_ok()
+                            && write_size_cache(&job.entry.size_path, width, height).is_ok()
+                    });
                     if written {
-                        update_diagram_status(generation, &job.id, DiagramThumbnailStatus::Ready);
-                        mark_diagram_generated(generation);
-                        measured_sources.insert(job.entry.source_path.clone());
+                        let (width, height) = measured.unwrap();
+                        let _ = write_latest_size_cache(
+                            &cache_dir,
+                            &job.entry.stable_key,
+                            width,
+                            height,
+                        );
+                        let size_changed = !diagram_size_matches(
+                            job.entry.used_width,
+                            job.entry.used_height,
+                            width,
+                            height,
+                        );
+                        if size_changed {
+                            changed_sources.insert(job.entry.source_path.clone());
+                        }
+                        ready_jobs.push((job.id.clone(), size_changed));
                     } else {
-                        update_diagram_status(generation, &job.id, DiagramThumbnailStatus::Failed);
+                        failed_jobs.push(job.id.clone());
                     }
                 }
-                for source_path in measured_sources {
+                // Invalidate the prepared mirror before reporting progress. The
+                // progress poll triggers a forced recompile as soon as it sees a
+                // changed size, so the new sizes must already be visible to that
+                // compile.
+                for source_path in changed_sources {
                     super::mirror::invalidate_draft_preparation_cache(
                         &cache_root,
                         &workspace_root,
                         &source_path,
                     );
+                }
+                for id in failed_jobs {
+                    update_diagram_status(generation, &id, DiagramThumbnailStatus::Failed);
+                }
+                for (id, size_changed) in ready_jobs {
+                    update_diagram_status(generation, &id, DiagramThumbnailStatus::Ready);
+                    mark_diagram_generated(generation, size_changed);
                 }
             }
             Err(_) => {
@@ -904,11 +1004,14 @@ async fn compile_diagram_chunk(
         .iter()
         .map(|job| MeasurementEntry {
             source_path: job.entry.source_path.clone(),
+            stable_key: job.entry.stable_key.clone(),
             binding_name: job.entry.binding_name.clone(),
             expression: job.entry.expression.clone(),
             imports: job.entry.imports.clone(),
             setup: job.entry.setup.clone(),
             size_path: job.entry.size_path.clone(),
+            used_width: job.entry.used_width,
+            used_height: job.entry.used_height,
         })
         .collect::<Vec<_>>();
     let (document, page_entries) = build_measurement_document(workspace_root, &entries)?;
@@ -1030,12 +1133,15 @@ fn update_diagram_status(generation: u64, id: &str, status: DiagramThumbnailStat
     }
 }
 
-fn mark_diagram_generated(generation: u64) {
+fn mark_diagram_generated(generation: u64, size_changed: bool) {
     let mut state = DIAGRAM_QUEUE_STATE
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     if state.generation == generation {
         state.generated += 1;
+        if size_changed {
+            state.size_changed += 1;
+        }
     }
 }
 
@@ -1136,11 +1242,14 @@ pub async fn measure_draft_diagrams(
         }
         pending.push(MeasurementEntry {
             source_path,
+            stable_key,
             binding_name: diagram.binding_name,
             expression,
             imports,
             setup,
             size_path,
+            used_width: diagram.used_width,
+            used_height: diagram.used_height,
         });
     }
     if pending.is_empty() {
@@ -1231,7 +1340,8 @@ pub async fn measure_draft_diagrams(
             page_entries.len()
         ));
     }
-    let mut measured_sources = std::collections::HashSet::new();
+    let mut changed = false;
+    let mut changed_sources = std::collections::HashSet::new();
     for ((_, page_path), (entry_index, _)) in pages.iter().zip(page_entries.iter()) {
         let bytes = fs::read(page_path)
             .map_err(|error| format!("Unable to read a Draft diagram measurement page: {error}"))?;
@@ -1241,9 +1351,13 @@ pub async fn measure_draft_diagrams(
             .ok_or_else(|| "A Draft diagram measurement page has no valid size.".to_string())?;
         let entry = &pending[*entry_index];
         write_size_cache(&entry.size_path, width, height)?;
-        measured_sources.insert(entry.source_path.clone());
+        write_latest_size_cache(&cache_dir, &entry.stable_key, width, height)?;
+        if !diagram_size_matches(entry.used_width, entry.used_height, width, height) {
+            changed = true;
+            changed_sources.insert(entry.source_path.clone());
+        }
     }
-    for source_path in measured_sources {
+    for source_path in changed_sources {
         super::mirror::invalidate_draft_preparation_cache(
             &cache_root,
             &workspace_root,
@@ -1251,7 +1365,7 @@ pub async fn measure_draft_diagrams(
         );
     }
     Ok(MeasureDraftDiagramsResult {
-        changed: true,
+        changed,
         measured: page_entries.len(),
     })
 }
@@ -1508,12 +1622,15 @@ mod tests {
             id: id.into(),
             entry: DiagramThumbnailEntry {
                 source_path: PathBuf::from(format!("{id}.typ")),
+                stable_key: id.into(),
                 binding_name: id.into(),
                 expression: None,
                 imports: None,
                 setup: None,
                 svg_path: PathBuf::from(format!("{id}.svg")),
                 size_path: PathBuf::from(format!("{id}.json")),
+                used_width: None,
+                used_height: None,
                 status: DiagramThumbnailStatus::Pending,
             },
         }
@@ -1547,35 +1664,47 @@ mod tests {
         let entries = vec![
             MeasurementEntry {
                 source_path: first.clone(),
+                stable_key: "a".into(),
                 binding_name: "A".into(),
                 expression: None,
                 imports: None,
                 setup: None,
                 size_path: workspace.path().join("a-size.json"),
+                used_width: None,
+                used_height: None,
             },
             MeasurementEntry {
                 source_path: second.clone(),
+                stable_key: "b".into(),
                 binding_name: "B".into(),
                 expression: None,
                 imports: None,
                 setup: None,
                 size_path: workspace.path().join("b-size.json"),
+                used_width: None,
+                used_height: None,
             },
             MeasurementEntry {
                 source_path: first.clone(),
+                stable_key: "c".into(),
                 binding_name: "C".into(),
                 expression: None,
                 imports: None,
                 setup: None,
                 size_path: workspace.path().join("c-size.json"),
+                used_width: None,
+                used_height: None,
             },
             MeasurementEntry {
                 source_path: first.clone(),
+                stable_key: "inline".into(),
                 binding_name: "inline-line-9".into(),
                 expression: Some("diagram(spacing: (1em, 1em))".into()),
                 imports: Some("#import \"/parts/diags.typ\": *".into()),
                 setup: Some("#import \"/parts/diags.typ\": *\n#set text(size: 14pt)".into()),
                 size_path: workspace.path().join("inline-size.json"),
+                used_width: None,
+                used_height: None,
             },
         ];
         let (document, pages) = build_measurement_document(workspace.path(), &entries).unwrap();
@@ -1597,9 +1726,11 @@ mod tests {
         let cache_dir = diagram_thumbnail_cache_dir(&cache_root);
         fs::create_dir_all(&cache_dir).unwrap();
         let before = diagram_size_signature(&cache_root);
-        write_size_cache(&cache_dir.join("diagram.json"), 122.0, 68.0).unwrap();
+        write_latest_size_cache(&cache_dir, "diagram", 122.0, 68.0).unwrap();
         let after = diagram_size_signature(&cache_root);
         assert_ne!(before, after);
+        write_size_cache(&cache_dir.join("diagram-other.json"), 122.0, 68.0).unwrap();
+        assert_eq!(diagram_size_signature(&cache_root), after);
     }
 
     #[test]
@@ -1631,5 +1762,58 @@ mod tests {
             cached_diagram_dimensions(&cache_root, &source, "other", "D", "cetz", "setup"),
             None
         );
+    }
+
+    #[test]
+    fn falls_back_to_the_last_measured_size_for_the_same_binding() {
+        let workspace = tempfile::tempdir().unwrap();
+        let source = workspace.path().join("diags.typ");
+        fs::write(&source, "#let D = 1").unwrap();
+        let cache_root = workspace.path().join("cache");
+        let cache_dir = diagram_thumbnail_cache_dir(&cache_root);
+        fs::create_dir_all(&cache_dir).unwrap();
+        let id = "0123456789abcdef01234567";
+        let (stable_key, _) = cache_identity(&source, id, "D", "cetz", "setup").unwrap();
+        write_latest_size_cache(&cache_dir, &stable_key, 214.0, 96.0).unwrap();
+
+        assert_eq!(
+            cached_diagram_dimensions(
+                &cache_root,
+                &source,
+                "fedcba9876543210fedcba98",
+                "D",
+                "cetz",
+                "setup",
+            ),
+            Some((214.0, 96.0))
+        );
+    }
+
+    #[test]
+    fn ignores_mtime_changes_when_the_source_content_is_unchanged() {
+        let workspace = tempfile::tempdir().unwrap();
+        let source = workspace.path().join("diags.typ");
+        fs::write(&source, "#let D = 1").unwrap();
+        let id = "0123456789abcdef01234567";
+        let (_, first) = cache_identity(&source, id, "D", "cetz", "setup").unwrap();
+        fs::write(&source, "#let D = 1").unwrap();
+        let (_, second) = cache_identity(&source, id, "D", "cetz", "setup").unwrap();
+        assert_eq!(first, second);
+        fs::write(&source, "#let D = 2").unwrap();
+        let (_, third) = cache_identity(&source, id, "D", "cetz", "setup").unwrap();
+        assert_ne!(first, third);
+    }
+
+    #[test]
+    fn only_reports_measurements_that_differ_from_the_used_placeholder() {
+        assert!(diagram_size_matches(Some(122.0), Some(68.0), 122.0, 68.0));
+        assert!(diagram_size_matches(
+            Some(122.0),
+            Some(68.0),
+            122.005,
+            67.995
+        ));
+        assert!(!diagram_size_matches(Some(122.0), Some(68.0), 123.0, 68.0));
+        assert!(!diagram_size_matches(None, None, 122.0, 68.0));
     }
 }

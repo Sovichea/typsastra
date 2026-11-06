@@ -56,6 +56,9 @@ export type DraftImageAsset = {
   diagramExpression?: string | null;
   diagramImports?: string | null;
   diagramSetup?: string | null;
+  diagramWidth?: number | null;
+  diagramHeight?: number | null;
+  diagramLine?: number | null;
   path: string;
   mimeType: string;
   width: number;
@@ -110,6 +113,7 @@ type DraftDiagramThumbnailProgress = {
   pending: number;
   generating: number;
   generated: number;
+  sizeChanged: number;
 };
 
 type DraftDiagramThumbnailStatus = {
@@ -129,6 +133,8 @@ type DraftDiagramMeasurement = {
   expression?: string;
   imports?: string;
   setup?: string;
+  usedWidth?: number;
+  usedHeight?: number;
 };
 
 type DraftDiagramMeasurementResult = {
@@ -162,7 +168,7 @@ export interface DraftPreviewControllerPort {
   renderMode(): PreviewRenderMode;
   saveWorkspaceState(): Promise<void>;
   invalidatePreviewWork(reason: string): void;
-  refreshActivePreviewRoot(force: boolean): Promise<void>;
+  refreshActivePreviewRoot(force: boolean, forceCompile?: boolean): Promise<void>;
   setPreviewRenderMode(mode: PreviewRenderMode): Promise<void>;
   setImageOptimizationIssues(entries: LogConsoleEntryInput[]): void;
   setEditorWarnings(warnings: ImageOptimizationWarning[]): void;
@@ -567,9 +573,7 @@ export class DraftPreviewController {
       : asset.diagramKind === "cetz"
         ? "Cetz canvas"
         : "Diagram";
-    const inlineLine = asset.diagramExpression
-      ? asset.name?.match(/^inline-line-(\d+)/)?.[1]
-      : null;
+    const inlineLine = asset.diagramLine != null ? String(asset.diagramLine) : null;
     return {
       status: "ready" as const,
       bytes: paddedBytes,
@@ -789,13 +793,21 @@ export class DraftPreviewController {
           }
           if (next.generated > 0 && !this.diagramProgressRefreshed) {
             this.diagramProgressRefreshed = true;
-            this.port.log(
-              "info",
-              "draft diagrams",
-              `Prepared ${next.generated} diagram thumbnail(s); refreshing Draft Preview.`,
-            );
-            this.port.invalidatePreviewWork("Draft diagram thumbnails prepared");
-            void this.port.refreshActivePreviewRoot(true);
+            if (next.sizeChanged > 0) {
+              this.port.log(
+                "info",
+                "draft diagrams",
+                `Prepared ${next.generated} diagram thumbnail(s); refreshing Draft Preview.`,
+              );
+              this.port.invalidatePreviewWork("Draft diagram thumbnails prepared");
+              void this.port.refreshActivePreviewRoot(true, true);
+            } else {
+              this.port.log(
+                "info",
+                "draft diagrams",
+                `Prepared ${next.generated} diagram thumbnail(s); placeholder sizes are unchanged.`,
+              );
+            }
           }
           this.diagramProgressHideTimer = window.setTimeout(
             () => this.stopDiagramThumbnailProgress(),
@@ -966,6 +978,8 @@ export class DraftPreviewController {
         expression: asset.diagramExpression ?? undefined,
         imports: asset.diagramImports ?? undefined,
         setup: asset.diagramSetup ?? undefined,
+        usedWidth: asset.diagramWidth ?? undefined,
+        usedHeight: asset.diagramHeight ?? undefined,
       }));
   }
 
@@ -1044,7 +1058,7 @@ export class DraftPreviewController {
       `Cached exact sizes for ${measured} diagram(s); refreshing Draft Preview.`,
     );
     this.port.invalidatePreviewWork("Draft diagram sizes measured");
-    await this.port.refreshActivePreviewRoot(true);
+    await this.port.refreshActivePreviewRoot(true, true);
   }
 
   private async showDraftDetails(): Promise<void> {

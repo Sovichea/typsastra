@@ -35,7 +35,7 @@ pub struct DraftImageReference {
     pub to_utf16: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DraftImageAsset {
     pub id: String,
@@ -51,6 +51,15 @@ pub struct DraftImageAsset {
     pub diagram_imports: Option<String>,
     #[serde(default)]
     pub diagram_setup: Option<String>,
+    /// The placeholder width that the last prepared draft used, when known.
+    #[serde(default)]
+    pub diagram_width: Option<f64>,
+    /// The placeholder height that the last prepared draft used, when known.
+    #[serde(default)]
+    pub diagram_height: Option<f64>,
+    /// One-based source line of an inline diagram, when it has no binding name.
+    #[serde(default)]
+    pub diagram_line: Option<usize>,
     pub path: PathBuf,
     pub mime_type: String,
     pub width: u32,
@@ -263,6 +272,9 @@ pub(crate) fn prepare_draft_images_with_aliases(
                 diagram_expression: None,
                 diagram_imports: None,
                 diagram_setup: None,
+                diagram_width: None,
+                diagram_height: None,
+                diagram_line: None,
                 path: image_path,
                 mime_type,
                 width,
@@ -492,7 +504,8 @@ where
         }
         let id = draft_diagram_asset_id(source_path, &candidate.name, &source[start..end]);
         let label = format!("{} · {}", kind.label(), candidate.name);
-        let dimensions = size_lookup(&id, &candidate.name, kind.key(), &setup);
+        let dimensions = size_lookup(&id, &candidate.name, kind.key(), &setup)
+            .filter(|(width, height)| *width > 0.0 && *height > 0.0);
         result.replacements.push(DraftReplacement {
             start,
             end,
@@ -506,6 +519,9 @@ where
             diagram_expression: None,
             diagram_imports: None,
             diagram_setup: Some(setup.clone()),
+            diagram_width: dimensions.map(|(width, _)| width),
+            diagram_height: dimensions.map(|(_, height)| height),
+            diagram_line: None,
             path: source_path.to_path_buf(),
             mime_type: String::new(),
             width: 0,
@@ -525,6 +541,9 @@ where
     let imports = diagram_import_block(&root, source, source_path, project_root);
     let mut inline = Vec::new();
     collect_inline_diagram_calls(&root, 0, source, &context, &skip_ranges, &mut inline);
+    // Inline diagrams are numbered by occurrence rather than by source offset
+    // so that edits above them do not invalidate their cached measurements.
+    let mut inline_index = 0usize;
     for (call, offset, kind) in inline {
         let start = offset;
         let end = start + call.to_untyped().len();
@@ -539,10 +558,12 @@ where
             .bytes()
             .filter(|byte| *byte == b'\n')
             .count();
-        let name = format!("inline-line-{line}-{start}");
-        let id = draft_diagram_asset_id(source_path, &format!("inline:{start}"), &expression);
+        inline_index += 1;
+        let name = format!("inline-{inline_index}");
+        let id = draft_diagram_asset_id(source_path, &name, &expression);
         let label = format!("{} · line {}", kind.label(), line);
-        let dimensions = size_lookup(&id, &name, kind.key(), &setup);
+        let dimensions = size_lookup(&id, &name, kind.key(), &setup)
+            .filter(|(width, height)| *width > 0.0 && *height > 0.0);
         result.replacements.push(DraftReplacement {
             start,
             end,
@@ -556,6 +577,9 @@ where
             diagram_expression: Some(expression),
             diagram_imports: Some(imports.clone()),
             diagram_setup: Some(setup.clone()),
+            diagram_width: dimensions.map(|(width, _)| width),
+            diagram_height: dimensions.map(|(_, height)| height),
+            diagram_line: Some(line),
             path: source_path.to_path_buf(),
             mime_type: String::new(),
             width: 0,
@@ -2446,6 +2470,9 @@ mod tests {
         assert!(prepared.replacements[0]
             .generated
             .contains("width: 121.9911pt, height: 68.3035pt"));
+        assert_eq!(prepared.assets[0].diagram_width, Some(121.9911));
+        assert_eq!(prepared.assets[0].diagram_height, Some(68.3035));
+        assert_eq!(prepared.assets[0].diagram_line, None);
     }
 
     #[test]
@@ -2488,7 +2515,8 @@ Text #diagram($ a edge(->, b) $) more
         assert_eq!(prepared.assets.len(), 1);
         assert_eq!(prepared.replacements.len(), 1);
         let asset = &prepared.assets[0];
-        assert!(asset.name.starts_with("inline-line-2-"));
+        assert_eq!(asset.name, "inline-1");
+        assert_eq!(asset.diagram_line, Some(2));
         assert!(asset
             .diagram_expression
             .as_deref()

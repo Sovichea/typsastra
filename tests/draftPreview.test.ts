@@ -90,6 +90,21 @@ describe("Draft Preview", () => {
     expect(plan).toContain("including its fixed-size path label");
   });
 
+  test("only recompiles when a measured diagram size changes", () => {
+    expect(draftController).toContain("if (next.sizeChanged > 0) {");
+    expect(draftController).toContain(
+      "Prepared ${next.generated} diagram thumbnail(s); refreshing Draft Preview.",
+    );
+    expect(draftController).toContain("void this.port.refreshActivePreviewRoot(true, true);");
+    expect(draftController).toContain(
+      "Prepared ${next.generated} diagram thumbnail(s); placeholder sizes are unchanged.",
+    );
+    expect(draftController).toContain(
+      "Cached exact sizes for ${measured} diagram(s); refreshing Draft Preview.",
+    );
+    expect(draftController).toContain("await this.port.refreshActivePreviewRoot(true, true);");
+  });
+
   test("retargets a stationary Draft hover after gesture and middle-button scrolling", () => {
     expect(previewFrame).toContain("this.rememberDraftPointer(event)");
     expect(previewFrame).toContain("elementFromPoint(point.x, point.y)");

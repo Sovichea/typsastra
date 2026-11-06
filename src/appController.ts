@@ -1841,7 +1841,8 @@ export class TypsastraWorkspaceController {
       renderMode: () => this.effectivePreviewRenderMode,
       saveWorkspaceState: () => this.saveWorkspaceState(),
       invalidatePreviewWork: reason => this.invalidatePreviewWork(reason),
-      refreshActivePreviewRoot: force => this.refreshActivePreviewRoot(force),
+      refreshActivePreviewRoot: (force, forceCompile) =>
+        this.refreshActivePreviewRoot(force, forceCompile),
       setPreviewRenderMode: mode => this.setPreviewRenderMode(mode),
       setImageOptimizationIssues: entries => this.logConsoleController.setImageOptimizationIssues(entries),
       setEditorWarnings: warnings => {
