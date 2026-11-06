@@ -64,7 +64,7 @@ externally created projects inherit the global document-language defaults on
 first open. Fresh installs start without a release summary, and **Create New
 Project** is available with `Ctrl+Shift+N` or `Cmd+Shift+N`.
 
-<img src="./docs/assets/screenshots/example-draft-diagrams.png" alt="Draft Preview placeholders for Fletcher diagrams and a CeTZ canvas" width="800"/>
+<img src="./docs/assets/screenshots/example-draft-diagrams.png" alt="Draft Preview showing a Fletcher diagram placeholder with its hover thumbnail" width="800"/>
 
 See the [v0.10.2 release notes](./docs/RELEASE_NOTES_V0.10.2.md).
 
@@ -80,7 +80,7 @@ click. Path-taking Typst functions warn about parent-relative paths and offer a
 root-relative quick fix, and missing toolchains use a non-blocking title-bar
 badge instead of a startup modal.
 
-<img src="./assets/screenshot-example-draft.png" alt="Draft Preview placeholders for images forwarded through nested helpers" width="800"/>
+<img src="./assets/screenshot-example-draft.png" alt="Draft Preview showing an image placeholder with its hover thumbnail" width="800"/>
 
 See the [v0.10.1 release notes](./docs/RELEASE_NOTES_V0.10.1.md).
 
@@ -135,9 +135,11 @@ Table Tools blocks and project creation.
 The image helper exercise shows the same current behavior in Normal and Draft
 preview: inverse sync selects the outermost call that supplied the image, and
 Draft Preview replaces that call with a layout-preserving placeholder using the
-helper's resolved width and height.
+helper's resolved width and height. Hovering the placeholder reveals the cached
+image and its source dimensions without loading the original asset into the
+Draft document.
 
-<img src="./assets/screenshot-example-draft.png" alt="Draft Preview placeholders for images forwarded through nested helpers" width="800"/>
+<img src="./assets/screenshot-example-draft.png" alt="Draft Preview showing an image placeholder with its hover thumbnail" width="800"/>
 
 The `08-tools-and-templates` exercises cover project-owned Table Tools blocks,
 table export/import, and project creation from templates. The linked-table

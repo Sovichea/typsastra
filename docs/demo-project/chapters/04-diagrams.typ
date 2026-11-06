@@ -8,7 +8,6 @@ layout-preserving placeholders, just as it does for images. The examples below
 are ordinary Typst source and render normally in Normal Preview.
 
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
-#import fletcher.shapes: diamond
 #import "@preview/cetz:0.5.2"
 
 == A flowchart
@@ -20,7 +19,7 @@ are ordinary Typst source and render normally in Normal Preview.
     edge("-|>"),
     node((0, 1), align(center)[
       Hey, wait,\ this flowchart\ is a trap!
-    ], shape: diamond),
+    ], shape: fletcher.shapes.diamond),
     edge("d,r,u,l", "-|>", [Yes], label-pos: 0.1),
   ),
   caption: [A flowchart from Fletcher's README example.],

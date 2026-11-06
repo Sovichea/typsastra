@@ -20,7 +20,7 @@ Draft Preview replaces supported Fletcher diagrams and CeTZ canvases with
 measured placeholders. Hover a placeholder to inspect its cached thumbnail, and
 use the Normal/Draft control to compare rendered output.
 
-![Draft Preview showing Fletcher and CeTZ placeholders](assets/screenshots/example-draft-diagrams.png)
+![Draft Preview showing a Fletcher diagram placeholder with its hover thumbnail](assets/screenshots/example-draft-diagrams.png)
 
 ### Workflow and preview fixes
 
@@ -44,7 +44,7 @@ the path, including forwarded parameters, defaults, and named arguments. Draft
 Preview resolves same-file helper chains and preserves their width and height
 values in the placeholder.
 
-![Draft Preview showing placeholders for images forwarded through nested helpers](assets/screenshots/example-draft-preview.png)
+![Draft Preview showing an image placeholder with its hover thumbnail](assets/screenshots/example-draft-preview.png)
 
 ### Preview and editor reliability
 

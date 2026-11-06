@@ -13,7 +13,8 @@ multi-file preview have useful content.
    references, crop controls, and optimization preview.
 3. Open `chapters/04-diagrams.typ` and switch the preview between **Normal** and
    **Draft**. Draft replaces the two Fletcher diagrams and the CeTZ canvas with
-   labeled placeholders while preserving their layout.
+   labeled placeholders while preserving their layout. Hover a placeholder to
+   inspect its cached rendering.
 4. Switch to **Table Tools** and select the **Basic table** already stored in
    this demo project's configuration. Its ID matches the `//@table:basic_table`
    anchor in `main.typ`, and its generated Typst block is synchronized there.

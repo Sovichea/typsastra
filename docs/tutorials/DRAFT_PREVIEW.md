@@ -17,7 +17,10 @@ lightweight placeholders while keeping their measured dimensions and positions
 in the document. Switch back to Normal before export or final visual review; PDF
 export uses original assets.
 
-![Draft Preview showing placeholders for images forwarded through helpers](../assets/screenshots/example-draft-preview.png)
+Hovering an image placeholder reveals its cached thumbnail without loading the
+original image into the Draft document:
+
+![Draft Preview showing an image placeholder with its hover thumbnail](../assets/screenshots/example-draft-preview.png)
 
 <video controls preload="none" playsinline width="100%">
   <source src="https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db" type="video/mp4">
@@ -47,9 +50,14 @@ Normal Preview renders the diagrams at their measured size:
 ![Normal preview showing two Fletcher diagrams and captions](../assets/screenshots/example-draft-diagrams-normal.png)
 
 Draft Preview keeps the same layout and labels each placeholder with its
-diagram kind and source line:
+diagram kind and source line. Hovering a placeholder reveals its cached
+rendering:
 
-![Draft preview showing two Fletcher placeholders and a CeTZ placeholder](../assets/screenshots/example-draft-diagrams.png)
+![Draft preview showing a Fletcher diagram placeholder with its hover thumbnail](../assets/screenshots/example-draft-diagrams.png)
+
+The same hover behavior applies to CeTZ canvases:
+
+![Draft preview showing a CeTZ placeholder with its hover thumbnail](../assets/screenshots/example-draft-cetz-hover.png)
 
 The CeTZ canvas renders normally on the following page in Normal Preview:
 
