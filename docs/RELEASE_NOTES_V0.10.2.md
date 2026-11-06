@@ -12,6 +12,10 @@ for new projects and the welcome screen.
   reveals a cached thumbnail without adding the diagram to the draft document.
 - Thumbnails compile on a blank page, so project headers, page numbers, and
   background rules do not leak into hover previews.
+- Diagram placeholders reuse the last measured size after an edit, and Draft
+  Preview recompiles automatically only when a new measurement differs from the
+  size already shown. Unchanged diagrams no longer need a second compile, and no
+  manual recompile is required.
 - The documentation demo project now includes the Fletcher flowchart and
   commutative-diagram examples plus a CeTZ unit-circle canvas.
 - The status bar reports image and diagram thumbnail progress separately, such

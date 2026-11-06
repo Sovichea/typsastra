@@ -78,6 +78,12 @@ render cache, keyed to the configured main document and content mode. Source
 files remain the authority. Generated thumbnails can be discarded and rebuilt
 without changing the project.
 
+When an edit invalidates diagram measurements, Draft Preview reuses the last
+measured size for each diagram so the first render keeps its layout. Background
+measurement then recompiles Draft Preview automatically only when a measured
+size differs from the placeholder already shown. Unchanged diagrams need no
+extra compile, and no manual **Recompile** is required.
+
 The mode is shared across included files because they belong to the main
 document's preview. Opening an included chapter does not create a separate
 Draft Preview session or change the PDF page position.
