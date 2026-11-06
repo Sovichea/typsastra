@@ -330,13 +330,14 @@ export class PdfPreviewRenderController {
         "live",
         false,
       );
-      if (contentMode === "draft" && this.deps.draftPreview.mode === "draft") {
+      if (this.deps.draftPreview.mode === contentMode) {
         // Hover requests reject the zero sentinel, so a restored Draft preview
         // needs its own positive generation before the thumbnail queue starts.
+        // Normal restores still need to update the presented content mode.
         const presentationGeneration = ++this.generationValue;
         await this.deps.draftPreview.presentGeneration({
           generation: presentationGeneration,
-          mode: "draft",
+          mode: contentMode,
           assets: new Map((cached.draft?.assets ?? []).map(asset => [asset.id, asset])),
           diagnostics: [...(cached.draft?.diagnostics ?? [])],
           assetRootPath: cached.draft?.assetRootPath ?? this.deps.getWorkspaceRootPath(),
@@ -579,10 +580,10 @@ export class PdfPreviewRenderController {
             "live",
             false,
           );
-          if (generationContentMode === "draft" && this.deps.draftPreview.mode === "draft") {
+          if (this.deps.draftPreview.mode === generationContentMode) {
             await this.deps.draftPreview.presentGeneration({
               generation,
-              mode: "draft",
+              mode: generationContentMode,
               assets: new Map((cached.draft?.assets ?? []).map(asset => [asset.id, asset])),
               diagnostics: [...(cached.draft?.diagnostics ?? [])],
               assetRootPath: cached.draft?.assetRootPath ?? this.deps.getWorkspaceRootPath(),

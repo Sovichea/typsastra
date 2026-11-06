@@ -191,6 +191,7 @@ export class DraftPreviewController {
   private profileValue: PreviewImageProfile | null = null;
   private modeValue: PreviewContentMode = "normal";
   private presentedModeValue: PreviewContentMode = "normal";
+  private presentedGenerationValue = 0;
   private compiling = false;
   private assetsValue = new Map<string, DraftImageAsset>();
   private diagnosticsValue: DraftImageDiagnostic[] = [];
@@ -241,6 +242,7 @@ export class DraftPreviewController {
   }): void {
     this.modeValue = input.mode;
     this.presentedModeValue = input.mode;
+    this.presentedGenerationValue = Math.max(this.presentedGenerationValue, input.generation ?? 0);
     this.assetsValue = new Map((input.assets ?? []).map(asset => [asset.id, asset]));
     this.diagnosticsValue = [];
     this.assetRootPathValue = input.assetRootPath ?? null;
@@ -257,6 +259,9 @@ export class DraftPreviewController {
     assetRootPath: string | null;
     documentRootPath: string | null;
   }): Promise<void> {
+    // An older render finishing late must not overwrite a newer presentation.
+    if (input.generation > 0 && input.generation < this.presentedGenerationValue) return;
+    this.presentedGenerationValue = Math.max(this.presentedGenerationValue, input.generation);
     this.presentedModeValue = input.mode;
     this.assetsValue = input.mode === "draft" ? input.assets : new Map();
     this.diagnosticsValue = input.mode === "draft" ? input.diagnostics : [];
@@ -282,6 +287,7 @@ export class DraftPreviewController {
     this.profileValue = null;
     this.modeValue = "normal";
     this.presentedModeValue = "normal";
+    this.presentedGenerationValue = 0;
     this.compiling = false;
     this.assetsValue.clear();
     this.diagnosticsValue = [];
@@ -457,7 +463,9 @@ export class DraftPreviewController {
     this.updateControl(true);
     await this.port.saveWorkspaceState();
     this.port.invalidatePreviewWork(`preview content mode changed to ${mode}`);
-    await this.port.refreshActivePreviewRoot(true);
+    // A mode switch must produce a PDF for the requested mode even when the
+    // source snapshot is unchanged, so bypass the live snapshot and cache paths.
+    await this.port.refreshActivePreviewRoot(true, true);
   }
 
   async showImageHeavyDetails(): Promise<void> {
