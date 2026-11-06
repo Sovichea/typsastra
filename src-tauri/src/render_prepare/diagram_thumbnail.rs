@@ -10,9 +10,13 @@ use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 use super::draft::{svg_dimensions, svg_dimensions_f64};
 
-const DIAGRAM_THUMBNAIL_CACHE_VERSION: &str = "v4";
+const DIAGRAM_THUMBNAIL_CACHE_VERSION: &str = "v5";
 const DIAGRAM_COMPILE_CONCURRENCY: usize = 4;
 const DIAGRAM_THUMBNAIL_CHUNK_SIZE: usize = 6;
+const BLANK_DIAGRAM_PAGE_SETUP: &str = concat!(
+    "#set page(width: auto, height: auto, margin: 0pt, columns: 1, fill: white, ",
+    "header: none, footer: none, numbering: none, background: none, foreground: none)\n",
+);
 
 static TEMP_SNIPPET_COUNTER: AtomicU64 = AtomicU64::new(0);
 static DIAGRAM_QUEUE_EPOCH: AtomicU64 = AtomicU64::new(0);
@@ -488,8 +492,7 @@ pub async fn get_draft_diagram_thumbnail(
     } else {
         format!("#{}", request.binding_name)
     };
-    let document =
-        format!("{blocks}\n#set page(width: auto, height: auto, margin: 0pt)\n{text_size}{body}\n");
+    let document = format!("{blocks}\n{BLANK_DIAGRAM_PAGE_SETUP}{text_size}{body}\n");
 
     // Tinymist 0.15 rejects entries whose derived project root contains `..`
     // components, so keep the transient entry directly at the workspace root.
@@ -1331,9 +1334,7 @@ fn build_measurement_document(
     } else {
         "#set text(size: 11pt)\n"
     };
-    let document = format!(
-        "{blocks}\n#set page(width: auto, height: auto, margin: 0pt)\n{text_size}{pages}\n"
-    );
+    let document = format!("{blocks}\n{BLANK_DIAGRAM_PAGE_SETUP}{text_size}{pages}\n");
     Ok((document, page_entries))
 }
 
@@ -1585,6 +1586,7 @@ mod tests {
         assert!(!document.contains("#set text(size: 11pt)"));
         assert!(document.contains("#d0.A\n#pagebreak()\n#d0.C\n#pagebreak()\n#d1.B"));
         assert!(document.contains("#(diagram(spacing: (1em, 1em)))"));
+        assert!(document.contains(BLANK_DIAGRAM_PAGE_SETUP.trim()));
         assert_eq!(pages.len(), 4);
     }
 
