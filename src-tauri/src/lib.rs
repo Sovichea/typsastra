@@ -25,6 +25,7 @@ mod pdfium_preview;
 mod project_archive;
 mod project_text;
 mod recovery;
+mod references;
 mod render_prepare;
 mod scaled_fonts;
 mod segmentation;
@@ -46,6 +47,7 @@ use project_text::{
     project_text_read, project_text_revision,
 };
 use recovery::{RecoveryDeleteResult, RecoveryListing, RecoveryRecord, RecoveryWriteResult};
+use references::get_project_bibliography;
 use render_prepare::{
     cancel_draft_diagram_thumbnail_generation, cancel_draft_thumbnail_generation,
     cancel_render_preparation, get_draft_diagram_thumbnail, get_draft_diagram_thumbnail_progress,
@@ -9514,6 +9516,7 @@ pub fn run() {
             project_text_inventory,
             project_text_read,
             project_text_revision,
+            get_project_bibliography,
             project_search_related_files,
             cancel_project_text_request,
             is_probably_plain_text_file,

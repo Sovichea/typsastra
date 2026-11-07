@@ -180,7 +180,7 @@ pub fn project_search_related_files_blocking(
     Ok(files)
 }
 
-fn canonical_root(workspace_root_path: &str) -> Result<PathBuf, String> {
+pub(crate) fn canonical_root(workspace_root_path: &str) -> Result<PathBuf, String> {
     let root = dunce::canonicalize(workspace_root_path)
         .map_err(|error| format!("Failed to resolve the workspace: {error}"))?;
     if !root.is_dir() {
@@ -221,7 +221,7 @@ fn modified_ms(metadata: &fs::Metadata) -> u64 {
         .unwrap_or_default()
 }
 
-fn is_excluded_directory(entry: &ignore::DirEntry) -> bool {
+pub(crate) fn is_excluded_directory(entry: &ignore::DirEntry) -> bool {
     if !entry
         .file_type()
         .is_some_and(|file_type| file_type.is_dir())
