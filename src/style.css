@@ -6538,6 +6538,258 @@ button.welcome-item:disabled {
   font: 12px/1.45 var(--font-family-sans);
 }
 
+.references-sidebar {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.references-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+  min-height: 52px;
+  padding: 6px 10px 7px;
+  gap: 1px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.references-entry.selected {
+  background: var(--ui-navigation-background);
+}
+
+.references-entry-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.references-entry-type {
+  flex: 0 0 auto;
+  color: var(--ui-header-text);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.references-entry-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.references-entry-authors {
+  overflow: hidden;
+  color: var(--ui-header-text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.references-entry-meta {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ui-header-text);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.references-entry-key {
+  flex: 0 0 auto;
+  color: var(--ui-text);
+  font-family: var(--editor-code-font);
+}
+
+.references-entry-source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.references-entry-cited {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--ui-accent-color);
+}
+
+.references-problem {
+  display: flex;
+  align-items: flex-start;
+  height: auto;
+  min-height: 44px;
+  padding: 6px 10px;
+  gap: 8px;
+  white-space: normal;
+}
+
+.references-problem-severity {
+  flex: 0 0 auto;
+  color: var(--ui-warning-icon-color);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.references-problem-severity.error {
+  color: var(--ui-error-color, #c44);
+}
+
+.references-problem-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.references-problem-message {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.references-problem-meta {
+  overflow: hidden;
+  color: var(--ui-header-text);
+  font: 10px var(--editor-code-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.references-details {
+  flex: 0 0 auto;
+  max-height: 42%;
+  overflow: auto;
+  padding: 10px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.references-details:has(> .image-tool-empty) {
+  max-height: 68px;
+}
+
+.references-detail-heading {
+  min-width: 0;
+}
+
+.references-detail-heading h2 {
+  margin: 2px 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.references-detail-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  font-size: 10.5px;
+}
+
+.references-detail-meta span {
+  color: var(--ui-header-text);
+}
+
+.references-detail-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.references-actions {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.references-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  margin: 8px 0;
+  font-size: 10.5px;
+}
+
+.references-fields dt {
+  color: var(--ui-header-text);
+}
+
+.references-fields dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.references-citations h3,
+.references-bibliography h3 {
+  margin: 8px 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.references-citation-site {
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-text);
+  background: transparent;
+  font: 10px var(--editor-code-font);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.references-citation-site:hover {
+  background: var(--ui-hover);
+}
+
+.references-bibliography {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.references-bibliography-note {
+  color: var(--ui-header-text);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.references-bibliography button {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.references-style {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--ui-header-text);
+  font-size: 11px;
+}
+
+.references-status {
+  margin-top: 6px;
+  color: var(--ui-header-text);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .preview-actions.markdown-preview-toolbar {
   justify-content: flex-start;
 }
