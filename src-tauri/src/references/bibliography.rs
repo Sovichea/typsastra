@@ -101,6 +101,10 @@ pub(crate) fn build_bibliography_index(
             });
             continue;
         };
+        // Editor tabs normalize CRLF and CR to LF before presenting text.
+        // Parse the same representation so entry ranges select correctly when
+        // the bibliography is opened in the source editor.
+        let text = text.replace("\r\n", "\n").replace('\r', "\n");
         let parsed = parse_bibliography(&text);
         files.push(BibliographyFile {
             path: read.path.clone(),
@@ -795,6 +799,27 @@ mod tests {
             utf16_len(&text[..first.end]),
             "@article{one, title={Tiêu đề}}".encode_utf16().count()
         );
+    }
+
+    #[test]
+    fn normalizes_crlf_ranges_for_editor_navigation() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        std::fs::write(
+            root.join("refs.bib"),
+            "@article{one,\r\n  title={First},\r\n}\r\n",
+        )
+        .unwrap();
+
+        let index = build_bibliography_index(root.to_str().unwrap()).unwrap();
+        let entry = &index.entries[0];
+        let normalized = "@article{one,\n  title={First},\n}\n";
+        assert_eq!(
+            &normalized[entry.from_utf16..entry.to_utf16],
+            "@article{one,\n  title={First},\n}"
+        );
+        assert!(entry.raw.contains('\n'));
+        assert!(!entry.raw.contains('\r'));
     }
 
     #[test]
