@@ -72,6 +72,7 @@ the reference documents when you need exact behavior or contributor contracts.
 - [v0.8.0 Unicode PDF Reliability implementation plan](V0_8_0_UNICODE_PDF_RELIABILITY_IMPLEMENTATION_PLAN.md)
 - [v0.8.0 release qualification](V0_8_0_RELEASE_QUALIFICATION.md)
 - [Deferred portable Active File preview plan](V0_8_0_ACTIVE_FILE_PREVIEW_IMPLEMENTATION_PLAN.md)
+- [v0.11 references implementation plan](V0_11_0_REFERENCES_IMPLEMENTATION_PLAN.md)
 - [v1.0 implementation plan](V1_RELEASE_IMPLEMENTATION_PLAN.md)
 
 First-class RTL editor behavior remains a future pre-1.0 milestone. Current
