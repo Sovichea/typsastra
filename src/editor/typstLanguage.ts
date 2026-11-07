@@ -1,5 +1,5 @@
-import { StreamLanguage } from "@codemirror/language";
-import type { IndentContext, StreamParser, StringStream } from "@codemirror/language";
+import { StreamLanguage, StringStream } from "@codemirror/language";
+import type { IndentContext, StreamParser } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 
 // Saved state of the hash expression that encloses a nested one, so a `#` rule
@@ -258,6 +258,80 @@ const typstParser: StreamParser<TypstParserState> = {
 };
 
 export const typstLanguage = StreamLanguage.define(typstParser);
+
+export type TypstSourceMode = "markup" | "math" | "code";
+
+export type TypstSourceContext = {
+  /** Typst parsing mode immediately before the requested position. */
+  mode: TypstSourceMode;
+  /** The last token that ended at or before the position. */
+  token: string | null;
+  /** Token containing the position, when the position falls inside one. */
+  insideToken: string | null;
+};
+
+/**
+ * Replays the stream parser up to a source position so callers can choose
+ * context-appropriate insertion syntax without depending on editor syntax-tree
+ * availability. Pass editor-normalized text (LF line endings). This is
+ * intentionally a single pass and is only used for explicit actions such as
+ * citation insertion.
+ */
+export function typstSourceContextAt(source: string, position: number): TypstSourceContext {
+  const target = Math.max(0, Math.min(position, source.length));
+  const state = typstParser.startState!(2);
+  let token: string | null = null;
+  let insideToken: string | null = null;
+  let lineStart = 0;
+
+  while (lineStart <= target) {
+    let lineEnd = source.indexOf("\n", lineStart);
+    if (lineEnd < 0) lineEnd = source.length;
+    const line = source.slice(lineStart, lineEnd);
+    const stream = new StringStream(line, 2, 2);
+    const targetInLine = Math.min(Math.max(target - lineStart, 0), line.length);
+
+    // The stream parser applies this reset when it sees the first token on a
+    // new line. Apply it before replaying so a position at the start of a line
+    // does not inherit a completed expression from the previous line.
+    if (lineStart > 0 && state.inCodeExpression && !state.isStatement
+      && state.bracketStack.length <= state.expressionBracketDepth) {
+      endCodeExpression(state);
+    }
+
+    while (stream.pos < targetInLine) {
+      const start = stream.pos;
+      token = typstParser.token(stream, state);
+      if (stream.pos === start) stream.next();
+      if (start < targetInLine && targetInLine < stream.pos) {
+        insideToken = token;
+      }
+      if (stream.pos >= targetInLine) break;
+    }
+
+    if (lineEnd >= target) {
+      // A simple expression ends at the line break rather than spilling into
+      // the following line. Match that behavior for a caret at the line end.
+      if (targetInLine === line.length
+        && state.inCodeExpression
+        && !state.isStatement
+        && state.bracketStack.length <= state.expressionBracketDepth) {
+        endCodeExpression(state);
+      }
+      break;
+    }
+    lineStart = lineEnd + 1;
+  }
+
+  let mode = getCurrentMode(state);
+  // A completed hash expression is only closed when the parser reads the next
+  // markup token. At a caret immediately before a citation, treat that
+  // position as markup so insertion does not use code syntax.
+  if (mode === "code" && /^\s*@[\p{L}\p{N}_:-]+/u.test(source.slice(target))) {
+    mode = "markup";
+  }
+  return { mode, token, insideToken };
+}
 
 
 function readToken(stream: StringStream, state: TypstParserState): string | null {
