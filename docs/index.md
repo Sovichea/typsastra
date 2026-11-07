@@ -132,6 +132,7 @@ export](tutorials/PROJECT_IMPORT_AND_EXPORT.md).
 - [Create from templates](tutorials/PROJECT_TEMPLATES.md) — browse Universe, offline, and user templates.
 - [PDF preview and synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md) — work with live preview and source navigation.
 - [Search a project](tutorials/PROJECT_SEARCH.md) — find and review replacements across project files.
+- [References and citations](tutorials/REFERENCES.md) — search a local bibliography, insert citations, and add a bibliography block.
 - [Editor productivity](tutorials/EDITOR_PRODUCTIVITY.md) — navigation, recovery, shortcuts, and editing workflows.
 - [Image Tools](tutorials/IMAGE_TOOLS.md) — inspect, crop, and optimize project images.
 - [Table Tools](tutorials/TABLE_TOOLS.md) — create, link, and edit Typst tables.

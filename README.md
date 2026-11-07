@@ -85,6 +85,8 @@ Khmer is the first language with deep support, including tailored cursor and del
   outlines.
 - **Image Tools** — raster inspection, non-destructive optimization previews,
   optimized copies, and explicit reference updates.
+- **References and citations** — search a project BibTeX index, inspect entries,
+  insert context-aware citations, and add or reveal a bibliography block.
 - **Markdown live preview** — sanitized GFM with workspace-bound local
   resources.
 - **Low-Memory Mode** — one-shot compilation and a cached navigation index for

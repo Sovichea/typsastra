@@ -18,6 +18,9 @@ walkthrough.
 - [Search a project](tutorials/PROJECT_SEARCH.md) — search literal, regex, or
   fuzzy matches across project files and review replacements across files with
   glob filters and stale-safe navigation.
+- [References and citations](tutorials/REFERENCES.md) — search a local BibTeX
+  bibliography, inspect entries, insert citations, and add or reveal a
+  bibliography block.
 - [Standalone files and PDFs](tutorials/STANDALONE_FILES_AND_PDFS.md) — open
   individual documents and use PDF reading, search, selection, and copy tools;
   opt into the experimental Unicode export engine when needed.
@@ -71,7 +74,8 @@ walkthrough.
   originals; and exporting a PDF requires an explicit destination.
 
 See the [demo project](demo-project/README.md) for a small workspace that
-combines included chapters, local images, Khmer text, and a linked table.
+combines included chapters, a local bibliography, local images, Khmer text, and
+a linked table.
 
 ## Bundled examples
 

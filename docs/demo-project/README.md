@@ -17,8 +17,9 @@ content.
    labeled placeholders while preserving their layout. Hover a placeholder to
    inspect its cached rendering.
 4. Open `chapters/05-references.typ` to inspect citations from `refs.bib` and
-   the cross-references to its heading and citation table. The bibliography is
-   rendered at the end of `main.typ`.
+   the cross-references to its heading and citation table. Open **References**
+   to search the local bibliography, inspect entries, and insert citations. The
+   bibliography is rendered at the end of `main.typ`.
 5. Switch to **Table Tools** and select the **Basic table** already stored in
    this demo project's configuration. Its ID matches the `//@table:basic_table`
    anchor in `main.typ`, and its generated Typst block is synchronized there.

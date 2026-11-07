@@ -99,6 +99,7 @@ debug app to use another loopback bind address. The API is not started in releas
 - `POST /ui/action` performs the named editor/tool action through the running frontend and returns `202 Accepted`. Example actions:
   - `{"action":"sidebar-tool","tool":"images"}`
   - `{"action":"sidebar-tool","tool":"search"}`
+  - `{"action":"sidebar-tool","tool":"references"}`
   - `{"action":"project-templates"}`
   - `{"action":"project-language","script":"Latn","languageTag":"en-US"}`
   - `{"action":"settings-open"}`
