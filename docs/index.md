@@ -89,6 +89,14 @@ active. The tab-list menu reaches every open source tab.
 
 ![Tab list menu listing the main document and included chapters](assets/screenshots/example-tab-list.png)
 
+## v0.9: Table tools, standalone files, and faster editing
+
+Typsastra v0.9 introduced the Table Tool and template-based project creation,
+then added programmable shortcuts, standalone file support, stronger completion,
+language-provider compatibility, and faster preview navigation through v0.9.6.
+
+Read the [v0.9 release notes](RELEASE_NOTES_V0.9.md).
+
 ## Preview and media examples
 
 The `06-preview-and-media` examples cover Draft Preview, nested image helper
@@ -102,11 +110,6 @@ See [Draft Preview](tutorials/DRAFT_PREVIEW.md), [PDF preview and
 synchronization](tutorials/PDF_PREVIEW_AND_SYNC.md), [Image
 Tools](tutorials/IMAGE_TOOLS.md), and [Markdown live
 preview](tutorials/MARKDOWN_PREVIEW.md).
-
-The previous v0.9.6 update improved Hunspell dictionary compatibility, added
-LibreOffice spelling variants, streamlined language-provider management, and
-fixed selection wrapping, paste, preview freshness, and stale diagnostic
-behavior. See the [v0.9.6 release notes](RELEASE_NOTES_V0.9.6.md).
 
 ## Tools and templates examples
 

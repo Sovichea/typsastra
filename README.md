@@ -52,76 +52,48 @@ It serves writers and researchers whose languages are not always well supported 
 
 Khmer is the first language with deep support, including tailored cursor and deletion behavior, spellcheck, and word completion. Khmer demonstrates the depth Typsastra aims to provide; it is not the boundary of the project. The editing-policy and language-provider architecture is designed so other languages can add their own behavior without changing or weakening Khmer support.
 
-## v0.10.2: Draft diagrams and workflow polish
+## Key features
 
-Typsastra v0.10.2 extends Draft Preview to Fletcher diagrams and CeTZ canvases.
-Supported diagrams become measured placeholders with hover thumbnails, while
-visible-page work is prioritized as thumbnail caches fill in the background.
-
-Manual Recompile now forces a fresh compilation, Draft inverse sync places the
-caret at the start of the source expression without selecting it, and new or
-externally created projects inherit the global document-language defaults on
-first open. Fresh installs start without a release summary, and **Create New
-Project** is available with `Ctrl+Shift+N` or `Cmd+Shift+N`.
-
-<img src="./docs/assets/screenshots/example-draft-diagrams.png" alt="Draft Preview showing a Fletcher diagram placeholder with its hover thumbnail" width="800"/>
-
-See the [v0.10.2 release notes](./docs/RELEASE_NOTES_V0.10.2.md).
-
-## v0.10.1: Image helper chains and editor polish
-
-Typsastra v0.10.1 makes nested image helpers work consistently in both preview
-directions. Inverse sync selects the outermost call that supplied the image,
-and Draft Preview resolves same-file helper chains with their width and height
-parameters.
-
-Cached preview restores now warm the source map before the first inverse-sync
-click. Path-taking Typst functions warn about parent-relative paths and offer a
-root-relative quick fix, and missing toolchains use a non-blocking title-bar
-badge instead of a startup modal.
-
-<img src="./assets/screenshot-example-draft.png" alt="Draft Preview showing an image placeholder with its hover thumbnail" width="800"/>
-
-See the [v0.10.1 release notes](./docs/RELEASE_NOTES_V0.10.1.md).
-
-## v0.10.0: Search, recovery, and navigation
-
-Typsastra v0.10.0 adds project-wide search and reviewed replacement, a shared
-main-document outline, Back/Forward source navigation, unsaved-work recovery,
-and global default document languages.
-
-These screenshots use the writable `07-editor-workflows` examples. Open
-**Open Examples** from the welcome screen to edit the three-file notebook
-safely.
-
-### Search and replace across a project
-
-<img src="./assets/screenshot-example-search.png" alt="Project search across a three-file field notebook" width="800"/>
-
-<img src="./assets/screenshot-example-replace.png" alt="Reviewed replacement showing before and after lines across files" width="800"/>
-
-### Recover unsaved work
-
-Typsastra snapshots unsaved text outside the project and reviews recovery
-snapshots as unified diffs before restoring them as unsaved buffers.
-
-<img src="./assets/screenshot-example-recovery.png" alt="Recovery review showing an unsaved main.typ buffer and a unified diff" width="800"/>
-
-### Main-document outline, tab navigation, and language defaults
-
-The outline follows the configured main document while an included chapter is
-active. The tab-list menu reaches every open source tab, and new projects inherit
-the default document-language assignments configured in Settings.
-
-<img src="./assets/screenshot-example-outline.png" alt="Shared main-document outline while an included chapter is active" width="800"/>
-
-<img src="./assets/screenshot-example-tabs.png" alt="Tab list menu listing the main document and included chapters" width="800"/>
-
-<img src="./assets/screenshot-example-language.png" alt="Default document-language settings for new projects" width="800"/>
-
-See the [v0.10.0 release notes](./docs/RELEASE_NOTES_V0.10.0.md), the [project
-search](./docs/tutorials/PROJECT_SEARCH.md), and [editor
-productivity](./docs/tutorials/EDITOR_PRODUCTIVITY.md) guides.
+- **Draft Preview for images and diagrams** — layout-preserving placeholders for
+  supported images, Fletcher diagrams, and CeTZ canvases, with cached hover
+  thumbnails and automatic background measurement.
+- **Table Tools** — a spreadsheet-style grid, linked table blocks, reusable
+  styles, CSV/TSV import, and lossless `.typ` export.
+- **Project-wide search and reviewed replacement** — find and replace across
+  files with an explicit review step.
+- **Unsaved-work recovery** — snapshots kept outside the project and reviewed as
+  unified diffs before restoring them as unsaved buffers.
+- **Shared main-document outline and navigation** — an outline while editing
+  included chapters, Back/Forward history, and a tab-list menu.
+- **Project templates** — create from Typst Universe, downloaded, managed user
+  `.typsastra`, or blank projects.
+- **Standalone Typst, Markdown, and PDF files** — edit or view files outside a
+  project, and promote a standalone Typst document into a full project.
+- **Complex-script editing** — Unicode-safe ranges, script-aware cursor and
+  deletion behavior, Khmer deep support, Lao segmentation, and bundled English
+  spellcheck with optional Hunspell dictionaries.
+- **Language and typography controls** — document-language routing, script-aware
+  spellcheck and completion, font fallback, and per-script visual scaling.
+- **Tinymist diagnostics and completion** — live errors, completion, formatting,
+  and source maps through a validated system or managed toolchain.
+- **PDF preview and synchronization** — virtualized live preview, forward and
+  inverse sync, preserved scroll position, color modes, zoom, live-preview
+  search, and docked or undocked windows.
+- **Reliable PDF export** — the optional Enhanced Unicode Engine, cancellable and
+  transactional compilation, and explicit compiler provenance.
+- **Standalone PDF viewing** — Unicode-aware search, selection, copy, links, and
+  outlines.
+- **Image Tools** — raster inspection, non-destructive optimization previews,
+  optimized copies, and explicit reference updates.
+- **Markdown live preview** — sanitized GFM with workspace-bound local
+  resources.
+- **Low-Memory Mode** — one-shot compilation and a cached navigation index for
+  very long documents.
+- **Local-first projects** — portable Typst source; multi-file chapters,
+  includes, bibliographies, figures, and data; `.typsastra` workspace state;
+  machine-local render caches; recent-project history; and signed update
+  detection.
+- **Customizable keyboard shortcuts** for application and editor commands.
 
 ## Bundled examples
 
@@ -148,224 +120,13 @@ is missing.
 
 <img src="./assets/screenshot-example-table.png" alt="Table Tools editing a linked table in the bundled example" width="800"/>
 
-## v0.9.6: Language and editing reliability
+## Screenshots
 
-Improved Hunspell dictionary compatibility and LibreOffice spelling variants,
-clearer language-provider management, and fixes for selection wrapping, paste,
-preview freshness, and stale diagnostics refine everyday editing.
-
-See the [v0.9.6 release notes](./docs/RELEASE_NOTES_V0.9.6.md).
-
-## v0.9.5: UX and app performance
-
-Faster file opening and tab switching, reusable live previews, and more reliable
-rendering and scroll restoration make large projects smoother to navigate.
-Live-preview search, configurable zoom, clearer source-status feedback, and an
-undocked outline navigator improve everyday authoring.
-
-See the [v0.9.5 release notes](./docs/RELEASE_NOTES_V0.9.5.md) for the full update.
-
-## v0.9.0 feature showcase
-
-Typsastra v0.9.0 adds a full table authoring tool and a template-based way to
-start new projects, alongside Khmer segmenter updates and preview-sync fixes.
-
-### Table Tool
-
-Build Typst tables from a spreadsheet-style grid with rows, columns, multi-row
-headers, merged cells, horizontal and vertical alignment, fills, text color,
-insets, rotation, and page-break control. Choose from default, report, banded,
-and booktabs styles, add explicit rules and row/column tracks, import CSV/TSV,
-and sort or transpose data. Link a table into a document with `//@table:<id>`
-and the builder stays synchronized with the generated code; export and import
-losslessly as `.typ`.
-
-<img src="./assets/screenshot-create-table.png" alt="Creating a new table from a built-in sample in the Table Tool" width="800"/>
-
-<img src="./assets/screenshot-table-tool.png" alt="Typsastra Table Tool with a spreadsheet-style cell grid, formatting toolbar, and a live table preview" width="800"/>
-
-
-### Create New Project from templates
-
-Start a project from a searchable Typst Universe template, an offline copy of a
-template you downloaded before, a managed user `.typsastra` template, or a blank
-project. Templates are cached as portable multi-directory `.typsastra` archives,
-and each project is created as an ordinary multi-directory project.
-
-<img src="./assets/screenshot-create-project.png" alt="Create New Project browser with Typst Universe, downloaded, and user template tabs" width="800"/>
-
-### Language tools and preview fixes
-
-The bundled Khmer segmenter is updated to v0.3.2 with reviewed phrase-collision
-exclusions and out-of-vocabulary diagnostics. Image Tools adds non-destructive
-cropping to the optimized copy and selects the saved copy after saving. Clicking
-the live preview to inverse-sync no longer re-scrolls the preview, the undocked
-preview window is no longer docked when a tab activates, and Table Tools keeps
-its explorer visible.
-
-## v0.8.0 feature showcase
-
-Typsastra v0.8.0 focuses on reliable multilingual PDF export and standalone
-viewing. It adds the optional Enhanced Unicode Engine v0.4.0, expands direct PDF
-search and selection, preserves preview context across recompilation, and makes
-project image insertion available through drag-and-drop and clipboard paste.
-Tinymist remains authoritative for live preview, diagnostics, completion,
-formatting, and source synchronization.
-
-### Enhanced Unicode PDF export
-
-The optional Enhanced Unicode Engine improves logical text extraction in
-exported Khmer, Arabic, Indic, Thai, Lao, and mixed-script documents. Typsastra
-installs verified platform packages on demand, keeps engine use explicit, and
-reports which compiler produced each export. Compilation is cancellable and
-transactional, so a failed or cancelled export does not replace an existing
-valid PDF.
-
-
-
-https://github.com/user-attachments/assets/f4730ab5-437f-4dbb-af4b-cb21c7cde3e3
-
-
-
-### Unicode-aware standalone PDF viewer
-
-Directly opened PDFs use the bundled PDFium viewer, while Typst live preview
-continues to use Typsastra's patched PDF.js path. Standalone PDFs support
-Unicode-aware search, semantic text selection, plain or formatted copy,
-internal and external links, document outlines, and clear errors for
-password-protected, malformed, empty, or unsupported files.
-
-
-
-https://github.com/user-attachments/assets/508ff81f-525e-48cf-9674-a60a1e6d52f2
-
-
-
-### Drag, drop, and paste images
-
-External files can be dropped into Explorer destinations without overwriting
-existing files. Project images, external images, and clipboard images can be
-inserted directly at the editor caret. Multi-image batches share one choice
-between plain `image(...)` calls and individual `figure(...)` calls with
-editable captions; imported and pasted files receive collision-safe names in
-the project `images` directory.
-
-
-
-https://github.com/user-attachments/assets/990277b9-b9df-4154-b6b5-bba293f07dc4
-
-
-
-### Established authoring workflows
-
-v0.8.0 retains secure Markdown live preview, PDF color modes, Image Tools,
-machine-local project caches, Draft Preview, document typography, language
-tools, and source navigation from earlier releases. Choose **Open Examples**
-from the welcome screen to explore the current capability-based exercises.
-
-### Experimental Low-Memory Mode
-
-Low-Memory Mode is an opt-in workflow for very long documents and
-memory-constrained computers. Typsastra generates the PDF and an approximate
-line-level navigation index with a one-shot Tinymist process, then terminates
-Tinymist. The cached index supports manual source-to-preview navigation and
-PDF-click inverse sync without keeping the compiler resident. Live LSP
-diagnostics, Tinymist completion, formatting, and exact continuous sync remain
-available in normal mode instead.
-
-
-https://github.com/user-attachments/assets/563b6809-4003-4901-b5ee-4c56ed959d11
-
-
-Read the [Low-Memory Mode guide](./docs/tutorials/LOW_MEMORY_MODE.md) for setup,
-cache behavior, synchronization details, and current limitations.
-
-### Draft Preview
-
-Draft Preview replaces supported image calls, Fletcher diagrams, and CeTZ canvases in Typsastra’s private render mirror with lightweight, layout-preserving placeholders. Hover over a placeholder to inspect a cached thumbnail without adding the full asset to the draft document. Normal Preview and exported PDFs continue to use the original images and diagrams.
-
-
-
-https://github.com/user-attachments/assets/b1c45806-8747-4180-8e52-dbe8222f82db
-
-
-
-### Document typography and language tools
-
-Configure fonts, visual scale, fallback order, and prepared roles through Document Typography. Language tools are independent: the status bar shows the script-language pair under the caret and opens a project-wide Document Languages dialog for ambiguous scripts. Portable assignments live in `.typsastra/config.json`; single-language scripts such as Khmer resolve automatically.
-
-
-
-https://github.com/user-attachments/assets/f58e3133-e900-4a4b-9c63-7dee587b7e90
-
-Fine per-script scaling can optically balance fonts whose glyphs appear at
-different sizes even when Typst gives them the same point size:
+### Project workspace
 
 <p align="center">
-  <img src="./assets/screenshot-font-scaling.png" alt="Khmer and Latin text before and after a 10 percent Khmer font adjustment in Typsastra" width="800"/>
+  <img src="./assets/screenshot-welcome.png" alt="Typsastra welcome screen" width="800"/>
 </p>
-
-
-
-### Source and document navigation
-
-Press `Alt+Enter` to trigger forward sync manually and reveal the current source location in the preview without animating through a long document. Outline navigation uses the same document relationship while keeping keyboard focus predictable.
-
-
-
-https://github.com/user-attachments/assets/c3e44128-9e7b-49ff-aec2-3965de3572e1
-
-
-
-Inverse sync and clickable references make it possible to move from rendered content back to its source, or follow internal and external document links directly in the preview. Hold `Ctrl` on Windows and Linux, or `Command` on macOS, while the pointer is inside the preview to reveal clickable references.
-
-
-
-https://github.com/user-attachments/assets/56add64e-5d10-47fc-8b0a-30ce1388c46f
-
-
-
-<details>
-<summary>More v0.6.0 demonstrations</summary>
-
-### Image optimization guidance
-
-Typsastra profiles referenced raster images and reports unusually expensive assets without modifying them. Editor-gutter and preview-toolbar warnings help authors find images that may slow compilation or enlarge exported PDFs.
-
-In this context, a high-resolution or pathological image is one whose decoded
-pixel workload is disproportionately large for the size at which it appears in
-the document. A compressed image may occupy only a few megabytes on disk while
-expanding to hundreds of megabytes in memory, especially when a very large
-photograph is scaled down to a small figure. These images can slow Typst
-compilation, increase Tinymist memory usage in image-heavy documents, and slow
-PDF loading, page rendering, and repeated live-preview updates.
-
-Typsastra focuses on optimized document creation. Its current recommendations
-identify expensive images and explain whether downscaling or re-encoding may
-help, without changing the source asset automatically. Future releases will
-add more non-destructive guidance and explicit optimization tools so authors
-can improve preview and exported-PDF performance while retaining control over
-image quality and project files.
-
-
-
-https://github.com/user-attachments/assets/b9de3d81-47e7-4b34-b3d8-2fdb4e702e19
-
-
-
-### Docked and undocked preview
-
-The same virtualized PDF preview can be docked beside the editor or moved into a separate window while retaining its theme, controls, document position, Draft Preview interaction, and source-navigation behavior.
-
-
-
-https://github.com/user-attachments/assets/c1278ad8-eca5-43c7-8aed-ba371ee8a14e
-
-
-
-</details>
-
-## Screenshots
 
 ### Editor and document preview
 
@@ -379,11 +140,26 @@ https://github.com/user-attachments/assets/c1278ad8-eca5-43c7-8aed-ba371ee8a14e
   <img src="./assets/screenshot-khmer-word-suggestion.png" alt="Khmer word completion in Typsastra" width="800"/>
 </p>
 
-### Project workspace
+### Draft Preview
 
-<p align="center">
-  <img src="./assets/screenshot-welcome.png" alt="Typsastra welcome screen" width="800"/>
-</p>
+![Draft Preview showing a Fletcher diagram placeholder with its hover thumbnail](./docs/assets/screenshots/example-draft-diagrams.png)
+
+### Image Tools
+
+![Image Tools showing asset metadata, references, crop controls, and an optimization preview](./docs/assets/screenshots/example-image-tools.png)
+
+### Table Tools
+
+![Typsastra Table Tool with a spreadsheet-style cell grid, formatting toolbar, and a live table preview](./assets/screenshot-table-tool.png)
+
+### Project creation and search
+
+![Create New Project browser with Typst Universe, downloaded, and user template tabs](./assets/screenshot-create-project.png)
+
+![Project search across a multi-file project](./assets/screenshot-example-search.png)
+
+![Recovery review showing an unsaved buffer and a unified diff](./assets/screenshot-example-recovery.png)
+
 
 ## Why Typsastra?
 
@@ -392,33 +168,6 @@ Most editors treat complex-script support as a font or rendering concern. Reliab
 Typsastra treats these as core editor responsibilities. Script-aware editing policies remain separate from dictionaries and language tools, allowing each language to tailor only the behavior it owns. Khmer is the reference implementation for this architecture.
 
 Typsastra also treats a document as a project rather than an isolated file. A real research document may contain a main file, templates, chapters, includes, bibliography databases, figures, data, and files that can be previewed independently. Typsastra is being designed around that structure while preserving compatibility with the standard Typst ecosystem.
-
-## Highlights
-
-- Local-first desktop authoring with ordinary, portable Typst source files.
-- CodeMirror editing with Unicode-safe ranges and complex-script font fallback.
-- Script-aware editing-policy registry with deeply tailored Khmer behavior.
-- Khmer spellcheck and word completion through the pinned Khmer segmenter.
-- Lao language support with ICU4X word segmentation and optional `lo_LA` Hunspell dictionary.
-- English spellcheck bundled by default, with optional Hunspell-compatible dictionaries for additional languages.
-- Independent controls for script-aware editing, spellcheck, and typing suggestions.
-- Project language routing: the status bar reports the caret's script-language pair, ambiguous scripts use portable project assignments, and native providers load only for detected prose.
-- Tinymist diagnostics with validated system or managed toolchain selection.
-- Hardware-accelerated, virtualized PDF preview designed for responsive long-document scrolling and constrained memory use.
-- Persistent document-color, dark, and experimental inverted preview modes for
-  compiled and standalone PDFs.
-- Direct in-app PDF viewing with editable current-page navigation.
-- Sanitized Markdown live preview with workspace-bound local resources.
-- Project Image Tools for raster inspection, optimization previews, optimized
-  copies, and explicit static-reference updates.
-- Machine-local project render caches with hard-link/copy accounting,
-  reveal-in-explorer actions, and consent-based migration from legacy caches.
-- Main-document preview workflows for multi-file projects.
-- Explicit source-to-preview navigation through the preview toolbar or keyboard shortcut.
-- Portable `.typsastra` workspace state, lazy restored tabs, and confirmation before loading large files.
-- Searchable recent-project history, signed update detection, and explicit Tinymist lifecycle management.
-- Project support for templates, chapters, includes, bibliography files, figures, and external assets.
-- Contributor framework for adding new complex-script languages without modifying core editor code.
 
 ## Language support
 
@@ -509,10 +258,14 @@ installation is not required for normal use.
 - [Enhanced Unicode Engine v0.3.0 benchmarks](./docs/ENHANCED_UNICODE_ENGINE_BENCHMARKS_V0.3.0.md)
 - [Roadmap](./docs/ROADMAP.md)
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)
-- [Typsastra v0.8.0 release notes](./docs/RELEASE_NOTES_V0.8.0.md)
-- [Typsastra v0.7.0 release notes](./docs/RELEASE_NOTES_V0.7.0.md)
-- [Typsastra v0.6.3 release notes](./docs/RELEASE_NOTES_V0.6.3.md)
-- [Typsastra v0.6.2 release notes](./docs/RELEASE_NOTES_V0.6.2.md)
+- [Typsastra v0.10.2 release notes](./docs/RELEASE_NOTES_V0.10.2.md)
+- [Typsastra v0.10.1 release notes](./docs/RELEASE_NOTES_V0.10.1.md)
+- [Typsastra v0.10.0 release notes](./docs/RELEASE_NOTES_V0.10.0.md)
+- [Typsastra v0.9 release notes](./docs/RELEASE_NOTES_V0.9.md)
+- [Typsastra v0.8 release notes](./docs/RELEASE_NOTES_V0.8.0.md)
+- [Typsastra v0.7 release notes](./docs/RELEASE_NOTES_V0.7.0.md)
+- [Typsastra v0.6 release notes](./docs/RELEASE_NOTES_V0.6.0.md)
+- [Typsastra v0.5 release notes](./docs/RELEASE_NOTES_V0.5.0.md)
 
 ## Contributing a language
 

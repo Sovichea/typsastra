@@ -63,10 +63,7 @@ nav:
       - v0.10.2 — Draft diagrams and workflow polish: RELEASE_NOTES_V0.10.2.md
       - v0.10.1 — Image helper chains and editor polish: RELEASE_NOTES_V0.10.1.md
       - v0.10.0 — Search, recovery, and navigation: RELEASE_NOTES_V0.10.0.md
-      - v0.9.6 — Language and editing fixes: RELEASE_NOTES_V0.9.6.md
-      - v0.9.5 — UX and performance: RELEASE_NOTES_V0.9.5.md
-      - v0.9.4: RELEASE_NOTES_V0.9.4.md
-      - v0.9.3: RELEASE_NOTES_V0.9.3.md
+      - v0.9 — Table tools, standalone files, and faster editing: RELEASE_NOTES_V0.9.md
   - Tutorials:
       - Start here:
           - Install Typsastra: INSTALL.md

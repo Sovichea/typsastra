@@ -169,3 +169,14 @@ To bypass the bundled CLI explicitly, install the version resolved in
 cargo install tauri-cli --version 2.11.3 --locked
 cargo tauri build
 ```
+
+### Release notes and README history
+
+The README is capability-based: describe the features available in Typsastra,
+not the release that introduced each one.
+
+Keep per-patch release notes only for the current minor line. When a new minor
+line supersedes it, merge those patch notes into a single
+`docs/RELEASE_NOTES_V<minor>.md` page and update the release indexes and MkDocs
+navigation. Older patch notes remain in the repository as history but are not
+listed separately.
