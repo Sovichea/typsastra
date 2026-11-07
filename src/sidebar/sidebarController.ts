@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 
-export type SidebarTool = "explorer" | "search" | "images" | "tables";
+export type SidebarTool = "explorer" | "search" | "images" | "tables" | "references";
 
 export interface SidebarControllerState {
   visible: boolean;
@@ -18,6 +18,8 @@ export interface SidebarControllerPort {
   hideImageTools(): void;
   showTableTools(): void;
   hideTableTools(): void;
+  showReferences?(): void;
+  hideReferences?(): void;
   showRestoringPreview(): void;
   restoreDocumentPreview(): void;
   setMainPreviewVisibleWhileUndocked(visible: boolean): void;
@@ -55,6 +57,8 @@ export class SidebarController {
     this.state = { visible: true, activeTool: "explorer" };
     document.body.classList.remove("image-tools-active", "table-tools-active");
     document.getElementById("project-search-sidebar-content")?.classList.add("hidden");
+    document.getElementById("references-sidebar-content")?.classList.add("hidden");
+    this.port.hideReferences?.();
   }
 
   public toggle(): void {
@@ -82,8 +86,9 @@ export class SidebarController {
     const showingImages = tool === "images";
     const showingTables = tool === "tables";
     const showingSearch = tool === "search";
-    const showingExplorer = !showingImages && !showingTables && !showingSearch;
-    const showingEditor = showingExplorer || showingSearch;
+    const showingReferences = tool === "references";
+    const showingExplorer = !showingImages && !showingTables && !showingSearch && !showingReferences;
+    const showingEditor = showingExplorer || showingSearch || showingReferences;
     const leavingPreviewTool = previousTool === "images" || previousTool === "tables";
     document.body.classList.toggle("image-tools-active", showingImages);
     document.body.classList.toggle("table-tools-active", showingTables);
@@ -91,18 +96,22 @@ export class SidebarController {
     document.getElementById("project-search-sidebar-content")?.classList.toggle("hidden", !showingSearch);
     document.getElementById("image-tools-sidebar-content")?.classList.toggle("hidden", !showingImages);
     document.getElementById("tables-sidebar-content")?.classList.toggle("hidden", !showingTables);
+    document.getElementById("references-sidebar-content")?.classList.toggle("hidden", !showingReferences);
     const explorerButton = document.getElementById("sidebar-explorer-button") as HTMLButtonElement | null;
     const searchButton = document.getElementById("sidebar-search-button") as HTMLButtonElement | null;
     const imagesButton = document.getElementById("sidebar-images-button") as HTMLButtonElement | null;
     const tablesButton = document.getElementById("sidebar-tables-button") as HTMLButtonElement | null;
+    const referencesButton = document.getElementById("sidebar-references-button") as HTMLButtonElement | null;
     explorerButton?.classList.toggle("active", showingExplorer);
     searchButton?.classList.toggle("active", showingSearch);
     imagesButton?.classList.toggle("active", showingImages);
     tablesButton?.classList.toggle("active", showingTables);
+    referencesButton?.classList.toggle("active", showingReferences);
     explorerButton?.setAttribute("aria-pressed", String(showingExplorer));
     searchButton?.setAttribute("aria-pressed", String(showingSearch));
     imagesButton?.setAttribute("aria-pressed", String(showingImages));
     tablesButton?.setAttribute("aria-pressed", String(showingTables));
+    referencesButton?.setAttribute("aria-pressed", String(showingReferences));
 
     this.codeRenderPane.classList.toggle("hidden", !showingEditor);
     document.getElementById("image-viewer-pane")?.classList.add("hidden");
@@ -111,17 +120,21 @@ export class SidebarController {
     this.port.setMainPreviewVisibleWhileUndocked(showingImages);
     if (showingImages) {
       this.port.hideSearch?.();
+      this.port.hideReferences?.();
       this.port.hideTableTools();
       if (toolChanged) this.port.invalidatePreview("switched to Image Tools");
       this.port.showImageTools();
     } else if (showingTables) {
       this.port.hideSearch?.();
+      this.port.hideReferences?.();
       this.port.hideImageTools();
       if (toolChanged) this.port.invalidatePreview("switched to Table Tools");
       this.port.showTableTools();
     } else {
       if (showingSearch) this.port.showSearch?.();
       else this.port.hideSearch?.();
+      if (showingReferences) this.port.showReferences?.();
+      else this.port.hideReferences?.();
       this.port.hideImageTools();
       this.port.hideTableTools();
       this.codeRenderPane.classList.toggle("hidden", this.port.isActiveSurfaceNonText());

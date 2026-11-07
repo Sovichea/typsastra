@@ -100,7 +100,7 @@ export interface WorkspaceLifecycleServices {
   };
   sidebarController: {
     activeTool: string;
-    restore(state: { visible: boolean; activeTool: "explorer" | "search" | "images" | "tables" }): void;
+    restore(state: { visible: boolean; activeTool: "explorer" | "search" | "images" | "tables" | "references" }): void;
     reset(): void;
   };
   projectSearchController: { reset(): void };

@@ -79,6 +79,14 @@ describe("workspace state store", () => {
     expect(metadata.workspace.layout.activeSidebarTool).toBe("search");
   });
 
+  test("preserves the References sidebar tool", () => {
+    const metadata = normalizeWorkspaceMetadata({
+      project: { projectId: "project-references" },
+      workspace: { layout: { activeSidebarTool: "references" } },
+    });
+    expect(metadata.workspace.layout.activeSidebarTool).toBe("references");
+  });
+
   test("normalizes portable script-language assignments", () => {
     const metadata = normalizeWorkspaceMetadata({
       project: {

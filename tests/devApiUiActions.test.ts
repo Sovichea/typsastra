@@ -14,7 +14,7 @@ describe("developer API UI actions", () => {
     expect(bindings).toContain('action: "settings-open";');
     expect(bindings).toContain('| { action: "settings-close" }');
     expect(bindings).toContain('| { action: "preview-content-mode"; mode: PreviewContentMode }');
-    expect(bindings).toContain('tool: "explorer" | "search" | "images" | "tables"');
+    expect(bindings).toContain('tool: "explorer" | "search" | "images" | "tables" | "references"');
 
     expect(app).toContain('case "project-templates":');
     expect(app).toContain('case "settings-open":');

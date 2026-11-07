@@ -166,7 +166,7 @@ export type StoredWorkspaceState = {
     inputContainerWidthPct: number;
     explorerSidebarWidthPx: number;
     sidebarVisible: boolean;
-    activeSidebarTool: "explorer" | "search" | "images" | "tables";
+    activeSidebarTool: "explorer" | "search" | "images" | "tables" | "references";
     activeDocumentPane: "outline" | "spellcheck" | "none";
   };
   selectedToolchain: StoredWorkspaceToolchain | null;
@@ -274,7 +274,9 @@ export function normalizeWorkspaceMetadata(
           ? "images"
           : layout.activeSidebarTool === "tables"
             ? "tables"
-            : layout.activeSidebarTool === "search" ? "search" : "explorer",
+            : layout.activeSidebarTool === "references"
+              ? "references"
+              : layout.activeSidebarTool === "search" ? "search" : "explorer",
         activeDocumentPane: layout.activeDocumentPane === "spellcheck" || layout.activeDocumentPane === "none"
           ? layout.activeDocumentPane : "outline",
       },

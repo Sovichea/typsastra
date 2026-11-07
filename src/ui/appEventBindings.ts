@@ -21,7 +21,7 @@ import { t } from "../i18n";
 export type PreviewWindowUpdate = Record<string, unknown> & { path: string };
 
 export type DevUiAction =
-  | { action: "sidebar-tool"; tool: "explorer" | "search" | "images" | "tables" }
+  | { action: "sidebar-tool"; tool: "explorer" | "search" | "images" | "tables" | "references" }
   | { action: "project-templates" }
   | { action: "project-language"; script: string; languageTag: string }
   | {
@@ -137,7 +137,7 @@ export interface AppEventActions {
   unfoldCurrentFile: () => void;
   openProjectSearch: (replace?: boolean) => void;
   toggleSidebar: () => void;
-  setSidebarTool: (tool: "explorer" | "search" | "images" | "tables") => void;
+  setSidebarTool: (tool: "explorer" | "search" | "images" | "tables" | "references") => void;
   restoreDefaultLayout: () => void;
   toggleEditorToolbar: () => void;
   toggleLogConsole: () => void;
@@ -473,6 +473,7 @@ export function bindAppEvents(actions: AppEventActions): void {
   document.getElementById("sidebar-search-button")?.addEventListener("click", () => actions.openProjectSearch(false));
   document.getElementById("sidebar-images-button")?.addEventListener("click", () => actions.setSidebarTool("images"));
   document.getElementById("sidebar-tables-button")?.addEventListener("click", () => actions.setSidebarTool("tables"));
+  document.getElementById("sidebar-references-button")?.addEventListener("click", () => actions.setSidebarTool("references"));
   document.getElementById("action-restore-default-layout")?.addEventListener("click", actions.restoreDefaultLayout);
   document.getElementById("action-toggle-editor-toolbar")?.addEventListener("click", actions.toggleEditorToolbar);
   document.getElementById("action-clear-logs")?.addEventListener("click", actions.clearLogs);

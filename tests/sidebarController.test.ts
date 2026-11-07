@@ -38,7 +38,12 @@ afterEach(() => {
   Object.defineProperty(globalThis, "document", { configurable: true, value: previousDocument });
 });
 
-function createController(): { controller: SidebarController; elements: Map<string, HTMLElement> } {
+function createController(): {
+  controller: SidebarController;
+  elements: Map<string, HTMLElement>;
+  calls: string[];
+} {
+  const calls: string[] = [];
   const elements = new Map<string, HTMLElement>([
     ["explorer-sidebar", fakeElement()],
     ["explorer-resizer", fakeElement()],
@@ -47,10 +52,12 @@ function createController(): { controller: SidebarController; elements: Map<stri
     ["project-search-sidebar-content", fakeElement()],
     ["image-tools-sidebar-content", fakeElement()],
     ["tables-sidebar-content", fakeElement()],
+    ["references-sidebar-content", fakeElement()],
     ["sidebar-explorer-button", fakeElement()],
     ["sidebar-search-button", fakeElement()],
     ["sidebar-images-button", fakeElement()],
     ["sidebar-tables-button", fakeElement()],
+    ["sidebar-references-button", fakeElement()],
     ["image-viewer-pane", fakeElement()],
     ["table-tool-inspector", fakeElement()],
   ]);
@@ -70,13 +77,19 @@ function createController(): { controller: SidebarController; elements: Map<stri
     hideImageTools: () => {},
     showTableTools: () => {},
     hideTableTools: () => {},
+    showReferences: () => calls.push("show-references"),
+    hideReferences: () => calls.push("hide-references"),
     showRestoringPreview: () => {},
     restoreDocumentPreview: () => {},
     setMainPreviewVisibleWhileUndocked: () => {},
     reconcileDockedPaneWidths: () => {},
     persist: () => {},
   };
-  return { controller: new SidebarController(port, fakeElement(), fakeElement()), elements };
+  return {
+    controller: new SidebarController(port, fakeElement(), fakeElement()),
+    elements,
+    calls,
+  };
 }
 
 describe("sidebar visibility persistence", () => {
@@ -126,6 +139,31 @@ describe("sidebar visibility persistence", () => {
     expect(elements.get("explorer-sidebar-content")!.classList.contains("hidden")).toBe(true);
     expect(elements.get("table-tool-inspector")!.classList.contains("hidden")).toBe(false);
     expect((elements.get("sidebar-tables-button") as HTMLButtonElement).classList.contains("active")).toBe(true);
+  });
+
+  test("restores the References tool when it is the persisted tool", () => {
+    const { controller, calls, elements } = createController();
+
+    controller.restore({ visible: true, activeTool: "references" });
+
+    expect(controller.activeTool).toBe("references");
+    expect(calls).toContain("show-references");
+    expect(elements.get("references-sidebar-content")!.classList.contains("hidden")).toBe(false);
+  });
+
+  test("activates the References tool as an editor tool", () => {
+    const { controller, elements } = createController();
+
+    controller.setTool("references");
+
+    expect(controller.activeTool).toBe("references");
+    expect(elements.get("references-sidebar-content")!.classList.contains("hidden")).toBe(false);
+    expect(elements.get("explorer-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("project-search-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("image-tools-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect(elements.get("tables-sidebar-content")!.classList.contains("hidden")).toBe(true);
+    expect((elements.get("sidebar-references-button") as HTMLButtonElement).classList.contains("active")).toBe(true);
+    expect((elements.get("sidebar-toggle-button") as HTMLButtonElement).disabled).toBe(false);
   });
 
   test("keeps the sidebar open for Table Tools even when the workspace preference is hidden", () => {
