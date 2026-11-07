@@ -136,6 +136,7 @@ export interface WorkspaceLifecycleServices {
   };
   imageToolsController: { setWorkspace(root: string | null, main: string | null): Promise<void>; show(): void };
   tableToolController: { setWorkspace(tables: readonly import("./workspaceStateStore").StoredTable[]): void; show(): void };
+  referencesController: { reset(): void };
   recentProjectsController: { add(path: string): void };
   editorFontManager: { ready(): Promise<void>; updateDocument(text: string): void };
   editorController: { updateCaretMarker(): void };
@@ -742,6 +743,7 @@ export class WorkspaceLifecycleController {
     document.body.classList.remove("image-tools-active", "table-tools-active");
     void app.imageToolsController.setWorkspace(null, null);
     app.tableToolController.setWorkspace([]);
+    app.referencesController.reset();
     app.workspaceMetadata = null;
     app.settingsController.setWorkspacePreviewRenderMode(null);
     app.settingsController.setProjectTerminology([], "");

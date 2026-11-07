@@ -217,6 +217,7 @@ describe("WorkspaceLifecycleController behavior", () => {
       projectSearchController: { reset: () => {} },
       imageToolsController: { setWorkspace: async () => {}, show: () => {} },
       tableToolController: { setWorkspace: () => {}, show: () => {} },
+      referencesController: { reset: () => {} },
       settingsController: {
         value: {
           preview: { renderMode: "on-save", lowMemoryMode: false },

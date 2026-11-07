@@ -15,7 +15,7 @@ import { closeBrackets } from "@codemirror/autocomplete";
 import { closeSearchPanel, openSearchPanel, SearchQuery, setSearchQuery } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { themeCompartment, getThemeExtension, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, showZwsCompartment, showZeroWidthSpaces, visibleIndentationMarkers, editorKeymapCompartment, configuredEditorShortcuts } from "./editor/extensions";
-import { typstLanguage } from "./editor/typstLanguage";
+import { typstLanguage, typstSourceContextAt } from "./editor/typstLanguage";
 import { createTypstAutocomplete } from "./editor/autocomplete";
 import { collapseSearchSelection } from "./editor/search";
 import { EditorController } from "./editor/editorController";
@@ -156,6 +156,18 @@ import { formatShortcut, setShortcutLabelOverrides } from "./platform/shortcuts"
 import { shortcutFor } from "./platform/shortcutRegistry";
 import { setImageOptimizationWarningsEffect } from "./editor/imageWarnings";
 import { TableToolController } from "./components/tableTool";
+import { ReferencesController } from "./components/references";
+import { ReferencesService } from "./references/referencesService";
+import {
+  bibliographyInsertion,
+  type BibliographyInsertRequest,
+  type BibliographyInsertResult,
+} from "./references/bibliographyBlock";
+import {
+  citationSnippet,
+  type CitationInsertResult,
+} from "./references/citationInsertion";
+import { scanTypstReferences } from "./references/typstReferences";
 import { createAppIcon } from "./ui/icons";
 import {
   findTableDirectiveBlocks,
@@ -294,6 +306,22 @@ export class TypsastraWorkspaceController {
     openTabs: () => this.openTabs,
     markPlainTextPath: path => this.editorFileContentController.markPlainTextPath(path),
   });
+  private readonly referencesService = new ReferencesService({
+    workspaceRootPath: () => this.workspaceRootPath,
+    projectText: () => this.projectTextService,
+  });
+  private readonly referencesController = new ReferencesController(
+    document.getElementById("references-sidebar")!,
+    {
+      workspaceRootPath: () => this.workspaceRootPath,
+      mainFilePath: () => this.pinnedMainFilePath,
+      loadIndex: () => this.referencesService.load(),
+      insertCitation: key => this.insertCitationAtCursor(key),
+      insertBibliography: request => this.insertOrRevealBibliography(request),
+      openLocation: (path, from, to) => this.navigateToReferenceLocation(path, from, to),
+      log: (kind, message) => this.appendDeveloperLog({ kind, source: "references", message }),
+    },
+  );
   private readonly projectSearchController = new ProjectSearchController({
     workspaceRootPath: () => this.workspaceRootPath,
     pinnedMainFilePath: () => this.pinnedMainFilePath,
@@ -1162,6 +1190,8 @@ export class TypsastraWorkspaceController {
       this.tableToolController.show();
     },
     hideTableTools: () => this.tableToolController.hide(),
+    showReferences: () => this.referencesController.show(),
+    hideReferences: () => this.referencesController.hide(),
     showRestoringPreview: () => this.previewFrame.setMessage(
       `<div class="preview-disabled-placeholder"><div class="guardrail-placeholder-content">` +
       `<div class="preview-disabled-title preview-accent-title">Restoring Preview</div>` +
@@ -3029,6 +3059,135 @@ export class TypsastraWorkspaceController {
     const doc = this.editorInstance.state.doc;
     const from = target.kind === "path" ? 0 : Math.max(0, Math.min(target.from, doc.length));
     const to = target.kind === "path" ? 0 : Math.max(from, Math.min(target.to, doc.length));
+    this.editorInstance.dispatch({
+      selection: { anchor: from, head: to },
+      effects: EditorView.scrollIntoView(from, { y: "center" }),
+    });
+    this.editorInstance.focus();
+  }
+
+  private insertCitationAtCursor(key: string): CitationInsertResult {
+    const path = this.activeFilePath;
+    if (!path || !isTypstDocumentPath(path) || !this.getActiveTab()?.contentLoaded) {
+      const message = t("Open a Typst document before inserting a citation.");
+      this.appendDeveloperLog({ kind: "warning", source: "references", message });
+      return { ok: false, message };
+    }
+    const view = this.editorInstance;
+    const source = view.state.doc.toString();
+    const cursor = view.state.selection.main.head;
+    const context = typstSourceContextAt(source, cursor);
+    if (context.insideToken === "comment"
+      || context.insideToken === "monospace"
+      || context.insideToken === "string"
+      || context.insideToken === "hashString") {
+      const message = t("Move the cursor out of a comment, string, or raw block before inserting a citation.");
+      this.appendDeveloperLog({ kind: "warning", source: "references", message });
+      return { ok: false, message };
+    }
+
+    const snippet = citationSnippet(key, context);
+    const previous = cursor > 0 ? source[cursor - 1] : "";
+    const insertion = /[\p{L}\p{N}]/u.test(previous) ? ` ${snippet}` : snippet;
+    view.dispatch({
+      changes: { from: cursor, insert: insertion },
+      selection: { anchor: cursor + insertion.length },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+    view.focus();
+    return { ok: true };
+  }
+
+  private async insertOrRevealBibliography(
+    request: BibliographyInsertRequest,
+  ): Promise<BibliographyInsertResult> {
+    const mainPath = request.mainPath;
+    if (!isTypstDocumentPath(mainPath)) {
+      return { ok: false, message: t("The main document must be a Typst file.") };
+    }
+    if (request.sources.length === 0) {
+      return { ok: false, message: t("No .bib files found in this project.") };
+    }
+    if (filePathKey(mainPath) !== filePathKey(this.activeFilePath ?? "")) {
+      await this.loadFile(mainPath, { focusEditor: false });
+    }
+    if (!this.getActiveTab()?.contentLoaded
+      || filePathKey(this.activeFilePath ?? "") !== filePathKey(mainPath)) {
+      return { ok: false, message: t`Could not open ${fileNameFromPath(mainPath)}.` };
+    }
+
+    const view = this.editorInstance;
+    const source = view.state.doc.toString();
+    const relativePath = this.workspaceRootPath
+      ? relativeFilePath(this.workspaceRootPath, mainPath) ?? fileNameFromPath(mainPath)
+      : fileNameFromPath(mainPath);
+    const existing = scanTypstReferences(source).bibliographyCalls[0];
+    if (existing) {
+      view.dispatch({
+        selection: { anchor: existing.from, head: existing.to },
+        effects: EditorView.scrollIntoView(existing.from, { y: "center" }),
+      });
+      view.focus();
+      return {
+        ok: true,
+        revealed: true,
+        call: {
+          path: mainPath,
+          relativePath,
+          fromUtf16: existing.from,
+          toUtf16: existing.to,
+          sources: existing.sources,
+          style: existing.style ?? request.style,
+        },
+      };
+    }
+
+    const insertion = bibliographyInsertion(source, request.style, request.sources);
+    view.dispatch({
+      changes: { from: insertion.from, insert: insertion.text },
+      selection: { anchor: insertion.blockTo },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+    view.focus();
+    return {
+      ok: true,
+      call: {
+        path: mainPath,
+        relativePath,
+        fromUtf16: insertion.blockFrom,
+        toUtf16: insertion.blockTo,
+        sources: [...request.sources],
+        style: request.style,
+      },
+    };
+  }
+
+  private navigateToReferenceLocation(
+    path: string,
+    fromUtf16: number,
+    toUtf16: number,
+  ): Promise<void> {
+    return this.navigationHistoryController.run(() =>
+      this.navigateToReferenceLocationInternal(path, fromUtf16, toUtf16)
+    );
+  }
+
+  private async navigateToReferenceLocationInternal(
+    path: string,
+    fromUtf16: number,
+    toUtf16: number,
+  ): Promise<void> {
+    if (!this.workspaceRootPath || this.standaloneFilePath !== null) return;
+    if (filePathKey(path) !== filePathKey(this.activeFilePath ?? "")) {
+      await this.loadFile(path, { focusEditor: false });
+    }
+    if (!this.getActiveTab()?.contentLoaded
+      || filePathKey(this.activeFilePath ?? "") !== filePathKey(path)) return;
+    const doc = this.editorInstance.state.doc;
+    const from = Math.max(0, Math.min(fromUtf16, doc.length));
+    const to = Math.max(from, Math.min(toUtf16, doc.length));
     this.editorInstance.dispatch({
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),
