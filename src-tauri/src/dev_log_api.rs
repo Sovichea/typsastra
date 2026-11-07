@@ -110,6 +110,7 @@ enum DevSidebarTool {
     Search,
     Images,
     Tables,
+    References,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1827,6 +1828,13 @@ mod tests {
         assert_eq!(
             serde_json::to_value(search).unwrap(),
             serde_json::json!({ "action": "sidebar-tool", "tool": "search" })
+        );
+
+        let references: DevUiAction =
+            serde_json::from_str(r#"{"action":"sidebar-tool","tool":"references"}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(references).unwrap(),
+            serde_json::json!({ "action": "sidebar-tool", "tool": "references" })
         );
 
         let project_templates: DevUiAction =
