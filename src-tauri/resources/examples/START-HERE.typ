@@ -68,6 +68,8 @@ English and Khmer are bundled. Optional providers are installed from Settings
 - `02-simple-thesis`: chapters, labels, and cross-file references.
 - `03-khmer-folklore-book`: a long-form multi-file Khmer project.
 - `04-typsastra-readme`: templates, imports, bibliography, images, and chapters.
+- `05-bibliography-and-citations`: a local BibTeX bibliography, citations, and
+  cross-references.
 
 == 05. Project portability
 
@@ -123,6 +125,7 @@ English and Khmer are bundled. Optional providers are installed from Settings
   [Preview links and synchronization], [`06-preview-and-media/03-preview-navigation`],
   [Markdown live preview], [`06-preview-and-media/05-markdown-notes/README.md`],
   [Private fonts and script typography], [`06-preview-and-media/04-private-local-fonts`, `02-multilingual-writing/01-script-font-assignments`],
+  [Bibliography and citations], [`04-research-projects/05-bibliography-and-citations`],
   [Language providers], [`03-language-providers`],
   [Linked Table Tools blocks], [`08-tools-and-templates/01-linked-table`],
   [Project templates], [`08-tools-and-templates/02-project-templates/README.md`],

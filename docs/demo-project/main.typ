@@ -24,11 +24,13 @@ Tools anchor. Explore the project in the editor while watching the preview.
 - A table anchor that can be connected to a Table Tools sample.
 - A short multilingual excerpt for script-aware editing.
 - Fletcher diagrams and a CeTZ canvas for Draft Preview.
+- A local BibTeX bibliography with citations and cross-references.
 
 #include "chapters/01-workflow.typ"
 #include "chapters/02-language.typ"
 #include "chapters/03-media-and-data.typ"
 #include "chapters/04-diagrams.typ"
+#include "chapters/05-references.typ"
 
 == Research summary
 
@@ -46,3 +48,5 @@ configured main document's preview active when an included chapter is opened.
   [Grace], [92], [A-],
 )
 //@generated-table-end
+
+#bibliography("refs.bib", style: "apa")

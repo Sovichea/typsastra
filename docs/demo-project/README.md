@@ -1,9 +1,10 @@
 # Typsastra documentation demo project
 
 Open this folder as a project in Typsastra. The configured main document is
-[`main.typ`](main.typ); it includes four chapter files, two local raster images,
-two Fletcher diagrams, and a CeTZ canvas so the Explorer, Image Tools, and
-multi-file preview have useful content.
+[`main.typ`](main.typ); it includes five chapter files, a local BibTeX
+bibliography, two local raster images, two Fletcher diagrams, and a CeTZ canvas
+so the Explorer, Image Tools, citations, and multi-file preview have useful
+content.
 
 ## Explore the project
 
@@ -15,14 +16,17 @@ multi-file preview have useful content.
    **Draft**. Draft replaces the two Fletcher diagrams and the CeTZ canvas with
    labeled placeholders while preserving their layout. Hover a placeholder to
    inspect its cached rendering.
-4. Switch to **Table Tools** and select the **Basic table** already stored in
+4. Open `chapters/05-references.typ` to inspect citations from `refs.bib` and
+   the cross-references to its heading and citation table. The bibliography is
+   rendered at the end of `main.typ`.
+5. Switch to **Table Tools** and select the **Basic table** already stored in
    this demo project's configuration. Its ID matches the `//@table:basic_table`
    anchor in `main.typ`, and its generated Typst block is synchronized there.
-5. Change a table cell and inspect the live preview update.
-6. Open **Search Project** and search for `research` to see matches across the
+6. Change a table cell and inspect the live preview update.
+7. Open **Search Project** and search for `research` to see matches across the
    main document and chapters. Enter a replacement and use **Review** to inspect
    the before/after changes before applying them.
-7. Edit a chapter, wait for the unsaved-work snapshot, and reopen the project to
+8. Edit a chapter, wait for the unsaved-work snapshot, and reopen the project to
    review the recovered text as a unified diff. Restoring opens an unsaved
    buffer; it does not overwrite the source file.
 
